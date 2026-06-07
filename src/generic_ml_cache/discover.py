@@ -82,9 +82,7 @@ class ModelListing:
     reason: Optional[str] = None
 
 
-def list_models(
-    name: str, executable: Optional[str] = None, timeout: float = 30.0
-) -> ModelListing:
+def list_models(name: str, executable: Optional[str] = None, timeout: float = 30.0) -> ModelListing:
     """List one client's models by relaying its own listing command.
 
     Never raises for an absent client or a client that cannot enumerate; both

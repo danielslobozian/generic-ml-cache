@@ -43,9 +43,7 @@ def test_cursor_uses_model_verbatim_when_no_effort():
 
 
 def test_run_effort_is_optional_in_cli():
-    args = build_parser().parse_args(
-        ["run", "--client", "fake", "--model", "m", "--prompt", "p"]
-    )
+    args = build_parser().parse_args(["run", "--client", "fake", "--model", "m", "--prompt", "p"])
     assert args.effort == ""
 
 
