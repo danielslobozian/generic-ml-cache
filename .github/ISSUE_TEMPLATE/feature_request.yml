@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a new capability or an improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Before filing, please skim
+        [docs/ROADMAP.md](../blob/main/docs/ROADMAP.md) — your idea may already be
+        planned, or deliberately out of scope. The cache is **dumb** on purpose:
+        it adds no intelligence to the data, and determinism is the caller's
+        responsibility. Proposals that make cache hits fuzzy or heuristic are
+        unlikely to be accepted.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and the roadmap, and this is not already covered.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What are you trying to do, and where does the tool fall short today? Describe the need, not just a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would like to happen. Sketch the CLI/library shape if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why this one is better.
+    validations:
+      required: false

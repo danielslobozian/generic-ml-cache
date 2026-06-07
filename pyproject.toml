@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "generic-ml-cache"
+version = "0.0.1"
+description = "Content-addressed cache/proxy for agentic CLI calls: record a real call once, replay it forever by checksum."
+readme = "README.md"
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Daniel Slobozian" }]
+keywords = ["cache", "llm", "ai", "cli", "agent", "claude", "codex", "cursor", "replay", "fixtures"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/danielslobozian/generic-ml-cache"
+Repository = "https://github.com/danielslobozian/generic-ml-cache"
+Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
+Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov"]
+
+[project.scripts]
+gmlcache = "generic_ml_cache.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/generic_ml_cache"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"

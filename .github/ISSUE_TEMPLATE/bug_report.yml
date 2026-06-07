@@ -1,0 +1,91 @@
+name: Bug report
+description: Report something that does not work the way it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. A failing test or an exact
+        `gmlcache` command that reproduces the problem is the most useful thing
+        you can give us.
+
+        Please do **not** report security vulnerabilities here — see
+        [SECURITY.md](../blob/main/SECURITY.md) for the private reporting channel.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I reproduced this on the latest release or on `main`.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `gmlcache --version`.
+      placeholder: "gmlcache 0.0.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Client adapter
+      description: Which client was involved (if any)?
+      options:
+        - "not client-specific"
+        - claude
+        - codex
+        - cursor
+        - other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - cache
+        - offline
+        - refresh
+        - "not applicable"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "e.g. Ubuntu 24.04, macOS 14, Windows 11"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "e.g. 3.11.9"
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command
+      description: The `gmlcache` command (or library call) that triggers the bug. Redact any secrets.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: What you observed, including any error output (with `-v` if helpful).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true

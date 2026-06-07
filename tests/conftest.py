@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 Daniel Slobozian
+# SPDX-License-Identifier: Apache-2.0
+"""Shared test fixtures.
+
+Registers a ``fake`` client adapter that launches ``fake_client.py`` via the
+current Python interpreter, so the whole cache can be exercised on Linux, macOS
+and Windows with no real CLI installed.
+"""
+
+from __future__ import annotations
+
+import base64
+import sys
+from pathlib import Path
+from typing import List
+
+import pytest
+
+from generic_ml_cache import register
+from generic_ml_cache.adapters.base import ClientAdapter
+from generic_ml_cache.store import CassetteStore
+
+FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
+
+
+class FakeAdapter(ClientAdapter):
+    name = "fake"
+    # An absolute path with a separator -> resolve_executable uses it verbatim.
+    default_executable = sys.executable
+
+    def prepare(self, run_dir, context, prompt, system_prompt) -> None:
+        (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")
+        (run_dir / "_in_prompt.txt").write_text(prompt, encoding="utf-8")
+        (run_dir / "_in_system.txt").write_text(system_prompt, encoding="utf-8")
+
+    def build_argv(
+        self, executable, run_dir, model, effort, context, prompt, system_prompt
+    ) -> List[str]:
+        return [
+            executable,
+            FAKE_SCRIPT,
+            "--model",
+            model,
+            "--effort",
+            effort,
+            "--context-file",
+            str(run_dir / "_in_context.txt"),
+            "--prompt-file",
+            str(run_dir / "_in_prompt.txt"),
+            "--system-file",
+            str(run_dir / "_in_system.txt"),
+        ]
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _register_fake_adapter():
+    register(FakeAdapter())
+
+
+@pytest.fixture()
+def store(tmp_path) -> CassetteStore:
+    return CassetteStore(tmp_path / "cassettes")
+
+
+def write_directive(relpath: str, content: str) -> str:
+    """Build a WRITE directive line for the fake client."""
+    b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
+    return f"WRITE {relpath} {b64}"
