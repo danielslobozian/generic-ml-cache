@@ -21,6 +21,15 @@ class UnknownClient(CacheError):
     """Raised when no adapter is registered for the requested client name."""
 
 
+class ConfigError(CacheError):
+    """Raised when the optional config file or a config env var is invalid.
+
+    A missing config file is never an error -- it just means built-in defaults
+    apply. This is only for a file that exists but cannot be parsed, or a value
+    (mode, timeout) that is not understood.
+    """
+
+
 class ClientNotFound(CacheError):
     """Raised when the client executable cannot be located on the system."""
 

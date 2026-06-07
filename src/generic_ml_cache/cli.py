@@ -5,6 +5,7 @@
     gmlcache run     -- resolve a request (record on miss, replay on hit)
     gmlcache doctor  -- report which configured clients are present (advisory)
     gmlcache models  -- list a client's available models (advisory; relayed)
+    gmlcache status  -- show the resolved configuration and where it came from
     gmlcache inspect -- pretty-print a cassette
 
 Replay fidelity: in the default (quiet) mode, ``run`` reproduces the client's
@@ -20,13 +21,11 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import __version__
+from . import __version__, config
 from .adapters.registry import registered_names
 from .cache import Mode, Request, apply_response, resolve
-from .errors import CacheError, CacheMiss
+from .errors import CacheError, CacheMiss, ConfigError
 from .store import CassetteStore
-
-DEFAULT_STORE = ".gmlcache"
 
 
 def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str:
@@ -35,14 +34,6 @@ def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str
     if path is not None:
         return Path(path).read_text(encoding="utf-8")
     return inline if inline is not None else ""
-
-
-def _mode_from_args(args: argparse.Namespace) -> Mode:
-    if args.offline:
-        return Mode.OFFLINE
-    if args.force:
-        return Mode.REFRESH
-    return Mode(args.mode)
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -63,8 +54,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
         prompt=prompt,
         user_system_prompt=system_prompt,
     )
-    store = CassetteStore(Path(args.store))
-    mode = _mode_from_args(args)
+    try:
+        file_cfg = config.load()
+        settings = config.resolve_settings(
+            file_cfg,
+            mode_flag=args.mode,
+            store_flag=args.store,
+            timeout_flag=args.timeout,
+        )
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    store = CassetteStore(Path(str(settings["store"][0])))
+    timeout = settings["timeout"][0]
+    # --offline / --force are explicit flags and win over the resolved mode.
+    if args.offline:
+        mode = Mode.OFFLINE
+    elif args.force:
+        mode = Mode.REFRESH
+    else:
+        mode = Mode(str(settings["mode"][0]))
 
     def log(msg: str) -> None:
         if args.verbose:
@@ -76,7 +86,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             store,
             mode=mode,
             executable=args.executable,
-            timeout=args.timeout,
+            timeout=timeout,
         )
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
@@ -183,6 +193,41 @@ def _cmd_models(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_status(args: argparse.Namespace) -> int:
+    try:
+        file_cfg = config.load()
+        settings = config.resolve_settings(file_cfg)  # no run flags: env > file > default
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    path = config.resolve_config_path()
+    loaded = file_cfg.source is not None
+
+    if args.json:
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "config_file": str(path),
+                    "loaded": loaded,
+                    "settings": {k: {"value": v[0], "source": v[1]} for k, v in settings.items()},
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
+    print("effective settings (no run flags applied):")
+    for key in ("mode", "store", "timeout"):
+        value, source = settings[key]
+        shown = "none" if value is None else value
+        print(f"  {key:<8} {str(shown):<14} (from {source})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gmlcache",
@@ -209,9 +254,16 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--system-prompt")
     run.add_argument("--system-prompt-file")
     run.add_argument(
-        "--store", default=DEFAULT_STORE, help=f"cassette directory (default: {DEFAULT_STORE})"
+        "--store",
+        default=None,
+        help="cassette directory (default: .gmlcache, or config/env)",
     )
-    run.add_argument("--mode", choices=[m.value for m in Mode], default=Mode.CACHE.value)
+    run.add_argument(
+        "--mode",
+        choices=[m.value for m in Mode],
+        default=None,
+        help="resolution mode (default: cache, or config/env)",
+    )
     run.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
     run.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
     run.add_argument("--executable", help="override the client executable (the seam)")
@@ -257,6 +309,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     models.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     models.set_defaults(func=_cmd_models)
+
+    status = sub.add_parser(
+        "status",
+        help="show the resolved configuration (which file loaded, effective settings)",
+    )
+    status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    status.set_defaults(func=_cmd_status)
 
     return parser
 

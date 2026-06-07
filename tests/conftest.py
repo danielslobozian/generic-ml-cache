@@ -57,6 +57,15 @@ def _register_fake_adapter():
     register(FakeAdapter())
 
 
+@pytest.fixture(autouse=True)
+def _isolate_config(monkeypatch, tmp_path):
+    """Point config discovery at a guaranteed-absent file and clear config env,
+    so no test accidentally reads the real user config or environment."""
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(tmp_path / "no-such-config.ini"))
+    for var in ("GMLCACHE_MODE", "GMLCACHE_STORE", "GMLCACHE_TIMEOUT"):
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture()
 def store(tmp_path) -> CassetteStore:
     return CassetteStore(tmp_path / "cassettes")

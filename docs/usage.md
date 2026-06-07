@@ -220,6 +220,49 @@ Deciding *which* model to use stays with the caller. Of the built-in adapters,
 only Cursor exposes a scriptable listing today; Claude and Codex report
 "not supported" until a client ships one (the seam is ready when they do).
 
+## Configuration
+
+`run` reads its defaults — the resolution `mode`, the cassette `store`, and the
+`timeout` — from one optional INI file, if it exists. The file is **opt-in**: it
+is never written for you, on install or otherwise.
+
+For each setting the winner is, in order: a **CLI flag**, then an **environment
+variable**, then the **config file**, then the **built-in default**. So a flag
+always wins, and the default (`mode = cache`, `store = .gmlcache`, no timeout)
+applies when nothing else is set.
+
+Location (override everything with `GMLCACHE_CONFIG=/path/to/file`):
+
+- Windows — `%APPDATA%\generic-ml-cache\config.ini`
+- otherwise — `$XDG_CONFIG_HOME/generic-ml-cache/config.ini` (or
+  `~/.config/generic-ml-cache/config.ini`)
+
+Format:
+
+```ini
+[defaults]
+mode = cache
+store = .gmlcache
+timeout = 120
+```
+
+Environment variables: `GMLCACHE_MODE`, `GMLCACHE_STORE`, `GMLCACHE_TIMEOUT`
+(and `GMLCACHE_CONFIG` to point at the file itself).
+
+## `gmlcache status`
+
+Show the resolved configuration so behavior is never a mystery.
+
+```bash
+gmlcache status
+gmlcache status --json
+```
+
+It prints which file would be read and whether it was found, then the effective
+`mode` / `store` / `timeout` with the source of each value (`flag` / `env` /
+`config` / `default`). It applies environment and file settings but no `run`
+flags, since it describes the resting configuration, not a particular call.
+
 ## `gmlcache --version`
 
 Prints the installed version.

@@ -9,6 +9,19 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- Optional configuration file (INI, zero dependencies). `run` reads its defaults
+  — `mode`, `store`, `timeout` — from `[defaults]` in a per-user config file when
+  one exists (`$XDG_CONFIG_HOME`/`~/.config` on Linux/macOS, `%APPDATA%` on
+  Windows; override with `GMLCACHE_CONFIG`). The file is opt-in and never written
+  automatically. Precedence is CLI flag > environment variable
+  (`GMLCACHE_MODE` / `GMLCACHE_STORE` / `GMLCACHE_TIMEOUT`) > config file >
+  built-in default.
+- `gmlcache status` (with `--json`): prints which config file was loaded, if any,
+  and the effective settings with the source of each value (flag / env / config /
+  default).
+
 ## [0.0.2] - 2026-06-07
 
 ### Changed
