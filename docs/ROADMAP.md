@@ -12,12 +12,12 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.1 (alpha)
+## Where we are: 0.0.2 (alpha)
 
-The first tagged release. It implements the core idea end to end: record a real
-agentic **CLI** call once, replay it forever by content checksum.
+The core idea end to end — record a real agentic **CLI** call once, replay it
+forever by content checksum — plus read-only discovery of what is installed.
 
-What works in 0.0.1:
+What works (since 0.0.1):
 
 - The cassette format — one inspectable JSON file per recorded call, with
   `client` / `model` / `effort`, `input_data` (`context`, `prompt`), and a
@@ -37,6 +37,21 @@ What works in 0.0.1:
 - A cross-platform test suite (Linux / macOS / Windows) with no dependency on a
   real CLI being installed.
 
+Added in 0.0.2:
+
+- `doctor` — reports which configured clients are present and their `--version`,
+  advisory only.
+- `models` — lists a client's available models by relaying the client's own
+  listing command (Cursor today via `--list-models`), or reports a clean "not
+  supported"; it never invents or substitutes a catalog. There is no separate
+  "effort discovery": Cursor already encodes effort in the model id, and Claude
+  and Codex expose effort levels only in documentation, which the cache does not
+  scrape.
+- `--json` output on both `doctor` and `models`, valid on every path (absent /
+  unsupported / listed) so a caller can parse it unconditionally.
+- `run --effort` made optional — each client applies its own default when it is
+  omitted; effort remains an explicit part of the cassette key.
+
 Deliberately **not** in 0.0.1: reading the caller's ambient files, API/HTTP
 caching, and dependency-aware validity tracking. Those are below.
 
@@ -46,17 +61,7 @@ These are the things that must land — and prove themselves stable — before t
 version number loses its leading zero. They will arrive across `0.0.x` and
 `0.1.x` releases.
 
-The immediate next releases after the first tag:
-
-- **`0.0.2` — Client discovery (`doctor`).** A read-only command that reports
-  which configured clients are present and runnable on the current machine
-  (presence + version), and — best-effort and **advisory only** — the models and
-  effort levels each client itself exposes, by relaying that client's own listing
-  mechanism. This makes the cache a *client-abstraction layer*: a caller can ask
-  "what is available here?" and "run this exact call" without embedding any
-  client-specific knowledge of its own. It is strictly **detection, not
-  selection** — discovery never chooses, never restricts, and never gates; a
-  model the cache has never heard of still runs, because the run is the validator.
+The immediate next releases:
 
 - **`0.0.3` — Configuration.** An optional config file at the standard per-user
   location (the XDG / OS config directory) holding defaults such as the mode and

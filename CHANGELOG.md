@@ -9,6 +9,8 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-06-07
+
 ### Changed
 
 - `run --effort` is now optional. When omitted, each client applies its own
@@ -60,5 +62,6 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/danielslobozian/generic-ml-cache/releases/tag/v0.0.1
