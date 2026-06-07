@@ -9,6 +9,15 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- `run --effort` is now optional. When omitted, each client applies its own
+  default instead of receiving an empty value: Claude drops the `--effort` flag,
+  Codex leaves `model_reasoning_effort` unset, and Cursor uses the model id as
+  given (so a full id from `models` that already encodes effort is passed through
+  unchanged). Effort remains an explicit part of the cassette match key, and an
+  empty effort is a distinct key value.
+
 ### Added
 
 - `gmlcache doctor`: a read-only command that reports which configured clients

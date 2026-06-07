@@ -21,6 +21,9 @@ class CursorAdapter(ClientAdapter):
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
         full_prompt = f"{context}\n\n{prompt}" if context else prompt
+        # Cursor encodes effort in the model id. Pass a full id from
+        # --list-models with no effort (preferred), or a base id plus an effort
+        # to append. Do not pass both, or the effort is duplicated.
         model_id = f"{model}-{effort}" if effort else model
         return [
             executable,

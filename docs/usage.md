@@ -41,10 +41,32 @@ Record-or-replay a call.
 |------|---------|
 | `--client {claude,codex,cursor}` | which CLI adapter to use |
 | `--model MODEL` | the model identifier passed to the client |
-| `--effort EFFORT` | the reasoning-effort setting passed to the client |
 
-`(client, model, effort)` are the explicit launch parameters. They are part of
-the match key and are stored verbatim in the cassette.
+`--model` and a prompt are required — without them there is nothing to identify
+or execute.
+
+### Effort (optional)
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--effort EFFORT` | *(empty)* | reasoning-effort setting; omit to use the client's own default |
+
+`(client, model, effort)` are the explicit launch parameters: part of the match
+key and stored verbatim in the cassette. An empty effort is a distinct, valid key
+value — a call with no effort is a different cassette from `--effort high`.
+
+How each client uses it:
+
+- **Claude** / **Codex** — effort is a separate axis. Pass `--effort high`, or
+  omit it to let the client apply the model's own default.
+- **Cursor** — effort is *encoded in the model id*. Use a full id from
+  `gmlcache models cursor` (e.g. `gpt-5.3-codex-high`) and **omit** `--effort`;
+  passing both appends the effort twice (`...-high-high`).
+
+The cache never canonicalizes — it stores exactly what you give it — so pick one
+convention per client and keep to it: `(cursor, "gpt-5.3-codex-high", "")` and
+`(cursor, "gpt-5.3-codex", "high")` launch the same command but are two separate
+cassettes.
 
 ### Supplying the input
 

@@ -22,19 +22,13 @@ class ClaudeAdapter(ClientAdapter):
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
         full_prompt = f"{context}\n\n{prompt}" if context else prompt
-        return [
-            executable,
-            "-p",
-            full_prompt,
-            "--model",
-            model,
-            "--effort",
-            effort,
-            "--append-system-prompt",
-            system_prompt,
-            "--output-format",
-            "text",
-        ]
+        argv = [executable, "-p", full_prompt, "--model", model]
+        # Effort is optional: when omitted, let Claude apply its own per-model
+        # default rather than passing an empty (and invalid) --effort value.
+        if effort:
+            argv += ["--effort", effort]
+        argv += ["--append-system-prompt", system_prompt, "--output-format", "text"]
+        return argv
 
 
 register(ClaudeAdapter())

@@ -194,7 +194,14 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="resolve a request (record on miss, replay on hit)")
     run.add_argument("--client", required=True, choices=registered_names())
     run.add_argument("--model", required=True)
-    run.add_argument("--effort", required=True)
+    run.add_argument(
+        "--effort",
+        default="",
+        help=(
+            "reasoning effort (optional); omit to use the client's own default. "
+            "For Cursor, leave this off when the model id already encodes effort."
+        ),
+    )
     run.add_argument("--prompt")
     run.add_argument("--prompt-file")
     run.add_argument("--context")

@@ -22,14 +22,10 @@ class CodexAdapter(ClientAdapter):
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
         full_prompt = f"{context}\n\n{prompt}" if context else prompt
-        return [
-            executable,
-            "exec",
-            "--model",
-            model,
-            "-c",
-            f"model_reasoning_effort={effort}",
-            "-c",
-            f"experimental_instructions={system_prompt}",
-            full_prompt,
-        ]
+        argv = [executable, "exec", "--model", model]
+        # Effort is optional: when omitted, leave model_reasoning_effort unset so
+        # Codex uses the model's own default instead of an empty override.
+        if effort:
+            argv += ["-c", f"model_reasoning_effort={effort}"]
+        argv += ["-c", f"experimental_instructions={system_prompt}", full_prompt]
+        return argv
