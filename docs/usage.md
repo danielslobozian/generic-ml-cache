@@ -164,6 +164,40 @@ chooses a client, never restricts which model may run, and never gates a call �
 it just tells you what is here. A client it cannot find is reported as missing,
 not treated as an error.
 
+Add `--json` for machine-readable output. In JSON mode every path emits valid
+JSON — including absent clients — so a caller can parse the result without
+special-casing.
+
+## `gmlcache models`
+
+List the models a client reports it can use.
+
+```bash
+gmlcache models            # every registered client
+gmlcache models cursor     # one client
+gmlcache models cursor --json
+```
+
+The list is **relayed from the client itself** — the cache runs the client's own
+listing command and structures the output; it never hardcodes, guesses, or
+substitutes a catalog. Because the client is already authenticated, the result
+reflects what *that account* can actually reach.
+
+There are three honest outcomes, and `--json` is always valid for each:
+
+- the client is **absent** (`present: false`);
+- the client is present but has **no listing command** (`supported: false` with a
+  `reason`) — the cache simply says it does not know how to enumerate this
+  client's models, rather than inventing a list;
+- the client **listed** its models (`supported: true`, `models` populated), each
+  entry an `id` (what you pass to `--model`), a human `name`, and `default` /
+  `current` flags lifted from any marker the client printed.
+
+Like `doctor`, this is advisory: it never selects, restricts, or gates a run.
+Deciding *which* model to use stays with the caller. Of the built-in adapters,
+only Cursor exposes a scriptable listing today; Claude and Codex report
+"not supported" until a client ships one (the seam is ready when they do).
+
 ## `gmlcache --version`
 
 Prints the installed version.

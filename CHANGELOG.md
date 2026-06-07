@@ -15,6 +15,15 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   are present on the current machine and their `--version` output. Advisory only
   — discovery never chooses a client, never restricts a model, and never gates a
   run; a client it cannot find is reported as missing rather than as an error.
+- `gmlcache models [client]`: lists the models a client reports it can use, by
+  relaying the client's own listing command and structuring the output — the
+  cache never hardcodes or substitutes a catalog, so the result reflects what the
+  authenticated client can actually reach. Reports a clean "not supported" when a
+  client has no listing command. Of the built-in adapters, Cursor
+  (`cursor-agent --list-models`) is supported today; Claude and Codex report
+  "not supported" via a ready relay seam (`models_argv` / `parse_model_list`).
+- `--json` output for `doctor` and `models`, valid on every path (absent /
+  unsupported / listed) so callers can parse it unconditionally.
 
 ## [0.0.1] - 2026-06-07
 

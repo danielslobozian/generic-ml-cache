@@ -4,6 +4,7 @@
 
     gmlcache run     -- resolve a request (record on miss, replay on hit)
     gmlcache doctor  -- report which configured clients are present (advisory)
+    gmlcache models  -- list a client's available models (advisory; relayed)
     gmlcache inspect -- pretty-print a cassette
 
 Replay fidelity: in the default (quiet) mode, ``run`` reproduces the client's
@@ -123,19 +124,62 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+
     from .discover import probe_all
 
     statuses = probe_all(timeout=args.timeout)
+
+    if args.json:
+        import json
+
+        print(json.dumps([asdict(s) for s in statuses], indent=2))
+        return 0
+
     if not statuses:
         print("no client adapters are registered")
         return 0
     print("configured clients (advisory — discovery never chooses or gates a run):")
     for s in statuses:
         if s.present:
-            print(f"  {s.name:8} present  {s.executable}")
-            print(f"  {'':8}          {s.version or 'version unknown'}")
+            print(f"  {s.name:<8} present  {(s.version or 'version unknown'):<28}  {s.executable}")
         else:
-            print(f"  {s.name:8} missing  {s.detail or ''}")
+            print(f"  {s.name:<8} missing  {s.detail or ''}")
+    return 0
+
+
+def _cmd_models(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+
+    from .discover import list_models, list_models_all
+
+    if args.client:
+        listings = [list_models(args.client, executable=args.executable, timeout=args.timeout)]
+    else:
+        listings = list_models_all(timeout=args.timeout)
+
+    if args.json:
+        import json
+
+        # Always valid JSON on every path (absent / unsupported / listed), so a
+        # caller can parse the output unconditionally.
+        print(json.dumps([asdict(m) for m in listings], indent=2))
+        return 0
+
+    for ml in listings:
+        if not ml.present:
+            print(f"  {ml.name:<8} absent   {ml.reason or ''}")
+            continue
+        if not ml.supported:
+            print(f"  {ml.name:<8} —        {ml.reason or 'model listing not supported'}")
+            continue
+        if ml.models is None:
+            print(f"  {ml.name:<8} —        {ml.reason or 'could not list models'}")
+            continue
+        print(f"  {ml.name:<8} {len(ml.models)} model(s) (advisory; relayed from the client):")
+        for m in ml.models:
+            marker = " (default)" if m.default else (" (current)" if m.current else "")
+            print(f"      {m.id:<34} {m.name}{marker}")
     return 0
 
 
@@ -187,7 +231,25 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--timeout", type=float, default=10.0, help="seconds before a version check is killed"
     )
+    doctor.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     doctor.set_defaults(func=_cmd_doctor)
+
+    models = sub.add_parser(
+        "models",
+        help="list the models a client reports it can use (advisory; relayed from the client)",
+    )
+    models.add_argument(
+        "client",
+        nargs="?",
+        choices=registered_names(),
+        help="one client; omit to query every registered client",
+    )
+    models.add_argument("--executable", help="override the client executable (the seam)")
+    models.add_argument(
+        "--timeout", type=float, default=30.0, help="seconds before the listing call is killed"
+    )
+    models.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    models.set_defaults(func=_cmd_models)
 
     return parser
 

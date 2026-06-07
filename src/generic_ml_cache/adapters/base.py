@@ -20,10 +20,26 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, List, Optional
 
 from ..errors import ClientNotFound
+
+
+@dataclass
+class ModelInfo:
+    """One model a client reports it can use. Purely what the client relayed.
+
+    ``id`` is the string a caller would pass as ``--model``; ``name`` is the
+    client's own human label. ``default``/``current`` mirror any marker the
+    client printed. The cache neither invents nor validates these fields.
+    """
+
+    id: str
+    name: str
+    default: bool = False
+    current: bool = False
 
 
 class ClientAdapter(ABC):
@@ -57,6 +73,26 @@ class ClientAdapter(ABC):
         ``doctor`` command for discovery; it never affects caching.
         """
         return [executable, "--version"]
+
+    def models_argv(self, executable: str) -> Optional[List[str]]:
+        """Argv that makes the client list the models it can use, or ``None``.
+
+        Return ``None`` when the client has no scriptable way to enumerate its
+        models -- discovery then reports "not supported" for this client rather
+        than inventing or substituting a list. When non-``None``, the output is
+        relayed through :meth:`parse_model_list`. Because the client is the one
+        already authenticated, a relayed list reflects what *that account* can
+        actually reach. Advisory: never selects, restricts, or gates a run.
+        """
+        return None
+
+    def parse_model_list(self, stdout: str) -> List[ModelInfo]:
+        """Structure the client's raw model-list output into ``ModelInfo``.
+
+        Only called when :meth:`models_argv` returns a command; override the two
+        together. Keep parsing to plain structuring of what the client printed.
+        """
+        raise NotImplementedError
 
     def prepare(self, run_dir: Path, context: str, prompt: str, system_prompt: str) -> None:
         """Write any input files the client needs into its isolated folder.
