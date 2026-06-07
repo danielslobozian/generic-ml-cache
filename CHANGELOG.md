@@ -9,7 +9,12 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- `gmlcache doctor`: a read-only command that reports which configured clients
+  are present on the current machine and their `--version` output. Advisory only
+  — discovery never chooses a client, never restricts a model, and never gates a
+  run; a client it cannot find is reported as missing rather than as an error.
 
 ## [0.0.1] - 2026-06-07
 

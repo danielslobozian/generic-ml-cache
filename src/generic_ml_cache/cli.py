@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Command-line interface for generic-ml-cache.
 
-    gmlcache run    -- resolve a request (record on miss, replay on hit)
+    gmlcache run     -- resolve a request (record on miss, replay on hit)
+    gmlcache doctor  -- report which configured clients are present (advisory)
     gmlcache inspect -- pretty-print a cassette
-    gmlcache version
 
 Replay fidelity: in the default (quiet) mode, ``run`` reproduces the client's
 stdout, stderr and exit code exactly. Cache diagnostics appear only with
@@ -122,6 +122,23 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from .discover import probe_all
+
+    statuses = probe_all(timeout=args.timeout)
+    if not statuses:
+        print("no client adapters are registered")
+        return 0
+    print("configured clients (advisory — discovery never chooses or gates a run):")
+    for s in statuses:
+        if s.present:
+            print(f"  {s.name:8} present  {s.executable}")
+            print(f"  {'':8}          {s.version or 'version unknown'}")
+        else:
+            print(f"  {s.name:8} missing  {s.detail or ''}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gmlcache",
@@ -162,6 +179,15 @@ def build_parser() -> argparse.ArgumentParser:
     inspect = sub.add_parser("inspect", help="pretty-print a cassette")
     inspect.add_argument("cassette", help="path to a cassette JSON file")
     inspect.set_defaults(func=_cmd_inspect)
+
+    doctor = sub.add_parser(
+        "doctor",
+        help="report which configured clients are present + their versions (advisory)",
+    )
+    doctor.add_argument(
+        "--timeout", type=float, default=10.0, help="seconds before a version check is killed"
+    )
+    doctor.set_defaults(func=_cmd_doctor)
 
     return parser
 

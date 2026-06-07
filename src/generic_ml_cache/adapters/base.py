@@ -50,6 +50,14 @@ class ClientAdapter(ABC):
             )
         return found
 
+    def version_argv(self, executable: str) -> List[str]:
+        """Argv that prints the client's version. Default: ``<exe> --version``.
+
+        Override only if a client uses a different flag. Advisory: used by the
+        ``doctor`` command for discovery; it never affects caching.
+        """
+        return [executable, "--version"]
+
     def prepare(self, run_dir: Path, context: str, prompt: str, system_prompt: str) -> None:
         """Write any input files the client needs into its isolated folder.
 

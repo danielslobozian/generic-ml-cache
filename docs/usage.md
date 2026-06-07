@@ -150,6 +150,20 @@ It shows the client / model / effort, the input checksum, the captured stdout /
 stderr / exit code, and the list of captured files — everything the cache will
 replay.
 
+## `gmlcache doctor`
+
+Report which configured clients are present on this machine and their versions.
+
+```bash
+gmlcache doctor
+```
+
+For each registered client it shows whether the executable was found (and where)
+and the first line of its `--version` output. This is **advisory only**: it never
+chooses a client, never restricts which model may run, and never gates a call —
+it just tells you what is here. A client it cannot find is reported as missing,
+not treated as an error.
+
 ## `gmlcache --version`
 
 Prints the installed version.
