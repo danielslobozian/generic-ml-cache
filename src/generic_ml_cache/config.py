@@ -25,13 +25,26 @@ File shape::
     mode = cache
     store = .gmlcache
     timeout = 120
+
+    [executables]
+    claude = /opt/claude/bin/claude
+    codex  = /usr/local/bin/codex
+
+The optional ``[executables]`` section maps a client name to the path (or bare
+command) used to launch it, supplying a persistent default for the per-call
+``--executable`` seam. It is for installs that are not on ``PATH`` or for pinning
+one of several builds; it never changes *which* client/model runs. Precedence per
+client is ``--executable`` flag > ``[executables]`` config > the adapter's own
+``PATH`` lookup. Unknown client keys are kept, not rejected (the adapter registry
+is extensible), and a path is not validated at load -- a wrong path surfaces a
+clear error only if and when that client is actually launched.
 """
 
 from __future__ import annotations
 
 import configparser
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -42,6 +55,7 @@ CONFIG_ENV = "GMLCACHE_CONFIG"
 APP_DIR = "generic-ml-cache"
 CONFIG_NAME = "config.ini"
 SECTION = "defaults"
+EXECUTABLES_SECTION = "executables"
 
 #: built-in defaults; ``timeout`` of ``None`` means "no timeout"
 DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "store": ".gmlcache", "timeout": None}
@@ -72,6 +86,7 @@ class FileConfig:
     mode: Optional[str] = None
     store: Optional[str] = None
     timeout: Optional[float] = None
+    executables: Dict[str, str] = field(default_factory=dict)
     source: Optional[Path] = None
 
 
@@ -106,7 +121,18 @@ def load(path: Optional[Path] = None) -> FileConfig:
     timeout_raw = get("timeout")
     timeout = _parse_timeout(timeout_raw, f"in {p}") if timeout_raw else None
 
-    return FileConfig(mode=mode, store=get("store"), timeout=timeout, source=p)
+    # [executables]: client name -> path/command. Kept verbatim and leniently
+    # (unknown client keys are not an error -- the adapter registry is
+    # extensible, and a key is only ever consulted when that client is run).
+    executables = (
+        {k: v for k, v in parser[EXECUTABLES_SECTION].items()}
+        if parser.has_section(EXECUTABLES_SECTION)
+        else {}
+    )
+
+    return FileConfig(
+        mode=mode, store=get("store"), timeout=timeout, executables=executables, source=p
+    )
 
 
 def _pick(flag, env, file_value, default) -> Tuple[object, str]:
@@ -150,3 +176,19 @@ def resolve_settings(
         "store": _pick(store_flag, env.get("GMLCACHE_STORE"), file_cfg.store, DEFAULTS["store"]),
         "timeout": _pick(timeout_flag, timeout_env, file_cfg.timeout, DEFAULTS["timeout"]),
     }
+
+
+def executable_for(
+    file_cfg: FileConfig, client: str, *, flag: Optional[str] = None
+) -> Optional[str]:
+    """The executable override to hand the adapter for ``client``.
+
+    Precedence is ``--executable`` flag > ``[executables]`` config entry, and
+    ``None`` when neither is set -- in which case the adapter falls back to its
+    own ``PATH`` lookup. There is deliberately no environment layer here: a
+    single variable cannot name *which* client, and per-client variables would
+    be overkill for what this seam is for.
+    """
+    if flag is not None:
+        return flag
+    return file_cfg.executables.get(client)

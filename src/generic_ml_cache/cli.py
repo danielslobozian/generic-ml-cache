@@ -85,7 +85,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             request,
             store,
             mode=mode,
-            executable=args.executable,
+            executable=config.executable_for(file_cfg, args.client, flag=args.executable),
             timeout=timeout,
         )
     except CacheMiss as exc:
@@ -138,7 +138,13 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
     from .discover import probe_all
 
-    statuses = probe_all(timeout=args.timeout)
+    try:
+        file_cfg = config.load()
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    statuses = probe_all(timeout=args.timeout, executables=file_cfg.executables)
 
     if args.json:
         import json
@@ -163,10 +169,17 @@ def _cmd_models(args: argparse.Namespace) -> int:
 
     from .discover import list_models, list_models_all
 
+    try:
+        file_cfg = config.load()
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
     if args.client:
-        listings = [list_models(args.client, executable=args.executable, timeout=args.timeout)]
+        executable = config.executable_for(file_cfg, args.client, flag=args.executable)
+        listings = [list_models(args.client, executable=executable, timeout=args.timeout)]
     else:
-        listings = list_models_all(timeout=args.timeout)
+        listings = list_models_all(timeout=args.timeout, executables=file_cfg.executables)
 
     if args.json:
         import json
@@ -213,6 +226,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
                     "config_file": str(path),
                     "loaded": loaded,
                     "settings": {k: {"value": v[0], "source": v[1]} for k, v in settings.items()},
+                    "executables": dict(file_cfg.executables),
                 },
                 indent=2,
             )
@@ -225,6 +239,12 @@ def _cmd_status(args: argparse.Namespace) -> int:
         value, source = settings[key]
         shown = "none" if value is None else value
         print(f"  {key:<8} {str(shown):<14} (from {source})")
+    if file_cfg.executables:
+        print("executables (from config; --executable still overrides per call):")
+        for client, exe in file_cfg.executables.items():
+            print(f"  {client:<8} {exe}")
+    else:
+        print("executables : none configured (clients resolved on PATH)")
     return 0
 
 

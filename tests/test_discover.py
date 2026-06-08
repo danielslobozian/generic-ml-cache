@@ -27,6 +27,12 @@ def test_probe_all_includes_registered_fake():
     assert "fake" in names
 
 
+def test_probe_all_threads_executables_mapping():
+    # an executables mapping overrides per client; an absent binary -> not present
+    statuses = {s.name: s for s in probe_all(executables={"fake": "no-such-binary-xyz123"})}
+    assert statuses["fake"].present is False
+
+
 def test_doctor_cli_lists_clients(capsys):
     rc = main(["doctor"])
     assert rc == 0

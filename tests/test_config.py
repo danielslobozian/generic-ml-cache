@@ -87,3 +87,65 @@ def test_status_cli_when_no_file(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "not present" in out
     assert "from default" in out
+
+
+def test_missing_file_yields_empty_executables(tmp_path):
+    cfg = config.load(tmp_path / "absent.ini")
+    assert cfg.executables == {}
+
+
+def test_load_reads_executables_section(tmp_path):
+    p = _write(
+        tmp_path / "c.ini",
+        "[executables]\nclaude = /opt/claude/bin/claude\ncodex = /usr/local/bin/codex\n",
+    )
+    cfg = config.load(p)
+    assert cfg.executables == {
+        "claude": "/opt/claude/bin/claude",
+        "codex": "/usr/local/bin/codex",
+    }
+
+
+def test_unknown_executable_key_is_kept_not_rejected(tmp_path):
+    # client names are an extensible registry, so an unknown key is not an error.
+    p = _write(tmp_path / "c.ini", "[executables]\nnot-a-real-client = /some/where\n")
+    cfg = config.load(p)
+    assert cfg.executables == {"not-a-real-client": "/some/where"}
+
+
+def test_executable_for_precedence(tmp_path):
+    cfg = config.load(_write(tmp_path / "c.ini", "[executables]\nclaude = /from/config\n"))
+    # flag wins
+    assert config.executable_for(cfg, "claude", flag="/from/flag") == "/from/flag"
+    # else config
+    assert config.executable_for(cfg, "claude") == "/from/config"
+    # else None (adapter falls back to its own PATH lookup)
+    assert config.executable_for(cfg, "codex") is None
+
+
+def test_status_json_includes_executables(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[executables]\nclaude = /opt/claude\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["status", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["executables"] == {"claude": "/opt/claude"}
+
+
+def test_status_text_shows_executables(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[executables]\nclaude = /opt/claude\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["status"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "claude" in out and "/opt/claude" in out
+
+
+def test_doctor_cli_honors_configured_executable(tmp_path, monkeypatch, capsys):
+    # point the fake client at an absent binary via config -> doctor reports it missing
+    p = _write(tmp_path / "c.ini", "[executables]\nfake = definitely-not-a-real-binary-xyz123\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["doctor"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "fake" in out and "missing" in out

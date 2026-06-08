@@ -107,7 +107,7 @@ and neither the directive nor your system prompt is stored in the cassette.
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--store STORE` | `.gmlcache` | the cassette directory |
-| `--executable EXECUTABLE` | adapter default | override the client binary (the "seam") |
+| `--executable EXECUTABLE` | `[executables]` config, else adapter `PATH` lookup | override the client binary (the "seam") |
 | `--output-dir OUTPUT_DIR` | current directory | where replayed files are written |
 | `--timeout TIMEOUT` | none | seconds before a real call is killed |
 | `-v`, `--verbose` | off | print `gmlc:` diagnostics to stderr |
@@ -249,6 +249,26 @@ timeout = 120
 Environment variables: `GMLCACHE_MODE`, `GMLCACHE_STORE`, `GMLCACHE_TIMEOUT`
 (and `GMLCACHE_CONFIG` to point at the file itself).
 
+### Client executables
+
+An optional `[executables]` section gives each client a persistent default for
+the `--executable` seam — handy when a client is not on your `PATH`, or when you
+keep several builds and want to pin one:
+
+```ini
+[executables]
+claude = /opt/claude/bin/claude
+codex  = /usr/local/bin/codex
+```
+
+It maps a client name to a path (or bare command); `run`, `doctor`, and `models`
+all use it. It only changes *where* a client is launched from — never *which*
+client or model runs. Precedence per client is `--executable` flag > this section
+> the adapter's own `PATH` lookup; there is no environment layer (a single
+variable cannot name a client). Unknown client keys are kept rather than
+rejected — the adapter set is extensible — and a path is not checked at load: a
+wrong one surfaces a clear error only when that client is actually launched.
+
 ## `gmlcache status`
 
 Show the resolved configuration so behavior is never a mystery.
@@ -260,8 +280,9 @@ gmlcache status --json
 
 It prints which file would be read and whether it was found, then the effective
 `mode` / `store` / `timeout` with the source of each value (`flag` / `env` /
-`config` / `default`). It applies environment and file settings but no `run`
-flags, since it describes the resting configuration, not a particular call.
+`config` / `default`), and any configured client executables. It applies
+environment and file settings but no `run` flags, since it describes the resting
+configuration, not a particular call.
 
 ## `gmlcache --version`
 

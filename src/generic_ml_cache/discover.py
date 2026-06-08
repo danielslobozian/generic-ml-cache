@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .adapters.base import ModelInfo
 from .adapters.registry import get_adapter, registered_names
@@ -56,9 +56,17 @@ def probe(name: str, executable: Optional[str] = None, timeout: float = 10.0) ->
     return ClientStatus(name=name, present=True, executable=exe, version=version, detail=detail)
 
 
-def probe_all(timeout: float = 10.0) -> List[ClientStatus]:
-    """Probe every registered client, in name order."""
-    return [probe(name, timeout=timeout) for name in registered_names()]
+def probe_all(
+    timeout: float = 10.0, executables: Optional[Dict[str, str]] = None
+) -> List[ClientStatus]:
+    """Probe every registered client, in name order.
+
+    ``executables`` optionally maps a client name to the executable to probe
+    (e.g. from the ``[executables]`` config); a client absent from the mapping
+    falls back to its adapter's own ``PATH`` lookup.
+    """
+    exe = executables or {}
+    return [probe(name, executable=exe.get(name), timeout=timeout) for name in registered_names()]
 
 
 @dataclass
@@ -126,6 +134,16 @@ def list_models(name: str, executable: Optional[str] = None, timeout: float = 30
     )
 
 
-def list_models_all(timeout: float = 30.0) -> List[ModelListing]:
-    """List models for every registered client, in name order."""
-    return [list_models(name, timeout=timeout) for name in registered_names()]
+def list_models_all(
+    timeout: float = 30.0, executables: Optional[Dict[str, str]] = None
+) -> List[ModelListing]:
+    """List models for every registered client, in name order.
+
+    ``executables`` optionally maps a client name to the executable to use
+    (e.g. from the ``[executables]`` config); a client absent from the mapping
+    falls back to its adapter's own ``PATH`` lookup.
+    """
+    exe = executables or {}
+    return [
+        list_models(name, executable=exe.get(name), timeout=timeout) for name in registered_names()
+    ]
