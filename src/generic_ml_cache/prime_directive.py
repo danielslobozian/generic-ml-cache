@@ -25,11 +25,28 @@ PRIME_DIRECTIVE = (
 )
 
 
-def build_system_prompt(user_system_prompt: str | None = None) -> str:
+def build_system_prompt(
+    user_system_prompt: str | None = None,
+    allowed_read_paths: list[str] | None = None,
+) -> str:
     """Compose the directive with an optional caller-supplied system prompt.
 
     The directive always comes first so it cannot be overridden by trailing text.
+    When ``allowed_read_paths`` is given (declared input files), the directive is
+    widened to permit reading exactly those paths -- nothing else outside the
+    folder, and never writing to them. Like the rest of the directive, this is
+    record-time scaffolding and is never stored in the cassette.
     """
+    directive = PRIME_DIRECTIVE
+    if allowed_read_paths:
+        listed = "\n".join(f"  - {p}" for p in allowed_read_paths)
+        directive = (
+            f"{directive}\n"
+            "DECLARED INPUT FILES: you MAY additionally READ the following "
+            "specific files even though they sit outside this folder. You may "
+            "NOT write to them, and you may NOT read anything else outside the "
+            "folder:\n" + listed
+        )
     if user_system_prompt:
-        return f"{PRIME_DIRECTIVE}\n\n---\n\n{user_system_prompt}"
-    return PRIME_DIRECTIVE
+        return f"{directive}\n\n---\n\n{user_system_prompt}"
+    return directive

@@ -100,9 +100,10 @@ releases, **one feature per release**.
   never the content. The key watches **content, not names**: a file's path
   normally lives in the prompt (already part of the key), so a rename that
   rewrites the prompt misses via the prompt and a content change misses via the
-  fingerprint — the cache itself does nothing clever about names. Input files are
-  UTF-8 text; because they are enumerated and fingerprinted, a call that declares
-  only input files stays **cacheable and sound**.
+  fingerprint — the cache itself does nothing clever about names. Input files may
+  be **any file** (text or binary): each is fingerprinted by its content bytes, so
+  no format is imposed. Because they are enumerated and fingerprinted, a call that
+  declares only input files stays **cacheable and sound**.
 
 - **`0.0.5` — Allow-path (anticipated, unfingerprintable read access).** The same
   door as 0.0.4, opened onto a **folder of unknowns** the cache cannot enumerate

@@ -17,9 +17,10 @@ design breaks byte-exact stderr fidelity -- use quiet mode when that matters.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from . import __version__, config
 from .adapters.registry import registered_names
@@ -46,6 +47,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
         _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
     )
 
+    # Declared input files: fingerprint each by content (any file type) -> {abs_path: sha}.
+    input_files: Dict[str, str] = {}
+    for raw in args.input_file or []:
+        p = Path(raw)
+        if not p.is_file():
+            raise SystemExit(f"error: input file not found: {raw}")
+        try:
+            data = p.read_bytes()
+        except OSError as exc:
+            raise SystemExit(f"error: cannot read input file {raw}: {exc}")
+        input_files[str(p.resolve())] = hashlib.sha256(data).hexdigest()
+
     request = Request(
         client=args.client,
         model=args.model,
@@ -53,6 +66,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         context=context,
         prompt=prompt,
         user_system_prompt=system_prompt,
+        input_files=input_files,
     )
     try:
         file_cfg = config.load()
@@ -124,6 +138,11 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print(f"key    : {cassette.match_key}")
     print(f"context: {len(cassette.input_data.get('context', ''))} chars")
     print(f"prompt : {len(cassette.input_data.get('prompt', ''))} chars")
+    infiles = sorted(k for k in cassette.input_data if k.startswith("input_file:"))
+    if infiles:
+        print(f"input files: {len(infiles)} (fingerprints)")
+        for k in infiles:
+            print(f"         - {k[len('input_file:') :][:12]}…")
     print(f"exit   : {cassette.response.exit}")
     print(f"stdout : {len(cassette.response.stdout)} chars")
     print(f"stderr : {len(cassette.response.stderr)} chars")
@@ -273,6 +292,18 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--context-file")
     run.add_argument("--system-prompt")
     run.add_argument("--system-prompt-file")
+    run.add_argument(
+        "--input-file",
+        action="append",
+        dest="input_file",
+        metavar="PATH",
+        help=(
+            "a specific file the client will read in place; its content is "
+            "fingerprinted into the cache key and the client is granted read "
+            "access to it. Repeatable, any file type. The key watches content, "
+            "not the name."
+        ),
+    )
     run.add_argument(
         "--store",
         default=None,

@@ -24,7 +24,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .adapters.base import ClientAdapter
 from .cassette import CapturedFile, Response
@@ -71,13 +71,16 @@ def record_real_call(
     prompt: str,
     user_system_prompt: str | None = None,
     timeout: float | None = None,
+    allowed_read_paths: Optional[List[str]] = None,
 ) -> RunResult:
     """Execute the client once in isolation and capture its full response.
 
     The prime directive is injected here (record time) and is deliberately NOT
-    returned as part of the cached input -- it is operational scaffolding.
+    returned as part of the cached input -- it is operational scaffolding. When
+    ``allowed_read_paths`` is given (declared input files), the directive is
+    widened to let the client read exactly those paths in place.
     """
-    system_prompt = build_system_prompt(user_system_prompt)
+    system_prompt = build_system_prompt(user_system_prompt, allowed_read_paths)
 
     with tempfile.TemporaryDirectory(prefix="gmlc-run-") as tmp:
         run_dir = Path(tmp)

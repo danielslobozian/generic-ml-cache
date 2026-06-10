@@ -93,6 +93,32 @@ cache entry. Newlines and tabs are significant.
 The cache's prime directive is always injected ahead of whatever you supply here,
 and neither the directive nor your system prompt is stored in the cassette.
 
+### Input files
+
+| Flag | Meaning |
+|------|---------|
+| `--input-file PATH` | a specific file the client will read in place (repeatable) |
+
+Use this to tell the cache about specific files your client will read that live
+**outside** its run folder. For each one the cache does exactly two things: it
+**fingerprints the file's content** into the cache key (so a content change is a
+different call), and it **opens the door** — the prime directive is widened to let
+the client read those exact paths, which it is otherwise forbidden. The cache does
+not deliver the files; your client reads them itself, in place, so your prompt
+should reference them.
+
+The key watches **content, not the name**: the fingerprint is a hash of the file's
+bytes, so any file type works (text or binary), a rename with identical content is
+still a hit, the order you pass them in is irrelevant, and two files with identical
+content collapse to one. Only the fingerprint is stored in the cassette, never the
+content. A missing file is an error.
+
+```bash
+gmlcache run --client claude --model sonnet \
+  --prompt "Using db/schema.sql, write the migration." \
+  --input-file db/schema.sql --input-file db/seed.sql
+```
+
 ### Modes
 
 | Flag | Mode | Behavior |

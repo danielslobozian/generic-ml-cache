@@ -17,9 +17,9 @@ caller's output folder, and stdout/stderr/exit are reproduced.
 from __future__ import annotations
 
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from .adapters.registry import get_adapter
 from .cassette import Cassette, Response
@@ -42,10 +42,24 @@ class Request:
     context: str
     prompt: str
     user_system_prompt: Optional[str] = None
+    # Declared input files the client will read *in place*: {absolute_path: content_sha256}.
+    # Only the content fingerprint enters the key (folded into input_data below); the paths
+    # are used solely to open the read-door at record time and are never part of the key.
+    # Same content -> same key (rename-invariant); identical-content files collapse to one
+    # entry; order is irrelevant (input_data is hashed by sorted key).
+    input_files: Dict[str, str] = field(default_factory=dict)
 
     @property
     def input_data(self) -> Dict[str, str]:
-        return {"context": self.context, "prompt": self.prompt}
+        data = {"context": self.context, "prompt": self.prompt}
+        for sha in self.input_files.values():
+            data[f"input_file:{sha}"] = sha
+        return data
+
+    @property
+    def allowed_read_paths(self) -> List[str]:
+        """The declared file paths, sorted -- what the door is opened for."""
+        return sorted(self.input_files)
 
 
 @dataclass
@@ -96,6 +110,7 @@ def resolve(
         prompt=request.prompt,
         user_system_prompt=request.user_system_prompt,
         timeout=timeout,
+        allowed_read_paths=request.allowed_read_paths,
     )
     cassette = Cassette(
         client=request.client,
