@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.2 (alpha)
+## Where we are: 0.0.3 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -52,6 +52,17 @@ Added in 0.0.2:
 - `run --effort` made optional — each client applies its own default when it is
   omitted; effort remains an explicit part of the cassette key.
 
+Added in 0.0.3:
+
+- An optional, opt-in configuration file (INI, zero dependencies) at the standard
+  per-user location. `run` reads `mode` / `store` / `timeout` defaults from
+  `[defaults]`; an `[executables]` section gives each client a persistent default
+  for the `--executable` seam (for installs off `PATH` or pinning a build).
+  Precedence is CLI flag > environment variable > config file > built-in default;
+  the executables seam has no environment layer.
+- `status` — prints the resolved configuration: which file loaded (if any), each
+  effective setting with its source, and any configured executables.
+
 Deliberately **not** in 0.0.1: reading the caller's ambient files, API/HTTP
 caching, and dependency-aware validity tracking. Those are below.
 
@@ -62,14 +73,6 @@ version number loses its leading zero. They will arrive across `0.0.x` and
 `0.1.x` releases.
 
 The immediate next releases:
-
-- **`0.0.3` — Configuration.** An optional config file at the standard per-user
-  location (the XDG / OS config directory) holding defaults such as the mode and
-  the store path. It is discovered only if present, **never auto-written on
-  install**, and always overridable, with explicit precedence: CLI flag > environment
-  variable > config file > built-in default (the default remains `cache`). A
-  `status` command prints the resolved configuration — which file was loaded, if
-  any, and the effective settings — so behavior is never a mystery.
 
 - **`0.0.4` — Declared file access (`allow-path`).** A per-execution allowlist of
   paths the client may **read** (for tasks like scanning a source tree),

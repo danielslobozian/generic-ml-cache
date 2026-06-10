@@ -9,6 +9,8 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-06-08
+
 ### Added
 
 - Optional configuration file (INI, zero dependencies). `run` reads its defaults
@@ -18,9 +20,17 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   automatically. Precedence is CLI flag > environment variable
   (`GMLCACHE_MODE` / `GMLCACHE_STORE` / `GMLCACHE_TIMEOUT`) > config file >
   built-in default.
+- Optional `[executables]` section in the same config file, mapping a client name
+  to the path (or bare command) used to launch it — a persistent default for the
+  per-call `--executable` seam, for installs not on `PATH` or for pinning one of
+  several builds. Used by `run`, `doctor`, and `models`; it only changes *where* a
+  client is launched, never *which* client or model runs. Precedence per client is
+  `--executable` flag > `[executables]` config > the adapter's own `PATH` lookup
+  (no environment layer). Unknown client keys are kept rather than rejected, and a
+  path is not validated until that client is actually launched.
 - `gmlcache status` (with `--json`): prints which config file was loaded, if any,
-  and the effective settings with the source of each value (flag / env / config /
-  default).
+  the effective settings with the source of each value (flag / env / config /
+  default), and any configured client executables.
 
 ## [0.0.2] - 2026-06-07
 
@@ -75,6 +85,7 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/danielslobozian/generic-ml-cache/releases/tag/v0.0.1
