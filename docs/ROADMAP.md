@@ -65,79 +65,150 @@ Added in 0.0.3:
 
 Deliberately **not** in 0.0.1: reading the caller's ambient files, API/HTTP
 caching, and dependency-aware validity tracking. Those are below.
-
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
-version number loses its leading zero. They will arrive across `0.0.x` and
-`0.1.x` releases.
+version number loses its leading zero. They arrive across `0.0.x` and `0.1.x`
+releases, **one feature per release**.
 
-The immediate next releases:
+### Design invariants (these constrain every item below)
 
-- **`0.0.4` — Declared file access (`allow-path`).** A per-execution allowlist of
-  paths the client may **read** (for tasks like scanning a source tree),
-  translated into each client's own access-restriction mechanism, best-effort
-  where a client has none. **Writes** stay confined to and captured from the
-  isolated folder, exactly as today. Because the cache cannot know whether the
-  contents of those paths changed between runs, a call that declares `allow-path`
-  runs **passthrough by default** — it executes the real client and does *not*
-  serve or store a cassette — so a scan is always fresh and leaves no stale
-  recording behind. Freshness stays the caller's responsibility (force a fresh run
-  when inputs change), keeping the cache dumb. Soundly *caching* a file-reading
-  call — by folding the declared paths' contents into the key — is the separate
-  dependency-aware enhancement below, deliberately not required here. This release
-  is the threshold at which the cache can front real file-reading workloads (such
-  as scanning a codebase), not only self-contained prompt-to-output calls.
+- **A detached-mode cache, never an interception proxy.** It records and replays
+  *headless client subprocess* calls. It does not sit between a client and a
+  provider's API; that is a separate, post-1.0.0 idea (below) and explicitly not
+  this software's mission.
+- **As dumb as possible.** Determinism is the caller's responsibility. The cache
+  adds no cleverness to "help" beyond watching declared inputs and reproducing
+  what it captured. Rename a file, change a prompt — that is the caller's to
+  manage; the cache simply records a different call.
+- **Soundness: the key captures everything that changes the client's output.** A
+  hit is served only when replay is faithful. Anything the cache cannot
+  fingerprint, it must not cache.
+- **The cache owns one folder.** It reproduces what was created/modified inside
+  its own isolated run folder. It does not track or re-apply changes to files
+  outside that folder.
 
-The remaining items, across later `0.0.x` / `0.1.x`:
+### Immediate next releases
 
-1. **Adapter hardening.** The launch-flag mappings for `claude` / `codex` /
-   `cursor-agent` are currently best-effort and follow one toolchain's
-   conventions. Before 1.0.0 they need to be verified against the real CLIs,
-   made configurable where the CLIs differ, and covered by adapters that degrade
-   gracefully when a flag is unsupported.
-2. **A documented, versioned cassette schema.** `SCHEMA_VERSION` exists; 1.0.0
-   needs a written schema document, a compatibility policy, and a migration path
-   for cassettes written by older versions.
-3. **Deletion capture.** v0.0.1 captures created and modified files only.
-   Deletions are ignored. 1.0.0 should represent deletions in the cassette so
-   replay can faithfully reproduce a run that removed a file.
-4. **A small, stable public Python API.** The CLI is the primary surface today.
-   1.0.0 should expose a documented library API (recording, lookup, replay,
-   inspection) with semantic-versioning guarantees.
-5. **Robustness around partial and failed records.** Clear, tested behavior when
-   a real call crashes, times out, or is interrupted mid-record, so the store is
-   never left with a half-written cassette. (Writes are already atomic; the
-   surrounding policy needs to be specified and tested.)
-6. **Store ergonomics.** Listing, pruning, and inspecting cassettes from the CLI;
-   a documented on-disk layout that callers can rely on.
+- **`0.0.4` — Input files (declared, fingerprinted read access).** The caller
+  names specific files its client will read. The cache does exactly two things
+  with them: it **fingerprints each file's content** into the cassette's input
+  identity (so a content change is a different call), and it **opens the door** —
+  amends the isolation so the client may read those specific paths, which it is
+  otherwise forbidden. It does *not* ingest, repackage, or deliver the files; the
+  client reads them itself, in place, and only the content fingerprint is stored,
+  never the content. The key watches **content, not names**: a file's path
+  normally lives in the prompt (already part of the key), so a rename that
+  rewrites the prompt misses via the prompt and a content change misses via the
+  fingerprint — the cache itself does nothing clever about names. Input files are
+  UTF-8 text; because they are enumerated and fingerprinted, a call that declares
+  only input files stays **cacheable and sound**.
+
+- **`0.0.5` — Allow-path (anticipated, unfingerprintable read access).** The same
+  door as 0.0.4, opened onto a **folder of unknowns** the cache cannot enumerate
+  or fingerprint (e.g. "scan this source tree to find where X is implemented").
+  Because it cannot know what was read or whether it changed, such a call is
+  **non-cacheable by default** — passthrough: run the real client, serve and store
+  nothing, leave no stale recording. An **opt-in** (off by default, deliberately a
+  config setting and not a casual flag) lets the user assert a folder is stable —
+  frozen CI fixtures, repeatable benchmarks — and cache anyway, at their own risk,
+  with `--force` as the manual refresh; a cassette recorded under that assertion
+  is **stamped** with scan-trust provenance so `inspect` shows it trusted an
+  unverified folder. Writes stay confined to and captured from the isolated
+  folder, exactly as today.
+
+  *Deletion capture is intentionally **dropped** (it was item 3 of the old plan).*
+  It only mattered if the run folder started non-empty. Under this model the
+  folder starts empty, declared inputs live *outside* it and are read in place,
+  and the cache never tracks external-file changes — so there is no deletion to
+  reproduce.
+
+- **`0.0.6` — Partial / failed-record robustness.** Clear, tested behavior when a
+  real call crashes, times out, or is interrupted mid-record, so the store is
+  never left with a half-written cassette. Writes are already atomic; the
+  surrounding policy needs to be specified and tested.
+
+### Later `0.0.x` / `0.1.x`
+
+- **`0.0.7` — Store ergonomics + observability.** Cassettes become effectively
+  **immutable**, and a separate, **non-load-bearing** access registry (stdlib
+  `sqlite3`, so still zero third-party dependencies) records access **events** —
+  hit / miss / record / evict — beside the store. The registry never gates a
+  lookup or a replay: lose it, corrupt it, or delete it and correctness is
+  untouched; it only powers observability and idle-based pruning, and every write
+  to it is best-effort. On top of it:
+  - **`prune`** — operator-invoked, never automatic: by **idle** (time since last
+    access, read from the registry), by **age**, or by **total size**
+    (`--max-size`, `--keep N`).
+  - **`stats`** — hit rate, hottest/coldest cassettes, eviction history.
+  - A documented on-disk layout that callers can rely on.
+
+  Because eviction events remain after the cassette is gone, the registry outlives
+  what it describes, so it carries its **own retention/compaction** story rather
+  than becoming a new unbounded surface.
+
+- **`0.0.8` — Adapter hardening.** The launch-flag mappings for `claude` /
+  `codex` / `cursor-agent` are best-effort today. Before 1.0.0 they need
+  verifying against the real CLIs, making configurable where the CLIs differ, and
+  degrading gracefully when a flag is unsupported.
+
+- **`0.1.0` — Documented, versioned cassette schema.** `SCHEMA_VERSION` exists;
+  this adds a written schema document, a compatibility policy, and a migration
+  path for cassettes written by older versions. It documents the **final** shape —
+  including the input-file fingerprint and the scan-trust provenance flag, and
+  explicitly **no** deletion field. The minor bump signals the format is now a
+  committed contract; it lands after the behavior-shaping items above so it
+  describes what is actually true.
+
+- **`0.1.1` — Small, stable public Python API.** The CLI is the primary surface
+  today. This exposes a documented library API (recording, lookup, replay,
+  inspection, prune/stats) with semantic-versioning guarantees. Done last so it
+  reflects final behavior.
 
 When all of the above are done and stable, the project ships **1.0.0**.
 
 ## After 1.0.0 (named, deliberately out of scope for now)
 
-These are real intentions, recorded here so the scope of the alpha stays honest.
+These are recorded here so the scope of the alpha stays honest. None is a
+commitment.
 
 ### v2 — API / HTTP proxy caching
 
-The next major capability after `1.0.0`, and a committed direction rather than a
-maybe. A different mechanism from CLI subprocess caching: intercept HTTP at the
-API layer rather than launching a subprocess and diffing a folder. The aim is
-**one cassette format for both CLI and API calls**, so a project's whole model
-surface caches in one place.
+A possible future capability, **explicitly not the core mission** and perhaps
+never built. A different mechanism from CLI subprocess caching: intercept HTTP at
+the API layer rather than launching a subprocess and diffing a folder. Caching a
+provider's own API to save tokens is fundamentally the provider's concern, not
+this cache's — so this stays a maybe, recorded only for honesty. If it is ever
+built, the aim would be **one cassette format for both CLI and API calls**.
 
 Because a proxy is a long-running network service (unlike the ephemeral CLI
-case), it carries a larger security surface. The intended default is **local /
-trusted use only** (bound to localhost). Exposing it on a shared network is
-explicitly *not* the proxy's job — that belongs to a reverse proxy or VPN in
-front of it providing TLS and authentication. This boundary will be stated
-prominently in its docs so the service is never naively exposed.
+case), it carries a larger security surface. The intended default would be
+**local / trusted use only** (bound to localhost); exposing it on a shared
+network is *not* the proxy's job — that belongs to a reverse proxy or VPN in
+front of it providing TLS and authentication. It could also carry optional
+**per-API policy** (e.g. blocking calls to a particular API for compliance/PII
+reasons) — meaningful only for the proxy, pointless in the local CLI case where
+the caller already chooses exactly which client and model to run.
 
-Because the proxy mediates API access, it could also carry optional **per-API
-policy** — e.g. blocking calls to a particular API so they can't be made through
-the cache (a compliance/PII control). This has no analogue in the local CLI case,
-where the caller already chooses exactly which client and model to run, so such a
-gate would be pointless there; it is meaningful only for the proxy.
+### Daemon / resident-service features (only meaningful with a long-running process)
+
+The CLI is one-shot, so anything that needs a background loop or shared live
+state belongs to a resident service (the proxy above, or a dedicated local-server
+mode), never the launcher:
+
+- **Automatic eviction by policy.** The operator-invoked `prune` of 0.0.7 becomes
+  a background sweep on a configured interval — idle / age / size **TTL** as app
+  configuration rather than a per-call argument — plus an admin "clean now"
+  command. The CLI keeps only manual `prune`; an automatic sweep needs a process
+  that stays alive.
+- **Per-user quotas.** Caps per user (size or count) only have meaning once the
+  cache is a multi-tenant service. There is no "user" in the local CLI.
+
+### Packaging (a v2-era thought)
+
+A possible split into a **client-only** release (the content-addressed store,
+adapters, CLI) and a **full** release (client **+** a local server providing the
+resident-service features above), both sharing the same cassette format.
 
 ### Dependency-aware caching (validity tracking)
 
