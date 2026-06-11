@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.4 (alpha)
+## Where we are: 0.0.5 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -74,6 +74,18 @@ Added in 0.0.4:
 
 Deliberately **not** in 0.0.1: reading the caller's ambient files, API/HTTP
 caching, and dependency-aware validity tracking. Those are below.
+
+Added in 0.0.5:
+
+- Allow-path (`run --allow-path PATH`, repeatable): a declared folder the client
+  may scan whose contents cannot be fingerprinted. Non-cacheable by default
+  (passthrough — runs fresh, stores nothing; offline is an error). Read access via
+  the prime directive for all clients, plus Claude's `--add-dir`; Codex/Cursor hard
+  mechanisms deferred to adapter hardening.
+- Scan-trust (`trust_scan`, config/env, default off): opt in to caching allow-path
+  calls when the scanned folders are asserted stable. Caches on the ordinary key
+  (the prompt names the folder); the allow-path never enters the key or cassette.
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -98,25 +110,6 @@ releases, **one feature per release**.
   outside that folder.
 
 ### Immediate next releases
-
-- **`0.0.5` — Allow-path (anticipated, unfingerprintable read access).** The same
-  door as 0.0.4, opened onto a **folder of unknowns** the cache cannot enumerate
-  or fingerprint (e.g. "scan this source tree to find where X is implemented").
-  Because it cannot know what was read or whether it changed, such a call is
-  **non-cacheable by default** — passthrough: run the real client, serve and store
-  nothing, leave no stale recording. An **opt-in** (off by default, deliberately a
-  config setting and not a casual flag) lets the user assert a folder is stable —
-  frozen CI fixtures, repeatable benchmarks — and cache anyway, at their own risk,
-  with `--force` as the manual refresh; a cassette recorded under that assertion
-  is **stamped** with scan-trust provenance so `inspect` shows it trusted an
-  unverified folder. Writes stay confined to and captured from the isolated
-  folder, exactly as today.
-
-  *Deletion capture is intentionally **dropped** (it was item 3 of the old plan).*
-  It only mattered if the run folder started non-empty. Under this model the
-  folder starts empty, declared inputs live *outside* it and are read in place,
-  and the cache never tracks external-file changes — so there is no deletion to
-  reproduce.
 
 - **`0.0.6` — Partial / failed-record robustness.** Clear, tested behavior when a
   real call crashes, times out, or is interrupted mid-record, so the store is

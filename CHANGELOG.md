@@ -9,6 +9,25 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-06-11
+
+### Added
+
+- Allow-path: `run --allow-path PATH` (repeatable) declares a folder the client may
+  scan/read whose contents the cache cannot fingerprint. Because what was read (and
+  whether it changed) is unknowable, such a call is **non-cacheable by default** —
+  it runs fresh and stores nothing (passthrough), and in offline mode it is a clear
+  error. The folder is granted read access via the prime directive for every client
+  and, on Claude, a real `--add-dir <folder>`; writes stay confined to and captured
+  from the isolated run folder. (Codex/Cursor hard read mechanisms are deferred to
+  adapter hardening.)
+- Scan-trust: an opt-in `trust_scan` setting (`[defaults]` in the config file, or
+  `GMLCACHE_TRUST_SCAN`; default `false`; no per-call flag) that lets allow-path
+  calls be cached anyway when you assert the scanned folders are stable. They cache
+  on the ordinary key — the prompt already names the folder — and the allow-path
+  never enters the key or the cassette. `status` shows the effective value; use
+  `--force` to re-record.
+
 ## [0.0.4] - 2026-06-11
 
 ### Added
@@ -101,7 +120,8 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.1...v0.0.2
