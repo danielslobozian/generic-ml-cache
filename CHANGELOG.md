@@ -9,6 +9,22 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-06-11
+
+### Added
+
+- Declared input files: `run --input-file PATH` (repeatable, any file type). The
+  cache fingerprints each file's content into the cache key — so a content change
+  is a different call — and opens the read-door for exactly those paths (the prime
+  directive is widened to permit reading them, nothing else outside the run
+  folder). The client reads the files itself, in place; the cache stores only the
+  fingerprint, never the content. The key watches content, not names: a rename
+  with identical content is still a hit, order is irrelevant, and identical-content
+  files collapse to one entry. `inspect` lists input-file fingerprints.
+- `docs/client-mapping.md`: a side-by-side reference of how each `run` input maps
+  to the `claude` / `codex` / `cursor-agent` command lines, plus the discovery
+  mapping and the cache-only flags that never reach a client.
+
 ## [0.0.3] - 2026-06-08
 
 ### Added
@@ -85,7 +101,8 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/danielslobozian/generic-ml-cache/releases/tag/v0.0.1

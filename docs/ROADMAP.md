@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.3 (alpha)
+## Where we are: 0.0.4 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -63,6 +63,15 @@ Added in 0.0.3:
 - `status` — prints the resolved configuration: which file loaded (if any), each
   effective setting with its source, and any configured executables.
 
+Added in 0.0.4:
+
+- Declared input files (`run --input-file PATH`, repeatable, any file type). The
+  cache fingerprints each file's content into the key and widens the prime
+  directive to grant read access to exactly those paths; the client reads them in
+  place, and only the fingerprint is stored. Content, not names, drives the key.
+- `docs/client-mapping.md` — a side-by-side reference of how `run` inputs map to
+  each client's command line.
+
 Deliberately **not** in 0.0.1: reading the caller's ambient files, API/HTTP
 caching, and dependency-aware validity tracking. Those are below.
 ## Road to 1.0.0 (the rest of the alpha series)
@@ -89,21 +98,6 @@ releases, **one feature per release**.
   outside that folder.
 
 ### Immediate next releases
-
-- **`0.0.4` — Input files (declared, fingerprinted read access).** The caller
-  names specific files its client will read. The cache does exactly two things
-  with them: it **fingerprints each file's content** into the cassette's input
-  identity (so a content change is a different call), and it **opens the door** —
-  amends the isolation so the client may read those specific paths, which it is
-  otherwise forbidden. It does *not* ingest, repackage, or deliver the files; the
-  client reads them itself, in place, and only the content fingerprint is stored,
-  never the content. The key watches **content, not names**: a file's path
-  normally lives in the prompt (already part of the key), so a rename that
-  rewrites the prompt misses via the prompt and a content change misses via the
-  fingerprint — the cache itself does nothing clever about names. Input files may
-  be **any file** (text or binary): each is fingerprinted by its content bytes, so
-  no format is imposed. Because they are enumerated and fingerprinted, a call that
-  declares only input files stays **cacheable and sound**.
 
 - **`0.0.5` — Allow-path (anticipated, unfingerprintable read access).** The same
   door as 0.0.4, opened onto a **folder of unknowns** the cache cannot enumerate
