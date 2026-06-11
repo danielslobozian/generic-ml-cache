@@ -132,6 +132,17 @@ implemented." Because the cache cannot know what was read or whether it changed,
 *passthrough* — never a hit, never a recording). In offline mode such a call is an
 error, since it can neither be served from cache nor run.
 
+**Scan-trust.** If you know the scanned folders are stable and you *want* these
+calls cached, set `trust_scan = true` under `[defaults]` in the config file (or
+`GMLCACHE_TRUST_SCAN=true`). Allow-path calls are then cached like any other call —
+on the ordinary key. The folder you scan is already named in your prompt, so the
+prompt distinguishes one scan target from another; the allow-path itself never
+enters the key or the cassette (it is purely the execution-time access grant).
+This trades soundness for reuse — the cache will replay a stored answer even if
+the folder's contents have since changed — so it is deliberately a standing config
+choice, not a per-call flag. Use `--force` to re-record. `status` shows the
+effective value.
+
 The client is granted read access to the folder two ways: the prime directive is
 widened to permit it (all clients), and on **Claude** a real `--add-dir <folder>`
 is added to the command. Codex and Cursor have their own per-client mechanisms,

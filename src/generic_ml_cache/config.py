@@ -25,6 +25,7 @@ File shape::
     mode = cache
     store = .gmlcache
     timeout = 120
+    trust_scan = false
 
     [executables]
     claude = /opt/claude/bin/claude
@@ -38,6 +39,16 @@ client is ``--executable`` flag > ``[executables]`` config > the adapter's own
 ``PATH`` lookup. Unknown client keys are kept, not rejected (the adapter registry
 is extensible), and a path is not validated at load -- a wrong path surfaces a
 clear error only if and when that client is actually launched.
+
+``trust_scan`` (boolean, default ``false``) governs whether an *allow-path* call
+may be cached. Allow-path folders cannot be fingerprinted, so by default such a
+call is passthrough (always fresh, never stored). Setting ``trust_scan = true``
+asserts that the scanned folders are stable and lets these calls be cached like
+any other -- on the ordinary key (the prompt already names the folder), with the
+folders themselves never entering the key or the cassette. It is deliberately a
+config/environment setting, not a per-call flag, because it trades soundness for
+reuse and should be a considered, standing choice. Precedence is the usual
+environment (``GMLCACHE_TRUST_SCAN``) > config file > built-in default.
 """
 
 from __future__ import annotations
@@ -86,6 +97,7 @@ class FileConfig:
     mode: Optional[str] = None
     store: Optional[str] = None
     timeout: Optional[float] = None
+    trust_scan: Optional[bool] = None
     executables: Dict[str, str] = field(default_factory=dict)
     source: Optional[Path] = None
 
@@ -95,6 +107,19 @@ def _parse_timeout(raw: str, where: str) -> float:
         return float(raw)
     except ValueError as exc:
         raise ConfigError(f"invalid timeout {raw!r} {where}; expected a number") from exc
+
+
+_TRUE = {"true", "1", "yes", "on"}
+_FALSE = {"false", "0", "no", "off"}
+
+
+def _parse_bool(raw: str, where: str) -> bool:
+    v = raw.strip().lower()
+    if v in _TRUE:
+        return True
+    if v in _FALSE:
+        return False
+    raise ConfigError(f"invalid boolean {raw!r} {where}; expected true or false")
 
 
 def load(path: Optional[Path] = None) -> FileConfig:
@@ -121,6 +146,9 @@ def load(path: Optional[Path] = None) -> FileConfig:
     timeout_raw = get("timeout")
     timeout = _parse_timeout(timeout_raw, f"in {p}") if timeout_raw else None
 
+    trust_scan_raw = get("trust_scan")
+    trust_scan = _parse_bool(trust_scan_raw, f"in {p}") if trust_scan_raw else None
+
     # [executables]: client name -> path/command. Kept verbatim and leniently
     # (unknown client keys are not an error -- the adapter registry is
     # extensible, and a key is only ever consulted when that client is run).
@@ -131,7 +159,12 @@ def load(path: Optional[Path] = None) -> FileConfig:
     )
 
     return FileConfig(
-        mode=mode, store=get("store"), timeout=timeout, executables=executables, source=p
+        mode=mode,
+        store=get("store"),
+        timeout=timeout,
+        trust_scan=trust_scan,
+        executables=executables,
+        source=p,
     )
 
 
@@ -171,10 +204,15 @@ def resolve_settings(
         _parse_timeout(timeout_env_raw, "in GMLCACHE_TIMEOUT") if timeout_env_raw else None
     )
 
+    trust_env_raw = env.get("GMLCACHE_TRUST_SCAN")
+    trust_env = _parse_bool(trust_env_raw, "in GMLCACHE_TRUST_SCAN") if trust_env_raw else None
+
     return {
         "mode": _pick(mode_flag, mode_env, file_cfg.mode, DEFAULTS["mode"]),
         "store": _pick(store_flag, env.get("GMLCACHE_STORE"), file_cfg.store, DEFAULTS["store"]),
         "timeout": _pick(timeout_flag, timeout_env, file_cfg.timeout, DEFAULTS["timeout"]),
+        # trust_scan has no CLI flag -- a standing, deliberate choice only.
+        "trust_scan": _pick(None, trust_env, file_cfg.trust_scan, False),
     }
 
 

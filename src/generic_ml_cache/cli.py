@@ -91,6 +91,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     store = CassetteStore(Path(str(settings["store"][0])))
     timeout = settings["timeout"][0]
+    trust_scan = bool(settings["trust_scan"][0])
     # --offline / --force are explicit flags and win over the resolved mode.
     if args.offline:
         mode = Mode.OFFLINE
@@ -110,6 +111,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             mode=mode,
             executable=config.executable_for(file_cfg, args.client, flag=args.executable),
             timeout=timeout,
+            trust_scan=trust_scan,
         )
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
@@ -265,10 +267,12 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
     print("effective settings (no run flags applied):")
-    for key in ("mode", "store", "timeout"):
+    for key in ("mode", "store", "timeout", "trust_scan"):
         value, source = settings[key]
         shown = "none" if value is None else value
-        print(f"  {key:<8} {str(shown):<14} (from {source})")
+        if isinstance(shown, bool):
+            shown = "true" if shown else "false"
+        print(f"  {key:<10} {str(shown):<14} (from {source})")
     if file_cfg.executables:
         print("executables (from config; --executable still overrides per call):")
         for client, exe in file_cfg.executables.items():
