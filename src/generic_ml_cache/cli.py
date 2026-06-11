@@ -59,6 +59,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
             raise SystemExit(f"error: cannot read input file {raw}: {exc}")
         input_files[str(p.resolve())] = hashlib.sha256(data).hexdigest()
 
+    # Declared scan folders (allow-path): validated directories, normalised to abs.
+    allow_paths: List[str] = []
+    for raw in args.allow_path or []:
+        p = Path(raw)
+        if not p.is_dir():
+            raise SystemExit(f"error: allow-path is not a directory: {raw}")
+        allow_paths.append(str(p.resolve()))
+
     request = Request(
         client=args.client,
         model=args.model,
@@ -67,6 +75,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         prompt=prompt,
         user_system_prompt=system_prompt,
         input_files=input_files,
+        allow_paths=allow_paths,
     )
     try:
         file_cfg = config.load()
@@ -111,6 +120,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     if outcome.hit:
         log("cache hit; replaying cassette")
+    elif outcome.passthrough:
+        log("allow-path call — ran fresh, stored nothing (not cacheable)")
     elif outcome.recorded:
         log(f"recorded real call -> cassette {outcome.cassette.match_key}.json")
 
@@ -302,6 +313,18 @@ def build_parser() -> argparse.ArgumentParser:
             "fingerprinted into the cache key and the client is granted read "
             "access to it. Repeatable, any file type. The key watches content, "
             "not the name."
+        ),
+    )
+    run.add_argument(
+        "--allow-path",
+        action="append",
+        dest="allow_path",
+        metavar="PATH",
+        help=(
+            "a folder the client may scan/read whose contents the cache cannot "
+            "fingerprint. Declaring any allow-path makes the call run fresh and "
+            "store nothing (non-cacheable). The client is granted read access to "
+            "it via the prime directive (and --add-dir on Claude). Repeatable."
         ),
     )
     run.add_argument(

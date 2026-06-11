@@ -25,6 +25,7 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 | Model | `--model` | `--model <model>` | `--model <model>` | `--model <model>` (effort baked into the id) |
 | Reasoning effort | `--effort` (optional) | `--effort <effort>` (omitted if empty) | `-c model_reasoning_effort=<effort>` (omitted if empty) | appended to the model id: `<model>-<effort>` (omitted if empty) |
 | System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | `--system-prompt <text>` |
+| Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to 0.0.8) | prime directive only (hard mechanism deferred to 0.0.8) |
 | Output capture | always | `--output-format text` | (default output) | `--print` |
 
 Notes:

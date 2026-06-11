@@ -78,7 +78,7 @@ def test_no_input_files_unchanged_key():
 def test_door_lists_allowed_paths_in_system_prompt():
     sp = build_system_prompt(None, allowed_read_paths=["/data/schema.sql"])
     assert "/data/schema.sql" in sp
-    assert "READ" in sp and "DECLARED INPUT FILES" in sp
+    assert "READ" in sp and "DECLARED READ PATHS" in sp
 
 
 def test_door_absent_when_no_paths():

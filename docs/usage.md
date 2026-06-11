@@ -119,6 +119,37 @@ gmlcache run --client claude --model sonnet \
   --input-file db/schema.sql --input-file db/seed.sql
 ```
 
+### Allow-path (scan folders)
+
+| Flag | Meaning |
+|------|---------|
+| `--allow-path PATH` | a folder the client may scan/read; makes the call non-cacheable (repeatable) |
+
+Use this when your client needs to **explore** a folder whose relevant contents
+you can't enumerate in advance — e.g. "scan this source tree and find where X is
+implemented." Because the cache cannot know what was read or whether it changed,
+**any call that declares an allow-path runs fresh and stores nothing** (it is
+*passthrough* — never a hit, never a recording). In offline mode such a call is an
+error, since it can neither be served from cache nor run.
+
+The client is granted read access to the folder two ways: the prime directive is
+widened to permit it (all clients), and on **Claude** a real `--add-dir <folder>`
+is added to the command. Codex and Cursor have their own per-client mechanisms,
+but they are heterogeneous and unverified, so for now they rely on the directive
+alone (hardening is tracked for a later release). Writes still stay confined to,
+and captured from, the isolated run folder.
+
+If you instead need the cache to *notice when specific files change*, declare them
+with `--input-file` (fingerprinted, cacheable) rather than `--allow-path`
+(unbounded, passthrough). The two are the bounded and unbounded ends of declared
+read access.
+
+```bash
+gmlcache run --client claude --model sonnet \
+  --prompt "Find every place we validate JWTs and summarise the approach." \
+  --allow-path ./src --allow-path ./libs
+```
+
 ### Modes
 
 | Flag | Mode | Behavior |

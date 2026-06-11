@@ -72,13 +72,16 @@ def record_real_call(
     user_system_prompt: str | None = None,
     timeout: float | None = None,
     allowed_read_paths: Optional[List[str]] = None,
+    add_dir_paths: Optional[List[str]] = None,
 ) -> RunResult:
     """Execute the client once in isolation and capture its full response.
 
     The prime directive is injected here (record time) and is deliberately NOT
     returned as part of the cached input -- it is operational scaffolding. When
-    ``allowed_read_paths`` is given (declared input files), the directive is
-    widened to let the client read exactly those paths in place.
+    ``allowed_read_paths`` is given (declared input files and/or allow-path
+    folders), the directive is widened to let the client read those paths. When
+    ``add_dir_paths`` is given, the adapter may *additionally* open a hard
+    per-client read door for those folders (e.g. Claude's ``--add-dir``).
     """
     system_prompt = build_system_prompt(user_system_prompt, allowed_read_paths)
 
@@ -90,6 +93,7 @@ def record_real_call(
         argv = adapter.build_argv(
             executable, run_dir, model, effort, context, prompt, system_prompt
         )
+        argv += adapter.read_access_argv(add_dir_paths or [])
         stdin_payload = adapter.stdin_payload(context, prompt, system_prompt)
 
         completed = subprocess.run(

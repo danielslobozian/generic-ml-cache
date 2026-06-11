@@ -30,5 +30,12 @@ class ClaudeAdapter(ClientAdapter):
         argv += ["--append-system-prompt", system_prompt, "--output-format", "text"]
         return argv
 
+    def read_access_argv(self, paths):
+        # Claude Code grants read access to extra directories via --add-dir.
+        argv = []
+        for p in paths:
+            argv += ["--add-dir", p]
+        return argv
+
 
 register(ClaudeAdapter())

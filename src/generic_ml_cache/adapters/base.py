@@ -118,3 +118,14 @@ class ClientAdapter(ABC):
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
         """Optional text to feed on stdin. Default: nothing."""
         return None
+
+    def read_access_argv(self, paths: List[str]) -> List[str]:
+        """Extra argv granting the client read access to ``paths`` (directories).
+
+        Default: none -- the client relies on the soft prime-directive door only.
+        Adapters with a real per-client read mechanism override this (Claude:
+        ``--add-dir``). Codex and Cursor have one too but it is heterogeneous and
+        currently unverified, so they stay on the directive until adapter
+        hardening verifies them against the live CLIs.
+        """
+        return []

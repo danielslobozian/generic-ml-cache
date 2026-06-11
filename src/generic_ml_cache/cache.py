@@ -54,11 +54,18 @@ class Request:
             open the read-door at record time and are never keyed. Same content ->
             same key (rename-invariant), identical contents collapse to one entry,
             and order is irrelevant.
+        allow_paths: declared folders the client may *scan* (read) whose contents
+            are unbounded and cannot be fingerprinted (absolute paths). Their mere
+            presence makes the call **non-cacheable** -- it runs fresh and stores
+            nothing (passthrough) -- unless scan-trust is explicitly enabled. Never
+            keyed; they only open the read-door (directive + a client's hard read
+            flag where available).
 
     The key is derived from ``client``, ``model``, ``effort`` and ``input_data``
     only -- i.e. context, prompt and the input-file fingerprints (see
-    ``input_data``). The user system prompt and the prime directive are
-    record-time scaffolding and are deliberately excluded.
+    ``input_data``). The user system prompt, the prime directive and the
+    allow-path folders are all record-time scaffolding and are deliberately
+    excluded from the key.
     """
 
     client: str
@@ -68,6 +75,7 @@ class Request:
     prompt: str
     user_system_prompt: Optional[str] = None
     input_files: Dict[str, str] = field(default_factory=dict)
+    allow_paths: List[str] = field(default_factory=list)
 
     @property
     def input_data(self) -> Dict[str, str]:
@@ -78,8 +86,19 @@ class Request:
 
     @property
     def allowed_read_paths(self) -> List[str]:
-        """The declared file paths, sorted -- what the door is opened for."""
-        return sorted(self.input_files)
+        """All paths the read-door is opened for: input files + allow-path folders."""
+        return sorted([*self.input_files, *self.allow_paths])
+
+    @property
+    def add_dir_paths(self) -> List[str]:
+        """Allow-path folders, sorted -- granted via a client's hard read flag
+        (e.g. Claude's ``--add-dir``) where one exists."""
+        return sorted(self.allow_paths)
+
+    @property
+    def requires_passthrough(self) -> bool:
+        """True when the call declares unfingerprintable folders -> not cacheable."""
+        return bool(self.allow_paths)
 
 
 @dataclass
@@ -90,6 +109,7 @@ class Outcome:
     hit: bool  # True if served from an existing cassette
     recorded: bool  # True if a real call was made and stored
     cassette: Cassette
+    passthrough: bool = False  # True if it ran fresh and stored nothing (allow-path)
 
 
 def resolve(
@@ -98,9 +118,50 @@ def resolve(
     mode: Mode = Mode.CACHE,
     executable: Optional[str] = None,
     timeout: Optional[float] = None,
+    trust_scan: bool = False,
 ) -> Outcome:
-    """Resolve a request against the store under ``mode`` (no I/O to caller)."""
+    """Resolve a request against the store under ``mode`` (no I/O to caller).
+
+    A call that declares ``allow_paths`` reads folders the cache cannot
+    fingerprint, so by default it is **passthrough**: it always runs fresh and
+    stores nothing (no hit is ever served for it). ``trust_scan`` is the explicit,
+    opt-in override that lets such a call be cached anyway (the caller asserts the
+    folders are stable); it is wired here but not yet exposed.
+    """
     adapter = get_adapter(request.client)
+
+    if request.requires_passthrough and not trust_scan:
+        # Unfingerprintable folders -> never cached: run fresh, store nothing.
+        if mode is Mode.OFFLINE:
+            raise CacheMiss(
+                "offline: this call declares allow-path folders the cache cannot "
+                "fingerprint, so it is never cached and cannot be served offline. "
+                "Run it online, or drop the allow-path folders."
+            )
+        resolved_exe = adapter.resolve_executable(executable)
+        result = record_real_call(
+            adapter=adapter,
+            executable=resolved_exe,
+            model=request.model,
+            effort=request.effort,
+            context=request.context,
+            prompt=request.prompt,
+            user_system_prompt=request.user_system_prompt,
+            timeout=timeout,
+            allowed_read_paths=request.allowed_read_paths,
+            add_dir_paths=request.add_dir_paths,
+        )
+        cassette = Cassette(
+            client=request.client,
+            model=request.model,
+            effort=request.effort,
+            input_data=request.input_data,
+            response=result.response,
+        )
+        # Deliberately NOT stored.
+        return Outcome(
+            result.response, hit=False, recorded=False, cassette=cassette, passthrough=True
+        )
 
     existing = store.lookup(request.client, request.model, request.effort, request.input_data)
 
@@ -131,6 +192,7 @@ def resolve(
         user_system_prompt=request.user_system_prompt,
         timeout=timeout,
         allowed_read_paths=request.allowed_read_paths,
+        add_dir_paths=request.add_dir_paths,
     )
     cassette = Cassette(
         client=request.client,
