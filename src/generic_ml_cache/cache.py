@@ -36,17 +36,37 @@ class Mode(enum.Enum):
 
 @dataclass
 class Request:
+    """A single cache request -- the full identity of one client call.
+
+    Fields:
+        client: registered client name (e.g. ``claude``, ``codex``, ``cursor``).
+        model:  the model id, passed through to the client verbatim.
+        effort: reasoning-effort level; an empty string means "unset" (the client
+            applies its own default). A distinct value in the key.
+        context: optional supporting material, merged ahead of the prompt when the
+            client is invoked. Part of the key.
+        prompt: the task instruction (required for a run). Part of the key.
+        user_system_prompt: an optional caller-supplied system prompt, layered
+            after the cache's prime directive at record time. NOT part of the key.
+        input_files: declared files the client will read *in place*, as
+            ``{absolute_path: content_sha256}``. Only the content fingerprint
+            enters the key (folded into ``input_data``); the paths serve solely to
+            open the read-door at record time and are never keyed. Same content ->
+            same key (rename-invariant), identical contents collapse to one entry,
+            and order is irrelevant.
+
+    The key is derived from ``client``, ``model``, ``effort`` and ``input_data``
+    only -- i.e. context, prompt and the input-file fingerprints (see
+    ``input_data``). The user system prompt and the prime directive are
+    record-time scaffolding and are deliberately excluded.
+    """
+
     client: str
     model: str
     effort: str
     context: str
     prompt: str
     user_system_prompt: Optional[str] = None
-    # Declared input files the client will read *in place*: {absolute_path: content_sha256}.
-    # Only the content fingerprint enters the key (folded into input_data below); the paths
-    # are used solely to open the read-door at record time and are never part of the key.
-    # Same content -> same key (rename-invariant); identical-content files collapse to one
-    # entry; order is irrelevant (input_data is hashed by sorted key).
     input_files: Dict[str, str] = field(default_factory=dict)
 
     @property
