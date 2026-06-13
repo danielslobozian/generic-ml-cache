@@ -9,6 +9,8 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-06-13
+
 ### Fixed
 
 - **Write/trust door — headless clients could not write their declared output

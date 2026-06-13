@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.5 (alpha)
+## Where we are: 0.0.6 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -86,6 +86,20 @@ Added in 0.0.5:
   calls when the scanned folders are asserted stable. Caches on the ordinary key
   (the prompt names the folder); the allow-path never enters the key or cassette.
 
+Added in 0.0.6:
+
+- **Write/trust door (bug fix).** Headless clients refused to write their declared
+  output in record mode — Claude paused on a write-permission prompt, Codex
+  rejected the non-git run folder and defaulted to a read-only sandbox, and
+  cursor-agent refused the untrusted workspace — so a file-producing call recorded
+  an empty `response.files`. Each adapter now opens a per-client write/trust grant
+  for its own isolated run folder (Claude `--permission-mode acceptEdits`; Codex
+  `--skip-git-repo-check --sandbox workspace-write -C <run-dir>`; cursor-agent
+  `--trust`), on by default and scoped to that folder; reads outside it are
+  unchanged. Cursor additionally receives the prime directive via the prompt
+  (argv-only, never keyed), since current cursor-agent has no system-prompt flag
+  and ignores rule files headlessly. Verified end-to-end against the live CLIs.
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -111,14 +125,14 @@ releases, **one feature per release**.
 
 ### Immediate next releases
 
-- **`0.0.6` — Partial / failed-record robustness.** Clear, tested behavior when a
+- **`0.0.7` — Partial / failed-record robustness.** Clear, tested behavior when a
   real call crashes, times out, or is interrupted mid-record, so the store is
   never left with a half-written cassette. Writes are already atomic; the
   surrounding policy needs to be specified and tested.
 
 ### Later `0.0.x` / `0.1.x`
 
-- **`0.0.7` — Store ergonomics + observability.** Cassettes become effectively
+- **`0.0.8` — Store ergonomics + observability.** Cassettes become effectively
   **immutable**, and a separate, **non-load-bearing** access registry (stdlib
   `sqlite3`, so still zero third-party dependencies) records access **events** —
   hit / miss / record / evict — beside the store. The registry never gates a
@@ -135,10 +149,17 @@ releases, **one feature per release**.
   what it describes, so it carries its **own retention/compaction** story rather
   than becoming a new unbounded surface.
 
-- **`0.0.8` — Adapter hardening.** The launch-flag mappings for `claude` /
+- **`0.0.9` — Adapter hardening.** The launch-flag mappings for `claude` /
   `codex` / `cursor-agent` are best-effort today. Before 1.0.0 they need
   verifying against the real CLIs, making configurable where the CLIs differ, and
   degrading gracefully when a flag is unsupported.
+
+- **Analysis — Codex model discovery.** Today `models` reports "not supported" for
+  Codex (no scriptable list). `codex debug models` exposes the account-aware model
+  catalogue (mirroring Cursor's `--list-models`), but it is an *experimental*
+  subcommand. An analysis/design task to decide whether and how the Codex adapter
+  should enumerate models through it — degrading gracefully if its shape changes —
+  before any implementation. Decide first, then build.
 
 - **`0.1.0` — Documented, versioned cassette schema.** `SCHEMA_VERSION` exists;
   this adds a written schema document, a compatibility policy, and a migration
@@ -184,7 +205,7 @@ The CLI is one-shot, so anything that needs a background loop or shared live
 state belongs to a resident service (the proxy above, or a dedicated local-server
 mode), never the launcher:
 
-- **Automatic eviction by policy.** The operator-invoked `prune` of 0.0.7 becomes
+- **Automatic eviction by policy.** The operator-invoked `prune` of 0.0.8 becomes
   a background sweep on a configured interval — idle / age / size **TTL** as app
   configuration rather than a per-call argument — plus an admin "clean now"
   command. The CLI keeps only manual `prune`; an automatic sweep needs a process
