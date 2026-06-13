@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.6 (alpha)
+## Where we are: 0.0.7 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -99,6 +99,19 @@ Added in 0.0.6:
   unchanged. Cursor additionally receives the prime directive via the prompt
   (argv-only, never keyed), since current cursor-agent has no system-prompt flag
   and ignores rule files headlessly. Verified end-to-end against the live CLIs.
+
+Added in 0.0.7:
+
+- **The cache owns its store location (breaking).** The cassette store is set
+  only by the config file, defaulting to the per-user data dir
+  (`~/.local/share/generic-ml-cache/cassettes`, honoring `XDG_DATA_HOME`) rather
+  than a `.gmlcache` folder in the working directory. The `--store` flag, the
+  `GMLCACHE_STORE` environment variable, and the `--output-dir` flag are retired:
+  a per-call store override forks the cache and defeats reuse, and the cache now
+  writes produced files into the directory it was called in, exactly as the client
+  would. `gmlcache init` materialises the config file (defaults filled in, never
+  overwriting) so the store path is easy to edit; `GMLCACHE_CONFIG` still selects a
+  whole alternate config for a deliberate isolated instance.
 
 ## Road to 1.0.0 (the rest of the alpha series)
 
