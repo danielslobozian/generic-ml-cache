@@ -125,14 +125,24 @@ releases, **one feature per release**.
 
 ### Immediate next releases
 
-- **`0.0.7` — Partial / failed-record robustness.** Clear, tested behavior when a
+- **`0.0.7` — The cache owns its store; no caller-dictated locations.** The
+  cassette store location is set only by the config file (built-in default: the
+  per-user data dir, `~/.local/share/generic-ml-cache/cassettes`, honoring
+  `XDG_DATA_HOME`). **Retired:** the `--store` flag, the `GMLCACHE_STORE`
+  environment variable, and the `--output-dir` flag — the cache writes produced
+  files into the directory it was called in, exactly as the client would. **Added:**
+  `gmlcache init` to materialise the config file so the store path is editable;
+  `GMLCACHE_CONFIG` still selects a whole alternate config (a deliberate isolated
+  instance, not a per-call redirect). A per-call store/output override would fork
+  the cache into per-caller copies and defeat the one thing a cache is for — reuse.
+- **`0.0.8` — Partial / failed-record robustness.** Clear, tested behavior when a
   real call crashes, times out, or is interrupted mid-record, so the store is
   never left with a half-written cassette. Writes are already atomic; the
   surrounding policy needs to be specified and tested.
 
 ### Later `0.0.x` / `0.1.x`
 
-- **`0.0.8` — Store ergonomics + observability.** Cassettes become effectively
+- **`0.0.9` — Store ergonomics + observability.** Cassettes become effectively
   **immutable**, and a separate, **non-load-bearing** access registry (stdlib
   `sqlite3`, so still zero third-party dependencies) records access **events** —
   hit / miss / record / evict — beside the store. The registry never gates a
@@ -149,7 +159,7 @@ releases, **one feature per release**.
   what it describes, so it carries its **own retention/compaction** story rather
   than becoming a new unbounded surface.
 
-- **`0.0.9` — Adapter hardening.** The launch-flag mappings for `claude` /
+- **`0.0.10` — Adapter hardening.** The launch-flag mappings for `claude` /
   `codex` / `cursor-agent` are best-effort today. Before 1.0.0 they need
   verifying against the real CLIs, making configurable where the CLIs differ, and
   degrading gracefully when a flag is unsupported.

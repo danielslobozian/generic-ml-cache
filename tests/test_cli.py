@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 
+import pytest
 
+from generic_ml_cache import config
 from generic_ml_cache.cli import main
 from conftest import write_directive
 
@@ -14,7 +16,6 @@ def run_cli(args):
 
 
 def test_cli_records_then_replays_offline(tmp_path, capsys):
-    store = str(tmp_path / "cas")
     common = [
         "run",
         "--client",
@@ -23,10 +24,6 @@ def test_cli_records_then_replays_offline(tmp_path, capsys):
         "m1",
         "--effort",
         "high",
-        "--store",
-        store,
-        "--output-dir",
-        str(tmp_path / "out"),
     ]
 
     rc = run_cli(common + ["--prompt", "STDOUT hello"])
@@ -49,8 +46,6 @@ def test_cli_offline_miss_exits_3(tmp_path, capsys):
             "m1",
             "--effort",
             "high",
-            "--store",
-            str(tmp_path / "cas"),
             "--prompt",
             "STDOUT x",
             "--offline",
@@ -70,10 +65,6 @@ def test_cli_propagates_exit_code(tmp_path):
             "m1",
             "--effort",
             "high",
-            "--store",
-            str(tmp_path / "cas"),
-            "--output-dir",
-            str(tmp_path / "out"),
             "--prompt",
             "EXIT 5",
         ]
@@ -81,8 +72,12 @@ def test_cli_propagates_exit_code(tmp_path):
     assert rc == 5
 
 
-def test_cli_writes_files_to_output_dir(tmp_path):
-    outdir = tmp_path / "out"
+def test_cli_writes_files_to_cwd(tmp_path, monkeypatch):
+    # No --output-dir: the cache writes into the directory it was called in,
+    # exactly as the real client would. Control that by chdir-ing into a workdir.
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
     rc = run_cli(
         [
             "run",
@@ -92,20 +87,18 @@ def test_cli_writes_files_to_output_dir(tmp_path):
             "m1",
             "--effort",
             "high",
-            "--store",
-            str(tmp_path / "cas"),
-            "--output-dir",
-            str(outdir),
             "--prompt",
             write_directive("deep/file.txt", "data\n"),
         ]
     )
     assert rc == 0
-    assert (outdir / "deep" / "file.txt").read_text(encoding="utf-8") == "data\n"
+    assert (workdir / "deep" / "file.txt").read_text(encoding="utf-8") == "data\n"
 
 
-def test_cli_inspect(tmp_path, capsys):
-    store = tmp_path / "cas"
+def test_cli_inspect(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
     run_cli(
         [
             "run",
@@ -115,15 +108,11 @@ def test_cli_inspect(tmp_path, capsys):
             "m1",
             "--effort",
             "high",
-            "--store",
-            str(store),
-            "--output-dir",
-            str(tmp_path / "out"),
             "--prompt",
             write_directive("r.txt", "hi\n"),
         ]
     )
-    cassette_path = next(store.glob("*.json"))
+    cassette_path = next(config.default_store_path().glob("*.json"))
     rc = run_cli(["inspect", str(cassette_path)])
     assert rc == 0
     report = capsys.readouterr().out
@@ -159,3 +148,22 @@ def test_multibyte_unicode_roundtrips(tmp_path):
     dest = tmp_path / "out"
     apply_response(out.response, dest)
     assert (dest / "u.txt").read_text(encoding="utf-8") == text
+
+
+def test_cli_init_creates_config_then_idempotent(tmp_path, monkeypatch, capsys):
+    cfg = tmp_path / "cfg.ini"
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(cfg))
+    assert run_cli(["init"]) == 0
+    out = capsys.readouterr().out
+    assert "created config" in out and str(cfg) in out
+    assert cfg.is_file()
+    # idempotent: a second init leaves the file unchanged
+    assert run_cli(["init"]) == 0
+    assert "already present" in capsys.readouterr().out
+
+
+def test_run_rejects_retired_location_flags(tmp_path):
+    base = ["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi"]
+    for bad in (["--store", str(tmp_path)], ["--output-dir", str(tmp_path)]):
+        with pytest.raises(SystemExit):
+            run_cli(base + bad)

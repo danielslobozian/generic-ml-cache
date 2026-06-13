@@ -174,11 +174,15 @@ gmlcache run --client claude --model sonnet \
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--store STORE` | `.gmlcache` | the cassette directory |
 | `--executable EXECUTABLE` | `[executables]` config, else adapter `PATH` lookup | override the client binary (the "seam") |
-| `--output-dir OUTPUT_DIR` | current directory | where replayed files are written |
 | `--timeout TIMEOUT` | none | seconds before a real call is killed |
 | `-v`, `--verbose` | off | print `gmlc:` diagnostics to stderr |
+
+There is deliberately **no** `--store` and **no** `--output-dir`. The cassette
+store location is owned by the config file (see Configuration); a per-call store
+override would fork the cache and defeat reuse. Produced files are written into
+the directory the cache was called in, exactly as the real client would — to put
+them elsewhere, run the cache there.
 
 `--verbose` deliberately breaks byte-exact stderr fidelity; use it for debugging,
 not for piping.
@@ -221,19 +225,21 @@ gmlcache run --force --client cursor --model auto --effort low \
   --prompt "regenerate"
 ```
 
-Write replayed files somewhere specific:
+Put the produced files somewhere specific by running the cache there — the same
+way you would the real client (the cache writes into its working directory):
 
 ```bash
-gmlcache run --client claude --model sonnet --effort medium \
-  --prompt-file task.txt --output-dir ./build
+cd ./build && gmlcache run --client claude --model sonnet --effort medium \
+  --prompt-file task.txt
 ```
 
 ## `gmlcache inspect`
 
-Pretty-print a cassette so you can see exactly what was recorded.
+Pretty-print a cassette so you can see exactly what was recorded. Cassettes
+live in your store (run `gmlcache status` to see where that is):
 
 ```bash
-gmlcache inspect .gmlcache/<match_key>.json
+gmlcache inspect ~/.local/share/generic-ml-cache/cassettes/<match_key>.json
 ```
 
 It shows the client / model / effort, the input checksum, the captured stdout /
@@ -291,13 +297,21 @@ only Cursor exposes a scriptable listing today; Claude and Codex report
 ## Configuration
 
 `run` reads its defaults — the resolution `mode`, the cassette `store`, and the
-`timeout` — from one optional INI file, if it exists. The file is **opt-in**: it
-is never written for you, on install or otherwise.
+`timeout` — from one optional INI file. The file is **opt-in**: it is never
+written automatically. `gmlcache init` writes one for you (in the location below)
+with the defaults filled in, so you can edit it; it never overwrites an existing
+file.
 
-For each setting the winner is, in order: a **CLI flag**, then an **environment
-variable**, then the **config file**, then the **built-in default**. So a flag
-always wins, and the default (`mode = cache`, `store = .gmlcache`, no timeout)
-applies when nothing else is set.
+For `mode` and `timeout` the winner is, in order: a **CLI flag**, an
+**environment variable**, the **config file**, the **built-in default**. The
+**`store` location is the exception** — it comes from the config file or the
+built-in default only, with **no flag and no environment**, because where the
+cassettes live is the cache's own concern, not a per-call knob. To run a fully
+isolated cache, point `GMLCACHE_CONFIG` at a different whole config file. The
+built-in store default is the per-user data dir (`mode = cache`, no timeout,
+`store = $XDG_DATA_HOME/generic-ml-cache/cassettes`, i.e.
+`~/.local/share/generic-ml-cache/cassettes`; `%LOCALAPPDATA%\generic-ml-cache\cassettes`
+on Windows).
 
 Location (override everything with `GMLCACHE_CONFIG=/path/to/file`):
 
@@ -310,12 +324,13 @@ Format:
 ```ini
 [defaults]
 mode = cache
-store = .gmlcache
+# store defaults to the per-user data dir; set an explicit path to change it
+store = /path/to/cassettes
 timeout = 120
 ```
 
-Environment variables: `GMLCACHE_MODE`, `GMLCACHE_STORE`, `GMLCACHE_TIMEOUT`
-(and `GMLCACHE_CONFIG` to point at the file itself).
+Environment variables: `GMLCACHE_MODE`, `GMLCACHE_TIMEOUT` (and `GMLCACHE_CONFIG`
+to point at the file itself). There is no environment variable for the store.
 
 ### Client executables
 
@@ -352,6 +367,20 @@ It prints which file would be read and whether it was found, then the effective
 environment and file settings but no `run` flags, since it describes the resting
 configuration, not a particular call.
 
+## `gmlcache init`
+
+Create the config file in its default location (if it isn't there already), with
+the defaults filled in so you can edit them — most usefully the `store` path.
+
+```bash
+gmlcache init
+```
+
+It prints the path it wrote (or that a file was already present and left
+unchanged), then the resolved cassette store. It never overwrites an existing
+config. You don't need to run it to use the cache — with no config, the cache
+works from its built-in defaults; `init` just gives you a file to edit.
+
 ## `gmlcache --version`
 
 Prints the installed version.
@@ -367,7 +396,8 @@ from generic_ml_cache.store import CassetteStore
 from generic_ml_cache.cassette import Cassette
 
 # Open a store and inspect what is in it.
-store = CassetteStore(".gmlcache")
+from generic_ml_cache.config import default_store_path
+store = CassetteStore(default_store_path())
 print(f"{len(store)} cassette(s) in the store")
 
 for cassette in store:
@@ -383,7 +413,7 @@ Loading a single cassette from disk:
 import json
 from generic_ml_cache.cassette import Cassette
 
-with open(".gmlcache/<match_key>.json", encoding="utf-8") as fh:
+with open("/path/to/store/<match_key>.json", encoding="utf-8") as fh:
     cassette = Cassette.from_json(json.load(fh))
 ```
 
@@ -402,7 +432,12 @@ together. A documented, stable library API is one of the items on the road to
 
 ## Where things live
 
-- Cassettes: in the `--store` directory (default `.gmlcache/`), one JSON file per
-  recorded call, named by its match key.
-- Replayed files: in `--output-dir` (default your current directory).
-- Add `.gmlcache/` to your `.gitignore` unless you intend to commit recordings.
+- Cassettes: in the config-owned store — by default the per-user data dir
+  (`~/.local/share/generic-ml-cache/cassettes`), one JSON file per recorded call,
+  named by its match key. `gmlcache status` prints the resolved location; change
+  it by editing the config (`gmlcache init` writes one for you).
+- Produced files: in the directory you ran the cache in, exactly as the real
+  client would write them.
+- The default store lives outside your project, so nothing lands in your repo;
+  if you point the store *inside* a project, add it to `.gitignore` unless you
+  intend to commit recordings.

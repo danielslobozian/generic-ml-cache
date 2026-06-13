@@ -58,7 +58,7 @@ def test_precedence_default_then_config_then_env_then_flag(tmp_path, monkeypatch
 def test_default_when_nothing_set(tmp_path):
     settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))
     assert settings["mode"] == ("cache", "default")
-    assert settings["store"] == (".gmlcache", "default")
+    assert settings["store"] == (str(config.default_store_path()), "default")
     assert settings["timeout"] == (None, "default")
 
 
@@ -149,3 +149,39 @@ def test_doctor_cli_honors_configured_executable(tmp_path, monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert "fake" in out and "missing" in out
+
+
+# --- store ownership + init (0.0.7) ----------------------------------------
+
+
+def test_store_default_is_under_xdg_data_home(tmp_path):
+    # the autouse fixture points XDG_DATA_HOME at tmp; the store default follows it
+    expected = tmp_path / "xdg-data" / "generic-ml-cache" / "cassettes"
+    assert config.default_store_path() == expected
+    settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))
+    assert settings["store"] == (str(expected), "default")
+
+
+def test_store_from_config_wins_over_default(tmp_path):
+    p = tmp_path / "config.ini"
+    p.write_text(f"[defaults]\nstore = {tmp_path / 'mystore'}\n")
+    settings = config.resolve_settings(config.load(p))
+    assert settings["store"] == (str(tmp_path / "mystore"), "config")
+
+
+def test_store_has_no_env_override(tmp_path, monkeypatch):
+    # GMLCACHE_STORE is retired: setting it must not change the resolved store
+    monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path / "ignored"))
+    settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))
+    assert settings["store"] == (str(config.default_store_path()), "default")
+
+
+def test_init_writes_config_and_is_idempotent(tmp_path):
+    target = tmp_path / "cfg" / "config.ini"
+    path, created = config.write_default_config(target)
+    assert created is True and path == target and target.is_file()
+    # the written file parses and pins the store at the resolved default
+    assert config.load(target).store == str(config.default_store_path())
+    # a second call never overwrites
+    again_path, again_created = config.write_default_config(target)
+    assert again_path == target and again_created is False

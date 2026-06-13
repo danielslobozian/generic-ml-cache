@@ -59,10 +59,15 @@ def _register_fake_adapter():
 
 @pytest.fixture(autouse=True)
 def _isolate_config(monkeypatch, tmp_path):
-    """Point config discovery at a guaranteed-absent file and clear config env,
-    so no test accidentally reads the real user config or environment."""
+    """Isolate config *and* store from the real machine: point config discovery at
+    a guaranteed-absent file, send the per-user data dir (and thus the default
+    cassette store) into tmp via the standard XDG/Windows base-dir vars, and clear
+    the env layers -- so no test reads the real user config or writes into the
+    real store."""
     monkeypatch.setenv("GMLCACHE_CONFIG", str(tmp_path / "no-such-config.ini"))
-    for var in ("GMLCACHE_MODE", "GMLCACHE_STORE", "GMLCACHE_TIMEOUT"):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg-data"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
+    for var in ("GMLCACHE_MODE", "GMLCACHE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
 
 

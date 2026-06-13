@@ -62,7 +62,7 @@ own list command or reports "not supported".
 These shape what the *cache* does and are not passed to any client:
 
 - `--mode` (`cache` / `offline` / `refresh`), `--force`, `--offline` — hit/miss policy.
-- `--store`, `--timeout`, `--output-dir` — where cassettes live, the kill timeout, and where replayed files are written.
+- `--timeout` — the kill timeout for a real call. The cassette **store** has no flag (its location is config-owned; see `gmlcache init` / the config file), and there is no output-dir flag — the cache writes produced files into the directory it was called in, exactly as the client would.
 - `--input-file` — the client receives **no** flag for these. The cache fingerprints each file's content into the key and grants read access by widening the prime directive; the client simply reads the file in place because your prompt refers to it.
 - The `[executables]` config — only chooses *which binary* to launch; invisible to the client.
 - `inspect` and `status` invoke no client at all.

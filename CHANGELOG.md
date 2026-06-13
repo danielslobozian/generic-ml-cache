@@ -9,6 +9,34 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **The cache owns its store location; it is no longer a caller-dictated knob.**
+  The cassette store is set only by the config file, falling back to a built-in
+  per-user default at `$XDG_DATA_HOME/generic-ml-cache/cassettes` (i.e.
+  `~/.local/share/generic-ml-cache/cassettes`; `%LOCALAPPDATA%\generic-ml-cache\cassettes`
+  on Windows) instead of the old `.gmlcache` folder in the current directory. A
+  per-call store override would fork the cache into per-caller copies and defeat
+  reuse, so it is gone; to run a fully isolated cache, point `GMLCACHE_CONFIG` at
+  a different whole config file.
+- **The cache writes produced files into the directory it was called in**, exactly
+  as the real client would, with no override flag — to put outputs elsewhere, run
+  the cache there.
+
+### Added
+
+- **`gmlcache init`** — creates the config file in its default location (if absent)
+  with the defaults filled in, so the store path is easy to find and edit. It
+  never overwrites an existing file, and the cache still works with no config at
+  all (built-in defaults).
+
+### Removed
+
+- **`--store` flag, `GMLCACHE_STORE` environment variable, and `--output-dir`
+  flag** on `gmlcache run` (breaking). The store location lives in the config; the
+  output location is always the working directory. `mode`/`timeout` keep their
+  flag and environment layers; only the store and output *locations* lose theirs.
+
 ## [0.0.6] - 2026-06-13
 
 ### Fixed

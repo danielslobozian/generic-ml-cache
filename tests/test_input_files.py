@@ -9,6 +9,7 @@ import hashlib
 import pytest
 
 from generic_ml_cache import CacheMiss, Mode, Request, resolve
+from generic_ml_cache import config
 from generic_ml_cache.checksum import checksum_input_data
 from generic_ml_cache.cli import main
 from generic_ml_cache.prime_directive import build_system_prompt
@@ -129,8 +130,6 @@ def test_cli_missing_input_file_errors(tmp_path):
                 "STDOUT hi",
                 "--input-file",
                 str(tmp_path / "nope.txt"),
-                "--store",
-                str(tmp_path / "store"),
             ]
         )
 
@@ -149,11 +148,7 @@ def test_cli_run_with_input_file_records(tmp_path):
             "STDOUT hi",
             "--input-file",
             str(f),
-            "--store",
-            str(tmp_path / "store"),
-            "--output-dir",
-            str(tmp_path / "out"),
         ]
     )
     assert rc == 0
-    assert list((tmp_path / "store").glob("*.json"))  # a cassette was written
+    assert list(config.default_store_path().glob("*.json"))  # a cassette was written

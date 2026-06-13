@@ -115,7 +115,5 @@ def test_cli_allow_path_must_be_directory(tmp_path):
                 "STDOUT hi",
                 "--allow-path",
                 str(f),  # a file, not a directory
-                "--store",
-                str(tmp_path / "store"),
             ]
         )

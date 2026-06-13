@@ -6,6 +6,7 @@
     gmlcache doctor  -- report which configured clients are present (advisory)
     gmlcache models  -- list a client's available models (advisory; relayed)
     gmlcache status  -- show the resolved configuration and where it came from
+    gmlcache init    -- create the config file in the default location (if absent)
     gmlcache inspect -- pretty-print a cassette
 
 Replay fidelity: in the default (quiet) mode, ``run`` reproduces the client's
@@ -82,7 +83,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
         settings = config.resolve_settings(
             file_cfg,
             mode_flag=args.mode,
-            store_flag=args.store,
             timeout_flag=args.timeout,
         )
     except ConfigError as exc:
@@ -127,8 +127,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     elif outcome.recorded:
         log(f"recorded real call -> cassette {outcome.cassette.match_key}.json")
 
-    output_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
-    apply_response(outcome.response, output_dir)
+    # The cache writes produced files into the directory it was called in,
+    # exactly as the real client would. There is no output-dir knob: to put the
+    # outputs elsewhere, run the cache there -- same as you would the client.
+    apply_response(outcome.response, Path.cwd())
 
     # Reproduce the client's streams exactly.
     sys.stdout.write(outcome.response.stdout)
@@ -282,6 +284,26 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_init(args: argparse.Namespace) -> int:
+    try:
+        path, created = config.write_default_config()
+    except OSError as exc:
+        print(f"gmlc: could not create config: {exc}", file=sys.stderr)
+        return 4
+    if created:
+        print(f"created config: {path}")
+    else:
+        print(f"config already present: {path}  (left unchanged)")
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+    value, source = settings["store"]
+    print(f"cassette store: {value}  (from {source})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gmlcache",
@@ -332,11 +354,6 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument(
-        "--store",
-        default=None,
-        help="cassette directory (default: .gmlcache, or config/env)",
-    )
-    run.add_argument(
         "--mode",
         choices=[m.value for m in Mode],
         default=None,
@@ -345,7 +362,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
     run.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
     run.add_argument("--executable", help="override the client executable (the seam)")
-    run.add_argument("--output-dir", help="where replayed files are written (default: CWD)")
     run.add_argument(
         "--timeout", type=float, default=None, help="seconds before the real call is killed"
     )
@@ -394,6 +410,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     status.set_defaults(func=_cmd_status)
+
+    init = sub.add_parser(
+        "init",
+        help="create the config file in the default location (if absent), then show the store",
+    )
+    init.set_defaults(func=_cmd_init)
 
     return parser
 

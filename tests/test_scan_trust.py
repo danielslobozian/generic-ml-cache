@@ -11,7 +11,7 @@ from generic_ml_cache.cli import main
 from generic_ml_cache.errors import ConfigError
 
 
-def _run_args(folder, store, prompt="STDOUT hi"):
+def _run_args(folder, prompt="STDOUT hi"):
     return [
         "run",
         "--client",
@@ -22,8 +22,6 @@ def _run_args(folder, store, prompt="STDOUT hi"):
         prompt,
         "--allow-path",
         str(folder),
-        "--store",
-        str(store),
     ]
 
 
@@ -76,8 +74,8 @@ def test_allow_path_passthrough_without_trust(tmp_path, monkeypatch):
     monkeypatch.delenv("GMLCACHE_TRUST_SCAN", raising=False)
     folder = tmp_path / "repo"
     folder.mkdir()
-    store = tmp_path / "store"
-    args = _run_args(folder, store)
+    store = C.default_store_path()
+    args = _run_args(folder)
 
     assert main(args) == 0
     assert list(store.glob("**/*.json")) == []  # passthrough: nothing stored
@@ -89,8 +87,8 @@ def test_trust_scan_caches_allow_path(tmp_path, monkeypatch):
     monkeypatch.setenv("GMLCACHE_TRUST_SCAN", "true")
     folder = tmp_path / "repo"
     folder.mkdir()
-    store = tmp_path / "store"
-    args = _run_args(folder, store)
+    store = C.default_store_path()
+    args = _run_args(folder)
 
     assert main(args) == 0
     assert len(list(store.glob("**/*.json"))) == 1  # cached despite allow-path

@@ -99,12 +99,11 @@ Requires Python ≥ 3.9. Pure standard library — no runtime dependencies.
 # First run: cache miss → calls real `claude`, records a cassette, replays it.
 gmlcache run \
   --client claude --model claude-sonnet-4 --effort high \
-  --context-file context.md --prompt-file task.md \
-  --store ./cassettes
+  --context-file context.md --prompt-file task.md
 
 # Same inputs again: cache hit → instant, free, identical output.
 gmlcache run --client claude --model claude-sonnet-4 --effort high \
-  --context-file context.md --prompt-file task.md --store ./cassettes
+  --context-file context.md --prompt-file task.md
 ```
 
 ### Modes
