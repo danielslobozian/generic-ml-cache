@@ -10,11 +10,11 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 
 > **Source of truth and accuracy.** These mappings are produced by each adapter's
 > `build_argv` (`src/generic_ml_cache/adapters/`), which is authoritative — if this
-> table and the code ever disagree, the code wins. The flag choices are
-> *best-effort* and not yet verified against live CLIs; that verification (and
-> recording which client versions were tested) is the work of release `0.0.8`
-> (adapter hardening). Treat this as "what the cache currently emits," not "what
-> each CLI is confirmed to accept."
+> table and the code ever disagree, the code wins. The **write/trust-door** flags
+> (the "Write access to the run folder" row) are *verified against the live CLIs*;
+> the remaining flag choices are still *best-effort* and not yet verified, which is
+> the work of release `0.0.8` (adapter hardening). Treat the unverified rows as
+> "what the cache currently emits," not "what each CLI is confirmed to accept."
 
 ## Run inputs
 
@@ -26,6 +26,7 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 | Reasoning effort | `--effort` (optional) | `--effort <effort>` (omitted if empty) | `-c model_reasoning_effort=<effort>` (omitted if empty) | appended to the model id: `<model>-<effort>` (omitted if empty) |
 | System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | `--system-prompt <text>` |
 | Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to 0.0.8) | prime directive only (hard mechanism deferred to 0.0.8) |
+| Write access to the run folder | always (the cache's own isolated run dir) | `--permission-mode acceptEdits` | `--skip-git-repo-check --sandbox workspace-write -C <run-dir>` | `--trust` |
 | Output capture | always | `--output-format text` | (default output) | `--print` |
 
 Notes:
@@ -37,6 +38,14 @@ Notes:
   the same system-prompt channel as `--system-prompt`. So the guardrail is only as
   strong as each client honouring that flag — which is why it is a best-effort
   (soft) control.
+- The **write/trust door** is opened by default for every run, because the client
+  writes into the cache's own isolated, ephemeral run folder (its cwd). Headless
+  clients otherwise refuse: Claude pauses on a write-permission prompt, Codex
+  rejects an untrusted non-git directory and defaults to a read-only sandbox, and
+  cursor-agent refuses an untrusted workspace. The grant is scoped to the run
+  folder; read access to anything *outside* it is unchanged (prime directive plus
+  the "Read access to a folder" row). Without it, a file-producing call recorded an
+  empty `response.files` — the v0.0.5 record-path bug fixed in v0.0.6.
 
 ## Discovery (`doctor`, `models`)
 

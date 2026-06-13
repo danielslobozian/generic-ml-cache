@@ -129,3 +129,26 @@ class ClientAdapter(ABC):
         hardening verifies them against the live CLIs.
         """
         return []
+
+    def write_access_argv(self, run_dir: Path) -> List[str]:
+        """Extra argv opening the client's WRITE/TRUST door for its own ``run_dir``.
+
+        Headless clients refuse to write by default: they pause on a permission
+        prompt, or decline a workspace they have not been told to trust. Without
+        this the client only *narrates* the file it was asked to produce, the
+        before/after diff captures nothing, and a file-producing call records an
+        empty ``response.files`` -- the v0.0.5 record-path bug this fixes.
+
+        The run folder is the client's own isolated, ephemeral sandbox, so writing
+        into it is the normal case and the grant is **on by default**. It is scoped
+        to that folder: reads *outside* it are unaffected and remain gated by the
+        prime directive and :meth:`read_access_argv`. Unlike ``read_access_argv``
+        (appended after :meth:`build_argv`), each adapter splices this into
+        ``build_argv`` itself, because some CLIs take the prompt as a trailing
+        positional and reject flags placed after it.
+
+        Default: none. The per-client flags below are verified against the live
+        CLIs (see ``docs/client-mapping.md``); adapter hardening keeps them small
+        and correctable should a CLI change.
+        """
+        return []

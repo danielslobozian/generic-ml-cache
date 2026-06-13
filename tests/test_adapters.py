@@ -68,3 +68,61 @@ def test_unknown_executable_name_raises():
     adapter = get_adapter("claude")  # default_executable "claude" not installed
     with pytest.raises(ClientNotFound):
         adapter.resolve_executable("definitely-not-a-real-binary-xyz")
+
+
+# --- write/trust door (v0.0.6 record-path fix) -----------------------------
+
+EXPECTED_WRITE_GRANT = {
+    "claude": ["--permission-mode", "acceptEdits"],
+    "codex": ["--skip-git-repo-check", "--sandbox", "workspace-write"],
+    "cursor": ["--trust"],
+}
+
+
+@pytest.mark.parametrize("client", ["claude", "codex", "cursor"])
+def test_write_access_argv_opens_write_door(client, tmp_path):
+    grant = get_adapter(client).write_access_argv(tmp_path)
+    for token in EXPECTED_WRITE_GRANT[client]:
+        assert token in grant
+
+
+@pytest.mark.parametrize("client", ["claude", "codex", "cursor"])
+def test_build_argv_includes_write_grant(client, tmp_path):
+    argv = get_adapter(client).build_argv(
+        executable="/usr/bin/" + client,
+        run_dir=tmp_path,
+        model="m-x",
+        effort="",
+        context="CTX",
+        prompt="PROMPT",
+        system_prompt=PRIME_DIRECTIVE,
+    )
+    for token in EXPECTED_WRITE_GRANT[client]:
+        assert token in argv
+
+
+@pytest.mark.parametrize("client", ["codex", "cursor"])
+def test_write_grant_precedes_trailing_positional_prompt(client, tmp_path):
+    # codex and cursor take the prompt as a trailing positional; the write/trust
+    # flags must sit before it or the CLI parser rejects flags after a positional.
+    argv = get_adapter(client).build_argv(
+        executable="/usr/bin/" + client,
+        run_dir=tmp_path,
+        model="m-x",
+        effort="",
+        context="",  # so full_prompt == "PROMPT" exactly
+        prompt="PROMPT",
+        system_prompt=PRIME_DIRECTIVE,
+    )
+    assert argv.index(EXPECTED_WRITE_GRANT[client][0]) < argv.index("PROMPT")
+
+
+def test_codex_write_grant_pins_run_dir_as_fence(tmp_path):
+    grant = get_adapter("codex").write_access_argv(tmp_path)
+    assert "-C" in grant
+    assert str(tmp_path) in grant
+
+
+def test_base_write_access_argv_defaults_empty(tmp_path):
+    # The fake adapter does not override the seam, so the base default applies.
+    assert get_adapter("fake").write_access_argv(tmp_path) == []

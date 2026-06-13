@@ -27,6 +27,7 @@ class CursorAdapter(ClientAdapter):
         model_id = f"{model}-{effort}" if effort else model
         return [
             executable,
+            *self.write_access_argv(run_dir),
             "--model",
             model_id,
             "--system-prompt",
@@ -34,6 +35,14 @@ class CursorAdapter(ClientAdapter):
             "--print",
             full_prompt,
         ]
+
+    def write_access_argv(self, run_dir):
+        # cursor-agent refuses an untrusted workspace ("Workspace Trust Required")
+        # in the isolated run folder. --trust accepts it; in --print mode the agent
+        # already has its write tool, so trust alone is sufficient to write (the
+        # separate --force is not needed). Reads outside the folder are unaffected.
+        # Verified against cursor-agent --print on the live CLI.
+        return ["--trust"]
 
     def models_argv(self, executable: str) -> Optional[List[str]]:
         return [executable, "--list-models"]

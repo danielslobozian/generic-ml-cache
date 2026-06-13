@@ -9,6 +9,23 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Write/trust door — headless clients could not write their declared output
+  file.** On the first real record-mode use, a file-producing call recorded an
+  empty `response.files`: Claude paused on a write-permission prompt and only
+  narrated the file, Codex rejected the non-git run folder (`Not inside a trusted
+  directory`) and otherwise defaulted to a read-only sandbox, and cursor-agent
+  refused the untrusted workspace (`Workspace Trust Required`). The before/after
+  diff therefore captured nothing. Each adapter now opens a per-client write/trust
+  grant for its own isolated run folder — **on by default** and scoped to that
+  folder, so reads *outside* it are unchanged: Claude `--permission-mode
+  acceptEdits`, Codex `--skip-git-repo-check --sandbox workspace-write -C
+  <run-dir>`, cursor-agent `--trust`. Mirrors the existing `read_access_argv`
+  seam via a new `write_access_argv(run_dir)` on the adapter base. Flags verified
+  against the live CLIs; `docs/client-mapping.md` updated and the row marked
+  verified.
+
 ## [0.0.5] - 2026-06-11
 
 ### Added

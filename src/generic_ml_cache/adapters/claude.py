@@ -27,6 +27,7 @@ class ClaudeAdapter(ClientAdapter):
         # default rather than passing an empty (and invalid) --effort value.
         if effort:
             argv += ["--effort", effort]
+        argv += self.write_access_argv(run_dir)
         argv += ["--append-system-prompt", system_prompt, "--output-format", "text"]
         return argv
 
@@ -36,6 +37,14 @@ class ClaudeAdapter(ClientAdapter):
         for p in paths:
             argv += ["--add-dir", p]
         return argv
+
+    def write_access_argv(self, run_dir):
+        # Headless Claude pauses on a write-permission prompt and only narrates
+        # the file. acceptEdits auto-approves edits/writes (the run folder is the
+        # cwd); it does NOT grant reads outside the folder. Verified to flip a
+        # file-producing call from narrate-only to a real write; the broader
+        # --dangerously-skip-permissions is unnecessary here.
+        return ["--permission-mode", "acceptEdits"]
 
 
 register(ClaudeAdapter())
