@@ -25,6 +25,14 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   seam via a new `write_access_argv(run_dir)` on the adapter base. Flags verified
   against the live CLIs; `docs/client-mapping.md` updated and the row marked
   verified.
+- **cursor-agent `--system-prompt` takes a file, not inline text.** The Cursor
+  adapter passed the prime-directive *string* as the flag value, so cursor-agent
+  read it as a filename and failed (`--system-prompt file not found: ...`),
+  producing no output file. The adapter now writes the system prompt to a file in
+  the isolated run folder during `prepare` (part of the pre-run baseline, so it is
+  never captured as output) and passes that path. Surfaced by the end-to-end
+  record regression through gmlcache — the unit tests and direct-client isolation
+  had not exercised the adapter's real `--system-prompt` argument.
 
 ## [0.0.5] - 2026-06-11
 

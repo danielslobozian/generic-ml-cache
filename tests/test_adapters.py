@@ -126,3 +126,45 @@ def test_codex_write_grant_pins_run_dir_as_fence(tmp_path):
 def test_base_write_access_argv_defaults_empty(tmp_path):
     # The fake adapter does not override the seam, so the base default applies.
     assert get_adapter("fake").write_access_argv(tmp_path) == []
+
+
+# --- cursor system-prompt is a file path, not inline text (v0.0.6 fix) ------
+
+
+def test_cursor_system_prompt_is_a_file_path_not_inline(tmp_path):
+    from pathlib import Path
+
+    argv = get_adapter("cursor").build_argv(
+        executable="/usr/bin/cursor-agent",
+        run_dir=tmp_path,
+        model="m-x",
+        effort="",
+        context="",
+        prompt="PROMPT",
+        system_prompt=PRIME_DIRECTIVE,
+    )
+    value = argv[argv.index("--system-prompt") + 1]
+    # cursor-agent's --system-prompt takes a path; passing the directive text
+    # inline is the bug being fixed.
+    assert value != PRIME_DIRECTIVE
+    assert str(tmp_path) in value
+    assert Path(value).name == get_adapter("cursor").SYSTEM_PROMPT_FILE
+
+
+def test_cursor_prepare_writes_the_system_prompt_file(tmp_path):
+    from pathlib import Path
+
+    adapter = get_adapter("cursor")
+    adapter.prepare(tmp_path, context="C", prompt="P", system_prompt=PRIME_DIRECTIVE)
+    argv = adapter.build_argv(
+        executable="/usr/bin/cursor-agent",
+        run_dir=tmp_path,
+        model="m-x",
+        effort="",
+        context="",
+        prompt="P",
+        system_prompt=PRIME_DIRECTIVE,
+    )
+    path = Path(argv[argv.index("--system-prompt") + 1])
+    assert path.is_file()
+    assert path.read_text(encoding="utf-8") == PRIME_DIRECTIVE

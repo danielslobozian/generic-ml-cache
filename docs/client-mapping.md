@@ -24,7 +24,7 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 | Supporting context | `--context` / `--context-file` | merged into the prompt above | merged into the prompt above | merged into the prompt above |
 | Model | `--model` | `--model <model>` | `--model <model>` | `--model <model>` (effort baked into the id) |
 | Reasoning effort | `--effort` (optional) | `--effort <effort>` (omitted if empty) | `-c model_reasoning_effort=<effort>` (omitted if empty) | appended to the model id: `<model>-<effort>` (omitted if empty) |
-| System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | `--system-prompt <text>` |
+| System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | `--system-prompt <file>` (written into the run folder; cursor-agent's flag takes a path, not inline text) |
 | Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to 0.0.8) | prime directive only (hard mechanism deferred to 0.0.8) |
 | Write access to the run folder | always (the cache's own isolated run dir) | `--permission-mode acceptEdits` | `--skip-git-repo-check --sandbox workspace-write -C <run-dir>` | `--trust` |
 | Output capture | always | `--output-format text` | (default output) | `--print` |

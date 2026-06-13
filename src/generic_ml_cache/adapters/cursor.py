@@ -17,6 +17,16 @@ class CursorAdapter(ClientAdapter):
     name = "cursor"
     default_executable = "cursor-agent"
 
+    #: cursor-agent's --system-prompt takes a FILE path, not inline text, so the
+    #: directive is written to this file in the run folder and referenced by path.
+    SYSTEM_PROMPT_FILE = "_gmlc_system_prompt.txt"
+
+    def prepare(self, run_dir, context, prompt, system_prompt) -> None:
+        # Write the system prompt where build_argv will point --system-prompt.
+        # Done here (before the pre-run snapshot) so the file joins the baseline
+        # and is never mistaken for client output by the before/after diff.
+        (run_dir / self.SYSTEM_PROMPT_FILE).write_text(system_prompt, encoding="utf-8")
+
     def build_argv(
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
@@ -25,13 +35,16 @@ class CursorAdapter(ClientAdapter):
         # --list-models with no effort (preferred), or a base id plus an effort
         # to append. Do not pass both, or the effort is duplicated.
         model_id = f"{model}-{effort}" if effort else model
+        # --system-prompt is a path (see prepare); passing the directive inline
+        # makes cursor-agent treat the text itself as a missing filename.
+        system_prompt_path = str(run_dir / self.SYSTEM_PROMPT_FILE)
         return [
             executable,
             *self.write_access_argv(run_dir),
             "--model",
             model_id,
             "--system-prompt",
-            system_prompt,
+            system_prompt_path,
             "--print",
             full_prompt,
         ]
