@@ -114,7 +114,10 @@ def test_write_grant_precedes_trailing_positional_prompt(client, tmp_path):
         prompt="PROMPT",
         system_prompt=PRIME_DIRECTIVE,
     )
-    assert argv.index(EXPECTED_WRITE_GRANT[client][0]) < argv.index("PROMPT")
+    # The grant flag must precede the trailing positional prompt. cursor folds
+    # the directive into that prompt, so locate it by substring, not exact match.
+    prompt_idx = max(i for i, a in enumerate(argv) if "PROMPT" in a)
+    assert argv.index(EXPECTED_WRITE_GRANT[client][0]) < prompt_idx
 
 
 def test_codex_write_grant_pins_run_dir_as_fence(tmp_path):
@@ -128,43 +131,36 @@ def test_base_write_access_argv_defaults_empty(tmp_path):
     assert get_adapter("fake").write_access_argv(tmp_path) == []
 
 
-# --- cursor system-prompt is a file path, not inline text (v0.0.6 fix) ------
+# --- cursor delivers the directive via the prompt (no system-prompt flag) ----
 
 
-def test_cursor_system_prompt_is_a_file_path_not_inline(tmp_path):
-    from pathlib import Path
-
+def test_cursor_has_no_system_prompt_flag(tmp_path):
+    # Current cursor-agent removed --system-prompt; the adapter must not emit it.
     argv = get_adapter("cursor").build_argv(
         executable="/usr/bin/cursor-agent",
         run_dir=tmp_path,
         model="m-x",
         effort="",
-        context="",
+        context="CTX",
         prompt="PROMPT",
         system_prompt=PRIME_DIRECTIVE,
     )
-    value = argv[argv.index("--system-prompt") + 1]
-    # cursor-agent's --system-prompt takes a path; passing the directive text
-    # inline is the bug being fixed.
-    assert value != PRIME_DIRECTIVE
-    assert str(tmp_path) in value
-    assert Path(value).name == get_adapter("cursor").SYSTEM_PROMPT_FILE
+    assert "--system-prompt" not in argv
 
 
-def test_cursor_prepare_writes_the_system_prompt_file(tmp_path):
-    from pathlib import Path
-
-    adapter = get_adapter("cursor")
-    adapter.prepare(tmp_path, context="C", prompt="P", system_prompt=PRIME_DIRECTIVE)
-    argv = adapter.build_argv(
+def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
+    # No system-prompt channel -> the directive rides in the prompt argument
+    # (argv-level only; the Request/key are untouched, tested via cache keying).
+    argv = get_adapter("cursor").build_argv(
         executable="/usr/bin/cursor-agent",
         run_dir=tmp_path,
         model="m-x",
         effort="",
-        context="",
-        prompt="P",
+        context="CTX",
+        prompt="PROMPT",
         system_prompt=PRIME_DIRECTIVE,
     )
-    path = Path(argv[argv.index("--system-prompt") + 1])
-    assert path.is_file()
-    assert path.read_text(encoding="utf-8") == PRIME_DIRECTIVE
+    full_prompt = argv[-1]  # the trailing positional prompt
+    assert PRIME_DIRECTIVE in full_prompt
+    assert "CTX" in full_prompt
+    assert "PROMPT" in full_prompt

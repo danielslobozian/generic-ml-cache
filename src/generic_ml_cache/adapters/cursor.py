@@ -17,34 +17,31 @@ class CursorAdapter(ClientAdapter):
     name = "cursor"
     default_executable = "cursor-agent"
 
-    #: cursor-agent's --system-prompt takes a FILE path, not inline text, so the
-    #: directive is written to this file in the run folder and referenced by path.
-    SYSTEM_PROMPT_FILE = "_gmlc_system_prompt.txt"
-
-    def prepare(self, run_dir, context, prompt, system_prompt) -> None:
-        # Write the system prompt where build_argv will point --system-prompt.
-        # Done here (before the pre-run snapshot) so the file joins the baseline
-        # and is never mistaken for client output by the before/after diff.
-        (run_dir / self.SYSTEM_PROMPT_FILE).write_text(system_prompt, encoding="utf-8")
-
     def build_argv(
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
-        full_prompt = f"{context}\n\n{prompt}" if context else prompt
+        # Current cursor-agent has NO system-prompt flag (it was removed), and
+        # headless -p ignores workspace rule files (.cursor/rules, .cursorrules,
+        # AGENTS.md) -- both verified against the live CLI. The only reliable
+        # channel is the prompt itself, so the prime directive is prepended here,
+        # at the argv level. It is NOT added to the Request, so input_data and the
+        # cache key are unchanged -- cursor keys identically to claude/codex; the
+        # directive is delivered out-of-key exactly as the others' system-prompt
+        # flags do.
+        segments = [system_prompt] if system_prompt else []
+        if context:
+            segments.append(context)
+        segments.append(prompt)
+        full_prompt = "\n\n".join(segments)
         # Cursor encodes effort in the model id. Pass a full id from
         # --list-models with no effort (preferred), or a base id plus an effort
         # to append. Do not pass both, or the effort is duplicated.
         model_id = f"{model}-{effort}" if effort else model
-        # --system-prompt is a path (see prepare); passing the directive inline
-        # makes cursor-agent treat the text itself as a missing filename.
-        system_prompt_path = str(run_dir / self.SYSTEM_PROMPT_FILE)
         return [
             executable,
             *self.write_access_argv(run_dir),
             "--model",
             model_id,
-            "--system-prompt",
-            system_prompt_path,
             "--print",
             full_prompt,
         ]
