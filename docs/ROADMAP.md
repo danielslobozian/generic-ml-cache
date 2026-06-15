@@ -148,10 +148,18 @@ releases, **one feature per release**.
   `GMLCACHE_CONFIG` still selects a whole alternate config (a deliberate isolated
   instance, not a per-call redirect). A per-call store/output override would fork
   the cache into per-caller copies and defeat the one thing a cache is for — reuse.
-- **`0.0.8` — Partial / failed-record robustness.** Clear, tested behavior when a
-  real call crashes, times out, or is interrupted mid-record, so the store is
-  never left with a half-written cassette. Writes are already atomic; the
-  surrounding policy needs to be specified and tested.
+- **`0.0.8` — Partial / failed-record robustness + clean interruption.** Clear,
+  tested behavior when a real call crashes, times out, or is interrupted
+  mid-record, so the store is never left with a half-written cassette. Writes are
+  already atomic; the surrounding policy needs to be specified and tested.
+  **Graceful stop on signal (added requirement):** when the caller sends a
+  termination signal — the engine stopping a run — the cache must tear down the
+  **client subprocess it spawned** (no orphaned client) and treat the call as an
+  interrupted record under the same policy, rather than blocking until the client
+  exits on its own. The client runs today under a blocking `subprocess.run`, which
+  does not propagate a stop to the child; this needs a killable child (its own
+  process group) and a signal handler. *The workflow engine depends on this for its
+  cross-app clean stop: the engine signals the cache, the cache owns the teardown.*
 
 ### Later `0.0.x` / `0.1.x`
 

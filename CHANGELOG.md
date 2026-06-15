@@ -9,6 +9,16 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **Roadmap — `0.0.8` gains a graceful-stop-on-signal requirement.** Partial/failed
+  -record robustness is extended: on a termination signal from the caller (the
+  workflow engine stopping a run) the cache must tear down the client subprocess it
+  spawned and treat the call as an interrupted record, rather than blocking until
+  the client exits. Documents the cross-app contract the workflow engine's clean
+  stop depends on (the engine signals; the cache owns the teardown). Documentation
+  only; no runtime change.
+
 ## [0.0.7] - 2026-06-13
 
 ### Changed
