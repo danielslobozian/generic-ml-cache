@@ -29,6 +29,7 @@ from .errors import (  # noqa: E402
     CacheMiss,
     CassetteFormatError,
     ClientNotFound,
+    RunInterrupted,
     UnknownClient,
 )
 from .store import CassetteStore  # noqa: E402
@@ -53,5 +54,6 @@ __all__ = [
     "CacheMiss",
     "CassetteFormatError",
     "ClientNotFound",
+    "RunInterrupted",
     "UnknownClient",
 ]

@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 from . import __version__, config
 from .adapters.registry import registered_names
 from .cache import Mode, Request, apply_response, resolve
-from .errors import CacheError, CacheMiss, ConfigError
+from .errors import CacheError, CacheMiss, ConfigError, RunInterrupted
 from .store import CassetteStore
 
 
@@ -113,6 +113,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
             timeout=timeout,
             trust_scan=trust_scan,
         )
+    except RunInterrupted as exc:
+        # A requested stop, not a failure: no cassette was written. Exit code 130
+        # (the conventional "terminated by Ctrl-C") tells the caller it was stopped.
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 130
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 3

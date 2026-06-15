@@ -45,3 +45,14 @@ class IsolationViolation(CacheError):
     the *soft* signal a well-behaved client emits when the prime directive is
     violated.
     """
+
+
+class RunInterrupted(Exception):
+    """Raised when a real client run is stopped by a signal from the caller (the
+    workflow engine) before it finished.
+
+    Deliberately **not** a ``CacheError``: it is not a fault but a requested stop,
+    and it must never be recorded as a cassette -- an interrupted call is not a
+    result. The CLI maps it to a distinct exit code so a stop is distinguishable
+    from a failure.
+    """

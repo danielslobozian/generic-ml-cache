@@ -9,6 +9,18 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Graceful stop on signal.** A real client call now runs in its own process
+  group/session and is supervised: when the caller (the workflow engine) sends a
+  termination signal — `SIGINT`/`SIGTERM` — the whole group is torn down (no
+  orphaned client) and the run raises `RunInterrupted`, so no cassette is written
+  (an interrupted call is not a result). `gmlcache run` maps it to exit code `130`,
+  distinct from a miss (3) or an error (4). The blocking `subprocess.run` is
+  replaced by a supervised `Popen`; timeout behavior is unchanged (kill the group,
+  re-raise). Signal handlers are installed only on the main thread; off it the run
+  still tears down on timeout. POSIX uses `killpg`; Windows terminates the child.
+
 ### Changed
 
 - **Roadmap — `0.0.8` gains a graceful-stop-on-signal requirement.** Partial/failed
