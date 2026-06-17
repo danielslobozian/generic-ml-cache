@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.11 (alpha)
+## Where we are: 0.0.12 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -163,6 +163,18 @@ Added in 0.0.11:
   replays. This is the cache-side dependency the engine's cost feature was waiting
   on (cassette schema bumped to 2; older cassettes still load, usage unknown).
 
+Added in 0.0.12:
+
+- **`check` — a read-only cache probe.** Given the same inputs as a `run`, it
+  reports whether the call is already cached — **hit / miss / non-cacheable** —
+  and on a hit shows the cassette's file count and recorded usage/cost. It
+  launches no client and writes nothing (a forecast, not a replay), so the
+  workflow engine can see which steps would hit before committing to a run, and
+  read each hit's cost from the 0.0.11 envelope. Human output by default, `--json`
+  for programmatic use; exit `0` for every verdict (the answer is in the output,
+  not the exit code). `run` and `check` share one key-building helper, so a probe
+  can never disagree with a run about whether a call is cached.
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -187,18 +199,6 @@ releases, **one feature per release**.
   outside that folder.
 
 ### Immediate next releases
-
-- **`0.0.12` — `check` (cache probe).** A read-only "is this already cached?"
-  query. Given the same inputs as `run`, it computes the key and reports **hit /
-  miss / non-cacheable** plus the matching cassette's metadata (client / model /
-  effort, recorded files) — and **launches nothing and writes nothing**. Unlike
-  `offline` mode, a hit does *not* replay (no files written, no streams
-  reproduced); it only answers whether the call is cached. This is what lets a
-  caller — the workflow engine — **forecast a run before launching it**: which
-  steps would hit, which would miss. It also reports the recorded **cost in
-  tokens**, drawn from the usage envelope shipped in `0.0.11` — so a probe answers
-  not just whether a call is cached but what it cost, which is what lets the engine
-  forecast a run's cost before launching it.
 
 - **`0.0.13` — Passthrough client arguments.** An escape hatch for client features
   the cache does not (yet) model: a single parameter carrying a quoted string of
