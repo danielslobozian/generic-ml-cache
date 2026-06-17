@@ -37,9 +37,10 @@ def test_build_argv_includes_model_and_inputs(client, tmp_path):
     assert argv[0].endswith(client)
     joined = " ".join(argv)
     assert "m-x" in joined  # the model id appears somewhere
-    # The prompt is delivered on stdin now, not as an argv argument.
-    assert "PROMPT" not in joined
-    assert "PROMPT" in (adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE) or "")
+    # The prompt is delivered to the client either on stdin (claude/codex) or as a
+    # positional argument (cursor) -- exactly one channel carries it.
+    payload = adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE) or ""
+    assert ("PROMPT" in joined) ^ ("PROMPT" in payload)
     # effort surfaces somehow (a flag value, a config kv, or baked into model id)
     assert any("high" in a for a in argv)
 
@@ -148,10 +149,10 @@ def test_cursor_has_no_system_prompt_flag(tmp_path):
     assert "--system-prompt" not in argv
 
 
-def test_cursor_directive_is_folded_into_the_stdin_payload(tmp_path):
-    # No system-prompt channel -> the directive rides in the stdin payload along
-    # with context and prompt (delivery-level only; the Request/key are untouched,
-    # tested via cache keying). argv carries no prompt text at all.
+def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
+    # No system-prompt channel and no stdin path -> the directive rides in the
+    # positional prompt argument (delivery-level only; the Request/key are
+    # untouched, tested via cache keying).
     adapter = get_adapter("cursor")
     argv = adapter.build_argv(
         executable="/usr/bin/cursor-agent",
@@ -162,8 +163,8 @@ def test_cursor_directive_is_folded_into_the_stdin_payload(tmp_path):
         prompt="PROMPT",
         system_prompt=PRIME_DIRECTIVE,
     )
-    assert "PROMPT" not in " ".join(argv)
-    payload = adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE)
-    assert PRIME_DIRECTIVE in payload
-    assert "CTX" in payload
-    assert "PROMPT" in payload
+    full_prompt = argv[-1]  # the trailing positional prompt
+    assert PRIME_DIRECTIVE in full_prompt
+    assert "CTX" in full_prompt
+    assert "PROMPT" in full_prompt
+    assert adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE) is None

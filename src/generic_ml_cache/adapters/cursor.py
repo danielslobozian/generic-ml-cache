@@ -20,9 +20,26 @@ class CursorAdapter(ClientAdapter):
     def build_argv(
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
-        # The prompt is delivered on stdin (see stdin_payload), not as an argv
-        # argument, so a large prompt cannot hit the OS argument-size limit. With
-        # --print and piped stdin, cursor-agent reads the prompt from stdin.
+        # cursor-agent takes the prompt ONLY as a positional argument -- its CLI has
+        # no stdin/file path for the prompt (verified against `cursor-agent --help`:
+        # `[prompt...]`, no `-`, no --prompt-file), unlike claude and codex. Feeding
+        # the prompt on stdin makes it hang waiting for a positional it never gets.
+        # So the prompt stays in argv, which means a cursor prompt is bounded by the
+        # OS argument-size limit (~128 KiB/arg on Linux, ~32 KB whole command line on
+        # Windows); claude and codex have no such ceiling because they read the
+        # prompt from stdin.
+        #
+        # Current cursor-agent has NO system-prompt flag (removed) and headless
+        # --print ignores workspace rule files (.cursor/rules, .cursorrules,
+        # AGENTS.md) -- both verified against the live CLI -- so the prime directive
+        # (system prompt) and context are folded into the prompt argument itself.
+        # None of this enters the Request, so input_data and the cache key are
+        # unchanged: cursor keys identically to claude/codex.
+        segments = [system_prompt] if system_prompt else []
+        if context:
+            segments.append(context)
+        segments.append(prompt)
+        full_prompt = "\n\n".join(segments)
         # Cursor encodes effort in the model id. Pass a full id from --list-models
         # with no effort (preferred), or a base id plus an effort to append. Do not
         # pass both, or the effort is duplicated.
@@ -33,22 +50,8 @@ class CursorAdapter(ClientAdapter):
             "--model",
             model_id,
             "--print",
+            full_prompt,
         ]
-
-    def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
-        # Current cursor-agent has NO system-prompt flag (it was removed), and
-        # headless --print ignores workspace rule files (.cursor/rules,
-        # .cursorrules, AGENTS.md) -- both verified against the live CLI. The only
-        # reliable channel is the prompt itself, so the prime directive (system
-        # prompt) and the context are folded into the stdin payload here. None of
-        # this enters the Request, so input_data and the cache key are unchanged --
-        # cursor keys identically to claude/codex; the directive is delivered
-        # out-of-key exactly as the others' system-prompt flags are.
-        segments = [system_prompt] if system_prompt else []
-        if context:
-            segments.append(context)
-        segments.append(prompt)
-        return "\n\n".join(segments)
 
     def write_access_argv(self, run_dir):
         # cursor-agent refuses an untrusted workspace ("Workspace Trust Required")

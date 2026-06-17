@@ -21,7 +21,7 @@ from generic_ml_cache.cli import main
 HUGE = "X" * 200_000
 
 
-@pytest.mark.parametrize("adapter", [ClaudeAdapter(), CodexAdapter(), CursorAdapter()])
+@pytest.mark.parametrize("adapter", [ClaudeAdapter(), CodexAdapter()])
 def test_prompt_goes_to_stdin_not_argv(adapter):
     argv = adapter.build_argv("exe", Path("/run"), "model", "high", "ctx", HUGE, "sys")
     payload = adapter.stdin_payload("ctx", HUGE, "sys")
@@ -30,6 +30,16 @@ def test_prompt_goes_to_stdin_not_argv(adapter):
     assert HUGE not in joined  # the big prompt is not an argv argument
     assert len(joined) < 10_000  # argv stays small no matter how large the prompt
     assert payload is not None and HUGE in payload  # it rides on stdin instead
+
+
+def test_cursor_keeps_prompt_as_argv_positional():
+    # cursor-agent has no stdin/file prompt path, so its prompt stays in argv and
+    # is therefore bounded by the OS argument-size limit (a documented cursor
+    # constraint, not something the cache can work around).
+    adapter = CursorAdapter()
+    argv = adapter.build_argv("exe", Path("/run"), "model", "high", "ctx", HUGE, "sys")
+    assert argv[-1].endswith(HUGE) or HUGE in argv[-1]  # prompt is the trailing arg
+    assert adapter.stdin_payload("ctx", HUGE, "sys") is None  # nothing on stdin
 
 
 def test_large_prompt_round_trips_through_stdin(capsys):
