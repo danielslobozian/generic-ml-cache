@@ -9,6 +9,36 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Usage and cost are now captured on every call.** Each cassette records a
+  usage block: a **normalized** envelope common to all clients — input, output and
+  cache-read tokens, plus an optional ring (cache-write, separated reasoning,
+  dollar cost) — alongside the **client's raw usage block kept verbatim**, so a
+  field we did not normalize is still reachable. Tokens are the spine; a dollar
+  figure is recorded only when the client reports one (today, only Claude) and is
+  flagged as the client's own estimate, not authoritative billing. A count the
+  client does not report stays **unknown** (never silently `0`) — so a reported
+  zero and an absent field stay distinct.
+- **`inspect` shows the usage envelope**, with `--raw` to print the client's
+  verbatim block.
+- **`stats` reports tokens saved** across replays: every cache hit avoided a real
+  call, so its recorded usage is usage not spent; the readout sums input, output
+  and cache-read tokens (and an estimated dollar saving when client costs are
+  known), noting any replays whose cassette carried no usage so the figure is not
+  understated.
+
+### Changed
+
+- **Clients are now invoked in their structured (JSON) output mode** so the call
+  also returns its usage. Each adapter lifts the clean answer text back out of the
+  structured output, so the caller still receives plain text on stdout exactly as
+  before — the cache, not the caller, parses the client's output. Claude:
+  `--output-format json`; Codex: `exec --json` (a JSON-lines event stream); Cursor:
+  `--print --output-format json`.
+- **Cassette schema is now version 2** (adds the optional `usage` field). Older
+  (version 1) cassettes still load unchanged — their usage is simply *unknown*.
+
 ## [0.0.10] - 2026-06-17
 
 ### Added

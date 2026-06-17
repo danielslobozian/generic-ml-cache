@@ -29,7 +29,7 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 | System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | prepended to the prompt argument (current cursor-agent has no system-prompt flag and ignores rule files headless) — argv-only, never keyed |
 | Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to adapter hardening, 0.0.10) | prime directive only (hard mechanism deferred to adapter hardening, 0.0.10) |
 | Write access to the run folder | always (the cache's own isolated run dir) | `--permission-mode acceptEdits` | `--skip-git-repo-check --sandbox workspace-write -C <run-dir>` | `--trust` |
-| Output capture | always | `--output-format text` | (default output) | `--print` |
+| Output capture | always (answer + usage) | `--output-format json` → answer from `result`, usage from `usage`/`modelUsage`/`total_cost_usd` | `exec --json` → answer from the `agent_message` event, usage from `turn.completed` | `--print --output-format json` → answer from `result`, usage from `usage` |
 
 Notes:
 
@@ -43,6 +43,14 @@ Notes:
   the same system-prompt channel as `--system-prompt`. So the guardrail is only as
   strong as each client honouring that flag — which is why it is a best-effort
   (soft) control.
+- **Each client runs in its structured (JSON) output mode**, so the call returns
+  its usage as well as its answer. The recorded stdout is the **answer text the
+  adapter extracted** from that structured output — content-identical to the plain
+  answer, so the caller boundary is unchanged. Usage is normalized into a common
+  shape and the client's raw block is kept verbatim; a count the client does not
+  report is *unknown*, never zero. Only Claude reports a dollar figure, and even
+  that is the client's own estimate (computed locally from a bundled price table),
+  not authoritative billing — so it is advisory and never derived by the cache.
 - The **write/trust door** is opened by default for every run, because the client
   writes into the cache's own isolated, ephemeral run folder (its cwd). Headless
   clients otherwise refuse: Claude pauses on a write-permission prompt, Codex
