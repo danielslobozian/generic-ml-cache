@@ -17,6 +17,7 @@ caller's output folder, and stdout/stderr/exit are reproduced.
 from __future__ import annotations
 
 import enum
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -61,6 +62,16 @@ class Request:
             nothing (passthrough) -- unless scan-trust is explicitly enabled. Never
             keyed; they only open the read-door (directive + a client's hard read
             flag where available).
+        client_args: extra raw arguments appended verbatim to the client launch --
+            an escape hatch for client features the cache does not model. They DO
+            enter the key: the same modeled inputs with different extra args are a
+            different call and get their own cassette, because anything that
+            changes the invocation can change the output. Only their *fingerprint*
+            is keyed (folded into ``input_data``), so the raw args -- which may
+            carry secrets -- never land in a cassette; the raw values are used
+            solely to build the command line at record time. Order is significant
+            (CLI flags are positional); an empty list keys identically to a call
+            with no passthrough, so existing cassettes are untouched.
 
     The key is derived from ``client``, ``model``, ``effort`` and ``input_data``
     only -- i.e. context, prompt and the input-file fingerprints (see
@@ -77,12 +88,20 @@ class Request:
     user_system_prompt: Optional[str] = None
     input_files: Dict[str, str] = field(default_factory=dict)
     allow_paths: List[str] = field(default_factory=list)
+    client_args: List[str] = field(default_factory=list)
 
     @property
     def input_data(self) -> Dict[str, str]:
         data = {"context": self.context, "prompt": self.prompt}
         for sha in self.input_files.values():
             data[f"input_file:{sha}"] = sha
+        # Passthrough args enter the key by *fingerprint* only -- the raw strings
+        # (which may hold secrets) never reach input_data and so never a cassette.
+        # Order is preserved (CLI flags are positional). Absent -> nothing added,
+        # so the key is byte-for-byte what it was before passthrough existed.
+        if self.client_args:
+            digest = hashlib.sha256("\x00".join(self.client_args).encode("utf-8")).hexdigest()
+            data[f"client_args:{digest}"] = digest
         return data
 
     @property
