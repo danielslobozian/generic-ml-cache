@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.7 (alpha)
+## Where we are: 0.0.8 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -148,7 +148,7 @@ releases, **one feature per release**.
   `GMLCACHE_CONFIG` still selects a whole alternate config (a deliberate isolated
   instance, not a per-call redirect). A per-call store/output override would fork
   the cache into per-caller copies and defeat the one thing a cache is for — reuse.
-- **`0.0.8` — Partial / failed-record robustness + clean interruption.** Clear,
+- **`0.0.8` — Partial / failed-record robustness + clean interruption.** ✅ *Shipped.* Clear,
   tested behavior when a real call crashes, times out, or is interrupted
   mid-record, so the store is never left with a half-written cassette. Writes are
   already atomic; the surrounding policy needs to be specified and tested.
