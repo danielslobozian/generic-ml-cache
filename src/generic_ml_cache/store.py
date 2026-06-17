@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from typing import Iterator, Optional
 
+from .access_registry import AccessRegistry
 from .cassette import Cassette, match_key
 from .checksum import checksum_input_data
 from .errors import CassetteFormatError
@@ -36,6 +37,14 @@ class CassetteStore:
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root)
+        self._registry: Optional[AccessRegistry] = None
+
+    @property
+    def registry(self) -> AccessRegistry:
+        """The access registry for this store (lazy; bound to the store dir)."""
+        if self._registry is None:
+            self._registry = AccessRegistry(self.root)
+        return self._registry
 
     def _path_for(self, key: str) -> Path:
         return self.root / f"{key}.json"

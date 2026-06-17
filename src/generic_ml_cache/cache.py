@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from . import access_registry
 from .adapters.registry import get_adapter
 from .cassette import Cassette, Response
 from .errors import CacheMiss
@@ -115,6 +116,65 @@ class Outcome:
 
 
 def resolve(
+    request: Request,
+    store: CassetteStore,
+    mode: Mode = Mode.CACHE,
+    executable: Optional[str] = None,
+    timeout: Optional[float] = None,
+    trust_scan: bool = False,
+    record_on_error: bool = False,
+) -> Outcome:
+    """Resolve a request and record one access event for observability.
+
+    Thin wrapper over the resolution logic: it runs the resolve, then logs exactly
+    one access event (hit / record / miss) to the store's non-load-bearing
+    registry — a passthrough call logs nothing (it is outside cache accounting),
+    and an offline miss logs a miss before the error propagates. Registry writes
+    are best-effort and never affect the result. See ``_resolve`` for the full
+    mode and storage semantics.
+    """
+    try:
+        outcome = _resolve(
+            request,
+            store,
+            mode,
+            executable=executable,
+            timeout=timeout,
+            trust_scan=trust_scan,
+            record_on_error=record_on_error,
+        )
+    except CacheMiss:
+        _record_access(store, access_registry.MISS, request, None)
+        raise
+    event = _event_for(outcome)
+    if event is not None:
+        _record_access(store, event, request, outcome.cassette)
+    return outcome
+
+
+def _event_for(outcome: "Outcome") -> Optional[str]:
+    if outcome.hit:
+        return access_registry.HIT
+    if outcome.recorded:
+        return access_registry.RECORD
+    if outcome.failed_unstored:
+        return access_registry.MISS
+    return None  # passthrough: ran fresh, not part of hit/miss accounting
+
+
+def _record_access(
+    store: CassetteStore, event: str, request: Request, cassette: Optional[Cassette]
+) -> None:
+    store.registry.record(
+        event,
+        match_key=cassette.match_key if cassette is not None else None,
+        client=request.client,
+        model=request.model,
+        effort=request.effort,
+    )
+
+
+def _resolve(
     request: Request,
     store: CassetteStore,
     mode: Mode = Mode.CACHE,

@@ -11,6 +11,15 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ### Added
 
+- **Access registry (observability).** A small SQLite log (`registry.sqlite3` in
+  the store dir, stdlib `sqlite3`, no extra dependency) records cache access
+  events — hit / miss / record (and eviction, once `prune` lands) — for the coming
+  `stats` and `prune` to read. It is **non-load-bearing by construction**: every
+  registry operation swallows its own errors, so a missing, locked, unwritable, or
+  corrupt database never affects whether or how the cache resolves a call. It
+  records access only — no checksums, no integrity claims (a checksum kept beside
+  the data it guards protects nothing a determined editor couldn't also rewrite).
+
 - **Cassettes are write-once and immutable.** A cassette is built fully in memory
   from the client's response and the keep-or-discard decision is made before
   anything is written, so the file is materialized in one shot and never reopened
