@@ -176,6 +176,23 @@ releases, **one feature per release**.
   until then `check` reports hit / miss + metadata, and the cost field lights up
   when the envelope lands.
 
+- **`0.0.12` — Passthrough client arguments.** An escape hatch for client features
+  the cache does not (yet) model: a single parameter carrying a quoted string of
+  extra arguments appended verbatim to the client launch, which the cache never
+  interprets. The run is otherwise unchanged — declared inputs / outputs, the
+  isolated run folder, the cassette, and replay all stay intact — so a passthrough
+  call records and replays like any other. The string is **part of the key**
+  (opaque, invocation-level material, distinct from the prompt prefix): the same
+  modeled inputs with different extra arguments are a different call and get their
+  own cassette. The user owns the string's correctness for their client version.
+  This is a **staging ground, not a backdoor**: a new client capability can be
+  tried with zero cache changes, then promoted into a modeled feature if it proves
+  worthwhile — or left as passthrough if it is too client-specific. To settle when
+  built: whether the string is stored verbatim or only hashed (it must not become a
+  place secrets are persisted). Complements `0.0.10` — hardening covers the flags
+  we model, passthrough the ones we do not; together, the whole launch-argument
+  surface.
+
 ### Later
 
 - **Analysis — Codex model discovery.** Today `models` reports "not supported" for
@@ -199,6 +216,24 @@ releases, **one feature per release**.
   reflects final behavior.
 
 When all of the above are done and stable, the project ships **1.0.0**.
+
+## Nice-to-haves (demand-gated, not scheduled)
+
+Functionality that fits the project and would be cheap to add, but that nobody
+needs yet. Unlike the "after 1.0.0" items below, these are **not** out of scope or
+mission-violating — they are simply unprioritised, recorded so a future request has
+somewhere to land. None is scheduled; any could be pulled forward if a real use
+asks for it.
+
+- **Pure proxy execution (no caching).** Run the chosen client *in place* in the
+  caller's own folder — no isolated run folder, no input / output declaration, no
+  cassette — and relay its `stdout` / `stderr` back untouched, as if the client had
+  been called directly. It is the cache with its entire purpose removed (nothing is
+  captured, nothing replays), which is why it sits here and not on the cache's road.
+  The only thing it buys a caller is using one dependency (our CLI) as a transparent
+  launcher, or feeding client arguments down from a higher-level application. Cheap
+  to add — it is *less* than a normal run, since it skips capture — so it waits for
+  a real request rather than a guess.
 
 ## After 1.0.0 (named, deliberately out of scope for now)
 
