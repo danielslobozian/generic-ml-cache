@@ -39,15 +39,21 @@ def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str
     return inline if inline is not None else ""
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
+def _build_keyed_request(args: argparse.Namespace) -> Request:
+    """Build a Request from the inputs shared by ``run`` and ``check``.
+
+    These are the fields the cache key is derived from -- client, model, effort,
+    context, prompt, and the content fingerprints of declared input files -- plus
+    the allow-path folders, which decide cacheability (never keyed). The system
+    prompt is deliberately excluded: it is record-time scaffolding, not keyed, so
+    only ``run`` layers it on. Keeping this in one place means ``run`` and
+    ``check`` derive the *same* key from the same arguments, so a probe can never
+    disagree with a run about whether a call is cached.
+    """
     context = _read_text_arg(args.context, args.context_file, "context")
     prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
     if not prompt:
         raise SystemExit("error: a non-empty --prompt or --prompt-file is required")
-
-    system_prompt = (
-        _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
-    )
 
     # Declared input files: fingerprint each by content (any file type) -> {abs_path: sha}.
     input_files: Dict[str, str] = {}
@@ -69,15 +75,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
             raise SystemExit(f"error: allow-path is not a directory: {raw}")
         allow_paths.append(str(p.resolve()))
 
-    request = Request(
+    return Request(
         client=args.client,
         model=args.model,
         effort=args.effort,
         context=context,
         prompt=prompt,
-        user_system_prompt=system_prompt,
         input_files=input_files,
         allow_paths=allow_paths,
+    )
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
+    request = _build_keyed_request(args)
+    request.user_system_prompt = (
+        _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
     )
     try:
         file_cfg = config.load()
@@ -164,6 +176,70 @@ def _cmd_run(args: argparse.Namespace) -> int:
     sys.stderr.write(outcome.response.stderr)
     sys.stderr.flush()
     return outcome.response.exit
+
+
+def _cmd_check(args: argparse.Namespace) -> int:
+    import json
+
+    from .cache import ProbeStatus, probe
+    from .cassette import match_key as compute_match_key
+    from .checksum import checksum_input_data
+
+    request = _build_keyed_request(args)
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    store = CassetteStore(Path(str(settings["store"][0])))
+    trust_scan = bool(settings["trust_scan"][0])
+
+    result = probe(request, store, trust_scan=trust_scan)
+
+    # Identity is derived from the request (same key a run would compute), so it is
+    # shown for every verdict, including a miss where there is no cassette to read.
+    checksum = checksum_input_data(request.input_data)
+    key = compute_match_key(request.client, request.model, request.effort, checksum)
+    cassette = result.cassette
+    usage = cassette.response.usage if cassette is not None else None
+
+    if args.json:
+        payload = {
+            "status": result.status.value,
+            "cached": result.status is ProbeStatus.HIT,
+            "client": request.client,
+            "model": request.model,
+            "effort": request.effort,
+            "checksum": checksum,
+            "key": key,
+        }
+        if cassette is not None:
+            payload["files"] = len(cassette.response.files)
+            payload["usage"] = usage.to_dict() if usage is not None else None
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    print(f"status  : {result.status.value}")
+    print(f"client  : {request.client}")
+    print(f"model   : {request.model}")
+    print(f"effort  : {request.effort}")
+    print(f"checksum: {checksum}")
+    print(f"key     : {key}")
+    if result.status is ProbeStatus.HIT and cassette is not None:
+        print(f"files   : {len(cassette.response.files)}")
+        if usage is None:
+            print("usage   : (none captured)")
+        else:
+            print(f"usage   : {_usage_summary(usage)}")
+            if usage.cost_usd is not None:
+                print(
+                    f"          cost ~ ${usage.cost_usd:.4f} (client estimate, not authoritative)"
+                )
+    elif result.status is ProbeStatus.NON_CACHEABLE:
+        print("note    : declares allow-path folders the cache cannot fingerprint, so this")
+        print("          call always runs fresh and is never cached.")
+    return 0
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
@@ -585,6 +661,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="also print the client's verbatim usage block (as the client reported it)",
     )
     inspect.set_defaults(func=_cmd_inspect)
+
+    check = sub.add_parser(
+        "check",
+        help="probe whether a call is already cached (read-only; launches and records nothing)",
+    )
+    check.add_argument("--client", required=True, choices=registered_names())
+    check.add_argument("--model", required=True)
+    check.add_argument(
+        "--effort",
+        default="",
+        help="reasoning effort (optional); must match the run you would make",
+    )
+    check.add_argument("--prompt")
+    check.add_argument("--prompt-file")
+    check.add_argument("--context")
+    check.add_argument("--context-file")
+    check.add_argument(
+        "--input-file",
+        action="append",
+        dest="input_file",
+        metavar="PATH",
+        help="an input file whose content is fingerprinted into the key (repeatable)",
+    )
+    check.add_argument(
+        "--allow-path",
+        action="append",
+        dest="allow_path",
+        metavar="PATH",
+        help="a scan folder; declaring any makes the call non-cacheable (repeatable)",
+    )
+    check.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    check.set_defaults(func=_cmd_check)
 
     doctor = sub.add_parser(
         "doctor",

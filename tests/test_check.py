@@ -67,3 +67,59 @@ def test_probe_writes_nothing_and_logs_nothing(store):
     # No cassette created, and no access event recorded by the probe.
     assert _cassette_count(store) == before_count
     assert store.registry.event_counts() == before_events
+
+
+# --- the `check` CLI command -------------------------------------------------
+
+import json  # noqa: E402
+
+from generic_ml_cache.cli import main  # noqa: E402
+
+_BASE = ["--client", "fake", "--model", "m", "--effort", "high"]
+
+
+def test_check_command_reports_hit_after_a_run(capsys):
+    assert main(["run", *_BASE, "--prompt", "STDOUT cached"]) == 0
+    capsys.readouterr()
+    code = main(["check", *_BASE, "--prompt", "STDOUT cached"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "status  : hit" in out
+    assert "key     :" in out
+
+
+def test_check_command_reports_miss_with_exit_zero(capsys):
+    code = main(["check", *_BASE, "--prompt", "never recorded"])
+    out = capsys.readouterr().out
+    assert code == 0  # a miss is a valid answer, not a failure
+    assert "status  : miss" in out
+
+
+def test_check_command_reports_non_cacheable(capsys, tmp_path):
+    scan = tmp_path / "scan"
+    scan.mkdir()
+    code = main(["check", *_BASE, "--prompt", "p", "--allow-path", str(scan)])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "status  : non-cacheable" in out
+
+
+def test_check_json_output(capsys):
+    assert main(["run", *_BASE, "--prompt", "STDOUT j"]) == 0
+    capsys.readouterr()
+    code = main(["check", *_BASE, "--prompt", "STDOUT j", "--json"])
+    out = capsys.readouterr().out
+    assert code == 0
+    data = json.loads(out)
+    assert data["status"] == "hit"
+    assert data["cached"] is True
+    assert data["key"] and data["checksum"]
+
+
+def test_check_command_records_nothing(capsys):
+    # A check on an absent call must create no cassette (the probe is read-only).
+    assert main(["check", *_BASE, "--prompt", "ghost"]) == 0
+    capsys.readouterr()
+    main(["stats", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["cassettes"] == 0
