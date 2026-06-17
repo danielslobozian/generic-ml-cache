@@ -113,6 +113,26 @@ Added in 0.0.7:
   overwriting) so the store path is easy to edit; `GMLCACHE_CONFIG` still selects a
   whole alternate config for a deliberate isolated instance.
 
+Added in 0.0.8:
+
+- **Lifecycle robustness.** Failed client calls (non-zero exit) are no longer
+  cached by default (`run --record-on-error` opts in); a crash, timeout, or
+  interruption mid-record can never leave a half-written cassette or a stray temp
+  file (atomic write, cleaned up on any failure); a timeout maps to exit `124`, a
+  caller-signalled stop to exit `130`. **Graceful stop on signal:** the cache runs
+  the client in its own process group and tears it down on `SIGINT` / `SIGTERM`,
+  recording nothing — the teardown the workflow engine's clean stop depends on.
+
+Added in 0.0.9:
+
+- **Store ergonomics + observability.** Cassettes are write-once and read-only (a
+  hit never writes back). A non-load-bearing access registry (stdlib `sqlite3`,
+  still zero third-party deps) logs hit / miss / record / evict beside the store
+  and never gates correctness. `stats` reports cassette count and total size split
+  by client / model, plus access counts. Opt-in size eviction (`max_size`, off by
+  default) evicts least-recently-used cassettes to make room — a soft cap that
+  never drops a fresh result. On-disk layout documented in `docs/storage.md`.
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -138,59 +158,25 @@ releases, **one feature per release**.
 
 ### Immediate next releases
 
-- **`0.0.7` — The cache owns its store; no caller-dictated locations.** The
-  cassette store location is set only by the config file (built-in default: the
-  per-user data dir, `~/.local/share/generic-ml-cache/cassettes`, honoring
-  `XDG_DATA_HOME`). **Retired:** the `--store` flag, the `GMLCACHE_STORE`
-  environment variable, and the `--output-dir` flag — the cache writes produced
-  files into the directory it was called in, exactly as the client would. **Added:**
-  `gmlcache init` to materialise the config file so the store path is editable;
-  `GMLCACHE_CONFIG` still selects a whole alternate config (a deliberate isolated
-  instance, not a per-call redirect). A per-call store/output override would fork
-  the cache into per-caller copies and defeat the one thing a cache is for — reuse.
-- **`0.0.8` — Partial / failed-record robustness + clean interruption.** ✅ *Shipped.* Clear,
-  tested behavior when a real call crashes, times out, or is interrupted
-  mid-record, so the store is never left with a half-written cassette. Writes are
-  already atomic; the surrounding policy needs to be specified and tested.
-  **Graceful stop on signal (added requirement):** when the caller sends a
-  termination signal — the engine stopping a run — the cache must tear down the
-  **client subprocess it spawned** (no orphaned client) and treat the call as an
-  interrupted record under the same policy, rather than blocking until the client
-  exits on its own. The client runs today under a blocking `subprocess.run`, which
-  does not propagate a stop to the child; this needs a killable child (its own
-  process group) and a signal handler. *The workflow engine depends on this for its
-  cross-app clean stop: the engine signals the cache, the cache owns the teardown.*
-
-### Later `0.0.x` / `0.1.x`
-
-- **`0.0.9` — Store ergonomics + observability.** ✅ *Shipped.* Cassettes are
-  **write-once and immutable** (read-only on disk; a hit never writes back), and a
-  separate **non-load-bearing** access registry (stdlib `sqlite3`, still zero
-  third-party dependencies) records access **events** — hit / miss / record /
-  evict — beside the store. The registry never gates a lookup or a replay: lose it,
-  corrupt it, or delete it and correctness is untouched; every write to it is
-  best-effort. It records access only — no checksum / integrity role (a checksum
-  kept beside the data it guards, in a writable folder, protects nothing a
-  determined editor couldn't also rewrite). On top of it:
-  - **`stats`** — cassette count and total size split by client / model, plus
-    hit / miss / record counts; the diagnostic that lets a user watch the
-    footprint and *decide* whether to turn on eviction.
-  - **Opt-in size eviction** (`max_size`) — off by default (keep everything
-    forever); when set, least-recently-used cassettes are evicted to make room on
-    insert (LRU from the registry, soft cap that never drops a fresh result).
-  - A documented on-disk layout (`docs/storage.md`).
-
-  No manual `prune` command: removing cassettes by selector was deliberately cut —
-  `rm` wipes the whole directory cleanly, `--force` re-records, and because the
-  cache is content-addressed a stale entry is simply *unused*, not *wrong*.
-  Time-based (idle / age) eviction is deferred to **daemon mode** (below), the only
-  place a background sweep makes sense. The registry is append-only and not yet
-  compacted — bounding its growth is a future concern, not addressed in 0.0.9.
-
 - **`0.0.10` — Adapter hardening.** The launch-flag mappings for `claude` /
   `codex` / `cursor-agent` are best-effort today. Before 1.0.0 they need
   verifying against the real CLIs, making configurable where the CLIs differ, and
   degrading gracefully when a flag is unsupported.
+
+- **`0.0.11` — `check` (cache probe).** A read-only "is this already cached?"
+  query. Given the same inputs as `run`, it computes the key and reports **hit /
+  miss / non-cacheable** plus the matching cassette's metadata (client / model /
+  effort, recorded files) — and **launches nothing and writes nothing**. Unlike
+  `offline` mode, a hit does *not* replay (no files written, no streams
+  reproduced); it only answers whether the call is cached. This is what lets a
+  caller — the workflow engine — **forecast a run before launching it**: which
+  steps would hit, which would miss. It also reports the recorded **cost in
+  tokens**, but only once cassettes carry usage (the normalized usage envelope,
+  tracked separately as the cache-side dependency of the engine's cost feature);
+  until then `check` reports hit / miss + metadata, and the cost field lights up
+  when the envelope lands.
+
+### Later
 
 - **Analysis — Codex model discovery.** Today `models` reports "not supported" for
   Codex (no scriptable list). `codex debug models` exposes the account-aware model
@@ -209,7 +195,7 @@ releases, **one feature per release**.
 
 - **`0.1.1` — Small, stable public Python API.** The CLI is the primary surface
   today. This exposes a documented library API (recording, lookup, replay,
-  inspection, prune/stats) with semantic-versioning guarantees. Done last so it
+  inspection, stats) with semantic-versioning guarantees. Done last so it
   reflects final behavior.
 
 When all of the above are done and stable, the project ships **1.0.0**.
@@ -243,11 +229,12 @@ The CLI is one-shot, so anything that needs a background loop or shared live
 state belongs to a resident service (the proxy above, or a dedicated local-server
 mode), never the launcher:
 
-- **Automatic eviction by policy.** The operator-invoked `prune` of 0.0.8 becomes
-  a background sweep on a configured interval — idle / age / size **TTL** as app
-  configuration rather than a per-call argument — plus an admin "clean now"
-  command. The CLI keeps only manual `prune`; an automatic sweep needs a process
-  that stays alive.
+- **Automatic time-based eviction.** The opt-in *size* cap shipped in 0.0.9 is
+  enforced on insert and needs no daemon. **Time-based** eviction — dropping
+  cassettes idle, or older, than a configured age — needs a background loop on an
+  interval, so it belongs to a resident service, not the one-shot CLI. (There is
+  deliberately no manual `prune` command: `rm` wipes the store cleanly and size
+  eviction reclaims space.)
 - **Per-user quotas.** Caps per user (size or count) only have meaning once the
   cache is a multi-tenant service. There is no "user" in the local CLI.
 
