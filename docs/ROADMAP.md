@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.8 (alpha)
+## Where we are: 0.0.9 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -163,22 +163,29 @@ releases, **one feature per release**.
 
 ### Later `0.0.x` / `0.1.x`
 
-- **`0.0.9` — Store ergonomics + observability.** Cassettes become effectively
-  **immutable**, and a separate, **non-load-bearing** access registry (stdlib
-  `sqlite3`, so still zero third-party dependencies) records access **events** —
-  hit / miss / record / evict — beside the store. The registry never gates a
-  lookup or a replay: lose it, corrupt it, or delete it and correctness is
-  untouched; it only powers observability and idle-based pruning, and every write
-  to it is best-effort. On top of it:
-  - **`prune`** — operator-invoked, never automatic: by **idle** (time since last
-    access, read from the registry), by **age**, or by **total size**
-    (`--max-size`, `--keep N`).
-  - **`stats`** — hit rate, hottest/coldest cassettes, eviction history.
-  - A documented on-disk layout that callers can rely on.
+- **`0.0.9` — Store ergonomics + observability.** ✅ *Shipped.* Cassettes are
+  **write-once and immutable** (read-only on disk; a hit never writes back), and a
+  separate **non-load-bearing** access registry (stdlib `sqlite3`, still zero
+  third-party dependencies) records access **events** — hit / miss / record /
+  evict — beside the store. The registry never gates a lookup or a replay: lose it,
+  corrupt it, or delete it and correctness is untouched; every write to it is
+  best-effort. It records access only — no checksum / integrity role (a checksum
+  kept beside the data it guards, in a writable folder, protects nothing a
+  determined editor couldn't also rewrite). On top of it:
+  - **`stats`** — cassette count and total size split by client / model, plus
+    hit / miss / record counts; the diagnostic that lets a user watch the
+    footprint and *decide* whether to turn on eviction.
+  - **Opt-in size eviction** (`max_size`) — off by default (keep everything
+    forever); when set, least-recently-used cassettes are evicted to make room on
+    insert (LRU from the registry, soft cap that never drops a fresh result).
+  - A documented on-disk layout (`docs/storage.md`).
 
-  Because eviction events remain after the cassette is gone, the registry outlives
-  what it describes, so it carries its **own retention/compaction** story rather
-  than becoming a new unbounded surface.
+  No manual `prune` command: removing cassettes by selector was deliberately cut —
+  `rm` wipes the whole directory cleanly, `--force` re-records, and because the
+  cache is content-addressed a stale entry is simply *unused*, not *wrong*.
+  Time-based (idle / age) eviction is deferred to **daemon mode** (below), the only
+  place a background sweep makes sense. The registry is append-only and not yet
+  compacted — bounding its growth is a future concern, not addressed in 0.0.9.
 
 - **`0.0.10` — Adapter hardening.** The launch-flag mappings for `claude` /
   `codex` / `cursor-agent` are best-effort today. Before 1.0.0 they need
