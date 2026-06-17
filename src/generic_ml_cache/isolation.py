@@ -23,6 +23,7 @@ import hashlib
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ from typing import Dict, List, Optional
 
 from .adapters.base import ClientAdapter
 from .cassette import CapturedFile, Response
-from .errors import RunInterrupted
+from .errors import CommandLineTooLong, RunInterrupted
 from .prime_directive import build_system_prompt
 
 
@@ -80,6 +81,48 @@ def _terminate_group(proc: subprocess.Popen) -> None:
             proc.terminate()
     except (ProcessLookupError, PermissionError, OSError):
         pass
+
+
+def _command_line_limit() -> tuple[str, int, str]:
+    """The binding command-line size limit for this OS, as (scope, bytes, label).
+
+    ``scope`` is ``"arg"`` when the limit is on a single argument (Linux's
+    ``MAX_ARG_STRLEN``) or ``"total"`` when it is on the whole argument area
+    (Windows' ``CreateProcess`` cap; other POSIX ``ARG_MAX``). These are the real
+    OS limits, so a call measured at or above one would fail at launch anyway --
+    catching it here just makes the failure legible.
+    """
+    if os.name == "nt":
+        return ("total", 32_767, "the Windows command-line limit")
+    if sys.platform.startswith("linux"):
+        return ("arg", 128 * 1024, "the Linux per-argument limit (MAX_ARG_STRLEN)")
+    try:
+        arg_max = int(os.sysconf("SC_ARG_MAX"))
+    except (ValueError, OSError):
+        arg_max = 1024 * 1024
+    return ("total", arg_max, "this OS's total argument limit (ARG_MAX)")
+
+
+def _check_command_line_size(argv: List[str]) -> None:
+    """Fail legibly if the assembled command line would exceed the OS limit.
+
+    Only a client that carries the prompt in argv (cursor-agent) can approach this;
+    claude and codex put the prompt on stdin, so their command line stays small and
+    this never fires for them.
+    """
+    scope, limit, label = _command_line_limit()
+    sizes = [len(arg.encode("utf-8")) for arg in argv]
+    measured = max(sizes) if scope == "arg" else sum(sizes) + len(argv)
+    # Headroom for the executable path, separators and OS bookkeeping.
+    if measured >= limit - 4096:
+        raise CommandLineTooLong(
+            f"the launched command is ~{measured // 1024} KiB, over {label} "
+            f"(~{limit // 1024} KiB). This client takes the prompt as a command-line "
+            "argument (it has no stdin path), so a prompt this large cannot be launched "
+            "here. Declare large content as input files (--input-file) and reference "
+            "them in a short prompt, or use a tier backed by a client that reads the "
+            "prompt on stdin (claude/codex)."
+        )
 
 
 def _run_client(
@@ -180,6 +223,10 @@ def record_real_call(
         )
         argv += adapter.read_access_argv(add_dir_paths or [])
         stdin_payload = adapter.stdin_payload(context, prompt, system_prompt)
+
+        # Fail legibly before the OS rejects an oversize command line (only a client
+        # that carries the prompt in argv -- cursor -- can hit this).
+        _check_command_line_size(argv)
 
         # A stop signal here raises RunInterrupted, unwinding before any capture or
         # cassette write -- an interrupted call leaves no half-written record.

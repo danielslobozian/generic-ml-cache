@@ -42,6 +42,23 @@ def test_cursor_keeps_prompt_as_argv_positional():
     assert adapter.stdin_payload("ctx", HUGE, "sys") is None  # nothing on stdin
 
 
+def test_command_line_size_guard_is_legible_and_platform_aware():
+    # The guard fires only when the assembled command line would exceed THIS OS's
+    # real limit, so the test sizes its oversize argument against that limit -- it
+    # behaves correctly on Linux (per-arg), Windows and macOS (total).
+    from generic_ml_cache.errors import CommandLineTooLong
+    from generic_ml_cache.isolation import _check_command_line_size, _command_line_limit
+
+    # A normal command line passes untouched.
+    _check_command_line_size(["exe", "--model", "m", "--print", "a short prompt"])
+
+    # One whose prompt argument exceeds this OS's limit fails with a clear error.
+    _, limit, _ = _command_line_limit()
+    oversize = "x" * (limit + 8192)
+    with pytest.raises(CommandLineTooLong):
+        _check_command_line_size(["exe", "--print", oversize])
+
+
 def test_large_prompt_round_trips_through_stdin(capsys):
     # End-to-end through the launcher's stdin path: record then replay a prompt far
     # larger than any argv limit. "STDOUT done" acts; the filler is one giant

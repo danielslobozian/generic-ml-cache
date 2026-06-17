@@ -9,6 +9,17 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Legible failure when a prompt is too large to launch.** Before starting a
+  client, the cache measures the assembled command line against the operating
+  system's argument-size limit (~32 KB on Windows, 128 KiB per argument on Linux,
+  `ARG_MAX` on macOS) and, if it would be exceeded, fails with a clear message —
+  the size, the limit, and the remedy (declare input files, or use a stdin-based
+  tier) — instead of an opaque "argument list too long" error or a silent Windows
+  failure. In practice this only affects cursor, whose prompt rides in argv;
+  claude and codex deliver the prompt on stdin and never hit it.
+
 ### Changed
 
 - **Claude and Codex prompts are delivered on stdin, not as a command-line

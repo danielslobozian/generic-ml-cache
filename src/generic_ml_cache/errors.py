@@ -34,6 +34,18 @@ class ClientNotFound(CacheError):
     """Raised when the client executable cannot be located on the system."""
 
 
+class CommandLineTooLong(CacheError):
+    """Raised before launch when the assembled command line would exceed the
+    operating system's argument-size limit.
+
+    Only a client that receives the prompt as a command-line argument
+    (cursor-agent, which has no stdin path) can hit this; claude and codex take the
+    prompt on stdin and are unaffected. Raising it up front turns an opaque OS
+    "argument list too long" error (or a silent Windows failure) into a clear
+    message that names the size, the limit, and the remedy.
+    """
+
+
 class CassetteFormatError(CacheError):
     """Raised when a cassette file on disk is malformed or unreadable."""
 
