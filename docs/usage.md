@@ -195,6 +195,8 @@ not for piping.
 | *(replayed)* | in a hit, `gmlcache` exits with the **recorded** exit code |
 | `3` | offline mode, cache miss |
 | `4` | other cache error (unknown client, missing executable, bad cassette) |
+| `124` | the real call exceeded `--timeout` and was killed (nothing recorded) |
+| `130` | the real call was stopped by a signal from the caller (nothing recorded) |
 | `2` | usage error (argparse) |
 
 ### Examples

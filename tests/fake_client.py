@@ -33,6 +33,7 @@ import base64
 import hashlib
 import os
 import sys
+import time
 
 
 def main() -> int:
@@ -73,6 +74,11 @@ def main() -> int:
             acted = True
         elif verb == "EXIT" and len(parts) >= 2:
             exit_code = int(parts[1])
+            acted = True
+        elif verb == "SLEEP" and len(parts) >= 2:
+            # Sleep far longer than any test timeout so the only way the call ends
+            # in time is by being killed -- used to exercise the timeout path.
+            time.sleep(float(parts[1]))
             acted = True
         elif verb == "OUTSIDE" and len(parts) >= 2:
             acted = True

@@ -11,6 +11,16 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ### Added
 
+- **Partial-record robustness — a half-written cassette can never be left behind.**
+  Cassette writes now use a per-process unique temp file in the store directory,
+  cleaned up on any failure (write, replace, or signal), so a crash mid-write
+  leaves neither a half-written cassette nor a stray temp file; the cassette is
+  rendered before anything touches disk, so a serialization fault writes nothing.
+  A real call that exceeds `--timeout` is killed and unwinds before any write
+  (nothing recorded); the CLI now maps that to exit code **124** (the `timeout(1)`
+  convention) with a clear message instead of an uncaught error, and documents
+  exit **130** for a caller-signalled stop.
+
 - **Failed client calls are not cached by default.** A real call that exits
   non-zero is no longer stored: the caller still receives the real failed
   response, but nothing is written to the store, so the next identical call runs

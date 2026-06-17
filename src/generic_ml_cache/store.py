@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -40,11 +41,22 @@ class CassetteStore:
     def save(self, cassette: Cassette) -> Path:
         self.root.mkdir(parents=True, exist_ok=True)
         path = self._path_for(cassette.match_key)
-        # Atomic-ish write: temp file then replace, so a crash never leaves a
-        # half-written cassette that would later fail to parse.
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(cassette.to_json(), encoding="utf-8")
-        tmp.replace(path)
+        # Serialize first: if rendering the cassette raises, nothing on disk has
+        # been touched yet, so a serialization fault can never half-write a file.
+        text = cassette.to_json()
+        # Write to a per-process unique temp file in the same directory, then
+        # atomically replace the target. Same-dir keeps the replace atomic; the
+        # unique name stops two concurrent writes to the same key from clobbering
+        # one shared temp path. On ANY failure (write or replace, including a
+        # signal) the temp file is removed, so a crash mid-write leaves neither a
+        # half-written cassette nor a stray temp behind.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        try:
+            tmp.write_text(text, encoding="utf-8")
+            os.replace(tmp, path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
         return path
 
     def __iter__(self) -> Iterator[Cassette]:

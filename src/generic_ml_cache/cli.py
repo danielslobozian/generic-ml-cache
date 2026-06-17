@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -119,6 +120,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
         # (the conventional "terminated by Ctrl-C") tells the caller it was stopped.
         print(f"gmlc: {exc}", file=sys.stderr)
         return 130
+    except subprocess.TimeoutExpired as exc:
+        # The real call ran past --timeout and was killed; the unwinding happened
+        # before any cassette write, so nothing was stored. Exit 124 is the
+        # `timeout(1)` convention for "command timed out", distinct from miss (3)
+        # and error (4).
+        print(
+            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
+            file=sys.stderr,
+        )
+        return 124
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 3
