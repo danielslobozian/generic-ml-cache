@@ -9,6 +9,19 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Cassettes are write-once and immutable.** A cassette is built fully in memory
+  from the client's response and the keep-or-discard decision is made before
+  anything is written, so the file is materialized in one shot and never reopened
+  for writing. Once written it is marked **read-only** on disk (cross-platform, on
+  the cache's own files only — no effect on anything else on the system). A cache
+  hit is a pure read and never writes back into the cassette: all mutable
+  bookkeeping will live in the side access registry, keeping recordings pure.
+  Read-only is a soft deterrent (the owner can clear it, root ignores mode bits);
+  firm tamper-detection is planned via a registry-held checksum. `refresh` clears
+  the flag before atomically replacing, so re-recording still works everywhere.
+
 ## [0.0.8] - 2026-06-17
 
 ### Added
