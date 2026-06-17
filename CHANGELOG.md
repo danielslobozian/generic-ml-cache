@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the version is `0.x.y` the project is in **alpha** and anything may change
 between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.0`.
 
-## [Unreleased]
+## [0.0.10] - 2026-06-17
 
 ### Added
 

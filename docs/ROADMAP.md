@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.9 (alpha)
+## Where we are: 0.0.10 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -133,6 +133,20 @@ Added in 0.0.9:
   default) evicts least-recently-used cassettes to make room — a soft cap that
   never drops a fresh result. On-disk layout documented in `docs/storage.md`.
 
+Added in 0.0.10:
+
+- **Prompt delivery hardened against OS limits.** `claude` and `codex` now receive
+  the prompt + context on **stdin** instead of as a command-line argument, so a
+  large prompt no longer hits the OS single-argument size limit (a real failure
+  once an uncompressed prompt crossed ~131 KB), and a Codex non-TTY stdin hang is
+  gone too. `cursor-agent` has no stdin path, so its prompt stays a positional
+  **argument** and is bounded by the OS command-line limit (~32 KB on Windows,
+  ~128 KiB/arg on Linux, ~1 MB on macOS) — a documented cursor-CLI constraint, with
+  guidance to declare large content as input files instead. When a command line
+  would exceed the OS limit the cache now **fails with a clear, actionable message**
+  rather than an opaque OS error. Delivery is verified against the live CLIs and
+  leaves the cassette key unchanged (`docs/client-mapping.md`).
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -157,11 +171,6 @@ releases, **one feature per release**.
   outside that folder.
 
 ### Immediate next releases
-
-- **`0.0.10` — Adapter hardening.** The launch-flag mappings for `claude` /
-  `codex` / `cursor-agent` are best-effort today. Before 1.0.0 they need
-  verifying against the real CLIs, making configurable where the CLIs differ, and
-  degrading gracefully when a flag is unsupported.
 
 - **`0.0.11` — `check` (cache probe).** A read-only "is this already cached?"
   query. Given the same inputs as `run`, it computes the key and reports **hit /
