@@ -115,6 +115,64 @@ class Outcome:
     # and was deliberately not stored (record_on_error off)
 
 
+class ProbeStatus(enum.Enum):
+    """The verdict of a read-only cache probe (see :func:`probe`)."""
+
+    HIT = "hit"  # a cassette exists for this exact call
+    MISS = "miss"  # cacheable, but no cassette recorded yet
+    NON_CACHEABLE = "non-cacheable"  # declares allow-path folders -> never cached
+
+
+@dataclass
+class ProbeResult:
+    """What a probe found, without running or recording anything.
+
+    ``cassette`` carries the matched recording on a ``HIT`` (so a caller can read
+    its metadata and recorded usage) and is ``None`` otherwise.
+    """
+
+    status: ProbeStatus
+    cassette: Optional[Cassette] = None
+
+
+def probe(
+    request: Request,
+    store: CassetteStore,
+    trust_scan: bool = False,
+) -> ProbeResult:
+    """Answer "is this exact call already cached?" -- read-only, side-effect-free.
+
+    A probe is a *forecast*, not a run: it launches no client, writes no cassette,
+    and records no access event. It exists so a caller (the workflow engine) can
+    ask which calls would hit and which would miss *before* committing to a run.
+
+    Correctness rests on reusing run's own machinery rather than reimplementing it:
+    the cacheability test is the same :attr:`Request.requires_passthrough` /
+    ``trust_scan`` rule :func:`_resolve` applies, and the lookup is the same
+    ``store.lookup`` over the same :attr:`Request.input_data`, so the key derived
+    here is byte-for-byte the key a ``run`` would derive. If that logic ever
+    changes, both paths change together.
+
+    The three verdicts mirror what a ``cache``-mode run would do with this call:
+    - ``NON_CACHEABLE`` -- declares allow-path folders the cache cannot fingerprint
+      (and scan-trust is off), so a run would pass through and store nothing; a
+      probe therefore never reports it cached.
+    - ``HIT`` -- a cassette exists; a run would serve it.
+    - ``MISS`` -- cacheable, but nothing recorded yet; a run would record.
+
+    The verdict is about cache *state*, not run *mode*: it is independent of
+    offline/cache/refresh, which are run-time policies rather than questions about
+    whether a recording exists.
+    """
+    if request.requires_passthrough and not trust_scan:
+        return ProbeResult(status=ProbeStatus.NON_CACHEABLE)
+
+    existing = store.lookup(request.client, request.model, request.effort, request.input_data)
+    if existing is None:
+        return ProbeResult(status=ProbeStatus.MISS)
+    return ProbeResult(status=ProbeStatus.HIT, cassette=existing)
+
+
 def resolve(
     request: Request,
     store: CassetteStore,
