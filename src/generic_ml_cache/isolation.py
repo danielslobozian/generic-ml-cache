@@ -234,10 +234,18 @@ def record_real_call(
 
         files = _capture_changes(run_dir, baseline)
 
+    # The client ran in its structured (JSON) output mode, so raw stdout carries
+    # the answer *and* the usage. The adapter lifts the clean answer back out (what
+    # the caller sees on stdout, exactly as a plain client would emit) and reads the
+    # normalized usage from the same output. parse_output degrades on its own if the
+    # output is unexpected, so this never breaks the core call.
+    parsed = adapter.parse_output(stdout)
+
     response = Response(
-        stdout=stdout,
+        stdout=parsed.text,
         stderr=stderr,
         exit=returncode,
         files=files,
+        usage=parsed.usage,
     )
     return RunResult(response=response, run_dir=str(run_dir))
