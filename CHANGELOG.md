@@ -11,6 +11,16 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ### Added
 
+- **Opt-in size eviction (`max_size`).** Off by default — the cache keeps every
+  cassette forever. Set `max_size` (config `[defaults]` or `GMLCACHE_MAX_SIZE`,
+  e.g. `5GB` / `500MB` / a byte count) and the cache evicts the
+  least-recently-used cassettes to make room as it records new ones (LRU from the
+  access registry, falling back to file age). It is a **soft cap**: a fresh result
+  is always stored, even if that briefly overshoots, rather than discarding a call
+  you just paid for; eviction is best-effort and never blocks or fails a save, and
+  each eviction logs an `evict` event. Time-based ("not used in N days") eviction
+  is deferred to daemon mode (see ROADMAP). `status` now shows the resolved cap.
+
 - **`stats` command.** Reports how many cassettes are stored, their total size
   split by client and model, and the access-event counts (hit / miss / record)
   from the registry — in a human table or `--json`. It is the diagnostic that

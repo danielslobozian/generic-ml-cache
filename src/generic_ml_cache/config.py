@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import configparser
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -99,6 +100,11 @@ mode = cache
 store = {store}
 # timeout = 120
 trust_scan = false
+# Optional cache size cap. Off by default = keep every cassette forever. When set
+# (e.g. 5GB / 500MB / a byte count), the cache evicts the least-recently-used
+# cassettes to make room as it records new ones. Time-based ("not used in N days")
+# eviction arrives with daemon mode.
+# max_size = 5GB
 
 # Optional: pin a client's executable (off-PATH installs, or a specific build).
 # [executables]
@@ -158,6 +164,7 @@ class FileConfig:
     store: Optional[str] = None
     timeout: Optional[float] = None
     trust_scan: Optional[bool] = None
+    max_size: Optional[int] = None
     executables: Dict[str, str] = field(default_factory=dict)
     source: Optional[Path] = None
 
@@ -171,6 +178,22 @@ def _parse_timeout(raw: str, where: str) -> float:
 
 _TRUE = {"true", "1", "yes", "on"}
 _FALSE = {"false", "0", "no", "off"}
+
+_SIZE_UNITS = {"b": 1, "kb": 1024, "mb": 1024**2, "gb": 1024**3, "tb": 1024**4}
+
+
+def _parse_size(raw: str, where: str) -> int:
+    """Parse a human size (``5GB``, ``500MB``, ``1048576``) into bytes (base 1024)."""
+    text = raw.strip().lower().replace(" ", "")
+    match = re.fullmatch(r"([0-9]*\.?[0-9]+)([a-z]*)", text)
+    if not match:
+        raise ConfigError(f"invalid size {raw!r} {where}; e.g. 5GB, 500MB, or a byte count")
+    number, unit = match.group(1), match.group(2) or "b"
+    if unit not in _SIZE_UNITS:
+        raise ConfigError(
+            f"invalid size unit {unit!r} {where}; expected one of {sorted(_SIZE_UNITS)}"
+        )
+    return int(float(number) * _SIZE_UNITS[unit])
 
 
 def _parse_bool(raw: str, where: str) -> bool:
@@ -209,6 +232,9 @@ def load(path: Optional[Path] = None) -> FileConfig:
     trust_scan_raw = get("trust_scan")
     trust_scan = _parse_bool(trust_scan_raw, f"in {p}") if trust_scan_raw else None
 
+    max_size_raw = get("max_size")
+    max_size = _parse_size(max_size_raw, f"in {p}") if max_size_raw else None
+
     # [executables]: client name -> path/command. Kept verbatim and leniently
     # (unknown client keys are not an error -- the adapter registry is
     # extensible, and a key is only ever consulted when that client is run).
@@ -223,6 +249,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
         store=get("store"),
         timeout=timeout,
         trust_scan=trust_scan,
+        max_size=max_size,
         executables=executables,
         source=p,
     )
@@ -285,6 +312,11 @@ def resolve_settings(
     trust_env_raw = env.get("GMLCACHE_TRUST_SCAN")
     trust_env = _parse_bool(trust_env_raw, "in GMLCACHE_TRUST_SCAN") if trust_env_raw else None
 
+    max_size_env_raw = env.get("GMLCACHE_MAX_SIZE")
+    max_size_env = (
+        _parse_size(max_size_env_raw, "in GMLCACHE_MAX_SIZE") if max_size_env_raw else None
+    )
+
     return {
         "mode": _pick(mode_flag, mode_env, file_cfg.mode, DEFAULTS["mode"]),
         # store: config file or built-in per-user default only. No flag, no env --
@@ -293,6 +325,9 @@ def resolve_settings(
         "timeout": _pick(timeout_flag, timeout_env, file_cfg.timeout, DEFAULTS["timeout"]),
         # trust_scan has no CLI flag -- a standing, deliberate choice only.
         "trust_scan": _pick(None, trust_env, file_cfg.trust_scan, False),
+        # max_size: off (None) by default = keep everything. Standing policy, so
+        # config/env only, no per-call flag.
+        "max_size": _pick(None, max_size_env, file_cfg.max_size, None),
     }
 
 

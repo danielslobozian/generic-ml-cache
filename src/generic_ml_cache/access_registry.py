@@ -102,3 +102,26 @@ class AccessRegistry:
                 conn.close()
         except Exception:
             return {}
+
+    def last_access(self) -> Dict[str, float]:
+        """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
+        ({} if unavailable). A cassette absent here has never been seen by the
+        registry; the caller falls back to file age for it."""
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT match_key, MAX(ts) FROM access_events "
+                    "WHERE match_key IS NOT NULL GROUP BY match_key"
+                ).fetchall()
+            finally:
+                conn.close()
+        except Exception:
+            return {}
+        out: Dict[str, float] = {}
+        for key, ts in rows:
+            try:
+                out[key] = datetime.fromisoformat(ts).timestamp()
+            except Exception:
+                pass
+        return out

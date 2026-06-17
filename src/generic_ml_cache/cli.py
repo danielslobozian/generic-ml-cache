@@ -90,7 +90,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    store = CassetteStore(Path(str(settings["store"][0])))
+    max_size = settings["max_size"][0]
+    store = CassetteStore(
+        Path(str(settings["store"][0])),
+        max_bytes=int(max_size) if max_size is not None else None,
+    )
     timeout = settings["timeout"][0]
     trust_scan = bool(settings["trust_scan"][0])
     # --offline / --force are explicit flags and win over the resolved mode.
@@ -291,7 +295,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
     print("effective settings (no run flags applied):")
-    for key in ("mode", "store", "timeout", "trust_scan"):
+    for key in ("mode", "store", "timeout", "trust_scan", "max_size"):
         value, source = settings[key]
         shown = "none" if value is None else value
         if isinstance(shown, bool):
