@@ -120,6 +120,7 @@ network and fails loudly if a cassette is missing.
 ### Other commands
 
 ```bash
+gmlcache check --client claude --model sonnet --prompt "…"   # is this call cached? (read-only)
 gmlcache inspect ./cassettes/<key>.json   # human-readable summary of a cassette
 gmlcache --version
 ```

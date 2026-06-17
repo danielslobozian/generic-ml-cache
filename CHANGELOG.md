@@ -9,6 +9,18 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **`check` — a read-only cache probe.** Given the same inputs as `run`, it
+  answers whether the call is already cached — **hit / miss / non-cacheable** —
+  and on a hit reports the cassette's file count and its recorded usage/cost. It
+  launches no client and writes nothing: a forecast, not a replay, so a caller
+  (the workflow engine) can tell which calls would hit before committing to a run.
+  Human output by default, `--json` for programmatic use. The exit code is `0` for
+  every verdict — cached-or-not is the result, carried in the output, not the exit
+  code; only real errors (bad client/config) are non-zero. `run` and `check` share
+  their key derivation, so a probe can never disagree with a run.
+
 ## [0.0.11] - 2026-06-17
 
 ### Added
