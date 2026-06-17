@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import ClassVar, List, Optional
 
 from ..errors import ClientNotFound
+from ..usage import ParsedOutput
 
 
 @dataclass
@@ -118,6 +119,29 @@ class ClientAdapter(ABC):
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
         """Optional text to feed on stdin. Default: nothing."""
         return None
+
+    def parse_output(self, stdout: str) -> ParsedOutput:
+        """Lift the clean answer text and the usage envelope out of the client's
+        raw stdout.
+
+        The cache runs each client in its **structured (JSON) output mode** so it
+        can read usage -- which means raw stdout is no longer the bare answer but a
+        JSON object (or JSON-lines stream) with the answer as one field and the
+        token counts beside it. The adapter is the only place that knows its own
+        client's structure, so it does the extraction here: it returns the answer
+        text (which the cache then hands the caller on stdout, exactly as a plain
+        client would) and the normalized :class:`~..usage.Usage` it read.
+
+        Default: the client was *not* run in a structured mode, so stdout already
+        *is* the answer and there is no usage to read. Adapters that switch their
+        client to JSON override this.
+
+        An override MUST degrade rather than raise: if the output cannot be parsed
+        (an unexpected shape, a truncated stream), return ``ParsedOutput(stdout,
+        None)`` so a parsing surprise never breaks the core call -- the caller
+        still gets the client's output, just without a usage envelope.
+        """
+        return ParsedOutput(text=stdout, usage=None)
 
     def read_access_argv(self, paths: List[str]) -> List[str]:
         """Extra argv granting the client read access to ``paths`` (directories).

@@ -9,8 +9,10 @@ lets you point at any binary.
 
 from __future__ import annotations
 
-from typing import List, Optional
+import json
+from typing import Any, Dict, List, Optional
 
+from ..usage import ParsedOutput, Usage, int_or_none
 from .base import ClientAdapter
 
 
@@ -21,7 +23,7 @@ class CodexAdapter(ClientAdapter):
     def build_argv(
         self, executable, run_dir, model, effort, context, prompt, system_prompt
     ) -> List[str]:
-        argv = [executable, "exec", *self.write_access_argv(run_dir), "--model", model]
+        argv = [executable, "exec", "--json", *self.write_access_argv(run_dir), "--model", model]
         # Effort is optional: when omitted, leave model_reasoning_effort unset so
         # Codex uses the model's own default instead of an empty override.
         if effort:
@@ -38,6 +40,54 @@ class CodexAdapter(ClientAdapter):
 
     def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
         return f"{context}\n\n{prompt}" if context else prompt
+
+    def parse_output(self, stdout: str) -> ParsedOutput:
+        """Codex's ``--json`` output is a JSON-lines *stream* of events, one per
+        line. The answer text is the ``text`` of the final ``agent_message`` item;
+        the usage is the ``usage`` block on the final ``turn.completed`` event.
+        Codex reports reasoning tokens *separately* from output, reports no
+        cache-write count (so that stays unknown), and reports no cost.
+        """
+        answer: Optional[str] = None
+        usage_block: Optional[Dict[str, Any]] = None
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # tolerate a stray non-JSON line in the stream
+            if not isinstance(event, dict):
+                continue
+            if event.get("type") == "item.completed":
+                item = event.get("item")
+                if isinstance(item, dict) and item.get("type") == "agent_message":
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        answer = text  # keep the latest; the final one is the answer
+            elif event.get("type") == "turn.completed":
+                block = event.get("usage")
+                if isinstance(block, dict):
+                    usage_block = block
+
+        if answer is None:
+            # Never found the answer event -- hand back the raw stream, no usage.
+            return ParsedOutput(text=stdout, usage=None)
+
+        usage = None
+        if usage_block is not None:
+            usage = Usage(
+                input_tokens=int_or_none(usage_block.get("input_tokens")),
+                output_tokens=int_or_none(usage_block.get("output_tokens")),
+                cache_read_tokens=int_or_none(usage_block.get("cached_input_tokens")),
+                # Codex reports no cache-write count: unknown, not zero.
+                cache_write_tokens=None,
+                reasoning_tokens=int_or_none(usage_block.get("reasoning_output_tokens")),
+                cost_usd=None,
+                raw=dict(usage_block),
+            )
+        return ParsedOutput(text=answer, usage=usage)
 
     def write_access_argv(self, run_dir):
         # The isolated run folder is not a git repo, so codex refuses to run

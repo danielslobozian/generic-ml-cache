@@ -8,8 +8,10 @@ with the seam and adjust here if the CLI changes.
 
 from __future__ import annotations
 
-from typing import List, Optional
+import json
+from typing import Any, Dict, List, Optional
 
+from ..usage import ParsedOutput, Usage, float_or_none, int_or_none
 from .base import ClientAdapter
 from .registry import register
 
@@ -31,8 +33,49 @@ class ClaudeAdapter(ClientAdapter):
         if effort:
             argv += ["--effort", effort]
         argv += self.write_access_argv(run_dir)
-        argv += ["--append-system-prompt", system_prompt, "--output-format", "text"]
+        # JSON output so the call also returns its usage (tokens + Claude's own
+        # cost estimate). parse_output lifts the answer text back out of the JSON.
+        argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
         return argv
+
+    def parse_output(self, stdout: str) -> ParsedOutput:
+        """Claude's headless JSON is a single object: ``result`` is the answer
+        text, ``usage`` holds the (primary-model) token counts, ``total_cost_usd``
+        is the cumulative cost estimate across every model the run used, and
+        ``modelUsage`` breaks it down per model (the main model plus any subagent
+        models). The per-model breakdown is kept verbatim in ``raw``; the
+        normalized counts come from the headline ``usage`` block, the cost from the
+        cumulative ``total_cost_usd``.
+        """
+        try:
+            doc = json.loads(stdout)
+            if not isinstance(doc, dict):
+                raise ValueError("expected a JSON object")
+        except (json.JSONDecodeError, ValueError):
+            return ParsedOutput(text=stdout, usage=None)
+
+        text = doc.get("result")
+        if not isinstance(text, str):
+            # Not the shape we expected -- keep the raw output, skip usage.
+            return ParsedOutput(text=stdout, usage=None)
+
+        block = doc.get("usage") if isinstance(doc.get("usage"), dict) else {}
+        raw: Dict[str, Any] = {}
+        for key in ("usage", "modelUsage", "total_cost_usd"):
+            if key in doc:
+                raw[key] = doc[key]
+
+        usage = Usage(
+            input_tokens=int_or_none(block.get("input_tokens")),
+            output_tokens=int_or_none(block.get("output_tokens")),
+            cache_read_tokens=int_or_none(block.get("cache_read_input_tokens")),
+            cache_write_tokens=int_or_none(block.get("cache_creation_input_tokens")),
+            # Claude folds reasoning into output_tokens; it is not separable here.
+            reasoning_tokens=None,
+            cost_usd=float_or_none(doc.get("total_cost_usd")),
+            raw=raw,
+        )
+        return ParsedOutput(text=text, usage=usage)
 
     def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
         # Prompt + context go to the client on stdin. The system prompt is a

@@ -8,8 +8,10 @@ the model string. Best-effort for v0.0.1; correct here as needed.
 
 from __future__ import annotations
 
+import json
 from typing import List, Optional
 
+from ..usage import ParsedOutput, Usage, int_or_none
 from .base import ClientAdapter, ModelInfo
 
 
@@ -50,8 +52,43 @@ class CursorAdapter(ClientAdapter):
             "--model",
             model_id,
             "--print",
+            # JSON output so the call also returns its usage; parse_output lifts
+            # the answer text back out. The prompt stays the trailing positional.
+            "--output-format",
+            "json",
             full_prompt,
         ]
+
+    def parse_output(self, stdout: str) -> ParsedOutput:
+        """Cursor's ``--output-format json`` is a single object: ``result`` is the
+        answer text and ``usage`` (camelCase keys) holds the token counts. Cursor
+        reports input/output and both cache directions, but no reasoning split and
+        no cost.
+        """
+        try:
+            doc = json.loads(stdout)
+            if not isinstance(doc, dict):
+                raise ValueError("expected a JSON object")
+        except (json.JSONDecodeError, ValueError):
+            return ParsedOutput(text=stdout, usage=None)
+
+        text = doc.get("result")
+        if not isinstance(text, str):
+            return ParsedOutput(text=stdout, usage=None)
+
+        block = doc.get("usage") if isinstance(doc.get("usage"), dict) else None
+        usage = None
+        if block is not None:
+            usage = Usage(
+                input_tokens=int_or_none(block.get("inputTokens")),
+                output_tokens=int_or_none(block.get("outputTokens")),
+                cache_read_tokens=int_or_none(block.get("cacheReadTokens")),
+                cache_write_tokens=int_or_none(block.get("cacheWriteTokens")),
+                reasoning_tokens=None,
+                cost_usd=None,
+                raw=dict(block),
+            )
+        return ParsedOutput(text=text, usage=usage)
 
     def write_access_argv(self, run_dir):
         # cursor-agent refuses an untrusted workspace ("Workspace Trust Required")
