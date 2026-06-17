@@ -37,7 +37,9 @@ def test_build_argv_includes_model_and_inputs(client, tmp_path):
     assert argv[0].endswith(client)
     joined = " ".join(argv)
     assert "m-x" in joined  # the model id appears somewhere
-    assert "PROMPT" in joined  # the prompt is delivered
+    # The prompt is delivered on stdin now, not as an argv argument.
+    assert "PROMPT" not in joined
+    assert "PROMPT" in (adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE) or "")
     # effort surfaces somehow (a flag value, a config kv, or baked into model id)
     assert any("high" in a for a in argv)
 
@@ -101,23 +103,21 @@ def test_build_argv_includes_write_grant(client, tmp_path):
         assert token in argv
 
 
-@pytest.mark.parametrize("client", ["codex", "cursor"])
-def test_write_grant_precedes_trailing_positional_prompt(client, tmp_path):
-    # codex and cursor take the prompt as a trailing positional; the write/trust
-    # flags must sit before it or the CLI parser rejects flags after a positional.
-    argv = get_adapter(client).build_argv(
-        executable="/usr/bin/" + client,
+def test_write_grant_precedes_stdin_placeholder_codex(tmp_path):
+    # codex exec reads the prompt from stdin via a trailing "-" placeholder; the
+    # write flags must sit before it or the CLI parser rejects flags after the
+    # positional. (cursor no longer has any trailing positional -- prompt on stdin.)
+    argv = get_adapter("codex").build_argv(
+        executable="/usr/bin/codex",
         run_dir=tmp_path,
         model="m-x",
         effort="",
-        context="",  # so full_prompt == "PROMPT" exactly
+        context="",
         prompt="PROMPT",
         system_prompt=PRIME_DIRECTIVE,
     )
-    # The grant flag must precede the trailing positional prompt. cursor folds
-    # the directive into that prompt, so locate it by substring, not exact match.
-    prompt_idx = max(i for i, a in enumerate(argv) if "PROMPT" in a)
-    assert argv.index(EXPECTED_WRITE_GRANT[client][0]) < prompt_idx
+    assert argv[-1] == "-"  # stdin placeholder is the trailing positional
+    assert argv.index(EXPECTED_WRITE_GRANT["codex"][0]) < len(argv) - 1
 
 
 def test_codex_write_grant_pins_run_dir_as_fence(tmp_path):
@@ -148,10 +148,12 @@ def test_cursor_has_no_system_prompt_flag(tmp_path):
     assert "--system-prompt" not in argv
 
 
-def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
-    # No system-prompt channel -> the directive rides in the prompt argument
-    # (argv-level only; the Request/key are untouched, tested via cache keying).
-    argv = get_adapter("cursor").build_argv(
+def test_cursor_directive_is_folded_into_the_stdin_payload(tmp_path):
+    # No system-prompt channel -> the directive rides in the stdin payload along
+    # with context and prompt (delivery-level only; the Request/key are untouched,
+    # tested via cache keying). argv carries no prompt text at all.
+    adapter = get_adapter("cursor")
+    argv = adapter.build_argv(
         executable="/usr/bin/cursor-agent",
         run_dir=tmp_path,
         model="m-x",
@@ -160,7 +162,8 @@ def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
         prompt="PROMPT",
         system_prompt=PRIME_DIRECTIVE,
     )
-    full_prompt = argv[-1]  # the trailing positional prompt
-    assert PRIME_DIRECTIVE in full_prompt
-    assert "CTX" in full_prompt
-    assert "PROMPT" in full_prompt
+    assert "PROMPT" not in " ".join(argv)
+    payload = adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE)
+    assert PRIME_DIRECTIVE in payload
+    assert "CTX" in payload
+    assert "PROMPT" in payload

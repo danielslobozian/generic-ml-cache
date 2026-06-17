@@ -9,6 +9,20 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **Prompts are delivered to the client on stdin, not as a command-line
+  argument.** Every adapter (`claude`, `codex`, `cursor`) now feeds the prompt and
+  context through the client's stdin — the launcher already pipes stdin
+  cross-platform via Python (`communicate`), with no shell — so an arbitrarily
+  large prompt can no longer hit the OS single-argument size limit (128 KiB per
+  argument on Linux, the ~32 KB whole-command-line cap on Windows, `ARG_MAX` on
+  macOS); this was a real failure once an uncompressed prompt crossed ~131 KB. It
+  is delivery-only: the cassette key is unchanged. Closing stdin on EOF also avoids
+  the `codex exec` hang in a non-TTY child. Claude reads stdin with `-p` and no
+  prompt argument; Codex via the `codex exec -` placeholder; cursor-agent via
+  `--print` with piped stdin.
+
 ## [0.0.9] - 2026-06-17
 
 ### Added

@@ -55,6 +55,40 @@ class FakeAdapter(ClientAdapter):
 @pytest.fixture(autouse=True, scope="session")
 def _register_fake_adapter():
     register(FakeAdapter())
+    register(FakeStdinAdapter())
+
+
+class FakeStdinAdapter(ClientAdapter):
+    """Like FakeAdapter, but delivers the prompt on stdin (as the real adapters
+    now do) so the launcher's stdin path can be exercised end-to-end -- including
+    a prompt far larger than any OS argv-size limit."""
+
+    name = "fake_stdin"
+    default_executable = sys.executable
+
+    def prepare(self, run_dir, context, prompt, system_prompt) -> None:
+        (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")
+        (run_dir / "_in_system.txt").write_text(system_prompt, encoding="utf-8")
+
+    def build_argv(
+        self, executable, run_dir, model, effort, context, prompt, system_prompt
+    ) -> List[str]:
+        return [
+            executable,
+            FAKE_SCRIPT,
+            "--model",
+            model,
+            "--effort",
+            effort,
+            "--context-file",
+            str(run_dir / "_in_context.txt"),
+            "--system-file",
+            str(run_dir / "_in_system.txt"),
+            "--prompt-stdin",
+        ]
+
+    def stdin_payload(self, context, prompt, system_prompt):
+        return prompt
 
 
 @pytest.fixture(autouse=True)

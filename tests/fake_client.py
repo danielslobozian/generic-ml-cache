@@ -41,14 +41,20 @@ def main() -> int:
     ap.add_argument("--model", required=True)
     ap.add_argument("--effort", required=True)
     ap.add_argument("--context-file", required=True)
-    ap.add_argument("--prompt-file", required=True)
+    ap.add_argument("--prompt-file")
+    ap.add_argument("--prompt-stdin", action="store_true")
     ap.add_argument("--system-file", required=True)
     args = ap.parse_args()
 
     with open(args.context_file, encoding="utf-8") as fh:
         context = fh.read()
-    with open(args.prompt_file, encoding="utf-8") as fh:
-        prompt = fh.read()
+    if args.prompt_stdin:
+        # Exercises the launcher's stdin delivery path (the real adapters feed the
+        # prompt this way); reading stdin proves a large prompt arrived intact.
+        prompt = sys.stdin.read()
+    else:
+        with open(args.prompt_file, encoding="utf-8") as fh:
+            prompt = fh.read()
     with open(args.system_file, encoding="utf-8") as fh:
         system = fh.read()
 
