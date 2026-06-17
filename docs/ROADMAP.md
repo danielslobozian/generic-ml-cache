@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.10 (alpha)
+## Where we are: 0.0.11 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -147,6 +147,22 @@ Added in 0.0.10:
   rather than an opaque OS error. Delivery is verified against the live CLIs and
   leaves the cassette key unchanged (`docs/client-mapping.md`).
 
+Added in 0.0.11:
+
+- **Usage and cost captured on every call.** Each call is now made in the client's
+  structured (JSON) output mode, so the cassette records what the call consumed: a
+  **normalized** envelope (input / output / cache-read tokens, plus cache-write,
+  separated reasoning, and a dollar figure where the client reports them) alongside
+  the client's **raw** usage block kept verbatim. Tokens are the spine; a dollar
+  cost is recorded only when the client offers one (today only Claude) and is
+  flagged as the client's own estimate — never authoritative billing, never derived
+  by the cache. A count a client does not report stays **unknown**, never zero. The
+  answer text is unchanged at the caller boundary: the cache extracts it from the
+  structured output, so callers still get plain text. `inspect` shows the envelope
+  (`--raw` for the client's own block) and `stats` reports **tokens saved** across
+  replays. This is the cache-side dependency the engine's cost feature was waiting
+  on (cassette schema bumped to 2; older cassettes still load, usage unknown).
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -172,7 +188,7 @@ releases, **one feature per release**.
 
 ### Immediate next releases
 
-- **`0.0.11` — `check` (cache probe).** A read-only "is this already cached?"
+- **`0.0.12` — `check` (cache probe).** A read-only "is this already cached?"
   query. Given the same inputs as `run`, it computes the key and reports **hit /
   miss / non-cacheable** plus the matching cassette's metadata (client / model /
   effort, recorded files) — and **launches nothing and writes nothing**. Unlike
@@ -180,12 +196,11 @@ releases, **one feature per release**.
   reproduced); it only answers whether the call is cached. This is what lets a
   caller — the workflow engine — **forecast a run before launching it**: which
   steps would hit, which would miss. It also reports the recorded **cost in
-  tokens**, but only once cassettes carry usage (the normalized usage envelope,
-  tracked separately as the cache-side dependency of the engine's cost feature);
-  until then `check` reports hit / miss + metadata, and the cost field lights up
-  when the envelope lands.
+  tokens**, drawn from the usage envelope shipped in `0.0.11` — so a probe answers
+  not just whether a call is cached but what it cost, which is what lets the engine
+  forecast a run's cost before launching it.
 
-- **`0.0.12` — Passthrough client arguments.** An escape hatch for client features
+- **`0.0.13` — Passthrough client arguments.** An escape hatch for client features
   the cache does not (yet) model: a single parameter carrying a quoted string of
   extra arguments appended verbatim to the client launch, which the cache never
   interprets. The run is otherwise unchanged — declared inputs / outputs, the
