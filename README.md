@@ -153,6 +153,7 @@ see [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
 - [`docs/SPEC.md`](docs/SPEC.md) — the v0.0.1 specification
 - [`docs/design.md`](docs/design.md) — architecture and the reasoning behind it
 - [`docs/usage.md`](docs/usage.md) — full CLI and library reference
+- [`docs/storage.md`](docs/storage.md) — the on-disk store layout
 - [`CHANGELOG.md`](CHANGELOG.md) — release history
 - [`SECURITY.md`](SECURITY.md) — how to report a vulnerability
 - [`GOVERNANCE.md`](GOVERNANCE.md) — how decisions get made
