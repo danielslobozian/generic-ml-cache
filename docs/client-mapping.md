@@ -11,21 +11,23 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 > **Source of truth and accuracy.** These mappings are produced by each adapter's
 > `build_argv` (`src/generic_ml_cache/adapters/`), which is authoritative — if this
 > table and the code ever disagree, the code wins. The **write/trust-door** flags
-> (the "Write access to the run folder" row) are *verified against the live CLIs*;
-> the remaining flag choices are still *best-effort* and not yet verified, which is
-> the work of release `0.0.8` (adapter hardening). Treat the unverified rows as
+> (the "Write access to the run folder" row) are *verified against the live CLIs*,
+> as is the **prompt-delivery channel** (stdin for `claude`/`codex`, a command-line
+> argument for `cursor-agent`); the remaining flag choices are still *best-effort*
+> and not yet verified, which is the work of release `0.0.10` (adapter hardening).
+> Treat the unverified rows as
 > "what the cache currently emits," not "what each CLI is confirmed to accept."
 
 ## Run inputs
 
 | Functionality | In the cache | `claude` | `codex` | `cursor-agent` |
 |---|---|---|---|---|
-| Task instruction | `--prompt` / `--prompt-file` (required) | merged with context → `-p "<ctx>\n\n<prompt>"` | merged with context → positional argument | merged with context → `--print "<ctx>\n\n<prompt>"` |
+| Task instruction | `--prompt` / `--prompt-file` (required) | merged with context, sent on **stdin** (`-p`, no prompt argument) | merged with context, sent on **stdin** (`codex exec -`) | merged with context → positional **argument** (`--print "<ctx>\n\n<prompt>"`) |
 | Supporting context | `--context` / `--context-file` | merged into the prompt above | merged into the prompt above | merged into the prompt above |
 | Model | `--model` | `--model <model>` | `--model <model>` | `--model <model>` (effort baked into the id) |
 | Reasoning effort | `--effort` (optional) | `--effort <effort>` (omitted if empty) | `-c model_reasoning_effort=<effort>` (omitted if empty) | appended to the model id: `<model>-<effort>` (omitted if empty) |
 | System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | prepended to the prompt argument (current cursor-agent has no system-prompt flag and ignores rule files headless) — argv-only, never keyed |
-| Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to 0.0.8) | prime directive only (hard mechanism deferred to 0.0.8) |
+| Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to adapter hardening, 0.0.10) | prime directive only (hard mechanism deferred to adapter hardening, 0.0.10) |
 | Write access to the run folder | always (the cache's own isolated run dir) | `--permission-mode acceptEdits` | `--skip-git-repo-check --sandbox workspace-write -C <run-dir>` | `--trust` |
 | Output capture | always | `--output-format text` | (default output) | `--print` |
 
@@ -33,7 +35,10 @@ Notes:
 
 - **Context and prompt are concatenated** (`context\n\nprompt`) before being handed
   to any client. They are separate fields in the *cache key*, but a single string
-  at the *client boundary*.
+  at the *client boundary*. That string is delivered on the client's **stdin** for
+  `claude` and `codex` (so its size is not limited by the OS command-line cap), and
+  as a **command-line argument** for `cursor-agent`, which has no stdin path — see
+  *Prompt size and delivery* below.
 - The cache's **prime directive** (the isolation guardrail) is delivered through
   the same system-prompt channel as `--system-prompt`. So the guardrail is only as
   strong as each client honouring that flag — which is why it is a best-effort
@@ -47,7 +52,40 @@ Notes:
   the "Read access to a folder" row). Without it, a file-producing call recorded an
   empty `response.files` — the v0.0.5 record-path bug fixed in v0.0.6.
 
-## Discovery (`doctor`, `models`)
+## Prompt size and delivery (and why cursor is limited)
+
+The cache delivers the prompt (the merged `context\n\nprompt`) differently per
+client, and that difference sets a hard size ceiling for one of them:
+
+- **`claude` and `codex` — on stdin.** The prompt is written to the client's
+  standard input, not placed on the command line. Standard input has no
+  command-line size limit, so the prompt can be large (Claude caps piped stdin
+  around 10 MB; Codex likewise reads the prompt from stdin). This is why a big
+  prompt works through these two.
+- **`cursor-agent` — as a command-line argument.** cursor-agent takes the prompt
+  only as a positional argument; its CLI exposes no stdin or prompt-file channel
+  (verified against `cursor-agent --help`). A command line is bounded by the
+  operating system, so a cursor prompt is bounded too:
+  - **Windows ≈ 32,000 characters** for the *entire* command line (the
+    `CreateProcess` limit), minus the executable path and the other flags;
+  - **Linux ≈ 128 KiB** per single argument;
+  - **macOS ≈ 1 MB** for the argument area.
+
+  The tightest case, Windows, is the one to design around: a cursor prompt much past
+  ~30 KB simply will not launch. This is a limitation of cursor-agent's CLI, not of
+  the cache — the cache cannot manufacture a channel the client does not offer.
+
+**Guidance for large material with cursor.** Don't pour a large body of text into a
+single `--context` / `--prompt` for cursor. Instead, declare it as **input files**
+(`--input-file`, repeatable) and refer to those paths in a short prompt. The cache
+fingerprints each file's content into the key and grants the client read access, so
+the model reads the files *in place* rather than receiving their contents on the
+command line — keeping the launched command small and well under the OS limit. (This
+also matches how cursor itself prefers large material: reference files and let the
+agent read them.) For a genuinely large single-shot prompt, prefer a tier that maps
+to `claude` or `codex`, which receive the prompt on stdin and have no such ceiling.
+
+
 
 | Functionality | In the cache | `claude` | `codex` | `cursor-agent` |
 |---|---|---|---|---|
