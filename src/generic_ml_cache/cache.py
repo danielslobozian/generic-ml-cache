@@ -110,6 +110,8 @@ class Outcome:
     recorded: bool  # True if a real call was made and stored
     cassette: Cassette
     passthrough: bool = False  # True if it ran fresh and stored nothing (allow-path)
+    failed_unstored: bool = False  # True if a real call ran, failed (non-zero exit),
+    # and was deliberately not stored (record_on_error off)
 
 
 def resolve(
@@ -119,6 +121,7 @@ def resolve(
     executable: Optional[str] = None,
     timeout: Optional[float] = None,
     trust_scan: bool = False,
+    record_on_error: bool = False,
 ) -> Outcome:
     """Resolve a request against the store under ``mode`` (no I/O to caller).
 
@@ -127,6 +130,17 @@ def resolve(
     stores nothing (no hit is ever served for it). ``trust_scan`` is the explicit,
     opt-in override that lets such a call be cached anyway (the caller asserts the
     folders are stable); it is wired here but not yet exposed.
+
+    A real call that **fails** (non-zero exit) is, by default, **not stored**: a
+    failure is usually transient (a bad model id, an auth hiccup, a rate limit), so
+    caching it would replay the failure forever and a retry could never reach the
+    real client. The caller still receives the real failed response; it simply is
+    not written to the store, so the next identical call runs fresh.
+    ``record_on_error=True`` opts into storing failures as well (the VCR
+    ``record_on_error`` convention) -- for the cases where a deterministic failure
+    *is* the result worth replaying. A refresh whose fresh call fails leaves any
+    existing cassette untouched rather than overwriting a good recording with a bad
+    one.
     """
     adapter = get_adapter(request.client)
 
@@ -201,6 +215,14 @@ def resolve(
         input_data=request.input_data,
         response=result.response,
     )
+    if result.response.exit != 0 and not record_on_error:
+        # A failed call is not cached by default: return the real failed response
+        # so the caller sees exactly what happened, but store nothing, so the next
+        # identical call runs fresh instead of replaying the failure. In REFRESH
+        # this also means any existing (successful) cassette is left untouched.
+        return Outcome(
+            result.response, hit=False, recorded=False, cassette=cassette, failed_unstored=True
+        )
     store.save(cassette)
     return Outcome(result.response, hit=False, recorded=True, cassette=cassette)
 

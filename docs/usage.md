@@ -174,6 +174,7 @@ gmlcache run --client claude --model sonnet \
 
 | Flag | Default | Meaning |
 |------|---------|---------|
+| `--record-on-error` | off | also cache a call that **fails** (non-zero exit); by default only successful calls are stored, so a transient failure runs fresh next time instead of replaying forever. A failing `--force` refresh leaves any existing successful cassette untouched. |
 | `--executable EXECUTABLE` | `[executables]` config, else adapter `PATH` lookup | override the client binary (the "seam") |
 | `--timeout TIMEOUT` | none | seconds before a real call is killed |
 | `-v`, `--verbose` | off | print `gmlc:` diagnostics to stderr |

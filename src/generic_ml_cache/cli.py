@@ -112,6 +112,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             executable=config.executable_for(file_cfg, args.client, flag=args.executable),
             timeout=timeout,
             trust_scan=trust_scan,
+            record_on_error=args.record_on_error,
         )
     except RunInterrupted as exc:
         # A requested stop, not a failure: no cassette was written. Exit code 130
@@ -129,6 +130,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
         log("cache hit; replaying cassette")
     elif outcome.passthrough:
         log("allow-path call — ran fresh, stored nothing (not cacheable)")
+    elif outcome.failed_unstored:
+        log(
+            f"real call failed (exit {outcome.response.exit}); not cached "
+            "(pass --record-on-error to store failures)"
+        )
     elif outcome.recorded:
         log(f"recorded real call -> cassette {outcome.cassette.match_key}.json")
 
@@ -366,6 +372,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
     run.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
+    run.add_argument(
+        "--record-on-error",
+        action="store_true",
+        help="also cache a call that fails (non-zero exit); default is to store only successes",
+    )
     run.add_argument("--executable", help="override the client executable (the seam)")
     run.add_argument(
         "--timeout", type=float, default=None, help="seconds before the real call is killed"

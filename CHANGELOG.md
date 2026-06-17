@@ -11,6 +11,16 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ### Added
 
+- **Failed client calls are not cached by default.** A real call that exits
+  non-zero is no longer stored: the caller still receives the real failed
+  response, but nothing is written to the store, so the next identical call runs
+  fresh instead of replaying a transient failure (a bad model id, an auth hiccup,
+  a rate limit) forever. The new `gmlcache run --record-on-error` flag (and
+  `resolve(..., record_on_error=True)`) opts into storing failures as well, for
+  the cases where a deterministic failure is itself the result worth replaying.
+  A `refresh` whose fresh call fails leaves any existing successful cassette
+  untouched rather than overwriting it. Naming follows VCR's `record_on_error`.
+
 - **Graceful stop on signal.** A real client call now runs in its own process
   group/session and is supervised: when the caller (the workflow engine) sends a
   termination signal — `SIGINT`/`SIGTERM` — the whole group is torn down (no
