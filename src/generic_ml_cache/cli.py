@@ -326,6 +326,82 @@ def _cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _human_size(num_bytes: int) -> str:
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024 or unit == "TB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def _cmd_stats(args: argparse.Namespace) -> int:
+    import json
+
+    from .cassette import Cassette
+
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    store = CassetteStore(Path(str(settings["store"][0])))
+    root = store.root
+
+    # Tally cassettes by (client, model). stats is an occasional, explicit call,
+    # so reading each cassette to learn its client/model is fine; a corrupt or
+    # unreadable file is skipped rather than aborting the report.
+    by_client_model: Dict[tuple, List[int]] = {}
+    total_count = 0
+    total_bytes = 0
+    if root.exists():
+        for path in sorted(root.glob("*.json")):
+            try:
+                size = path.stat().st_size
+                cassette = Cassette.from_json(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            slot = by_client_model.setdefault((cassette.client, cassette.model), [0, 0])
+            slot[0] += 1
+            slot[1] += size
+            total_count += 1
+            total_bytes += size
+
+    access = store.registry.event_counts()
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "store": str(root),
+                    "cassettes": total_count,
+                    "bytes": total_bytes,
+                    "by_client_model": [
+                        {"client": client, "model": model, "cassettes": n, "bytes": b}
+                        for (client, model), (n, b) in sorted(by_client_model.items())
+                    ],
+                    "access_events": access,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    print(f"store     : {root}")
+    print(f"cassettes : {total_count}  ({_human_size(total_bytes)} total)")
+    if by_client_model:
+        print("by client / model:")
+        for (client, model), (n, b) in sorted(by_client_model.items()):
+            print(f"  {client:<8} {model:<26} {n:>5}  {_human_size(b)}")
+    if access:
+        parts = ", ".join(f"{event}={count}" for event, count in sorted(access.items()))
+        print(f"access    : {parts}")
+    else:
+        print("access    : (no events recorded yet)")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="gmlcache",
@@ -437,6 +513,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     status.set_defaults(func=_cmd_status)
+
+    stats = sub.add_parser(
+        "stats",
+        help="show how many cassettes are stored, their total size split by client/model, "
+        "and access counts",
+    )
+    stats.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    stats.set_defaults(func=_cmd_stats)
 
     init = sub.add_parser(
         "init",

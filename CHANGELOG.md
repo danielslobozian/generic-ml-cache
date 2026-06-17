@@ -11,6 +11,12 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ### Added
 
+- **`stats` command.** Reports how many cassettes are stored, their total size
+  split by client and model, and the access-event counts (hit / miss / record)
+  from the registry — in a human table or `--json`. It is the diagnostic that
+  lets a user watch the cache's footprint (e.g. on a daily dashboard) and decide
+  whether to turn on an eviction policy, rather than the cache imposing one.
+
 - **Access registry (observability).** A small SQLite log (`registry.sqlite3` in
   the store dir, stdlib `sqlite3`, no extra dependency) records cache access
   events — hit / miss / record (and eviction, once `prune` lands) — for the coming
