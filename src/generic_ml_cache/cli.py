@@ -190,6 +190,18 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print(f"files  : {len(cassette.response.files)}")
     for f in cassette.response.files:
         print(f"         - {f.path} ({f.encoding}, {len(f.content)} chars)")
+    usage = cassette.response.usage
+    if usage is None:
+        print("usage  : (none captured)")
+    else:
+        print(f"usage  : {_usage_summary(usage)}")
+        if usage.cost_usd is not None:
+            print(f"         cost ~ ${usage.cost_usd:.4f} (client estimate, not authoritative)")
+        if args.raw:
+            import json as _json
+
+            print("raw usage (verbatim from the client):")
+            print(_indent(_json.dumps(usage.raw, indent=2, sort_keys=True), "         "))
     return 0
 
 
@@ -339,6 +351,66 @@ def _human_size(num_bytes: int) -> str:
     return f"{size:.1f} TB"
 
 
+def _token_str(count: "int | None") -> str:
+    """A token count for display: the number, or ``?`` when unknown (None)."""
+    return "?" if count is None else str(count)
+
+
+def _usage_summary(usage) -> str:
+    """One-line token summary; unknown counts show as ``?`` (never 0)."""
+    return (
+        f"input={_token_str(usage.input_tokens)} "
+        f"output={_token_str(usage.output_tokens)} "
+        f"cache-read={_token_str(usage.cache_read_tokens)} "
+        f"cache-write={_token_str(usage.cache_write_tokens)} "
+        f"reasoning={_token_str(usage.reasoning_tokens)}"
+    )
+
+
+def _indent(text: str, prefix: str) -> str:
+    return "\n".join(prefix + line for line in text.splitlines())
+
+
+def _tokens_saved(hit_counts: dict, usage_by_key: dict) -> dict:
+    """Sum the usage that cache hits avoided spending.
+
+    Each hit on a cassette would otherwise have been a real call costing that
+    cassette's recorded usage, so the saving is ``usage * hits`` summed over
+    cassettes. A field stays ``None`` ("unknown") if no contributing cassette
+    reported it -- never silently 0. Hits whose cassette is gone or carried no
+    usage are counted separately so the figure is not quietly understated.
+    """
+    fields = ("input_tokens", "output_tokens", "cache_read_tokens")
+    sums = {f: 0 for f in fields}
+    known = {f: False for f in fields}
+    cost_sum = 0.0
+    cost_known = False
+    replays = 0
+    replays_without_usage = 0
+    for key, hits in hit_counts.items():
+        usage = usage_by_key.get(key)
+        if usage is None:
+            replays_without_usage += hits
+            continue
+        replays += hits
+        for f in fields:
+            value = getattr(usage, f)
+            if value is not None:
+                sums[f] += value * hits
+                known[f] = True
+        if usage.cost_usd is not None:
+            cost_sum += usage.cost_usd * hits
+            cost_known = True
+    return {
+        "replays": replays,
+        "replays_without_usage": replays_without_usage,
+        "input_tokens": sums["input_tokens"] if known["input_tokens"] else None,
+        "output_tokens": sums["output_tokens"] if known["output_tokens"] else None,
+        "cache_read_tokens": sums["cache_read_tokens"] if known["cache_read_tokens"] else None,
+        "cost_usd": cost_sum if cost_known else None,
+    }
+
+
 def _cmd_stats(args: argparse.Namespace) -> int:
     import json
 
@@ -357,6 +429,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     # so reading each cassette to learn its client/model is fine; a corrupt or
     # unreadable file is skipped rather than aborting the report.
     by_client_model: Dict[tuple, List[int]] = {}
+    usage_by_key: Dict[str, object] = {}
     total_count = 0
     total_bytes = 0
     if root.exists():
@@ -371,8 +444,11 @@ def _cmd_stats(args: argparse.Namespace) -> int:
             slot[1] += size
             total_count += 1
             total_bytes += size
+            if cassette.response.usage is not None:
+                usage_by_key[cassette.match_key] = cassette.response.usage
 
     access = store.registry.event_counts()
+    saved = _tokens_saved(store.registry.hit_counts_by_key(), usage_by_key)
 
     if args.json:
         print(
@@ -386,6 +462,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
                         for (client, model), (n, b) in sorted(by_client_model.items())
                     ],
                     "access_events": access,
+                    "tokens_saved": saved,
                 },
                 indent=2,
             )
@@ -403,6 +480,26 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"access    : {parts}")
     else:
         print("access    : (no events recorded yet)")
+
+    if saved["replays"] == 0:
+        print("saved     : (no replays yet — savings appear once cassettes are reused)")
+    else:
+        print(
+            f"saved     : from {saved['replays']} replay(s) — "
+            f"input {_token_str(saved['input_tokens'])}, "
+            f"output {_token_str(saved['output_tokens'])}, "
+            f"cache-read {_token_str(saved['cache_read_tokens'])} tokens"
+        )
+        if saved["cost_usd"] is not None:
+            print(
+                f"            ~ ${saved['cost_usd']:.4f} (from client cost estimates; "
+                "not authoritative)"
+            )
+        if saved["replays_without_usage"]:
+            print(
+                f"            ({saved['replays_without_usage']} replay(s) had no recorded "
+                "usage and are not counted)"
+            )
     return 0
 
 
@@ -482,6 +579,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     inspect = sub.add_parser("inspect", help="pretty-print a cassette")
     inspect.add_argument("cassette", help="path to a cassette JSON file")
+    inspect.add_argument(
+        "--raw",
+        action="store_true",
+        help="also print the client's verbatim usage block (as the client reported it)",
+    )
     inspect.set_defaults(func=_cmd_inspect)
 
     doctor = sub.add_parser(

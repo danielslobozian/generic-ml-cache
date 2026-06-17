@@ -89,6 +89,28 @@ class AccessRegistry:
             # Non-load-bearing: observability must never break the cache.
             pass
 
+    def hit_counts_by_key(self) -> Dict[str, int]:
+        """Return {match_key: number-of-hits} across all recorded HIT events
+        ({} if unavailable).
+
+        A hit is a real call that was *not* made because a cassette answered it,
+        so multiplying a cassette's recorded usage by its hit count is exactly the
+        usage that hit saved. Best-effort like everything here: never raises.
+        """
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT match_key, COUNT(*) FROM access_events "
+                    "WHERE event = ? AND match_key IS NOT NULL GROUP BY match_key",
+                    (HIT,),
+                ).fetchall()
+                return {key: int(count) for key, count in rows}
+            finally:
+                conn.close()
+        except Exception:
+            return {}
+
     def event_counts(self) -> Dict[str, int]:
         """Return {event: count} across all recorded events ({} if unavailable)."""
         try:
