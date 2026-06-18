@@ -29,6 +29,7 @@ Three clients are supported, by executable name: **`claude`** (Claude Code),
 | System prompt | `--system-prompt` / `--system-prompt-file` (optional) | `--append-system-prompt <text>` | `-c experimental_instructions=<text>` | prepended to the prompt argument (current cursor-agent has no system-prompt flag and ignores rule files headless) — argv-only, never keyed |
 | Read access to a folder | `--allow-path` (optional; makes the call non-cacheable) | `--add-dir <folder>` + prime directive | prime directive only (hard mechanism deferred to adapter hardening, 0.0.10) | prime directive only (hard mechanism deferred to adapter hardening, 0.0.10) |
 | Write access to the run folder | always (the cache's own isolated run dir) | `--permission-mode acceptEdits` | `--skip-git-repo-check --sandbox workspace-write -C <run-dir>` | `--trust` |
+| Web / network access | `--grant net` (optional; keyed, stays cacheable) | web tools allowed (`--allowedTools WebSearch WebFetch`) — best-effort, pending live verification | network on in the write-sandbox (`-c sandbox_workspace_write.network_access=true`) — verified | reached through the existing `--trust` shell/fetch path (no extra flag) — best-effort, pending live verification |
 | Output capture | always (answer + usage) | `--output-format json` → answer from `result`, usage from `usage`/`modelUsage`/`total_cost_usd` | `exec --json` → answer from the `agent_message` event, usage from `turn.completed` | `--print --output-format json` → answer from `result`, usage from `usage` |
 
 Notes:

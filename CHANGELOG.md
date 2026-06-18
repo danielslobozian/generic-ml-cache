@@ -11,6 +11,15 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ### Added
 
+- **Grants (`run --grant net`).** Open a capability for the launched client; the
+  first is `net` (web / network access). It extends the write/trust door from
+  "write inside the run folder" to "reach the network when a step needs a live
+  source." A granted call is keyed (a net call gets its own, inspectable cassette)
+  and cached like any other call -- `--force` re-fetches live. Enablement only: the
+  cache opens doors, never closes them, and is not a security boundary (see
+  [`docs/grants.md`](docs/grants.md)). Available on `run` and `check`. Codex's
+  network toggle is verified against the live CLI; Claude's and Cursor's net doors
+  are best-effort, pending the same live verification as the other adapter doors.
 - **`inspect` accepts a short key**, not only a file path: paste the key shown by
   `list` and it's resolved against the store. A path still works; an unknown key
   fails cleanly, and an ambiguous prefix lists the candidates.

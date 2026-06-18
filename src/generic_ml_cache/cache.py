@@ -72,6 +72,14 @@ class Request:
             solely to build the command line at record time. Order is significant
             (CLI flags are positional); an empty list keys identically to a call
             with no passthrough, so existing cassettes are untouched.
+        grants: declared capabilities to *open* for this run (e.g. ``net`` for
+            network access). Enablement only -- the cache opens the door and never
+            tries to close it (see ``docs/grants.md``). They enter the key (a
+            granted call is a distinct call and gets its own cassette), kept
+            readable and order-independent: a sorted, de-duplicated set folded into
+            ``input_data``. ``net`` does not make the call non-cacheable -- choosing
+            the cache is the intent to cache, and ``--force`` is the lever for a
+            live re-fetch. Absent -> nothing keyed, so prior cassettes are untouched.
 
     The key is derived from ``client``, ``model``, ``effort`` and ``input_data``
     only -- i.e. context, prompt and the input-file fingerprints (see
@@ -89,6 +97,7 @@ class Request:
     input_files: Dict[str, str] = field(default_factory=dict)
     allow_paths: List[str] = field(default_factory=list)
     client_args: List[str] = field(default_factory=list)
+    grants: List[str] = field(default_factory=list)
 
     @property
     def input_data(self) -> Dict[str, str]:
@@ -102,6 +111,13 @@ class Request:
         if self.client_args:
             digest = hashlib.sha256("\x00".join(self.client_args).encode("utf-8")).hexdigest()
             data[f"client_args:{digest}"] = digest
+        # Grants enter the key too -- a granted call is a distinct call (a net run
+        # and a no-net run of the same prompt produce different output). Unlike
+        # client_args they are non-secret and few, so they are kept readable; and
+        # they are order-independent, so the set is sorted and de-duplicated for a
+        # stable key. Absent -> nothing added, so prior cassettes are untouched.
+        if self.grants:
+            data["grants"] = ",".join(sorted(set(self.grants)))
         return data
 
     @property
@@ -302,6 +318,7 @@ def _resolve(
             allowed_read_paths=request.allowed_read_paths,
             add_dir_paths=request.add_dir_paths,
             client_args=request.client_args,
+            grants=request.grants,
         )
         cassette = Cassette(
             client=request.client,
@@ -346,6 +363,7 @@ def _resolve(
         allowed_read_paths=request.allowed_read_paths,
         add_dir_paths=request.add_dir_paths,
         client_args=request.client_args,
+        grants=request.grants,
     )
     cassette = Cassette(
         client=request.client,

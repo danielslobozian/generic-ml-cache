@@ -202,6 +202,7 @@ def record_real_call(
     allowed_read_paths: Optional[List[str]] = None,
     add_dir_paths: Optional[List[str]] = None,
     client_args: Optional[List[str]] = None,
+    grants: Optional[List[str]] = None,
 ) -> RunResult:
     """Execute the client once in isolation and capture its full response.
 
@@ -220,7 +221,15 @@ def record_real_call(
         baseline = _snapshot(run_dir)
 
         argv = adapter.build_argv(
-            executable, run_dir, model, effort, context, prompt, system_prompt, client_args or []
+            executable,
+            run_dir,
+            model,
+            effort,
+            context,
+            prompt,
+            system_prompt,
+            client_args or [],
+            grants or [],
         )
         argv += adapter.read_access_argv(add_dir_paths or [])
         stdin_payload = adapter.stdin_payload(context, prompt, system_prompt)

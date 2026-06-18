@@ -34,7 +34,16 @@ class FakeAdapter(ClientAdapter):
         (run_dir / "_in_system.txt").write_text(system_prompt, encoding="utf-8")
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+        self,
+        executable,
+        run_dir,
+        model,
+        effort,
+        context,
+        prompt,
+        system_prompt,
+        client_args=(),
+        grants=(),
     ) -> List[str]:
         return [
             executable,
@@ -71,7 +80,16 @@ class FakeStdinAdapter(ClientAdapter):
         (run_dir / "_in_system.txt").write_text(system_prompt, encoding="utf-8")
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+        self,
+        executable,
+        run_dir,
+        model,
+        effort,
+        context,
+        prompt,
+        system_prompt,
+        client_args=(),
+        grants=(),
     ) -> List[str]:
         return [
             executable,

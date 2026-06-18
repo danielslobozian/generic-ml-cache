@@ -34,7 +34,16 @@ class _SleepAdapter(ClientAdapter):
         pass
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+        self,
+        executable,
+        run_dir,
+        model,
+        effort,
+        context,
+        prompt,
+        system_prompt,
+        client_args=(),
+        grants=(),
     ) -> List[str]:
         return [executable, "-c", "sleep 30"]
 

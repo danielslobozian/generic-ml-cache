@@ -91,6 +91,7 @@ def _build_keyed_request(args: argparse.Namespace) -> Request:
         input_files=input_files,
         allow_paths=allow_paths,
         client_args=list(getattr(args, "client_arg", None) or []),
+        grants=list(getattr(args, "grant", None) or []),
     )
 
 
@@ -808,6 +809,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument(
+        "--grant",
+        action="append",
+        dest="grant",
+        choices=["net"],
+        metavar="CAPABILITY",
+        help=(
+            "open a capability for the client -- enablement, not restriction. "
+            "'net' lets the client reach the web. Part of the key (a granted call "
+            "is its own cassette) and cacheable like any call; use --force for a "
+            "live re-fetch. Repeatable."
+        ),
+    )
+    run.add_argument(
         "--mode",
         choices=[m.value for m in Mode],
         default=None,
@@ -878,6 +892,14 @@ def build_parser() -> argparse.ArgumentParser:
         dest="client_arg",
         metavar="ARG",
         help="extra arg keyed into the call, to probe a passthrough launch (repeatable)",
+    )
+    check.add_argument(
+        "--grant",
+        action="append",
+        dest="grant",
+        choices=["net"],
+        metavar="CAPABILITY",
+        help="open a capability (e.g. net), keyed into the call, to probe a granted launch (repeatable)",
     )
     check.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     check.set_defaults(func=_cmd_check)
