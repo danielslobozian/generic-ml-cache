@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -594,13 +595,58 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _use_color() -> bool:
+    """Colour only when writing to a real terminal and NO_COLOR is unset, so piped
+    or redirected output never carries escape codes (the conventional contract)."""
+    return sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+
+
+def render_banner(color: bool = False) -> str:
+    """The boxed gmlcache banner. Width is derived from the content, so any version
+    string or tagline stays aligned. ``color`` adds teal ANSI; off yields plain text."""
+    title = "gmlcache"
+    ver = __version__
+    tag = "record · replay · check · tokens"
+
+    if color:
+        rule = "\x1b[38;5;37m"  # teal box
+        name = "\x1b[1m"  # bold title
+        vers = "\x1b[38;5;43m"  # bright-teal version
+        sub = "\x1b[38;5;245m"  # dim-grey tagline
+        off = "\x1b[0m"
+    else:
+        rule = name = vers = sub = off = ""
+
+    left_top = f"─ {title} "
+    right_top = f" {ver} ─"
+    inner = max(len(left_top) + 6 + len(right_top), len(tag) + 4)
+    top_dashes = inner - len(left_top) - len(right_top)
+    pad_right = inner - 2 - len(tag)
+
+    top = (
+        f"{rule}┌─ {off}{name}{title}{off}"
+        f"{rule} {'─' * top_dashes} {off}{vers}{ver}{off}{rule} ─┐{off}"
+    )
+    mid = f"{rule}│{off}  {sub}{tag}{off}{' ' * pad_right}{rule}│{off}"
+    bot = f"{rule}└{'─' * inner}┘{off}"
+    return "\n".join([top, mid, bot])
+
+
+class _BannerParser(argparse.ArgumentParser):
+    """An ArgumentParser whose full help is fronted by the banner, so the banner
+    shows on ``-h`` and on a bare invocation (but not on terse usage/error lines)."""
+
+    def format_help(self) -> str:
+        return render_banner(_use_color()) + "\n\n" + super().format_help()
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _BannerParser(
         prog="gmlcache",
         description="Content-addressed cache/proxy for agentic CLI calls.",
     )
     parser.add_argument("--version", action="version", version=f"gmlcache {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=False)
 
     run = sub.add_parser("run", help="resolve a request (record on miss, replay on hit)")
     run.add_argument("--client", required=True, choices=registered_names())
@@ -783,6 +829,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return 0
     return args.func(args)
 
 

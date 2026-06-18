@@ -193,3 +193,42 @@ def test_run_rejects_retired_location_flags(tmp_path):
     for bad in (["--store", str(tmp_path)], ["--output-dir", str(tmp_path)]):
         with pytest.raises(SystemExit):
             run_cli(base + bad)
+
+
+# --- banner & bare invocation ---------------------------------------------
+
+
+def test_render_banner_lines_align():
+    from generic_ml_cache.cli import render_banner
+
+    widths = {len(line) for line in render_banner(color=False).splitlines()}
+    assert len(widths) == 1  # all three box lines are the same width
+
+
+def test_render_banner_color_is_opt_in():
+    from generic_ml_cache.cli import render_banner
+
+    assert "\x1b[" not in render_banner(color=False)
+    assert "\x1b[" in render_banner(color=True)
+
+
+def test_bare_invocation_prints_help_not_an_error(capsys):
+    rc = main([])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "gmlcache" in out
+    assert "record · replay · check · tokens" in out
+    assert "usage:" in out
+
+
+def test_bare_invocation_has_no_ansi_when_not_a_tty(capsys):
+    main([])
+    # capsys stdout is not a terminal, so the banner must be plain text
+    assert "\x1b[" not in capsys.readouterr().out
+
+
+def test_help_flag_shows_the_banner(capsys):
+    with pytest.raises(SystemExit) as excinfo:
+        main(["-h"])
+    assert excinfo.value.code == 0
+    assert "record · replay · check · tokens" in capsys.readouterr().out
