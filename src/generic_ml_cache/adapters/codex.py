@@ -21,9 +21,21 @@ class CodexAdapter(ClientAdapter):
     default_executable = "codex"
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+        self,
+        executable,
+        run_dir,
+        model,
+        effort,
+        context,
+        prompt,
+        system_prompt,
+        client_args=(),
+        grants=(),
     ) -> List[str]:
-        argv = [executable, "exec", "--json", *self.write_access_argv(run_dir), "--model", model]
+        argv = [executable, "exec", "--json", *self.write_access_argv(run_dir)]
+        if "net" in grants:
+            argv += self.network_access_argv()
+        argv += ["--model", model]
         # Effort is optional: when omitted, leave model_reasoning_effort unset so
         # Codex uses the model's own default instead of an empty override.
         if effort:
@@ -101,3 +113,13 @@ class CodexAdapter(ClientAdapter):
         # and /tmp); -C pins that folder as the explicit write fence. Reads outside
         # are unaffected. Verified against codex exec on the live CLI.
         return ["--skip-git-repo-check", "--sandbox", "workspace-write", "-C", str(run_dir)]
+
+    def network_access_argv(self):
+        # Open the network inside the workspace-write sandbox the run already uses.
+        # Codex leaves it off by default; this flips network_access on for this run
+        # only. The probes confirmed the toggle gates the network at the process
+        # level (off = an outbound fetch is blocked, on = it reaches) -- the one
+        # leak-proof network door of the three clients. The -c override mirrors how
+        # this adapter already sets model_reasoning_effort; confirm the exact -c key
+        # path in the live-CLI verification pass.
+        return ["-c", "sandbox_workspace_write.network_access=true"]

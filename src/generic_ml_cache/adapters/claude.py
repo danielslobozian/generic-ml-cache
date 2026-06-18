@@ -21,7 +21,16 @@ class ClaudeAdapter(ClientAdapter):
     default_executable = "claude"
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+        self,
+        executable,
+        run_dir,
+        model,
+        effort,
+        context,
+        prompt,
+        system_prompt,
+        client_args=(),
+        grants=(),
     ) -> List[str]:
         # The prompt and context are delivered on stdin (see stdin_payload), never
         # as an argv argument, so an arbitrarily large prompt cannot hit the OS
@@ -33,6 +42,8 @@ class ClaudeAdapter(ClientAdapter):
         if effort:
             argv += ["--effort", effort]
         argv += self.write_access_argv(run_dir)
+        if "net" in grants:
+            argv += self.network_access_argv()
         # JSON output so the call also returns its usage (tokens + Claude's own
         # cost estimate). parse_output lifts the answer text back out of the JSON.
         argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
@@ -99,6 +110,17 @@ class ClaudeAdapter(ClientAdapter):
         # file-producing call from narrate-only to a real write; the broader
         # --dangerously-skip-permissions is unnecessary here.
         return ["--permission-mode", "acceptEdits"]
+
+    def network_access_argv(self):
+        # Claude has no process-level network switch -- subprocess egress is not
+        # gated by its permission config -- so opening "net" means allowing the web
+        # tools for the run. BEST-EFFORT, not yet verified against the live CLI the
+        # way the write door is: the probes confirmed Claude reaches the web (via a
+        # shell fetch), but the exact --allowedTools spelling for the web tools is
+        # on the live-verification list. "No net" here is the absence of these
+        # tools, not a hard block -- the cache enables, it does not restrict
+        # (docs/grants.md).
+        return ["--allowedTools", "WebSearch", "WebFetch"]
 
 
 register(ClaudeAdapter())

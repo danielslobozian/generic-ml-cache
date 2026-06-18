@@ -168,3 +168,47 @@ def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
     assert "CTX" in full_prompt
     assert "PROMPT" in full_prompt
     assert adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE) is None
+
+
+def _argv(adapter, tmp_path, grants=()):
+    return adapter.build_argv(
+        executable="/usr/bin/x",
+        run_dir=tmp_path,
+        model="m",
+        effort="",
+        context="",
+        prompt="P",
+        system_prompt=PRIME_DIRECTIVE,
+        client_args=(),
+        grants=grants,
+    )
+
+
+@pytest.mark.parametrize("client", ["claude", "codex", "cursor"])
+def test_no_grant_emits_no_network_door(client, tmp_path):
+    # Without a net grant, no adapter opens any network flag (default behaviour
+    # is unchanged): the grant is purely additive.
+    joined = " ".join(_argv(get_adapter(client), tmp_path))
+    assert "network_access" not in joined
+    assert "WebFetch" not in joined and "WebSearch" not in joined
+
+
+def test_net_grant_opens_codex_network(tmp_path):
+    # Codex's net door is the one process-level toggle: granting net flips
+    # network_access on inside the workspace-write sandbox.
+    joined = " ".join(_argv(get_adapter("codex"), tmp_path, grants=("net",)))
+    assert "sandbox_workspace_write.network_access=true" in joined
+
+
+def test_net_grant_allows_claude_web_tools(tmp_path):
+    # Claude has no network switch; the net door allows the web tools (best-effort).
+    joined = " ".join(_argv(get_adapter("claude"), tmp_path, grants=("net",)))
+    assert "WebFetch" in joined
+
+
+def test_net_grant_keeps_cursor_prompt_trailing(tmp_path):
+    # cursor-agent reads the prompt as the trailing positional; a grant must never
+    # land after it (or it would be read as prompt text).
+    argv = _argv(get_adapter("cursor"), tmp_path, grants=("net",))
+    assert argv[-1].endswith("P")
+    assert "--model" in argv

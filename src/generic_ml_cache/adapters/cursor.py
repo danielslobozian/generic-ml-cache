@@ -20,7 +20,16 @@ class CursorAdapter(ClientAdapter):
     default_executable = "cursor-agent"
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+        self,
+        executable,
+        run_dir,
+        model,
+        effort,
+        context,
+        prompt,
+        system_prompt,
+        client_args=(),
+        grants=(),
     ) -> List[str]:
         # cursor-agent takes the prompt ONLY as a positional argument -- its CLI has
         # no stdin/file path for the prompt (verified against `cursor-agent --help`:
@@ -46,9 +55,11 @@ class CursorAdapter(ClientAdapter):
         # with no effort (preferred), or a base id plus an effort to append. Do not
         # pass both, or the effort is duplicated.
         model_id = f"{model}-{effort}" if effort else model
+        net = self.network_access_argv() if "net" in grants else []
         return [
             executable,
             *self.write_access_argv(run_dir),
+            *net,
             "--model",
             model_id,
             "--print",
@@ -101,6 +112,18 @@ class CursorAdapter(ClientAdapter):
         # separate --force is not needed). Reads outside the folder are unaffected.
         # Verified against cursor-agent --print on the live CLI.
         return ["--trust"]
+
+    def network_access_argv(self):
+        # cursor-agent has no process-level network switch. Under the run's
+        # --trust (already applied), the agent's shell/fetch tools are available
+        # and reach the network -- the probes confirmed cursor reaches the web via
+        # a shell fetch under a trusted workspace -- so opening "net" needs no extra
+        # flag here. BEST-EFFORT: that the existing --trust alone (without a tool
+        # allow-list) keeps the network reachable headless is on the live-CLI
+        # verification list. The grant still distinguishes the call in the cassette
+        # key even when it adds no argv. The cache enables, never restricts
+        # (docs/grants.md).
+        return []
 
     def models_argv(self, executable: str) -> Optional[List[str]]:
         return [executable, "--list-models"]

@@ -22,7 +22,7 @@ import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, List, Optional
+from typing import ClassVar, List, Optional, Sequence
 
 from ..errors import ClientNotFound
 from ..usage import ParsedOutput
@@ -114,6 +114,7 @@ class ClientAdapter(ABC):
         prompt: str,
         system_prompt: str,
         client_args: List[str],
+        grants: Sequence[str] = (),
     ) -> List[str]:
         """Return the full argv to launch the client in ``run_dir``.
 
@@ -123,6 +124,11 @@ class ClientAdapter(ABC):
         very end for clients whose prompt arrives on stdin, but **before the
         trailing prompt positional** for a client that takes the prompt in argv
         (otherwise they would be swallowed as prompt text rather than applied).
+
+        ``grants`` are declared capabilities to *open* for this run (e.g. ``"net"``
+        for network access). The adapter splices the matching door
+        (:meth:`network_access_argv`) in when granted. Grants enable; they never
+        restrict (see ``docs/grants.md``).
         """
 
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
@@ -183,5 +189,20 @@ class ClientAdapter(ABC):
         Default: none. The per-client flags below are verified against the live
         CLIs (see ``docs/client-mapping.md``); adapter hardening keeps them small
         and correctable should a CLI change.
+        """
+        return []
+
+    def network_access_argv(self) -> List[str]:
+        """Extra argv opening the client's NETWORK door, spliced when ``net`` is
+        granted.
+
+        Grants are *enablement, not restriction* (see ``docs/grants.md``): this
+        opens the door and never tries to close it. Default: none. Each adapter
+        overrides with the door for its own client and, like
+        :meth:`write_access_argv`, splices it inside its own ``build_argv`` (before
+        any trailing positional or stdin marker), because some CLIs reject flags
+        placed after the prompt. Only Codex's mechanism is a process-level toggle;
+        Claude's and Cursor's are best-effort, slated for the same live-CLI
+        verification as the other adapter doors.
         """
         return []
