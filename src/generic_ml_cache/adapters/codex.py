@@ -120,6 +120,7 @@ class CodexAdapter(ClientAdapter):
         # only. The probes confirmed the toggle gates the network at the process
         # level (off = an outbound fetch is blocked, on = it reaches) -- the one
         # leak-proof network door of the three clients. The -c override mirrors how
-        # this adapter already sets model_reasoning_effort; confirm the exact -c key
-        # path in the live-CLI verification pass.
+        # this adapter already sets model_reasoning_effort, and is verified against
+        # the live CLI through the cache (grant on -> an external fetch reaches;
+        # off -> blocked at the sandbox).
         return ["-c", "sandbox_workspace_write.network_access=true"]

@@ -17,9 +17,10 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   source." A granted call is keyed (a net call gets its own, inspectable cassette)
   and cached like any other call -- `--force` re-fetches live. Enablement only: the
   cache opens doors, never closes them, and is not a security boundary (see
-  [`docs/grants.md`](docs/grants.md)). Available on `run` and `check`. Codex's
-  network toggle is verified against the live CLI; Claude's and Cursor's net doors
-  are best-effort, pending the same live verification as the other adapter doors.
+  [`docs/grants.md`](docs/grants.md)). Available on `run` and `check`. All three net
+  doors are verified against the live CLIs: Codex via its `workspace-write` sandbox
+  network toggle, Claude via its web tools (WebFetch), and Cursor via `--force`
+  (its `--trust` write door alone does not open Cursor's sandboxed network).
 - **`inspect` accepts a short key**, not only a file path: paste the key shown by
   `list` and it's resolved against the store. A path still works; an unknown key
   fails cleanly, and an ambiguous prefix lists the candidates.

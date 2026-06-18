@@ -107,10 +107,11 @@ What opening `net` means for each adapter, and the limits found.
 
 ### `claude` (Claude Code)
 
-- **Door:** open the web/fetch path for the run (the client already runs
-  `--permission-mode acceptEdits`).
-- **Reaches the web:** yes — verified by a shell fetch (`curl`) of an unguessable
-  token served from a local-only server and seeing it returned.
+- **Door:** allow Claude's web tools (`--allowedTools WebSearch WebFetch`).
+- **Reaches the web:** yes — verified against the live CLI through the cache: with
+  the grant Claude fetched an external URL via WebFetch and returned the real value;
+  without it WebFetch is denied (a permission prompt it cannot satisfy headless).
+  The prime directive does not block the WebFetch path.
 - **Limit:** Claude has no process-level *network switch* — egress from a subprocess
   is not gated by its permission config. So "no web" means not opening the path, not
   a hard network block. The cache does not attempt the hard block (see *enablement,
@@ -131,10 +132,12 @@ What opening `net` means for each adapter, and the limits found.
 
 ### `cursor-agent`
 
-- **Door:** under the run's `--trust`, the shell/fetch path reaches the network.
-- **Reaches the web:** yes — verified by a shell fetch of the token.
-- **Limit:** as with Claude, no separate network switch; the web is reached through
-  the trusted shell/fetch tools, not a process-level toggle.
+- **Door:** `--force` ("Force allow commands unless explicitly denied"; `--yolo`
+  is its alias). `--trust` (the write door) alone does NOT open the network.
+- **Reaches the web:** yes — verified against the live cursor-agent: `--trust`
+  alone is blocked at the sandbox; `--trust --force` reaches an external fetch.
+- **Limit:** cursor-agent's `sandbox.json` `networkPolicy` is ignored under headless
+  `-p` (an upstream bug), so the door is the `--force` flag, not a config file.
 
 ## How this was validated
 

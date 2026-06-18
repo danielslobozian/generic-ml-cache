@@ -212,3 +212,6 @@ def test_net_grant_keeps_cursor_prompt_trailing(tmp_path):
     argv = _argv(get_adapter("cursor"), tmp_path, grants=("net",))
     assert argv[-1].endswith("P")
     assert "--model" in argv
+    assert "--force" in argv  # the verified cursor net door
+    # ...and --force is not present without the grant
+    assert "--force" not in _argv(get_adapter("cursor"), tmp_path)

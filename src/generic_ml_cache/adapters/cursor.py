@@ -114,16 +114,14 @@ class CursorAdapter(ClientAdapter):
         return ["--trust"]
 
     def network_access_argv(self):
-        # cursor-agent has no process-level network switch. Under the run's
-        # --trust (already applied), the agent's shell/fetch tools are available
-        # and reach the network -- the probes confirmed cursor reaches the web via
-        # a shell fetch under a trusted workspace -- so opening "net" needs no extra
-        # flag here. BEST-EFFORT: that the existing --trust alone (without a tool
-        # allow-list) keeps the network reachable headless is on the live-CLI
-        # verification list. The grant still distinguishes the call in the cassette
-        # key even when it adds no argv. The cache enables, never restricts
-        # (docs/grants.md).
-        return []
+        # cursor-agent's sandbox blocks the network by default, and --trust alone
+        # (the write door) does NOT open it. The headless flag that does is --force
+        # ("Force allow commands unless explicitly denied"; --yolo is just its
+        # alias). Verified against the live cursor-agent: --trust alone is blocked,
+        # --trust --force reaches an external fetch. (Its sandbox.json networkPolicy
+        # is ignored under headless -p -- an upstream bug -- so we don't rely on it.)
+        # The cache enables, never restricts (docs/grants.md).
+        return ["--force"]
 
     def models_argv(self, executable: str) -> Optional[List[str]]:
         return [executable, "--list-models"]

@@ -112,14 +112,12 @@ class ClaudeAdapter(ClientAdapter):
         return ["--permission-mode", "acceptEdits"]
 
     def network_access_argv(self):
-        # Claude has no process-level network switch -- subprocess egress is not
-        # gated by its permission config -- so opening "net" means allowing the web
-        # tools for the run. BEST-EFFORT, not yet verified against the live CLI the
-        # way the write door is: the probes confirmed Claude reaches the web (via a
-        # shell fetch), but the exact --allowedTools spelling for the web tools is
-        # on the live-verification list. "No net" here is the absence of these
-        # tools, not a hard block -- the cache enables, it does not restrict
-        # (docs/grants.md).
+        # Claude has no process-level network switch; "net" allows its web tools.
+        # Verified against the live CLI through the cache: with this grant Claude
+        # fetched an external URL via WebFetch and returned the real result; without
+        # it WebFetch is denied (permission). The prime directive does not block the
+        # WebFetch path. "No net" is the absence of these tools, not a hard block --
+        # the cache enables, it does not restrict (docs/grants.md).
         return ["--allowedTools", "WebSearch", "WebFetch"]
 
 
