@@ -19,8 +19,8 @@ Or from source:
 pip install git+https://github.com/danielslobozian/generic-ml-cache.git
 ```
 
-There are no runtime dependencies; the package is pure standard library. Python
-3.9 or newer is required.
+The only runtime dependency is `argcomplete` (Apache-2.0, for shell completion);
+everything else is standard library. Python 3.9 or newer is required.
 
 ## The mental model in one paragraph
 

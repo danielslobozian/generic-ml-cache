@@ -19,7 +19,7 @@ By participating you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Development setup
 
-You need Python 3.9 or newer. There are no runtime dependencies.
+You need Python 3.9 or newer. The only runtime dependency is `argcomplete` (Apache-2.0).
 
 ```bash
 git clone https://github.com/danielslobozian/generic-ml-cache.git

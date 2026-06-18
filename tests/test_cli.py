@@ -296,3 +296,14 @@ def test_list_json(tmp_path, monkeypatch, capsys):
     models = {c["model"] for c in data["cassettes"]}
     assert models == {"m1", "m2"}
     assert "key" in data["cassettes"][0] and "path" in data["cassettes"][0]
+
+
+def test_main_offers_the_parser_to_argcomplete(monkeypatch):
+    import generic_ml_cache.cli as cli
+
+    if cli.argcomplete is None:
+        pytest.skip("argcomplete not installed")
+    seen = []
+    monkeypatch.setattr(cli.argcomplete, "autocomplete", lambda parser: seen.append(parser))
+    main([])  # a normal run must still work; autocomplete is a no-op here
+    assert len(seen) == 1

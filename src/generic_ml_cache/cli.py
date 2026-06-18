@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
+# PYTHON_ARGCOMPLETE_OK
 """Command-line interface for generic-ml-cache.
 
     gmlcache run     -- resolve a request (record on miss, replay on hit)
@@ -24,6 +25,11 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
+
+try:
+    import argcomplete
+except ImportError:  # completion is a convenience; never let its absence break the CLI
+    argcomplete = None
 
 from . import __version__, config
 from .adapters.registry import registered_names
@@ -899,6 +905,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
+    if argcomplete is not None:
+        # A no-op unless the shell is requesting completions (it sets _ARGCOMPLETE);
+        # in that case it emits candidates and exits, so it never affects normal runs.
+        argcomplete.autocomplete(parser)
     args = parser.parse_args(argv)
     if not hasattr(args, "func"):
         parser.print_help()

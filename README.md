@@ -91,7 +91,17 @@ pip install git+https://github.com/danielslobozian/generic-ml-cache.git
 
 A PyPI release (`pip install generic-ml-cache`) is planned but not yet available.
 
-Requires Python ≥ 3.9. Pure standard library — no runtime dependencies.
+Requires Python ≥ 3.9. The only runtime dependency is `argcomplete` (Apache-2.0), which powers shell completion.
+
+### Shell completion
+
+`gmlcache` completes commands and flags via argcomplete. Activate it once in your shell — for bash, add this to `~/.bashrc`:
+
+```bash
+eval "$(register-python-argcomplete gmlcache)"
+```
+
+zsh and fish work the same way; see the argcomplete docs for their one-liners.
 
 ## Usage
 
