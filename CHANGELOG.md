@@ -9,6 +9,22 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Shell completion** for commands and flags via `argcomplete` (Apache-2.0 — now
+  the one runtime dependency). Activate with `eval "$(register-python-argcomplete gmlcache)"`.
+- **`list`** — a read-only listing of stored cassettes grouped by client/model,
+  each row showing effort, short key, size, and the file path (paste into
+  `inspect`). `--client`/`--model` narrow it; `--json` for programmatic use.
+- **A banner in the help.** A bare `gmlcache` now prints the banner followed by the
+  help and exits `0`, instead of an argparse error; the banner also fronts `-h`.
+  Colour is dropped when output is not a terminal (piped, redirected, or `NO_COLOR`).
+
+### Fixed
+
+- **`inspect` fails legibly** on a missing, unreadable, or malformed cassette — a
+  clean `gmlc:` message and exit `4`, instead of a Python traceback.
+
 ## [0.0.13] - 2026-06-18
 
 ### Added
