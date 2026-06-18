@@ -85,6 +85,30 @@ the recorded behavior but is **not** persisted in the cassette — the cassette
 records what the client *did*, not the instructions it was given. The directive is
 injected ahead of any caller-supplied system prompt so it cannot be overridden.
 
+### Grants open doors, never close them
+
+A *grant* is the cache opening a capability a launched step needs — today the
+network/web door (`run --grant net`). The cache's job here is **enablement, not
+restriction**: it makes a client *able* to do something and never tries to *limit*
+what a client can do. That is a deliberate boundary. The probes behind this feature
+(recorded in [`grants.md`](grants.md)) showed that two of the three clients cannot be
+reliably *confined* by the configuration the cache controls — a denied tool is
+reachable again through the shell, and one client reads workspace files outside any
+permission gate. Chasing an airtight limit the client itself will not honour would be
+a false promise, so the cache does not pretend to be a sandbox. A user who needs hard
+isolation provides it at the layer that can enforce it — a restricted OS user, or a
+container — as they would for any untrusted tool. If a client misbehaves once a door
+is open, that is the client's and the deployment's concern, not the cache's.
+
+A granted web call stays **cacheable**, on the ordinary prompt key, like every other
+call: the web is a source the model consulted while producing the recorded answer,
+not a separate keyed input. The live page is not fingerprinted, so a cassette is "the
+answer as of when it was recorded" — the same way the cache already treats model
+nondeterminism — and `refresh` is how a caller asks for a live re-fetch. (This differs
+from `--allow-path`, which stays non-cacheable by default; that earlier choice targets
+*locally mutated* folders the caller edits between runs, where silent staleness is
+likeliest.)
+
 ### The executable seam
 
 Adapters resolve their executable through one chokepoint: an explicit path is used

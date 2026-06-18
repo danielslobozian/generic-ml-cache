@@ -228,6 +228,21 @@ releases, **one feature per release**.
 
 ### Later
 
+- **`0.0.15` — Grants: the web/network door.** A `run --grant <capability>` flag
+  (repeatable) that opens a declared capability for the launched client — the first
+  being **`net`** (web / network access), with **`web-search`** as a sibling for
+  clients that expose a distinct live-search tool. It extends the write/trust door
+  (0.0.6) from "write inside the run folder" to "reach the network when a step needs
+  a live source." A granted call is cached like any other — on the ordinary prompt
+  key — because choosing the cache is the intent to cache; the web is a source the
+  model consulted, captured in the recorded answer, and `refresh` is the lever for a
+  live re-fetch. Grants are **enablement only**: the cache opens doors, never closes
+  them, and is explicitly not a security boundary. Sub-agent and MCP grants are named
+  but deferred — unproven against the live CLIs. Validated per client against the live
+  tools on 2026-06-18; the per-adapter mechanics, what each can and cannot do, and
+  why, are recorded in [`grants.md`](grants.md). Decide the flag surface and the
+  cassette-key treatment first, then build.
+
 - **Analysis — Codex model discovery.** Today `models` reports "not supported" for
   Codex (no scriptable list). `codex debug models` exposes the account-aware model
   catalogue (mirroring Cursor's `--list-models`), but it is an *experimental*
