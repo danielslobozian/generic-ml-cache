@@ -107,11 +107,15 @@ What opening `net` means for each adapter, and the limits found.
 
 ### `claude` (Claude Code)
 
-- **Door:** allow Claude's web tools (`--allowedTools WebSearch WebFetch`).
-- **Reaches the web:** yes — verified against the live CLI through the cache: with
-  the grant Claude fetched an external URL via WebFetch and returned the real value;
-  without it WebFetch is denied (a permission prompt it cannot satisfy headless).
-  The prime directive does not block the WebFetch path.
+- **Door:** `--dangerously-skip-permissions` (bypasses Claude's permission wall),
+  used in place of the `acceptEdits` write door for a net call.
+- **Reaches the web:** yes, reliably — verified 3/3 against the live CLI. The
+  narrow door (`--allowedTools WebFetch WebSearch`) only managed ~2/3: WebFetch's
+  network stays gated by the permission *mode*, so headless Claude refuses it part
+  of the time ("network access approval ... in the current permission mode").
+- **Note:** the bypass is broad (it covers writes too, which is why it replaces the
+  write door). The cache enables; confining the process is the user's concern
+  (*enablement, not restriction*).
 - **Limit:** Claude has no process-level *network switch* — egress from a subprocess
   is not gated by its permission config. So "no web" means not opening the path, not
   a hard network block. The cache does not attempt the hard block (see *enablement,

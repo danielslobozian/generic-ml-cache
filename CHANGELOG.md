@@ -19,7 +19,8 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   cache opens doors, never closes them, and is not a security boundary (see
   [`docs/grants.md`](docs/grants.md)). Available on `run` and `check`. All three net
   doors are verified against the live CLIs: Codex via its `workspace-write` sandbox
-  network toggle, Claude via its web tools (WebFetch), and Cursor via `--force`
+  network toggle, Claude via `--dangerously-skip-permissions` (the narrow tool-allow
+  proved flaky), and Cursor via `--force`
   (its `--trust` write door alone does not open Cursor's sandboxed network).
 - **`inspect` accepts a short key**, not only a file path: paste the key shown by
   `list` and it's resolved against the store. A path still works; an unknown key

@@ -202,7 +202,8 @@ class ClientAdapter(ABC):
         :meth:`write_access_argv`, splices it inside its own ``build_argv`` (before
         any trailing positional or stdin marker), because some CLIs reject flags
         placed after the prompt. Codex's is a process-level sandbox toggle,
-        Claude's opens its web tools, Cursor's is --force; all three are verified
-        against the live CLIs (see docs/grants.md).
+        Claude's bypasses its permission wall (--dangerously-skip-permissions),
+        Cursor's is --force; all three are verified against the live CLIs (see
+        docs/grants.md).
         """
         return []

@@ -41,9 +41,14 @@ class ClaudeAdapter(ClientAdapter):
         # default rather than passing an empty (and invalid) --effort value.
         if effort:
             argv += ["--effort", effort]
-        argv += self.write_access_argv(run_dir)
+        # Permission posture. Net must bypass Claude's network-approval wall, which
+        # the narrow tool-allow does only ~2/3 of the time (flaky); --dangerously-
+        # skip-permissions opens it reliably (3/3) and subsumes the acceptEdits write
+        # door, so a net call uses it INSTEAD of that door rather than stacking.
         if "net" in grants:
             argv += self.network_access_argv()
+        else:
+            argv += self.write_access_argv(run_dir)
         # JSON output so the call also returns its usage (tokens + Claude's own
         # cost estimate). parse_output lifts the answer text back out of the JSON.
         argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
@@ -112,13 +117,15 @@ class ClaudeAdapter(ClientAdapter):
         return ["--permission-mode", "acceptEdits"]
 
     def network_access_argv(self):
-        # Claude has no process-level network switch; "net" allows its web tools.
-        # Verified against the live CLI through the cache: with this grant Claude
-        # fetched an external URL via WebFetch and returned the real result; without
-        # it WebFetch is denied (permission). The prime directive does not block the
-        # WebFetch path. "No net" is the absence of these tools, not a hard block --
-        # the cache enables, it does not restrict (docs/grants.md).
-        return ["--allowedTools", "WebSearch", "WebFetch"]
+        # Open Claude's network reliably. The narrow door (--allowedTools WebFetch
+        # WebSearch) is flaky: WebFetch's network stays gated by the permission
+        # mode, so headless Claude refuses it ~1/3 of the time ("network access
+        # approval ... in the current permission mode"). --dangerously-skip-
+        # permissions bypasses that wall -- verified 3/3 against the live CLI (the
+        # narrow door measured 2/3). It also covers writes, so build_argv uses it in
+        # place of the acceptEdits write door for a net call. Broad by necessity;
+        # the cache enables and the user owns process confinement (docs/grants.md).
+        return ["--dangerously-skip-permissions"]
 
 
 register(ClaudeAdapter())
