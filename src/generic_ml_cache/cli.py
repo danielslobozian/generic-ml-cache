@@ -83,6 +83,7 @@ def _build_keyed_request(args: argparse.Namespace) -> Request:
         prompt=prompt,
         input_files=input_files,
         allow_paths=allow_paths,
+        client_args=list(getattr(args, "client_arg", None) or []),
     )
 
 
@@ -629,6 +630,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.add_argument(
+        "--client-arg",
+        action="append",
+        dest="client_arg",
+        metavar="ARG",
+        help=(
+            "an extra argument appended verbatim to the client launch -- an escape "
+            "hatch for client features the cache does not model. Part of the key "
+            "(different args = different cassette); only its fingerprint is stored, "
+            "never the raw value. Repeatable; order is significant. Pass a "
+            "dash-leading value with the =form: --client-arg=--flag."
+        ),
+    )
+    run.add_argument(
         "--mode",
         choices=[m.value for m in Mode],
         default=None,
@@ -690,6 +704,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="allow_path",
         metavar="PATH",
         help="a scan folder; declaring any makes the call non-cacheable (repeatable)",
+    )
+    check.add_argument(
+        "--client-arg",
+        action="append",
+        dest="client_arg",
+        metavar="ARG",
+        help="extra arg keyed into the call, to probe a passthrough launch (repeatable)",
     )
     check.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     check.set_defaults(func=_cmd_check)

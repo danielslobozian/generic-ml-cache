@@ -107,3 +107,31 @@ def test_empty_passthrough_leaves_the_command_line_unchanged():
         # cursor's prompt stays the trailing positional with no args
         if isinstance(adapter, CursorAdapter):
             assert _argv(adapter, [])[-1] == "sys\n\nctx\n\nPROMPT"
+
+
+# --- the --client-arg flag flows into the key on both run and check ----------
+
+from generic_ml_cache.cli import main  # noqa: E402
+
+_CLI = ["--client", "fake", "--model", "m", "--effort", "high"]
+# Dash-led values use the =form (--client-arg=--foo), as argparse requires.
+_ARGS_CLI = ["--client-arg=--foo", "--client-arg=bar"]
+
+
+def test_client_arg_keys_run_and_check_identically(capsys):
+    assert main(["run", *_CLI, "--prompt", "STDOUT p", *_ARGS_CLI]) == 0
+    capsys.readouterr()
+    assert main(["check", *_CLI, "--prompt", "STDOUT p", *_ARGS_CLI]) == 0
+    assert "status  : hit" in capsys.readouterr().out
+
+
+def test_passthrough_args_yield_a_distinct_cassette(capsys):
+    assert main(["run", *_CLI, "--prompt", "STDOUT q", "--client-arg=--foo"]) == 0
+    capsys.readouterr()
+    # same prompt, no passthrough -> different key -> miss
+    assert main(["check", *_CLI, "--prompt", "STDOUT q"]) == 0
+    assert "status  : miss" in capsys.readouterr().out
+    # same prompt, different passthrough -> also a miss
+    capsys.readouterr()
+    assert main(["check", *_CLI, "--prompt", "STDOUT q", "--client-arg=--other"]) == 0
+    assert "status  : miss" in capsys.readouterr().out
