@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.13 (alpha)
+## Where we are: 0.0.14 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -187,6 +187,21 @@ Added in 0.0.13:
   places them as late as its CLI still reads them as flags (before the prompt where
   the prompt is a trailing positional). A dash-leading value uses the =form
   (`--client-arg=--flag`).
+
+Added in 0.0.14 (a CLI usability pass — a batch of small items rather than one
+feature):
+
+- **A banner in the help**, shown on `-h` and on a bare `gmlcache`, which now
+  prints help and exits `0` instead of an argparse error. Colour is dropped when
+  output is not a terminal.
+- **`list`** — stored cassettes grouped by client/model, each row showing effort,
+  short key, size, cache-hit count, and the file path; `--client`/`--model`
+  filters and `--json`.
+- **`inspect` fails legibly** on a missing, unreadable, or malformed cassette (a
+  clean message and exit `4`) instead of a Python traceback.
+- **Shell completion** via `argcomplete` (Apache-2.0) — the first runtime
+  dependency, and licence-compatible. Activate with
+  `eval "$(register-python-argcomplete gmlcache)"`.
 
 ## Road to 1.0.0 (the rest of the alpha series)
 
