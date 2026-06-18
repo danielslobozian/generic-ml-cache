@@ -244,10 +244,24 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
-    from .cassette import Cassette
+    from .cassette import Cassette, CassetteFormatError
 
-    text = Path(args.cassette).read_text(encoding="utf-8")
-    cassette = Cassette.from_json(text)
+    path = Path(args.cassette)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print(f"gmlc: no such cassette: {path}", file=sys.stderr)
+        return 4
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"gmlc: cannot read cassette {path}: {exc}", file=sys.stderr)
+        return 4
+
+    try:
+        cassette = Cassette.from_json(text)
+    except CassetteFormatError as exc:
+        print(f"gmlc: not a valid cassette {path}: {exc}", file=sys.stderr)
+        return 4
+
     d = cassette.to_dict()
     print(f"client : {d['client']}")
     print(f"model  : {d['model']}")

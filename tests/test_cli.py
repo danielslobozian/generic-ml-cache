@@ -120,6 +120,32 @@ def test_cli_inspect(tmp_path, monkeypatch, capsys):
     assert "r.txt" in report
 
 
+def test_inspect_missing_file_is_clean(tmp_path, capsys):
+    rc = run_cli(["inspect", str(tmp_path / "does-not-exist.json")])
+    assert rc == 4
+    err = capsys.readouterr().err
+    assert "no such cassette" in err
+    assert "Traceback" not in err
+
+
+def test_inspect_malformed_file_is_clean(tmp_path, capsys):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{ not valid json", encoding="utf-8")
+    rc = run_cli(["inspect", str(bad)])
+    assert rc == 4
+    err = capsys.readouterr().err
+    assert "not a valid cassette" in err
+    assert "Traceback" not in err
+
+
+def test_inspect_directory_is_clean(tmp_path, capsys):
+    d = tmp_path / "a-directory"
+    d.mkdir()
+    rc = run_cli(["inspect", str(d)])
+    assert rc == 4
+    assert "cannot read cassette" in capsys.readouterr().err
+
+
 # --- cross-platform invariants --------------------------------------------
 
 
