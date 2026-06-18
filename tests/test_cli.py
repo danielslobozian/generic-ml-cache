@@ -326,3 +326,34 @@ def test_list_shows_hit_counts(tmp_path, monkeypatch, capsys):
     assert main(["list", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["cassettes"][0]["hits"] == 1
+
+
+def test_inspect_by_short_key(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    run_cli(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            write_directive("k.txt", "hi\n"),
+        ]
+    )
+    capsys.readouterr()
+    main(["list", "--json"])
+    short_key = json.loads(capsys.readouterr().out)["cassettes"][0]["key"][:12]
+
+    capsys.readouterr()
+    rc = main(["inspect", short_key])  # short key alone is enough
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "client : fake" in out
+    assert "model  : m1" in out

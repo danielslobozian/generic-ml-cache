@@ -253,12 +253,43 @@ def _cmd_check(args: argparse.Namespace) -> int:
 def _cmd_inspect(args: argparse.Namespace) -> int:
     from .cassette import Cassette, CassetteFormatError
 
-    path = Path(args.cassette)
+    arg = args.cassette
+    path = Path(arg)
+    if path.exists():
+        if not path.is_file():
+            print(f"gmlc: cannot read cassette {path}: not a regular file", file=sys.stderr)
+            return 4
+    else:
+        # Not a filesystem path -> treat it as a (short) key and resolve it against
+        # the store, so the short key shown by `list` is enough to inspect.
+        try:
+            settings = config.resolve_settings(config.load())
+        except ConfigError as exc:
+            print(f"gmlc: {exc}", file=sys.stderr)
+            return 4
+        root = CassetteStore(Path(str(settings["store"][0]))).root
+        matches = (
+            sorted(p for p in root.glob("*.json") if p.stem.startswith(arg))
+            if root.exists()
+            else []
+        )
+        if not matches:
+            print(
+                f"gmlc: no such cassette: {arg} (not a file, and no key matches)", file=sys.stderr
+            )
+            return 4
+        if len(matches) > 1:
+            print(
+                f"gmlc: key {arg!r} is ambiguous — matches {len(matches)} cassettes:",
+                file=sys.stderr,
+            )
+            for m in matches:
+                print(f"  {m.stem}", file=sys.stderr)
+            return 4
+        path = matches[0]
+
     try:
         text = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        print(f"gmlc: no such cassette: {path}", file=sys.stderr)
-        return 4
     except (OSError, UnicodeDecodeError) as exc:
         print(f"gmlc: cannot read cassette {path}: {exc}", file=sys.stderr)
         return 4
@@ -801,8 +832,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.set_defaults(func=_cmd_run)
 
-    inspect = sub.add_parser("inspect", help="pretty-print a cassette")
-    inspect.add_argument("cassette", help="path to a cassette JSON file")
+    inspect = sub.add_parser("inspect", help="pretty-print a cassette (by file path or short key)")
+    inspect.add_argument(
+        "cassette", help="a cassette file path, or a (short) key as shown by `list`"
+    )
     inspect.add_argument(
         "--raw",
         action="store_true",

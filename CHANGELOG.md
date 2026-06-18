@@ -9,6 +9,12 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **`inspect` accepts a short key**, not only a file path: paste the key shown by
+  `list` and it's resolved against the store. A path still works; an unknown key
+  fails cleanly, and an ambiguous prefix lists the candidates.
+
 ## [0.0.14] - 2026-06-18
 
 ### Added
