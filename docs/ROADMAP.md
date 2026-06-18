@@ -241,10 +241,12 @@ releases, **one feature per release**.
 
 ### Later
 
-- **Grants — remaining capabilities.** `net` shipped in 0.0.15 (above). Still
-  deferred: **`web-search`** (a distinct live-search tool on clients that expose
-  one) and **sub-agent / MCP** grants — all unproven against the live CLIs, to be
-  validated the same way (a real effect, per client) before they land.
+- **Grants — remaining capabilities.** `net`, `read`, `write`, `shell`, and
+  `web-search` now ship via the uniform config-file mechanism (0.0.16), each
+  validated by a real effect against the live CLIs. Still deferred: **sub-agent**
+  and **MCP** grants — unproven against the live CLIs (they need a spawnable
+  sub-agent task and a live MCP server), to be validated the same way before they
+  land.
 
 - **Analysis — Codex model discovery.** Today `models` reports "not supported" for
   Codex (no scriptable list). `codex debug models` exposes the account-aware model

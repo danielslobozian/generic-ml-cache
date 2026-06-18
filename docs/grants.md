@@ -7,8 +7,37 @@ what it deliberately does **not** try to do.
 
 A *grant* is a door the cache opens for the client it launches, so the client can do
 something a step requires that it otherwise cannot do headless. You ask for one with
-`run --grant <capability>` (repeatable). The first grant is **`net`** — web /
-network access.
+`run --grant <capability>` (repeatable). The capabilities are **`net`**, **`read`**,
+**`write`**, **`shell`**, and **`web-search`** — the common set across all three
+clients.
+
+## How a grant is opened (v0.0.16): one uniform mechanism — the config file
+
+A grant is **not** an argv flag. For every client, the cache writes that client's own
+configuration file into a private config **home** and points the client's home
+variable at it for the run:
+
+- `claude` → `CLAUDE_CONFIG_DIR` → `settings.json` (`permissions.allow` + `defaultMode`)
+- `codex` → `CODEX_HOME` → `config.toml` (`sandbox_mode`, `network_access`, `web_search`)
+- `cursor` → `CURSOR_CONFIG_DIR` → `cli-config.json` (`permissions.allow`)
+
+Why a redirected home rather than a file in the run folder: only Claude honours a
+folder-local config, and even there it sits below a project file; Codex skips
+project config in an untrusted temp dir; Cursor's project permissions were stripped
+by a security fix. Redirecting the home is the one shape that works for all three.
+The home is a **separate** folder from the run directory, so the settings file and any
+seeded credentials are never snapshotted into a cassette and vanish with the run.
+Credentials are seeded into the home as each client needs (Codex `auth.json`, Claude
+`~/.claude` creds; Cursor finds its own). Validated 2026-06-18 against the live CLIs.
+
+Run-folder **write** is always on — the client cannot produce output otherwise (the
+record-path guarantee) — and the named grants open capability beyond it. Two honest
+limits, consistent with *enablement, not restriction*: Codex exposes no file-level
+*deny* for read or shell, and Cursor none for read; the cache opens, it does not try
+to close those. And Cursor's external network egress is not file-addressable under
+headless `--print` (its `sandbox.json` is ignored — upstream bug), so `net` for Cursor
+keeps `--force` as a forced transport flag. The per-adapter sections below record the
+live-CLI verification behind each setting.
 
 ## Enablement, not restriction (and not a security boundary)
 

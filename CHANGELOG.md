@@ -9,6 +9,28 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **Grants are now opened by a config file, not a flag — one uniform mechanism for
+  all three clients.** The cache writes each client's own configuration into a
+  redirected config home (`CLAUDE_CONFIG_DIR` → `settings.json`, `CODEX_HOME` →
+  `config.toml`, `CURSOR_CONFIG_DIR` → `cli-config.json`), seeding credentials, and
+  runs the client with that home. This replaces the 0.0.15 per-client net doors
+  (Claude inline `--settings`, Codex `-c network_access`, Cursor `--force`-only).
+  The home is separate from the run folder, so the settings file and seeded
+  credentials never enter a cassette.
+
+### Added
+
+- **Grants now cover five capabilities** — `net`, `read`, `write`, `shell`,
+  `web-search` — on `run` and `check`, each keyed into the call (its own cassette)
+  and cacheable. Run-folder write stays on by default; the named grants open
+  capability beyond it. Enablement only: Codex has no file-level deny for read/shell
+  and Cursor none for read (documented limits, not doors the cache closes); Cursor's
+  external network egress keeps `--force` as a forced transport flag. `--grant` on
+  the CLI now lists all five values in `--help`. Validated 2026-06-18 against the
+  live CLIs; see [`docs/grants.md`](docs/grants.md).
+
 ## [0.0.15] - 2026-06-18
 
 ### Added
