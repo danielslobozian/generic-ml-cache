@@ -307,3 +307,22 @@ def test_main_offers_the_parser_to_argcomplete(monkeypatch):
     monkeypatch.setattr(cli.argcomplete, "autocomplete", lambda parser: seen.append(parser))
     main([])  # a normal run must still work; autocomplete is a no-op here
     assert len(seen) == 1
+
+
+def test_list_shows_hit_counts(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    prompt = write_directive("h.txt", "hi\n")
+    run_cli(["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", prompt])
+    run_cli(["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", prompt])
+    capsys.readouterr()
+
+    assert main(["list"]) == 0
+    assert "hits:1" in capsys.readouterr().out
+
+    assert main(["list", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["cassettes"][0]["hits"] == 1

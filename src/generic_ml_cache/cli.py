@@ -614,6 +614,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
     store = CassetteStore(Path(str(settings["store"][0])))
     root = store.root
+    hit_counts = store.registry.hit_counts_by_key()
 
     # One entry per cassette; a corrupt or unreadable file is skipped, not fatal.
     entries: List[dict] = []
@@ -634,6 +635,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
                     "model": cassette.model,
                     "effort": cassette.effort,
                     "key": cassette.match_key,
+                    "hits": hit_counts.get(cassette.match_key, 0),
                     "bytes": size,
                     "path": str(path),
                 }
@@ -660,7 +662,10 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(f"\n{client} / {model}  ({len(items)} · {_human_size(total)})")
         for i in sorted(items, key=lambda x: x["bytes"], reverse=True):
             effort = i["effort"] or "-"
-            print(f"  {effort:<6} {i['key'][:12]}  {_human_size(i['bytes']):>9}  {i['path']}")
+            print(
+                f"  {effort:<6} {i['key'][:12]}  {_human_size(i['bytes']):>9}  "
+                f"hits:{i['hits']:<4} {i['path']}"
+            )
     return 0
 
 
