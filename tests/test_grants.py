@@ -65,3 +65,18 @@ def test_grant_yields_a_distinct_cassette(capsys):
 def test_unknown_grant_is_rejected():
     with pytest.raises(SystemExit):
         main(["run", *_CLI, "--prompt", "STDOUT z", "--grant", "bogus"])
+
+
+def test_all_five_capabilities_are_accepted_and_key_distinctly():
+    # The five-capability vocabulary the adapters implement, each its own cassette.
+    caps = ["net", "read", "write", "shell", "web-search"]
+    keys = {c: _key(_req(grants=[c])) for c in caps}
+    assert len(set(keys.values())) == len(caps)  # all distinct
+    assert all(k != _key(_req()) for k in keys.values())  # all differ from no-grant
+
+
+def test_web_search_grant_runs_via_cli(capsys):
+    assert main(["run", *_CLI, "--prompt", "STDOUT w", "--grant", "web-search"]) == 0
+    capsys.readouterr()
+    assert main(["check", *_CLI, "--prompt", "STDOUT w", "--grant", "web-search"]) == 0
+    assert "status  : hit" in capsys.readouterr().out

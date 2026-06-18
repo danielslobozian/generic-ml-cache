@@ -10,6 +10,8 @@ lets you point at any binary.
 from __future__ import annotations
 
 import json
+import shutil
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..usage import ParsedOutput, Usage, int_or_none
@@ -32,10 +34,21 @@ class CodexAdapter(ClientAdapter):
         client_args=(),
         grants=(),
     ) -> List[str]:
-        argv = [executable, "exec", "--json", *self.write_access_argv(run_dir)]
-        if "net" in grants:
-            argv += self.network_access_argv()
-        argv += ["--model", model]
+        # Capability doors (sandbox write, network, web-search) now live in
+        # $CODEX_HOME/config.toml written by grant_setup -- not in argv. build_argv
+        # carries only transport: the exec subcommand, JSON events, the no-git-repo
+        # escape and the cwd fence, model + effort, the system prompt, passthrough,
+        # and the trailing stdin marker.
+        argv = [
+            executable,
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "-C",
+            str(run_dir),
+            "--model",
+            model,
+        ]
         # Effort is optional: when omitted, leave model_reasoning_effort unset so
         # Codex uses the model's own default instead of an empty override.
         if effort:
@@ -105,22 +118,26 @@ class CodexAdapter(ClientAdapter):
             )
         return ParsedOutput(text=answer, usage=usage)
 
-    def write_access_argv(self, run_dir):
-        # The isolated run folder is not a git repo, so codex refuses to run
-        # ("Not inside a trusted directory") without --skip-git-repo-check; and
-        # the default read-only sandbox lets it run but never write. workspace-write
-        # makes the run folder writable (its writable set already includes the cwd
-        # and /tmp); -C pins that folder as the explicit write fence. Reads outside
-        # are unaffected. Verified against codex exec on the live CLI.
-        return ["--skip-git-repo-check", "--sandbox", "workspace-write", "-C", str(run_dir)]
-
-    def network_access_argv(self):
-        # Open the network inside the workspace-write sandbox the run already uses.
-        # Codex leaves it off by default; this flips network_access on for this run
-        # only. The probes confirmed the toggle gates the network at the process
-        # level (off = an outbound fetch is blocked, on = it reaches) -- the one
-        # leak-proof network door of the three clients. The -c override mirrors how
-        # this adapter already sets model_reasoning_effort, and is verified against
-        # the live CLI through the cache (grant on -> an external fetch reaches;
-        # off -> blocked at the sandbox).
-        return ["-c", "sandbox_workspace_write.network_access=true"]
+    def grant_setup(self, run_dir, config_home, grants):
+        # Uniform door: write $CODEX_HOME/config.toml so the FILE enables
+        # capabilities. The run folder is untrusted (a fresh temp dir), so a
+        # folder-local .codex/config.toml would be skipped -- we redirect the home
+        # instead and seed auth.json into it. workspace-write is always on (the
+        # record-path guarantee); it already permits read + shell, so granting
+        # those needs nothing extra (Codex exposes no file-level read/shell *deny*
+        # -- a documented limit, not a door we close). net flips network_access on;
+        # web-search sets web_search=live. The cache enables (docs/grants.md).
+        lines = ['approval_policy = "never"', 'sandbox_mode = "workspace-write"']
+        if "web-search" in grants:
+            lines.append('web_search = "live"')
+        if "net" in grants:
+            lines += ["[sandbox_workspace_write]", "network_access = true"]
+        config_home.mkdir(parents=True, exist_ok=True)
+        (config_home / "config.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        auth = Path.home() / ".codex" / "auth.json"
+        if auth.is_file():
+            try:
+                shutil.copy2(auth, config_home / "auth.json")
+            except OSError:
+                pass  # best-effort; an env API key still authenticates the run
+        return {"CODEX_HOME": str(config_home)}

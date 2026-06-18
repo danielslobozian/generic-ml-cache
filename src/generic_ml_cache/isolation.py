@@ -126,7 +126,11 @@ def _check_command_line_size(argv: List[str]) -> None:
 
 
 def _run_client(
-    argv: List[str], cwd: Path, stdin_payload: Optional[str], timeout: float | None
+    argv: List[str],
+    cwd: Path,
+    stdin_payload: Optional[str],
+    timeout: float | None,
+    env: Optional[dict] = None,
 ) -> tuple[str, str, int]:
     """Launch the client in its own process group and wait, while honoring a stop
     signal from the caller (the workflow engine, DESIGN cross-app clean stop).
@@ -152,6 +156,7 @@ def _run_client(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        env=env,
         **group_kwargs,
     )
 
@@ -215,8 +220,16 @@ def record_real_call(
     """
     system_prompt = build_system_prompt(user_system_prompt, allowed_read_paths)
 
-    with tempfile.TemporaryDirectory(prefix="gmlc-run-") as tmp:
+    with (
+        tempfile.TemporaryDirectory(prefix="gmlc-run-") as tmp,
+        tempfile.TemporaryDirectory(prefix="gmlc-home-") as home_tmp,
+    ):
         run_dir = Path(tmp)
+        # The config home is a SEPARATE folder from run_dir, so the settings file
+        # and any seeded credentials are never snapshotted into the cassette and
+        # are deleted with the run. Capabilities are enabled by the file written
+        # here, not by argv flags (v0.0.16; see docs/grants.md).
+        config_home = Path(home_tmp)
         adapter.prepare(run_dir, context, prompt, system_prompt)
         baseline = _snapshot(run_dir)
 
@@ -232,6 +245,13 @@ def record_real_call(
             grants or [],
         )
         argv += adapter.read_access_argv(add_dir_paths or [])
+        # Forced operational flags a client requires for a grant its file cannot
+        # express (Cursor's --force for external network egress).
+        argv += adapter.grant_argv(grants or [])
+        # Render the client's config file into the redirected home and collect the
+        # env (e.g. CODEX_HOME/CLAUDE_CONFIG_DIR/CURSOR_CONFIG_DIR) the run needs.
+        grant_env = adapter.grant_setup(run_dir, config_home, grants or [])
+        run_env = {**os.environ, **grant_env} if grant_env else None
         stdin_payload = adapter.stdin_payload(context, prompt, system_prompt)
 
         # Fail legibly before the OS rejects an oversize command line (only a client
@@ -240,7 +260,7 @@ def record_real_call(
 
         # A stop signal here raises RunInterrupted, unwinding before any capture or
         # cassette write -- an interrupted call leaves no half-written record.
-        stdout, stderr, returncode = _run_client(argv, run_dir, stdin_payload, timeout)
+        stdout, stderr, returncode = _run_client(argv, run_dir, stdin_payload, timeout, run_env)
 
         files = _capture_changes(run_dir, baseline)
 

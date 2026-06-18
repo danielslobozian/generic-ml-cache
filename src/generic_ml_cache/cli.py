@@ -32,10 +32,22 @@ except ImportError:  # completion is a convenience; never let its absence break 
     argcomplete = None
 
 from . import __version__, config
+from .adapters.base import ClientAdapter
 from .adapters.registry import registered_names
 from .cache import Mode, Request, apply_response, resolve
 from .errors import CacheError, CacheMiss, ConfigError, RunInterrupted
 from .store import CassetteStore
+
+#: capabilities a caller may open with --grant, sourced from the adapter seam so
+#: the CLI choices, the help, and what the adapters implement can never drift.
+GRANT_CHOICES: List[str] = list(ClientAdapter.GRANTS)
+_GRANT_HELP = (
+    "open a capability for the client -- enablement, not restriction. One of "
+    "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "
+    "widen file and command access, web-search enables the search tool. Part of "
+    "the key (a granted call is its own cassette) and cacheable like any call; use "
+    "--force for a live re-fetch. Repeatable."
+)
 
 
 def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str:
@@ -812,14 +824,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--grant",
         action="append",
         dest="grant",
-        choices=["net"],
-        metavar="CAPABILITY",
-        help=(
-            "open a capability for the client -- enablement, not restriction. "
-            "'net' lets the client reach the web. Part of the key (a granted call "
-            "is its own cassette) and cacheable like any call; use --force for a "
-            "live re-fetch. Repeatable."
-        ),
+        choices=GRANT_CHOICES,
+        help=_GRANT_HELP,
     )
     run.add_argument(
         "--mode",
@@ -897,9 +903,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--grant",
         action="append",
         dest="grant",
-        choices=["net"],
-        metavar="CAPABILITY",
-        help="open a capability (e.g. net), keyed into the call, to probe a granted launch (repeatable)",
+        choices=GRANT_CHOICES,
+        help="open a capability (net/read/write/shell/web-search), keyed into the call, to probe a granted launch (repeatable)",
     )
     check.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     check.set_defaults(func=_cmd_check)

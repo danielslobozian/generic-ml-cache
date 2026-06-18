@@ -9,6 +9,8 @@ with the seam and adjust here if the CLI changes.
 from __future__ import annotations
 
 import json
+import shutil
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..usage import ParsedOutput, Usage, float_or_none, int_or_none
@@ -36,16 +38,15 @@ class ClaudeAdapter(ClientAdapter):
         # as an argv argument, so an arbitrarily large prompt cannot hit the OS
         # single-argument size limit. With -p/--print and no prompt argument,
         # Claude reads the prompt from stdin.
+        # Capability doors (write/read/shell/net/web-search) now live in a config
+        # FILE written by grant_setup into CLAUDE_CONFIG_DIR -- not in argv.
+        # build_argv carries only transport: print mode, model, effort, the system
+        # prompt, JSON output (so usage comes back), and the verbatim passthrough.
         argv = [executable, "-p", "--model", model]
         # Effort is optional: when omitted, let Claude apply its own per-model
         # default rather than passing an empty (and invalid) --effort value.
         if effort:
             argv += ["--effort", effort]
-        # The write door (acceptEdits) is always on; a net grant ADDS a surgical
-        # web-tool allow-list (see network_access_argv), it does not replace it.
-        argv += self.write_access_argv(run_dir)
-        if "net" in grants:
-            argv += self.network_access_argv()
         # JSON output so the call also returns its usage (tokens + Claude's own
         # cost estimate). parse_output lifts the answer text back out of the JSON.
         argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
@@ -105,24 +106,52 @@ class ClaudeAdapter(ClientAdapter):
             argv += ["--add-dir", p]
         return argv
 
-    def write_access_argv(self, run_dir):
-        # Headless Claude pauses on a write-permission prompt and only narrates
-        # the file. acceptEdits auto-approves edits/writes (the run folder is the
-        # cwd); it does NOT grant reads outside the folder. Verified to flip a
-        # file-producing call from narrate-only to a real write; the broader
-        # --dangerously-skip-permissions is unnecessary here.
-        return ["--permission-mode", "acceptEdits"]
-
-    def network_access_argv(self):
-        # Open Claude's network surgically: allow-list the web tools via a settings
-        # file. The CLI --allowedTools flag was flaky (~2/3 -- WebFetch's network
-        # stayed gated by the permission mode); settings permissions.allow is
-        # authoritative and reached 3/3 against the live CLI (a --dangerously-skip-
-        # permissions sledgehammer was NOT needed). --settings takes the JSON inline,
-        # so there is no file to manage, and the acceptEdits write door is unaffected
-        # -- this only adds the web grant. The cache enables (docs/grants.md).
-        allow = json.dumps({"permissions": {"allow": ["WebFetch", "WebSearch"]}})
-        return ["--settings", allow]
+    def grant_setup(self, run_dir, config_home, grants):
+        # Uniform door: write settings.json into a redirected CLAUDE_CONFIG_DIR so
+        # the FILE (not a flag) enables capabilities. Verified against the live CLI:
+        # the redirected home governs because the run folder is clean of a project
+        # .claude/ that would outrank it. acceptEdits + Write/Edit are always on so
+        # a file-producing call actually writes (the record-path guarantee); each
+        # named grant ADDS its allow-token. The cache enables; it never closes
+        # (docs/grants.md).
+        allow = ["Write(**)", "Edit(**)"]
+        if "read" in grants:
+            allow.append("Read(**)")
+        if "shell" in grants:
+            allow.append("Bash(**)")
+        if "net" in grants:
+            allow.append("WebFetch")
+        if "web-search" in grants:
+            allow.append("WebSearch")
+        settings = {"permissions": {"allow": allow}, "defaultMode": "acceptEdits"}
+        config_home.mkdir(parents=True, exist_ok=True)
+        (config_home / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        # Seed credentials so the relocated home is authenticated. Subscription
+        # login lives in ~/.claude; an API key in the env carries over on its own.
+        # Bulk caches (projects/history/todos/shell-snapshots) are skipped; a stray
+        # settings.local.json would outrank ours, so it is dropped.
+        src = Path.home() / ".claude"
+        if src.is_dir():
+            skip = {
+                "projects",
+                "history",
+                "todos",
+                "shell-snapshots",
+                "settings.json",
+                "settings.local.json",
+            }
+            for child in src.iterdir():
+                if child.name in skip:
+                    continue
+                dest = config_home / child.name
+                try:
+                    if child.is_dir():
+                        shutil.copytree(child, dest, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(child, dest)
+                except OSError:
+                    pass  # best-effort seeding; an env API key still authenticates
+        return {"CLAUDE_CONFIG_DIR": str(config_home)}
 
 
 register(ClaudeAdapter())

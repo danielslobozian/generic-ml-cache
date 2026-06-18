@@ -60,83 +60,20 @@ def test_resolve_executable_missing_path_raises():
 
 def test_resolve_executable_found_on_path():
     adapter = get_adapter("claude")
-    # Pass a bare name (no separator) that exists on PATH -> exercises the
-    # shutil.which branch without mutating the shared adapter.
     name = "python" if sys.platform == "win32" else "sh"
-    path = adapter.resolve_executable(name)
-    assert path
+    assert adapter.resolve_executable(name)
 
 
 def test_unknown_executable_name_raises():
-    adapter = get_adapter("claude")  # default_executable "claude" not installed
+    adapter = get_adapter("claude")
     with pytest.raises(ClientNotFound):
         adapter.resolve_executable("definitely-not-a-real-binary-xyz")
-
-
-# --- write/trust door (v0.0.6 record-path fix) -----------------------------
-
-EXPECTED_WRITE_GRANT = {
-    "claude": ["--permission-mode", "acceptEdits"],
-    "codex": ["--skip-git-repo-check", "--sandbox", "workspace-write"],
-    "cursor": ["--trust"],
-}
-
-
-@pytest.mark.parametrize("client", ["claude", "codex", "cursor"])
-def test_write_access_argv_opens_write_door(client, tmp_path):
-    grant = get_adapter(client).write_access_argv(tmp_path)
-    for token in EXPECTED_WRITE_GRANT[client]:
-        assert token in grant
-
-
-@pytest.mark.parametrize("client", ["claude", "codex", "cursor"])
-def test_build_argv_includes_write_grant(client, tmp_path):
-    argv = get_adapter(client).build_argv(
-        executable="/usr/bin/" + client,
-        run_dir=tmp_path,
-        model="m-x",
-        effort="",
-        context="CTX",
-        prompt="PROMPT",
-        system_prompt=PRIME_DIRECTIVE,
-    )
-    for token in EXPECTED_WRITE_GRANT[client]:
-        assert token in argv
-
-
-def test_write_grant_precedes_stdin_placeholder_codex(tmp_path):
-    # codex exec reads the prompt from stdin via a trailing "-" placeholder; the
-    # write flags must sit before it or the CLI parser rejects flags after the
-    # positional. (cursor no longer has any trailing positional -- prompt on stdin.)
-    argv = get_adapter("codex").build_argv(
-        executable="/usr/bin/codex",
-        run_dir=tmp_path,
-        model="m-x",
-        effort="",
-        context="",
-        prompt="PROMPT",
-        system_prompt=PRIME_DIRECTIVE,
-    )
-    assert argv[-1] == "-"  # stdin placeholder is the trailing positional
-    assert argv.index(EXPECTED_WRITE_GRANT["codex"][0]) < len(argv) - 1
-
-
-def test_codex_write_grant_pins_run_dir_as_fence(tmp_path):
-    grant = get_adapter("codex").write_access_argv(tmp_path)
-    assert "-C" in grant
-    assert str(tmp_path) in grant
-
-
-def test_base_write_access_argv_defaults_empty(tmp_path):
-    # The fake adapter does not override the seam, so the base default applies.
-    assert get_adapter("fake").write_access_argv(tmp_path) == []
 
 
 # --- cursor delivers the directive via the prompt (no system-prompt flag) ----
 
 
 def test_cursor_has_no_system_prompt_flag(tmp_path):
-    # Current cursor-agent removed --system-prompt; the adapter must not emit it.
     argv = get_adapter("cursor").build_argv(
         executable="/usr/bin/cursor-agent",
         run_dir=tmp_path,
@@ -150,9 +87,6 @@ def test_cursor_has_no_system_prompt_flag(tmp_path):
 
 
 def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
-    # No system-prompt channel and no stdin path -> the directive rides in the
-    # positional prompt argument (delivery-level only; the Request/key are
-    # untouched, tested via cache keying).
     adapter = get_adapter("cursor")
     argv = adapter.build_argv(
         executable="/usr/bin/cursor-agent",
@@ -170,6 +104,18 @@ def test_cursor_directive_is_folded_into_the_prompt(tmp_path):
     assert adapter.stdin_payload("CTX", "PROMPT", PRIME_DIRECTIVE) is None
 
 
+# --- transport stays in argv; capability doors moved to the config file ------
+
+# Flags each adapter still needs in argv just to run head-less and write into its
+# own run folder. Capability gating (read/write/shell/net/web-search) is NOT in
+# argv any more -- it lives in the config file rendered by grant_setup.
+_TRANSPORT = {
+    "claude": [],  # acceptEdits moved into settings.json defaultMode
+    "codex": ["--skip-git-repo-check"],  # plus -C <run_dir>, checked separately
+    "cursor": ["--trust"],  # workspace-trust acceptance (transport, not a capability)
+}
+
+
 def _argv(adapter, tmp_path, grants=()):
     return adapter.build_argv(
         executable="/usr/bin/x",
@@ -185,38 +131,102 @@ def _argv(adapter, tmp_path, grants=()):
 
 
 @pytest.mark.parametrize("client", ["claude", "codex", "cursor"])
-def test_no_grant_emits_no_network_door(client, tmp_path):
-    # Without a net grant, no adapter opens any network flag (default behaviour
-    # is unchanged): the grant is purely additive.
-    joined = " ".join(_argv(get_adapter(client), tmp_path))
-    assert "network_access" not in joined
-    assert "WebFetch" not in joined and "WebSearch" not in joined
+def test_build_argv_carries_transport_not_capability_flags(client, tmp_path):
+    argv = _argv(get_adapter(client), tmp_path)
+    joined = " ".join(argv)
+    for token in _TRANSPORT[client]:
+        assert token in argv
+    # No capability door may leak into argv any more -- they live in the file.
+    for leak in (
+        "acceptEdits",
+        "--settings",
+        "--sandbox",
+        "network_access",
+        "WebFetch",
+        "WebSearch",
+        "--force",
+        "--dangerously-skip-permissions",
+    ):
+        assert leak not in joined
 
 
-def test_net_grant_opens_codex_network(tmp_path):
-    # Codex's net door is the one process-level toggle: granting net flips
-    # network_access on inside the workspace-write sandbox.
-    joined = " ".join(_argv(get_adapter("codex"), tmp_path, grants=("net",)))
-    assert "sandbox_workspace_write.network_access=true" in joined
+def test_codex_pins_run_dir_as_write_fence(tmp_path):
+    argv = _argv(get_adapter("codex"), tmp_path)
+    assert "-C" in argv
+    assert str(tmp_path) in argv
+    assert argv[-1] == "-"  # stdin placeholder stays the trailing positional
 
 
-def test_net_grant_opens_claude_network(tmp_path):
-    # Claude's net door allow-lists the web tools via a settings file (surgical),
-    # added alongside the acceptEdits write door -- not the skip-permissions hammer.
-    with_net = " ".join(_argv(get_adapter("claude"), tmp_path, grants=("net",)))
-    assert "--settings" in with_net and "WebFetch" in with_net
-    assert "acceptEdits" in with_net  # the write door stays
-    assert "--dangerously-skip-permissions" not in with_net
-    # ...and no web allow-list without the grant
-    assert "WebFetch" not in " ".join(_argv(get_adapter("claude"), tmp_path))
+# --- the uniform grant door: a config FILE in a redirected home --------------
 
 
-def test_net_grant_keeps_cursor_prompt_trailing(tmp_path):
-    # cursor-agent reads the prompt as the trailing positional; a grant must never
-    # land after it (or it would be read as prompt text).
-    argv = _argv(get_adapter("cursor"), tmp_path, grants=("net",))
-    assert argv[-1].endswith("P")
-    assert "--model" in argv
-    assert "--force" in argv  # the verified cursor net door
-    # ...and --force is not present without the grant
-    assert "--force" not in _argv(get_adapter("cursor"), tmp_path)
+def _grant(client, tmp_path, grants):
+    adapter = get_adapter(client)
+    home = tmp_path / "home"
+    env = adapter.grant_setup(tmp_path / "run", home, grants)
+    return adapter, home, env
+
+
+def test_grant_setup_redirects_each_clients_home(tmp_path):
+    cases = {
+        "claude": ("CLAUDE_CONFIG_DIR", "settings.json"),
+        "codex": ("CODEX_HOME", "config.toml"),
+        "cursor": ("CURSOR_CONFIG_DIR", "cli-config.json"),
+    }
+    for client, (var, fname) in cases.items():
+        _, home, env = _grant(client, tmp_path / client, ())
+        assert env.get(var) == str(home)
+        assert (home / fname).is_file()
+
+
+def test_write_is_always_on_in_the_file(tmp_path):
+    # The record-path guarantee: a file-producing call must write even with no
+    # grants. Each client's default file opens its own run-folder write.
+    _, home, _ = _grant("claude", tmp_path / "c", ())
+    assert "Write(**)" in (home / "settings.json").read_text()
+    _, home, _ = _grant("codex", tmp_path / "x", ())
+    assert "workspace-write" in (home / "config.toml").read_text()
+    _, home, _ = _grant("cursor", tmp_path / "u", ())
+    assert "Write(**)" in (home / "cli-config.json").read_text()
+
+
+def test_net_grant_opens_each_client_in_the_file(tmp_path):
+    _, home, _ = _grant("claude", tmp_path / "c", ("net",))
+    assert "WebFetch" in (home / "settings.json").read_text()
+    _, home, _ = _grant("codex", tmp_path / "x", ("net",))
+    assert "network_access = true" in (home / "config.toml").read_text()
+    # cursor: shell allowed in the file; external egress forced via grant_argv.
+    adapter, home, _ = _grant("cursor", tmp_path / "u", ("net",))
+    assert "Shell(**)" in (home / "cli-config.json").read_text()
+    assert adapter.grant_argv(("net",)) == ["--force"]
+
+
+def test_web_search_grant_in_the_file(tmp_path):
+    _, home, _ = _grant("claude", tmp_path / "c", ("web-search",))
+    assert "WebSearch" in (home / "settings.json").read_text()
+    _, home, _ = _grant("codex", tmp_path / "x", ("web-search",))
+    assert 'web_search = "live"' in (home / "config.toml").read_text()
+
+
+def test_read_and_shell_grants_open_in_the_file(tmp_path):
+    _, home, _ = _grant("claude", tmp_path / "c", ("read", "shell"))
+    text = (home / "settings.json").read_text()
+    assert "Read(**)" in text and "Bash(**)" in text
+    _, home, _ = _grant("cursor", tmp_path / "u", ("read", "shell"))
+    text = (home / "cli-config.json").read_text()
+    assert "Read(**)" in text and "Shell(**)" in text
+
+
+def test_no_grant_opens_no_capability_in_the_file(tmp_path):
+    # Additive: without grants, nothing beyond the always-on write appears.
+    _, home, _ = _grant("claude", tmp_path / "c", ())
+    text = (home / "settings.json").read_text()
+    assert "WebFetch" not in text and "WebSearch" not in text and "Bash(**)" not in text
+    _, home, _ = _grant("codex", tmp_path / "x", ())
+    assert "network_access" not in (home / "config.toml").read_text()
+    assert get_adapter("cursor").grant_argv(()) == []
+
+
+def test_base_grant_setup_defaults_empty(tmp_path):
+    # The fake adapter does not override the seam -> base default: no env, no file.
+    assert get_adapter("fake").grant_setup(tmp_path, tmp_path / "h", ("net",)) == {}

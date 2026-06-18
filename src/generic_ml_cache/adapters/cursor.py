@@ -55,11 +55,15 @@ class CursorAdapter(ClientAdapter):
         # with no effort (preferred), or a base id plus an effort to append. Do not
         # pass both, or the effort is duplicated.
         model_id = f"{model}-{effort}" if effort else model
-        net = self.network_access_argv() if "net" in grants else []
+        # Capability doors (read/write/shell/web-search) now live in
+        # $CURSOR_CONFIG_DIR/cli-config.json written by grant_setup. --trust stays
+        # here: it is workspace-trust transport (accept the ephemeral run folder),
+        # not a capability. The net grant's external-egress flag (--force) is added
+        # by grant_argv, because Cursor's sandbox network is not file-addressable
+        # headless -- see grant_argv.
         return [
             executable,
             *self.write_access_argv(run_dir),
-            *net,
             "--model",
             model_id,
             "--print",
@@ -113,15 +117,41 @@ class CursorAdapter(ClientAdapter):
         # Verified against cursor-agent --print on the live CLI.
         return ["--trust"]
 
-    def network_access_argv(self):
-        # cursor-agent's sandbox blocks the network by default, and --trust alone
-        # (the write door) does NOT open it. The headless flag that does is --force
-        # ("Force allow commands unless explicitly denied"; --yolo is just its
-        # alias). Verified against the live cursor-agent: --trust alone is blocked,
-        # --trust --force reaches an external fetch. (Its sandbox.json networkPolicy
-        # is ignored under headless -p -- an upstream bug -- so we don't rely on it.)
-        # The cache enables, never restricts (docs/grants.md).
-        return ["--force"]
+    def grant_setup(self, run_dir, config_home, grants):
+        # Uniform door: write $CURSOR_CONFIG_DIR/cli-config.json so the FILE enables
+        # capabilities. The project-level permission file was stripped by a security
+        # fix (GHSA-v64q-396f-7m79), so we redirect the config home instead. Write
+        # is always on (the record-path guarantee). Cursor has no file-level read
+        # *deny* headless -- a documented limit, not a door we close. Cursor folds
+        # web search into fetch, so web-search maps to WebFetch. net needs the shell
+        # (to reach the network) plus fetch; its external egress is opened by
+        # grant_argv. The cache enables (docs/grants.md).
+        allow = ["Write(**)"]
+        if "read" in grants:
+            allow.append("Read(**)")
+        if "shell" in grants or "net" in grants:
+            allow.append("Shell(**)")
+        if "net" in grants or "web-search" in grants:
+            allow.append("WebFetch(**)")
+        # de-dup, preserve order
+        seen, ordered = set(), []
+        for tok in allow:
+            if tok not in seen:
+                seen.add(tok)
+                ordered.append(tok)
+        config_home.mkdir(parents=True, exist_ok=True)
+        config = {"version": 1, "permissions": {"allow": ordered}}
+        (config_home / "cli-config.json").write_text(json.dumps(config), encoding="utf-8")
+        return {"CURSOR_CONFIG_DIR": str(config_home)}
+
+    def grant_argv(self, grants):
+        # Cursor's sandbox blocks external network egress and its sandbox.json
+        # networkPolicy is IGNORED under headless --print (upstream bug), so the
+        # file cannot open the network. The verified headless egress lever is
+        # --force ("Force allow commands unless explicitly denied"; --yolo is its
+        # alias). So net = the file's Shell/WebFetch allow PLUS this forced flag.
+        # Transport forced by the client, not a capability door (docs/grants.md).
+        return ["--force"] if "net" in grants else []
 
     def models_argv(self, executable: str) -> Optional[List[str]]:
         return [executable, "--list-models"]

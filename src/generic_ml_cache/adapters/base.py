@@ -204,5 +204,40 @@ class ClientAdapter(ABC):
         placed after the prompt. Codex's is a process-level sandbox toggle,
         Claude's allow-lists its web tools via a settings file, Cursor's is --force;
         all three are verified against the live CLIs (see docs/grants.md).
+
+        DEPRECATED seam (v0.0.16): capability doors now live in a config FILE, not
+        in argv. See :meth:`grant_setup`. Kept only so older callers/tests resolve.
+        """
+        return []
+
+    #: capabilities the cache can OPEN via the uniform config-file mechanism.
+    GRANTS: ClassVar[tuple] = ("net", "read", "write", "shell", "web-search")
+
+    def grant_setup(self, run_dir: Path, config_home: Path, grants: Sequence[str]) -> dict:
+        """Render this client's own config file into ``config_home`` so the file --
+        not a flag -- enables the granted capabilities, and return the environment
+        the run needs (the client's config-home variable pointed at ``config_home``,
+        e.g. ``{"CODEX_HOME": ...}``), seeding any credentials the relocated home
+        needs along the way.
+
+        This is the uniform door (v0.0.16): every client is driven the same way --
+        a private config home, its home variable pointed at it, the settings file
+        written inside. Writing into the run folder is always on (the client cannot
+        produce output otherwise); the named grants open capability *beyond* that.
+        Grants ENABLE, never restrict (``docs/grants.md``); where a client has no
+        file-level way to *close* a capability, that is a documented limit, not a
+        door this method tries to shut.
+
+        ``config_home`` is separate from ``run_dir``, so nothing written here is
+        ever mistaken for client output or captured into a cassette. Default: no
+        config home, empty env (adapters override).
+        """
+        return {}
+
+    def grant_argv(self, grants: Sequence[str]) -> List[str]:
+        """Operational flags a client FORCES for a grant its config file cannot
+        express -- not a capability door, a transport necessity (Cursor's external
+        network egress is ignored in its sandbox file headless, so ``net`` still
+        needs ``--force``). Default: none.
         """
         return []
