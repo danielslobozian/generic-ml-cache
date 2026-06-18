@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.12 (alpha)
+## Where we are: 0.0.13 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -175,6 +175,19 @@ Added in 0.0.12:
   not the exit code). `run` and `check` share one key-building helper, so a probe
   can never disagree with a run about whether a call is cached.
 
+Added in 0.0.13:
+
+- **Passthrough client arguments (`--client-arg`).** An escape hatch for client
+  features the cache does not model: extra arguments appended verbatim to the
+  client launch, on `run` and `check`, which the cache never interprets. They are
+  **part of the key** — different passthrough args are a different call and get
+  their own cassette — but only their **fingerprint** is stored (the verbatim-or-
+  hashed question is now settled in favour of hashed), so raw args that may carry
+  secrets never land in a cassette. Repeatable and order-significant; each adapter
+  places them as late as its CLI still reads them as flags (before the prompt where
+  the prompt is a trailing positional). A dash-leading value uses the =form
+  (`--client-arg=--flag`).
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -197,25 +210,6 @@ releases, **one feature per release**.
 - **The cache owns one folder.** It reproduces what was created/modified inside
   its own isolated run folder. It does not track or re-apply changes to files
   outside that folder.
-
-### Immediate next releases
-
-- **`0.0.13` — Passthrough client arguments.** An escape hatch for client features
-  the cache does not (yet) model: a single parameter carrying a quoted string of
-  extra arguments appended verbatim to the client launch, which the cache never
-  interprets. The run is otherwise unchanged — declared inputs / outputs, the
-  isolated run folder, the cassette, and replay all stay intact — so a passthrough
-  call records and replays like any other. The string is **part of the key**
-  (opaque, invocation-level material, distinct from the prompt prefix): the same
-  modeled inputs with different extra arguments are a different call and get their
-  own cassette. The user owns the string's correctness for their client version.
-  This is a **staging ground, not a backdoor**: a new client capability can be
-  tried with zero cache changes, then promoted into a modeled feature if it proves
-  worthwhile — or left as passthrough if it is too client-specific. To settle when
-  built: whether the string is stored verbatim or only hashed (it must not become a
-  place secrets are persisted). Complements `0.0.10` — hardening covers the flags
-  we model, passthrough the ones we do not; together, the whole launch-argument
-  surface.
 
 ### Later
 
