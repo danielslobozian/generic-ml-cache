@@ -9,6 +9,18 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **Passthrough client arguments (`--client-arg`).** An escape hatch for client
+  features the cache does not model: extra arguments appended verbatim to the
+  client launch, available on both `run` and `check`. They are **part of the
+  key** — the same modeled inputs with different passthrough args are a different
+  call and get their own cassette — but only their **fingerprint** is stored, so
+  raw args (which may carry secrets) never land in a cassette. Each client places
+  them as late as its CLI still reads them as flags (before the prompt, where the
+  prompt is a trailing positional). Repeatable and order-significant; pass a
+  dash-leading value with the =form (`--client-arg=--flag`).
+
 ## [0.0.12] - 2026-06-17
 
 ### Added
