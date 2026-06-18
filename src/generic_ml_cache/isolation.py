@@ -28,12 +28,13 @@ import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from .adapters.base import ClientAdapter
 from .cassette import CapturedFile, Response
 from .errors import CommandLineTooLong, RunInterrupted
 from .prime_directive import build_system_prompt
+from .stream import StreamWriter
 
 
 def _snapshot(root: Path) -> Dict[str, str]:
@@ -125,12 +126,79 @@ def _check_command_line_size(argv: List[str]) -> None:
         )
 
 
+def _communicate_streaming(
+    proc: subprocess.Popen,
+    stdin_text: Optional[str],
+    timeout: float | None,
+    on_line: Callable[[str], None],
+) -> tuple[str, str]:
+    """Like ``proc.communicate()``, but hand each stdout line to ``on_line`` as it
+    arrives so a live consumer sees progress in real time.
+
+    Stdin is fed and stderr drained on worker threads to avoid the classic pipe
+    deadlock, and stdout is read line by line on a third thread. This is the
+    portable approach -- it uses threads, not ``select``/``poll`` on file
+    descriptors (POSIX-only) -- so it behaves the same on Linux, macOS and Windows.
+    Raises ``subprocess.TimeoutExpired`` on timeout, matching ``communicate()`` so
+    the caller's teardown path is unchanged.
+    """
+    out_lines: List[str] = []
+    err_chunks: List[str] = []
+
+    def _feed_stdin() -> None:
+        if stdin_text is not None and proc.stdin is not None:
+            try:
+                proc.stdin.write(stdin_text)
+            except (OSError, ValueError):
+                pass
+        if proc.stdin is not None:
+            try:
+                proc.stdin.close()
+            except (OSError, ValueError):
+                pass
+
+    def _read_stderr() -> None:
+        if proc.stderr is None:
+            return
+        try:
+            for chunk in proc.stderr:
+                err_chunks.append(chunk)
+        except (OSError, ValueError):
+            pass
+
+    def _read_stdout() -> None:
+        if proc.stdout is None:
+            return
+        try:
+            for line in proc.stdout:
+                out_lines.append(line)
+                try:
+                    on_line(line)
+                except Exception:
+                    pass  # the live view must never break the run
+        except (OSError, ValueError):
+            pass
+
+    workers = [
+        threading.Thread(target=_feed_stdin, daemon=True),
+        threading.Thread(target=_read_stderr, daemon=True),
+        threading.Thread(target=_read_stdout, daemon=True),
+    ]
+    for w in workers:
+        w.start()
+    proc.wait(timeout=timeout)  # raises TimeoutExpired -> caller tears down
+    for w in workers:
+        w.join(timeout=5)
+    return "".join(out_lines), "".join(err_chunks)
+
+
 def _run_client(
     argv: List[str],
     cwd: Path,
     stdin_payload: Optional[str],
     timeout: float | None,
     env: Optional[dict] = None,
+    on_line: Optional[Callable[[str], None]] = None,
 ) -> tuple[str, str, int]:
     """Launch the client in its own process group and wait, while honoring a stop
     signal from the caller (the workflow engine, DESIGN cross-app clean stop).
@@ -179,10 +247,22 @@ def _run_client(
                 pass  # not settable on this platform/context; carry on without it
 
     try:
-        out, err = proc.communicate(input=stdin_payload if use_stdin else None, timeout=timeout)
+        if on_line is None:
+            out, err = proc.communicate(input=stdin_payload if use_stdin else None, timeout=timeout)
+        else:
+            out, err = _communicate_streaming(
+                proc, stdin_payload if use_stdin else None, timeout, on_line
+            )
     except subprocess.TimeoutExpired:
         _terminate_group(proc)
-        proc.communicate()  # reap the killed child so no zombie lingers
+        if on_line is None:
+            proc.communicate()  # reap the killed child so no zombie lingers
+        else:
+            # the reader threads hit EOF on the kill; reap without re-reading pipes
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
         raise
     finally:
         for sig in installed:
@@ -208,6 +288,7 @@ def record_real_call(
     add_dir_paths: Optional[List[str]] = None,
     client_args: Optional[List[str]] = None,
     grants: Optional[List[str]] = None,
+    stream_path: Optional[str] = None,
 ) -> RunResult:
     """Execute the client once in isolation and capture its full response.
 
@@ -220,62 +301,96 @@ def record_real_call(
     """
     system_prompt = build_system_prompt(user_system_prompt, allowed_read_paths)
 
-    with (
-        tempfile.TemporaryDirectory(prefix="gmlc-run-") as tmp,
-        tempfile.TemporaryDirectory(prefix="gmlc-home-") as home_tmp,
-    ):
-        run_dir = Path(tmp)
-        # The config home is a SEPARATE folder from run_dir, so the settings file
-        # and any seeded credentials are never snapshotted into the cassette and
-        # are deleted with the run. Capabilities are enabled by the file written
-        # here, not by argv flags (v0.0.16; see docs/grants.md).
-        config_home = Path(home_tmp)
-        adapter.prepare(run_dir, context, prompt, system_prompt)
-        baseline = _snapshot(run_dir)
-
-        argv = adapter.build_argv(
-            executable,
-            run_dir,
-            model,
-            effort,
-            context,
-            prompt,
-            system_prompt,
-            client_args or [],
-            grants or [],
+    # Opt-in live progress: an NDJSON event file the cache writes as the call runs.
+    # Display-only -- it never changes what is recorded (see stream.py).
+    writer = StreamWriter(Path(stream_path)) if stream_path else None
+    on_line: Optional[Callable[[str], None]] = None
+    if writer is not None:
+        writer.event(
+            "run.start",
+            client=adapter.name,
+            model=model,
+            effort=effort or None,
+            grants=",".join(sorted(set(grants or []))) or None,
         )
-        argv += adapter.read_access_argv(add_dir_paths or [])
-        # Forced operational flags a client requires for a grant its file cannot
-        # express (Cursor's --force for external network egress).
-        argv += adapter.grant_argv(grants or [])
-        # Render the client's config file into the redirected home and collect the
-        # env (e.g. CODEX_HOME/CLAUDE_CONFIG_DIR/CURSOR_CONFIG_DIR) the run needs.
-        grant_env = adapter.grant_setup(run_dir, config_home, grants or [])
-        run_env = {**os.environ, **grant_env} if grant_env else None
-        stdin_payload = adapter.stdin_payload(context, prompt, system_prompt)
 
-        # Fail legibly before the OS rejects an oversize command line (only a client
-        # that carries the prompt in argv -- cursor -- can hit this).
-        _check_command_line_size(argv)
+        def _emit(line: str) -> None:
+            event = adapter.stream_event(line)
+            if event:
+                writer.event(event.pop("kind"), **event)
 
-        # A stop signal here raises RunInterrupted, unwinding before any capture or
-        # cassette write -- an interrupted call leaves no half-written record.
-        stdout, stderr, returncode = _run_client(argv, run_dir, stdin_payload, timeout, run_env)
+        on_line = _emit
 
-        files = _capture_changes(run_dir, baseline)
+    try:
+        with (
+            tempfile.TemporaryDirectory(prefix="gmlc-run-") as tmp,
+            tempfile.TemporaryDirectory(prefix="gmlc-home-") as home_tmp,
+        ):
+            run_dir = Path(tmp)
+            # The config home is a SEPARATE folder from run_dir, so the settings
+            # file and any seeded credentials are never snapshotted into the
+            # cassette and are deleted with the run. Capabilities are enabled by the
+            # file written here, not by argv flags (v0.0.16; see docs/grants.md).
+            config_home = Path(home_tmp)
+            adapter.prepare(run_dir, context, prompt, system_prompt)
+            baseline = _snapshot(run_dir)
 
-    # The client ran in its structured (JSON) output mode, so raw stdout carries
-    # the answer *and* the usage. The adapter lifts the clean answer back out (what
-    # the caller sees on stdout, exactly as a plain client would emit) and reads the
-    # normalized usage from the same output. parse_output degrades on its own if the
-    # output is unexpected, so this never breaks the core call.
-    parsed = adapter.parse_output(stdout)
+            argv = adapter.build_argv(
+                executable,
+                run_dir,
+                model,
+                effort,
+                context,
+                prompt,
+                system_prompt,
+                client_args or [],
+                grants or [],
+            )
+            argv += adapter.read_access_argv(add_dir_paths or [])
+            # Forced operational flags a client requires for a grant its file cannot
+            # express (Cursor's --force for external network egress).
+            argv += adapter.grant_argv(grants or [])
+            # Render the client's config file into the redirected home and collect
+            # the env (CODEX_HOME/CLAUDE_CONFIG_DIR/CURSOR_CONFIG_DIR) the run needs.
+            grant_env = adapter.grant_setup(run_dir, config_home, grants or [])
+            run_env = {**os.environ, **grant_env} if grant_env else None
+            stdin_payload = adapter.stdin_payload(context, prompt, system_prompt)
 
-    response = Response(
-        stdout=parsed.text,
-        stderr=stderr,
-        exit=returncode,
-        files=files,
-        usage=parsed.usage,
-    )
-    return RunResult(response=response, run_dir=str(run_dir))
+            # Fail legibly before the OS rejects an oversize command line (only a
+            # client that carries the prompt in argv -- cursor -- can hit this).
+            _check_command_line_size(argv)
+
+            # A stop signal here raises RunInterrupted, unwinding before any capture
+            # or cassette write -- an interrupted call leaves no half-written record.
+            stdout, stderr, returncode = _run_client(
+                argv, run_dir, stdin_payload, timeout, run_env, on_line
+            )
+
+            files = _capture_changes(run_dir, baseline)
+
+        # The client ran in its structured (JSON) output mode, so raw stdout carries
+        # the answer *and* the usage. The adapter lifts the clean answer back out
+        # (what the caller sees on stdout) and reads the normalized usage from the
+        # same output. parse_output degrades on its own if the output is unexpected.
+        parsed = adapter.parse_output(stdout)
+
+        if writer is not None:
+            writer.event(
+                "run.end",
+                exit=returncode,
+                files=len(files),
+                input_tokens=parsed.usage.input_tokens if parsed.usage else None,
+                output_tokens=parsed.usage.output_tokens if parsed.usage else None,
+            )
+
+        response = Response(
+            stdout=parsed.text,
+            stderr=stderr,
+            exit=returncode,
+            files=files,
+            usage=parsed.usage,
+        )
+        return RunResult(response=response, run_dir=str(run_dir))
+    finally:
+        if writer is not None:
+            writer.close()

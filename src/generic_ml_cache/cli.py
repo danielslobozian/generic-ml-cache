@@ -41,6 +41,8 @@ from .store import CassetteStore
 #: capabilities a caller may open with --grant, sourced from the adapter seam so
 #: the CLI choices, the help, and what the adapters implement can never drift.
 GRANT_CHOICES: List[str] = list(ClientAdapter.GRANTS)
+#: default file written when --stream is passed with no path.
+_DEFAULT_STREAM_FILE = "gmlc-stream.jsonl"
 _GRANT_HELP = (
     "open a capability for the client -- enablement, not restriction. One of "
     "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "
@@ -151,6 +153,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             timeout=timeout,
             trust_scan=trust_scan,
             record_on_error=args.record_on_error,
+            stream_path=getattr(args, "stream", None),
         )
     except RunInterrupted as exc:
         # A requested stop, not a failure: no cassette was written. Exit code 130
@@ -826,6 +829,20 @@ def build_parser() -> argparse.ArgumentParser:
         dest="grant",
         choices=GRANT_CHOICES,
         help=_GRANT_HELP,
+    )
+    run.add_argument(
+        "--stream",
+        dest="stream",
+        nargs="?",
+        const=_DEFAULT_STREAM_FILE,
+        default=None,
+        metavar="PATH",
+        help=(
+            "write a live NDJSON progress stream as the call runs -- display-only, "
+            "it never changes what is recorded. Give a path, or pass --stream alone "
+            "to write ./gmlc-stream.jsonl. Tail it, or have a parent process read it "
+            "line by line."
+        ),
     )
     run.add_argument(
         "--mode",

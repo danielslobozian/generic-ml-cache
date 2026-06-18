@@ -141,3 +141,27 @@ class CodexAdapter(ClientAdapter):
             except OSError:
                 pass  # best-effort; an env API key still authenticates the run
         return {"CODEX_HOME": str(config_home)}
+
+    def stream_event(self, raw_line):
+        try:
+            ev = json.loads(raw_line)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(ev, dict):
+            return None
+        t = ev.get("type")
+        if t == "thread.started":
+            return {"kind": "start"}
+        if t == "turn.completed":
+            return {"kind": "result"}
+        if t in ("error", "turn.failed"):
+            return {"kind": "error"}
+        if t == "item.completed":
+            item = ev.get("item")
+            if isinstance(item, dict):
+                it = item.get("type")
+                if it == "agent_message":
+                    return {"kind": "message"}
+                if it:
+                    return {"kind": "tool", "name": it}
+        return None

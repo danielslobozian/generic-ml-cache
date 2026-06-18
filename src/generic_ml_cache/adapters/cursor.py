@@ -12,7 +12,7 @@ import json
 from typing import List, Optional
 
 from ..usage import ParsedOutput, Usage, int_or_none
-from .base import ClientAdapter, ModelInfo
+from .base import ClientAdapter, ModelInfo, final_result_object
 
 
 class CursorAdapter(ClientAdapter):
@@ -67,10 +67,12 @@ class CursorAdapter(ClientAdapter):
             "--model",
             model_id,
             "--print",
-            # JSON output so the call also returns its usage; parse_output lifts
-            # the answer text back out. The prompt stays the trailing positional.
+            # Streaming output (NDJSON) so a live consumer can watch progress; the
+            # recorded answer + usage come from the final `result` event, which is
+            # identical to the old single-object json (proven against the live CLI),
+            # so the cassette is unchanged. The prompt stays the trailing positional.
             "--output-format",
-            "json",
+            "stream-json",
             # Passthrough args before the prompt: cursor-agent's prompt is a
             # trailing (variadic) positional, so anything after it is read as prompt
             # text, not a flag. Spliced here verbatim, uninterpreted.
@@ -85,9 +87,9 @@ class CursorAdapter(ClientAdapter):
         no cost.
         """
         try:
-            doc = json.loads(stdout)
+            doc = final_result_object(stdout)
             if not isinstance(doc, dict):
-                raise ValueError("expected a JSON object")
+                raise ValueError("no result object")
         except (json.JSONDecodeError, ValueError):
             return ParsedOutput(text=stdout, usage=None)
 
@@ -182,3 +184,19 @@ class CursorAdapter(ClientAdapter):
                 current, label = True, label[: -len("(current)")].strip()
             models.append(ModelInfo(id=ident, name=label, default=default, current=current))
         return models
+
+    def stream_event(self, raw_line):
+        try:
+            d = json.loads(raw_line)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(d, dict):
+            return None
+        t = d.get("type")
+        if t == "system" and d.get("subtype") == "init":
+            return {"kind": "start"}
+        if t == "assistant":
+            return {"kind": "message"}
+        if t == "result":
+            return {"kind": "result"}
+        return None

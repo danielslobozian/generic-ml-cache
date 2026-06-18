@@ -241,3 +241,51 @@ class ClientAdapter(ABC):
         needs ``--force``). Default: none.
         """
         return []
+
+    def stream_event(self, raw_line: str) -> Optional[dict]:
+        """Map ONE raw stdout line of this client's streaming output into a small
+        normalized progress event, e.g. ``{"kind": "thinking"}`` or
+        ``{"kind": "tool", "name": "web_search"}`` -- or ``None`` to ignore the
+        line. Used only to feed the opt-in live stream (``--stream``; see
+        ``stream.py``); it never affects what is recorded. Default: ignore every
+        line (a client whose stream we do not normalize still shows the cache's own
+        ``run.start`` / ``run.end`` events).
+        """
+        return None
+
+
+def final_result_object(stdout: str):
+    """Return the client's final result object, whether its output arrived as a
+    single JSON object (``--output-format json``) or as the last ``type:result``
+    line of an NDJSON stream (``--output-format stream-json``).
+
+    Claude and Cursor emit *the same* result object in both forms, so the recorded
+    answer and usage are identical either way -- this is what lets the live stream
+    switch the client to streaming mode without moving the cassette. Returns
+    ``None`` if nothing parseable is present (the adapter then degrades to raw
+    stdout with no usage).
+    """
+    import json
+
+    text = stdout.strip()
+    if not text:
+        return None
+    # Single object (today's --output-format json): parses whole, in one shot.
+    try:
+        doc = json.loads(text)
+        if isinstance(doc, dict):
+            return doc
+    except (json.JSONDecodeError, ValueError):
+        pass  # not a single object -> it is an NDJSON stream; scan for the result
+    last = None
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(event, dict) and event.get("type") == "result":
+            last = event
+    return last

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..usage import ParsedOutput, Usage, float_or_none, int_or_none
-from .base import ClientAdapter
+from .base import ClientAdapter, final_result_object
 from .registry import register
 
 
@@ -47,9 +47,20 @@ class ClaudeAdapter(ClientAdapter):
         # default rather than passing an empty (and invalid) --effort value.
         if effort:
             argv += ["--effort", effort]
-        # JSON output so the call also returns its usage (tokens + Claude's own
-        # cost estimate). parse_output lifts the answer text back out of the JSON.
-        argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
+        # Streaming output mode (one NDJSON event per line) so a live consumer can
+        # watch progress; the recorded answer + usage are lifted from the final
+        # `result` event, which is byte-identical to the old single-object json
+        # (proven against the live CLI), so the cassette is unchanged. --verbose is
+        # required for stream-json to emit the full stream; --include-partial-
+        # messages adds token-level deltas for the live feed.
+        argv += [
+            "--append-system-prompt",
+            system_prompt,
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--include-partial-messages",
+        ]
         # Passthrough args go last: Claude takes the prompt on stdin, so there is no
         # trailing positional to sit in front of. Appended verbatim, uninterpreted.
         argv += client_args
@@ -65,9 +76,9 @@ class ClaudeAdapter(ClientAdapter):
         cumulative ``total_cost_usd``.
         """
         try:
-            doc = json.loads(stdout)
+            doc = final_result_object(stdout)
             if not isinstance(doc, dict):
-                raise ValueError("expected a JSON object")
+                raise ValueError("no result object")
         except (json.JSONDecodeError, ValueError):
             return ParsedOutput(text=stdout, usage=None)
 
@@ -163,6 +174,32 @@ class ClaudeAdapter(ClientAdapter):
             except OSError:
                 pass  # best-effort; the run still proceeds without it (just noisy)
         return {"CLAUDE_CONFIG_DIR": str(config_home)}
+
+    def stream_event(self, raw_line):
+        try:
+            d = json.loads(raw_line)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(d, dict):
+            return None
+        t = d.get("type")
+        if t == "system":
+            sub = d.get("subtype")
+            if sub == "init":
+                return {"kind": "start"}
+            if sub == "thinking_tokens":
+                return {"kind": "thinking"}
+            return None
+        if t == "stream_event":
+            ev = d.get("event")
+            if isinstance(ev, dict) and ev.get("type") == "content_block_start":
+                block = ev.get("content_block")
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    return {"kind": "tool", "name": block.get("name")}
+            return None
+        if t == "result":
+            return {"kind": "result"}
+        return None
 
 
 register(ClaudeAdapter())

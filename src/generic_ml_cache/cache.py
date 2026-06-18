@@ -216,6 +216,7 @@ def resolve(
     timeout: Optional[float] = None,
     trust_scan: bool = False,
     record_on_error: bool = False,
+    stream_path: Optional[str] = None,
 ) -> Outcome:
     """Resolve a request and record one access event for observability.
 
@@ -235,6 +236,7 @@ def resolve(
             timeout=timeout,
             trust_scan=trust_scan,
             record_on_error=record_on_error,
+            stream_path=stream_path,
         )
     except CacheMiss:
         _record_access(store, access_registry.MISS, request, None)
@@ -275,6 +277,7 @@ def _resolve(
     timeout: Optional[float] = None,
     trust_scan: bool = False,
     record_on_error: bool = False,
+    stream_path: Optional[str] = None,
 ) -> Outcome:
     """Resolve a request against the store under ``mode`` (no I/O to caller).
 
@@ -319,6 +322,7 @@ def _resolve(
             add_dir_paths=request.add_dir_paths,
             client_args=request.client_args,
             grants=request.grants,
+            stream_path=stream_path,
         )
         cassette = Cassette(
             client=request.client,
@@ -364,6 +368,7 @@ def _resolve(
         add_dir_paths=request.add_dir_paths,
         client_args=request.client_args,
         grants=request.grants,
+        stream_path=stream_path,
     )
     cassette = Cassette(
         client=request.client,
