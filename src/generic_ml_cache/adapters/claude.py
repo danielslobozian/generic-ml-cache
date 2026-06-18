@@ -21,7 +21,7 @@ class ClaudeAdapter(ClientAdapter):
     default_executable = "claude"
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt
+        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
     ) -> List[str]:
         # The prompt and context are delivered on stdin (see stdin_payload), never
         # as an argv argument, so an arbitrarily large prompt cannot hit the OS
@@ -36,6 +36,9 @@ class ClaudeAdapter(ClientAdapter):
         # JSON output so the call also returns its usage (tokens + Claude's own
         # cost estimate). parse_output lifts the answer text back out of the JSON.
         argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
+        # Passthrough args go last: Claude takes the prompt on stdin, so there is no
+        # trailing positional to sit in front of. Appended verbatim, uninterpreted.
+        argv += client_args
         return argv
 
     def parse_output(self, stdout: str) -> ParsedOutput:

@@ -20,7 +20,7 @@ class CursorAdapter(ClientAdapter):
     default_executable = "cursor-agent"
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt
+        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
     ) -> List[str]:
         # cursor-agent takes the prompt ONLY as a positional argument -- its CLI has
         # no stdin/file path for the prompt (verified against `cursor-agent --help`:
@@ -56,6 +56,10 @@ class CursorAdapter(ClientAdapter):
             # the answer text back out. The prompt stays the trailing positional.
             "--output-format",
             "json",
+            # Passthrough args before the prompt: cursor-agent's prompt is a
+            # trailing (variadic) positional, so anything after it is read as prompt
+            # text, not a flag. Spliced here verbatim, uninterpreted.
+            *client_args,
             full_prompt,
         ]
 

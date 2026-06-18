@@ -113,8 +113,17 @@ class ClientAdapter(ABC):
         context: str,
         prompt: str,
         system_prompt: str,
+        client_args: List[str],
     ) -> List[str]:
-        """Return the full argv to launch the client in ``run_dir``."""
+        """Return the full argv to launch the client in ``run_dir``.
+
+        ``client_args`` are passthrough arguments the caller wants appended to the
+        launch verbatim -- the cache never interprets them. The adapter places
+        them as late as its CLI allows while they are still read as flags: at the
+        very end for clients whose prompt arrives on stdin, but **before the
+        trailing prompt positional** for a client that takes the prompt in argv
+        (otherwise they would be swallowed as prompt text rather than applied).
+        """
 
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
         """Optional text to feed on stdin. Default: nothing."""

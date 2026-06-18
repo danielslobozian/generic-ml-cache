@@ -301,6 +301,7 @@ def _resolve(
             timeout=timeout,
             allowed_read_paths=request.allowed_read_paths,
             add_dir_paths=request.add_dir_paths,
+            client_args=request.client_args,
         )
         cassette = Cassette(
             client=request.client,
@@ -344,6 +345,7 @@ def _resolve(
         timeout=timeout,
         allowed_read_paths=request.allowed_read_paths,
         add_dir_paths=request.add_dir_paths,
+        client_args=request.client_args,
     )
     cassette = Cassette(
         client=request.client,

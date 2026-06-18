@@ -236,7 +236,7 @@ def test_usage_is_captured_and_persisted_end_to_end(store):
         default_executable = sys.executable
 
         def build_argv(
-            self, executable, run_dir, model, effort, context, prompt, system_prompt
+            self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
         ) -> List[str]:
             return [executable, "-c", "print('the answer')"]
 
@@ -278,7 +278,9 @@ class _UsageCliFake(_ClientAdapter):
     name = "usage_cli_fake"
     default_executable = _sys.executable
 
-    def build_argv(self, executable, run_dir, model, effort, context, prompt, system_prompt):
+    def build_argv(
+        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
+    ):
         doc = json.dumps({"result": "hi", "u": {"in": 100, "out": 10, "cr": 5, "cost": 0.002}})
         return [executable, "-c", f"print({doc!r})"]
 

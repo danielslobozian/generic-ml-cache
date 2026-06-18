@@ -55,3 +55,55 @@ def test_raw_args_never_appear_in_the_keyed_data():
     assert len(digest) == 64
     assert data[arg_keys[0]] == digest
     assert "SUPERSECRET" not in digest
+
+
+# --- launch placement: args go in just before each client's prompt -----------
+
+from pathlib import Path  # noqa: E402
+
+from generic_ml_cache.adapters.claude import ClaudeAdapter  # noqa: E402
+from generic_ml_cache.adapters.codex import CodexAdapter  # noqa: E402
+from generic_ml_cache.adapters.cursor import CursorAdapter  # noqa: E402
+
+_ARGS = ["--reasoning", "max", "--flag"]
+
+
+def _argv(adapter, client_args):
+    return adapter.build_argv(
+        adapter.default_executable,
+        Path("/tmp"),
+        "model",
+        "high",
+        "ctx",
+        "PROMPT",
+        "sys",
+        client_args,
+    )
+
+
+def test_claude_appends_args_verbatim():
+    argv = _argv(ClaudeAdapter(), _ARGS)
+    # Claude's prompt is on stdin, so the args sit at the very end, in order.
+    assert argv[-3:] == _ARGS
+
+
+def test_codex_places_args_before_the_stdin_marker():
+    argv = _argv(CodexAdapter(), _ARGS)
+    assert "-" in argv and all(a in argv for a in _ARGS)
+    # every passthrough arg comes before the trailing "-" (else codex eats them)
+    assert max(argv.index(a) for a in _ARGS) < argv.index("-")
+
+
+def test_cursor_places_args_before_the_prompt_positional():
+    argv = _argv(CursorAdapter(), _ARGS)
+    # the prompt is the last (variadic) positional; args must precede it
+    assert argv[-1] != _ARGS[-1]
+    assert max(argv.index(a) for a in _ARGS) < len(argv) - 1
+
+
+def test_empty_passthrough_leaves_the_command_line_unchanged():
+    for adapter in (ClaudeAdapter(), CodexAdapter(), CursorAdapter()):
+        assert _argv(adapter, []) == _argv(adapter, [])
+        # cursor's prompt stays the trailing positional with no args
+        if isinstance(adapter, CursorAdapter):
+            assert _argv(adapter, [])[-1] == "sys\n\nctx\n\nPROMPT"

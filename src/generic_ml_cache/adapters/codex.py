@@ -21,7 +21,7 @@ class CodexAdapter(ClientAdapter):
     default_executable = "codex"
 
     def build_argv(
-        self, executable, run_dir, model, effort, context, prompt, system_prompt
+        self, executable, run_dir, model, effort, context, prompt, system_prompt, client_args=()
     ) -> List[str]:
         argv = [executable, "exec", "--json", *self.write_access_argv(run_dir), "--model", model]
         # Effort is optional: when omitted, leave model_reasoning_effort unset so
@@ -35,7 +35,11 @@ class CodexAdapter(ClientAdapter):
         # "reading additional input from stdin" hang codex shows in a non-TTY child
         # when a prompt argument is given but stdin is left open. The system prompt
         # is a small config value and stays in argv.
-        argv += ["-c", f"experimental_instructions={system_prompt}", "-"]
+        argv += ["-c", f"experimental_instructions={system_prompt}"]
+        # Passthrough args before the trailing "-" (the stdin marker, codex's last
+        # positional), so they are still parsed as flags. Appended verbatim.
+        argv += client_args
+        argv.append("-")
         return argv
 
     def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
