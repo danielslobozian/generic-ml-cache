@@ -595,6 +595,69 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_list(args: argparse.Namespace) -> int:
+    import json
+
+    from .cassette import Cassette
+
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    store = CassetteStore(Path(str(settings["store"][0])))
+    root = store.root
+
+    # One entry per cassette; a corrupt or unreadable file is skipped, not fatal.
+    entries: List[dict] = []
+    if root.exists():
+        for path in sorted(root.glob("*.json")):
+            try:
+                size = path.stat().st_size
+                cassette = Cassette.from_json(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if args.client and cassette.client != args.client:
+                continue
+            if args.model and cassette.model != args.model:
+                continue
+            entries.append(
+                {
+                    "client": cassette.client,
+                    "model": cassette.model,
+                    "effort": cassette.effort,
+                    "key": cassette.match_key,
+                    "bytes": size,
+                    "path": str(path),
+                }
+            )
+
+    if args.json:
+        print(json.dumps({"store": str(root), "cassettes": entries}, indent=2))
+        return 0
+
+    if not entries:
+        narrowing = [f"{k}={getattr(args, k)!r}" for k in ("client", "model") if getattr(args, k)]
+        suffix = f" matching {', '.join(narrowing)}" if narrowing else ""
+        print(f"no cassettes{suffix} in {root}")
+        return 0
+
+    groups: Dict[tuple, List[dict]] = {}
+    for entry in entries:
+        groups.setdefault((entry["client"], entry["model"]), []).append(entry)
+
+    plural = "s" if len(entries) != 1 else ""
+    print(f"store : {root}  ({len(entries)} cassette{plural})")
+    for (client, model), items in sorted(groups.items()):
+        total = sum(i["bytes"] for i in items)
+        print(f"\n{client} / {model}  ({len(items)} · {_human_size(total)})")
+        for i in sorted(items, key=lambda x: x["bytes"], reverse=True):
+            effort = i["effort"] or "-"
+            print(f"  {effort:<6} {i['key'][:12]}  {_human_size(i['bytes']):>9}  {i['path']}")
+    return 0
+
+
 def _use_color() -> bool:
     """Colour only when writing to a real terminal and NO_COLOR is unset, so piped
     or redirected output never carries escape codes (the conventional contract)."""
@@ -816,6 +879,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stats.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     stats.set_defaults(func=_cmd_stats)
+
+    listp = sub.add_parser(
+        "list", help="list stored cassettes, grouped by client/model (read-only)"
+    )
+    listp.add_argument("--client", help="only cassettes recorded for this client")
+    listp.add_argument("--model", help="only cassettes recorded for this model")
+    listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    listp.set_defaults(func=_cmd_list)
 
     init = sub.add_parser(
         "init",

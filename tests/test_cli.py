@@ -232,3 +232,67 @@ def test_help_flag_shows_the_banner(capsys):
         main(["-h"])
     assert excinfo.value.code == 0
     assert "record · replay · check · tokens" in capsys.readouterr().out
+
+
+# --- list (grouped by client/model) ---------------------------------------
+
+
+def _record_two_models(monkeypatch, tmp_path):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    for model in ("m1", "m2"):
+        run_cli(
+            [
+                "run",
+                "--client",
+                "fake",
+                "--model",
+                model,
+                "--effort",
+                "high",
+                "--prompt",
+                write_directive(f"{model}.txt", "hi\n"),
+            ]
+        )
+
+
+def test_list_empty_store_is_clean(capsys):
+    rc = main(["list"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "no cassettes" in out
+
+
+def test_list_groups_by_client_model(tmp_path, monkeypatch, capsys):
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    rc = main(["list"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "fake / m1" in out
+    assert "fake / m2" in out
+    assert ".json" in out  # each cassette's path is shown, for inspect
+
+
+def test_list_model_filter(tmp_path, monkeypatch, capsys):
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    rc = main(["list", "--model", "m1"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "fake / m1" in out
+    assert "m2" not in out
+
+
+def test_list_json(tmp_path, monkeypatch, capsys):
+    import json
+
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    rc = main(["list", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    models = {c["model"] for c in data["cassettes"]}
+    assert models == {"m1", "m2"}
+    assert "key" in data["cassettes"][0] and "path" in data["cassettes"][0]
