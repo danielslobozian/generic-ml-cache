@@ -194,6 +194,41 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # outputs elsewhere, run the cache there -- same as you would the client.
     apply_response(outcome.response, Path.cwd())
 
+    if getattr(args, "json", False):
+        # Machine-readable envelope for a parent process (e.g. the workflow engine
+        # reading normalized usage). Same usage shape as `check --json`; adds the
+        # run outcome (status/exit) and the answer, so the caller gets result and
+        # usage in one parse. Files are still materialized to the cwd as above.
+        import json
+
+        if outcome.hit:
+            status = "hit"
+        elif outcome.passthrough:
+            status = "passthrough"
+        elif outcome.failed_unstored:
+            status = "failed"
+        elif outcome.recorded:
+            status = "recorded"
+        else:
+            status = "miss"
+        usage = outcome.response.usage
+        payload = {
+            "status": status,
+            "cached": outcome.hit,
+            "exit": outcome.response.exit,
+            "client": request.client,
+            "model": request.model,
+            "effort": request.effort,
+            "files": len(outcome.response.files),
+            "usage": usage.to_dict() if usage is not None else None,
+            "stdout": outcome.response.stdout,
+        }
+        print(json.dumps(payload, indent=2))
+        # Client diagnostics still go to stderr; the JSON on stdout stays clean.
+        sys.stderr.write(outcome.response.stderr)
+        sys.stderr.flush()
+        return outcome.response.exit
+
     # Reproduce the client's streams exactly.
     sys.stdout.write(outcome.response.stdout)
     sys.stdout.flush()
@@ -842,6 +877,15 @@ def build_parser() -> argparse.ArgumentParser:
             "it never changes what is recorded. Give a path, or pass --stream alone "
             "to write ./gmlc-stream.jsonl. Tail it, or have a parent process read it "
             "line by line."
+        ),
+    )
+    run.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "emit a machine-readable JSON envelope (status, exit, files, normalized "
+            "usage, stdout) instead of the raw answer -- for a parent process such "
+            "as the workflow engine reading usage. Files are still written to the cwd."
         ),
     )
     run.add_argument(

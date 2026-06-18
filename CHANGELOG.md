@@ -9,6 +9,15 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 ## [Unreleased]
 
+### Added
+
+- **`run --json`.** `run` now accepts `--json`, emitting a machine-readable envelope
+  -- status, exit, files, the answer, and the **normalized usage** dict (the same
+  shape `check --json` exposes: input/output/cache-read/cache-write/reasoning tokens
+  and the advisory cost) -- instead of the raw answer. This lets a parent process
+  (the workflow engine reading per-call usage for its cost view) get the result and
+  the usage in one parse after a real execution; files are still written to the cwd.
+
 ### Changed
 
 - **Grants are now opened by a config file, not a flag — one uniform mechanism for
