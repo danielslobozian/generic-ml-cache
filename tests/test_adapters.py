@@ -201,13 +201,14 @@ def test_net_grant_opens_codex_network(tmp_path):
 
 
 def test_net_grant_opens_claude_network(tmp_path):
-    # Claude's reliable net door bypasses the permission wall (the narrow tool-allow
-    # is flaky) and replaces the acceptEdits write door for a net call.
-    with_net = _argv(get_adapter("claude"), tmp_path, grants=("net",))
-    assert "--dangerously-skip-permissions" in with_net
-    assert "acceptEdits" not in " ".join(with_net)  # net posture replaces the write door
-    # ...and the bypass is absent without the grant
-    assert "--dangerously-skip-permissions" not in _argv(get_adapter("claude"), tmp_path)
+    # Claude's net door allow-lists the web tools via a settings file (surgical),
+    # added alongside the acceptEdits write door -- not the skip-permissions hammer.
+    with_net = " ".join(_argv(get_adapter("claude"), tmp_path, grants=("net",)))
+    assert "--settings" in with_net and "WebFetch" in with_net
+    assert "acceptEdits" in with_net  # the write door stays
+    assert "--dangerously-skip-permissions" not in with_net
+    # ...and no web allow-list without the grant
+    assert "WebFetch" not in " ".join(_argv(get_adapter("claude"), tmp_path))
 
 
 def test_net_grant_keeps_cursor_prompt_trailing(tmp_path):

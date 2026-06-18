@@ -41,14 +41,11 @@ class ClaudeAdapter(ClientAdapter):
         # default rather than passing an empty (and invalid) --effort value.
         if effort:
             argv += ["--effort", effort]
-        # Permission posture. Net must bypass Claude's network-approval wall, which
-        # the narrow tool-allow does only ~2/3 of the time (flaky); --dangerously-
-        # skip-permissions opens it reliably (3/3) and subsumes the acceptEdits write
-        # door, so a net call uses it INSTEAD of that door rather than stacking.
+        # The write door (acceptEdits) is always on; a net grant ADDS a surgical
+        # web-tool allow-list (see network_access_argv), it does not replace it.
+        argv += self.write_access_argv(run_dir)
         if "net" in grants:
             argv += self.network_access_argv()
-        else:
-            argv += self.write_access_argv(run_dir)
         # JSON output so the call also returns its usage (tokens + Claude's own
         # cost estimate). parse_output lifts the answer text back out of the JSON.
         argv += ["--append-system-prompt", system_prompt, "--output-format", "json"]
@@ -117,15 +114,15 @@ class ClaudeAdapter(ClientAdapter):
         return ["--permission-mode", "acceptEdits"]
 
     def network_access_argv(self):
-        # Open Claude's network reliably. The narrow door (--allowedTools WebFetch
-        # WebSearch) is flaky: WebFetch's network stays gated by the permission
-        # mode, so headless Claude refuses it ~1/3 of the time ("network access
-        # approval ... in the current permission mode"). --dangerously-skip-
-        # permissions bypasses that wall -- verified 3/3 against the live CLI (the
-        # narrow door measured 2/3). It also covers writes, so build_argv uses it in
-        # place of the acceptEdits write door for a net call. Broad by necessity;
-        # the cache enables and the user owns process confinement (docs/grants.md).
-        return ["--dangerously-skip-permissions"]
+        # Open Claude's network surgically: allow-list the web tools via a settings
+        # file. The CLI --allowedTools flag was flaky (~2/3 -- WebFetch's network
+        # stayed gated by the permission mode); settings permissions.allow is
+        # authoritative and reached 3/3 against the live CLI (a --dangerously-skip-
+        # permissions sledgehammer was NOT needed). --settings takes the JSON inline,
+        # so there is no file to manage, and the acceptEdits write door is unaffected
+        # -- this only adds the web grant. The cache enables (docs/grants.md).
+        allow = json.dumps({"permissions": {"allow": ["WebFetch", "WebSearch"]}})
+        return ["--settings", allow]
 
 
 register(ClaudeAdapter())
