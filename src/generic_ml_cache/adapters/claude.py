@@ -151,6 +151,17 @@ class ClaudeAdapter(ClientAdapter):
                         shutil.copy2(child, dest)
                 except OSError:
                     pass  # best-effort seeding; an env API key still authenticates
+        # Claude Code also keeps a top-level ~/.claude.json (account, onboarding,
+        # project trust) BESIDE the ~/.claude dir; under a redirected CLAUDE_CONFIG_DIR
+        # it is expected at <home>/.claude.json. Seed it too, or Claude Code finds no
+        # main config, writes a fresh default and backs it up, and warns once per
+        # internal phase (harmless but noisy). Deleted with the run like the rest.
+        main_config = Path.home() / ".claude.json"
+        if main_config.is_file():
+            try:
+                shutil.copy2(main_config, config_home / ".claude.json")
+            except OSError:
+                pass  # best-effort; the run still proceeds without it (just noisy)
         return {"CLAUDE_CONFIG_DIR": str(config_home)}
 
 

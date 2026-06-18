@@ -230,3 +230,20 @@ def test_no_grant_opens_no_capability_in_the_file(tmp_path):
 def test_base_grant_setup_defaults_empty(tmp_path):
     # The fake adapter does not override the seam -> base default: no env, no file.
     assert get_adapter("fake").grant_setup(tmp_path, tmp_path / "h", ("net",)) == {}
+
+
+def test_claude_grant_setup_seeds_main_config_and_dir(tmp_path, monkeypatch):
+    # Claude Code needs both the top-level .claude.json AND the ~/.claude dir creds
+    # seeded into the redirected home, or it warns the main config is missing.
+    fake_home = tmp_path / "home"
+    (fake_home / ".claude").mkdir(parents=True)
+    (fake_home / ".claude" / ".credentials.json").write_text("{}", encoding="utf-8")
+    (fake_home / ".claude.json").write_text('{"x":1}', encoding="utf-8")
+    from pathlib import Path as _P
+
+    monkeypatch.setattr(_P, "home", staticmethod(lambda: fake_home))
+    cfg = tmp_path / "cfg"
+    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    assert (cfg / ".claude.json").read_text() == '{"x":1}'  # main config seeded
+    assert (cfg / ".credentials.json").is_file()  # dir creds seeded
+    assert (cfg / "settings.json").is_file()  # our grant file written
