@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "generic-ml-cache"
-version = "0.0.15.dev0"
+version = "0.0.15"
 description = "Content-addressed cache/proxy for agentic CLI calls: record a real call once, replay it forever by checksum."
 readme = "README.md"
 requires-python = ">=3.9"

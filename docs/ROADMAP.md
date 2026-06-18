@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.14 (alpha)
+## Where we are: 0.0.15 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -203,6 +203,19 @@ feature):
   dependency, and licence-compatible. Activate with
   `eval "$(register-python-argcomplete gmlcache)"`.
 
+Added in 0.0.15 (the web/network door):
+
+- **Grants (`run --grant net`).** A repeatable flag that opens a declared
+  capability for the launched client; the first is **`net`** (web / network access).
+  It extends the write/trust door from "write inside the run folder" to "reach the
+  network when a step needs a live source." A granted call is keyed (its own,
+  inspectable cassette) and cached like any other — `--force` re-fetches live.
+  Enablement only; not a security boundary. Each client's net door was verified
+  against the live CLI on 2026-06-18 — Codex via its sandbox network toggle, Claude
+  via a web-tool allow-list in a settings file, Cursor via `--force` — with the
+  per-adapter mechanics recorded in [`grants.md`](grants.md). `web-search`,
+  sub-agent, and MCP grants remain deferred.
+
 ## Road to 1.0.0 (the rest of the alpha series)
 
 These are the things that must land — and prove themselves stable — before the
@@ -228,20 +241,10 @@ releases, **one feature per release**.
 
 ### Later
 
-- **`0.0.15` — Grants: the web/network door.** A `run --grant <capability>` flag
-  (repeatable) that opens a declared capability for the launched client — the first
-  being **`net`** (web / network access), with **`web-search`** as a sibling for
-  clients that expose a distinct live-search tool. It extends the write/trust door
-  (0.0.6) from "write inside the run folder" to "reach the network when a step needs
-  a live source." A granted call is cached like any other — on the ordinary prompt
-  key — because choosing the cache is the intent to cache; the web is a source the
-  model consulted, captured in the recorded answer, and `refresh` is the lever for a
-  live re-fetch. Grants are **enablement only**: the cache opens doors, never closes
-  them, and is explicitly not a security boundary. Sub-agent and MCP grants are named
-  but deferred — unproven against the live CLIs. Validated per client against the live
-  tools on 2026-06-18; the per-adapter mechanics, what each can and cannot do, and
-  why, are recorded in [`grants.md`](grants.md). Decide the flag surface and the
-  cassette-key treatment first, then build.
+- **Grants — remaining capabilities.** `net` shipped in 0.0.15 (above). Still
+  deferred: **`web-search`** (a distinct live-search tool on clients that expose
+  one) and **sub-agent / MCP** grants — all unproven against the live CLIs, to be
+  validated the same way (a real effect, per client) before they land.
 
 - **Analysis — Codex model discovery.** Today `models` reports "not supported" for
   Codex (no scriptable list). `codex debug models` exposes the account-aware model
