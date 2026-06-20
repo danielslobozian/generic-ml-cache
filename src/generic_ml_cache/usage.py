@@ -118,6 +118,3 @@ class Usage:
             cost_usd=float_or_none(d.get("cost_usd")),
             raw=dict(d.get("raw", {})),
         )
-
-
-from .parsed_output import ParsedOutput as ParsedOutput  # noqa: E402

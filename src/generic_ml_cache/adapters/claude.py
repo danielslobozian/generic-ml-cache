@@ -13,7 +13,9 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..usage import ParsedOutput, Usage, float_or_none, int_or_none
+from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
+
+from ..usage import Usage, float_or_none, int_or_none
 from .base import ClientAdapter, final_result_object
 from .registry import register
 

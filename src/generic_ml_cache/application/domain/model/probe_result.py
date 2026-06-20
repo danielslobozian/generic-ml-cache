@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from .cassette import Cassette
-from .probe_status import ProbeStatus
+from generic_ml_cache.application.domain.model.probe_status import ProbeStatus
+from generic_ml_cache.cassette import Cassette
 
 
 @dataclass

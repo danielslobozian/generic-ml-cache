@@ -25,10 +25,11 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Dict
 
-from .captured_file import CapturedFile as CapturedFile
+from generic_ml_cache.application.domain.model.captured_file import CapturedFile as CapturedFile
+from generic_ml_cache.application.domain.model.response import Response as Response
+
 from .common.checksum import checksum_input_data
 from .common.errors import CassetteFormatError
-from .response import Response as Response
 
 SCHEMA_VERSION = 2
 

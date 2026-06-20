@@ -13,18 +13,19 @@ Public API (stable surface for v0.x):
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 try:
     __version__ = _pkg_version("generic-ml-cache")
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from .adapters import ClientAdapter, get_adapter, register  # noqa: E402
-from .cache import Mode, Outcome, Request, apply_response, resolve  # noqa: E402
-from .cassette import CapturedFile, Cassette, Response  # noqa: E402
-from .common.checksum import checksum_input_data, text_checksum  # noqa: E402
-from .common.errors import (  # noqa: E402
+from .adapters import ClientAdapter, get_adapter, register  # noqa: E402  # fmt: skip
+from .cache import Mode, Outcome, Request, apply_response, resolve  # noqa: E402  # fmt: skip
+from .cassette import CapturedFile, Cassette, Response  # noqa: E402  # fmt: skip
+from .common.checksum import checksum_input_data, text_checksum  # noqa: E402  # fmt: skip
+from .common.errors import (  # noqa: E402  # fmt: skip
     CacheError,
     CacheMiss,
     CassetteFormatError,
@@ -32,7 +33,7 @@ from .common.errors import (  # noqa: E402
     RunInterrupted,
     UnknownClient,
 )
-from .store import CassetteStore  # noqa: E402
+from .store import CassetteStore  # noqa: E402  # fmt: skip
 
 __all__ = [
     "__version__",

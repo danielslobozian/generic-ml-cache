@@ -10,13 +10,12 @@ documented as such.
 
 from __future__ import annotations
 
-from .base import ClientAdapter
-from .registry import get_adapter, register, registered_names
-
 # Eager registration of the built-in adapters.
 from . import claude  # noqa: F401  (registers ClaudeAdapter)
+from .base import ClientAdapter
 from .codex import CodexAdapter
 from .cursor import CursorAdapter
+from .registry import get_adapter, register, registered_names
 
 register(CodexAdapter())
 register(CursorAdapter())

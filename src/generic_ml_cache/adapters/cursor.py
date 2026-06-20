@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-from ..usage import ParsedOutput, Usage, int_or_none
+from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
+
+from ..usage import Usage, int_or_none
 from .base import ClientAdapter, ModelInfo, final_result_object
 
 

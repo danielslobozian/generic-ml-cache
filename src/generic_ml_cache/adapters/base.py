@@ -23,9 +23,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar, List, Optional, Sequence
 
+from generic_ml_cache.application.domain.model.model_info import ModelInfo as ModelInfo
+from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
+
 from ..common.errors import ClientNotFound
-from ..usage import ParsedOutput
-from .model_info import ModelInfo as ModelInfo
 
 
 class ClientAdapter(ABC):

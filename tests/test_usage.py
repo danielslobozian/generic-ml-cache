@@ -229,7 +229,8 @@ def test_usage_is_captured_and_persisted_end_to_end(store):
     from generic_ml_cache import register
     from generic_ml_cache.adapters.base import ClientAdapter
     from generic_ml_cache.cache import Mode, Request, resolve
-    from generic_ml_cache.usage import ParsedOutput, Usage
+    from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
+    from generic_ml_cache.usage import Usage
 
     class JsonFakeAdapter(ClientAdapter):
         name = "json_fake"
@@ -277,7 +278,7 @@ import sys as _sys  # noqa: E402
 from generic_ml_cache import register as _register  # noqa: E402
 from generic_ml_cache.adapters.base import ClientAdapter as _ClientAdapter  # noqa: E402
 from generic_ml_cache.cli import main as _main  # noqa: E402
-from generic_ml_cache.usage import ParsedOutput as _ParsedOutput  # noqa: E402
+from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput as _ParsedOutput  # noqa: E402
 
 
 class _UsageCliFake(_ClientAdapter):

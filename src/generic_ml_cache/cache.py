@@ -19,16 +19,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from generic_ml_cache.application.domain.model.mode import Mode as Mode
+from generic_ml_cache.application.domain.model.outcome import Outcome as Outcome
+from generic_ml_cache.application.domain.model.probe_result import ProbeResult as ProbeResult
+from generic_ml_cache.application.domain.model.probe_status import ProbeStatus as ProbeStatus
+from generic_ml_cache.application.domain.model.request import Request as Request
+
 from . import access_registry
 from .adapters.registry import get_adapter
 from .cassette import Cassette, Response
 from .common.errors import CacheMiss
 from .isolation import record_real_call
-from .mode import Mode as Mode
-from .outcome import Outcome as Outcome
-from .probe_result import ProbeResult as ProbeResult
-from .probe_status import ProbeStatus as ProbeStatus
-from .request import Request as Request
 from .store import CassetteStore
 
 
