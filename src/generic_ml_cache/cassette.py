@@ -20,96 +20,17 @@ match keys are equal.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
+from .captured_file import CapturedFile as CapturedFile
 from .checksum import checksum_input_data
 from .errors import CassetteFormatError
-from .usage import Usage
+from .response import Response as Response
 
 SCHEMA_VERSION = 2
-
-
-@dataclass(frozen=True)
-class CapturedFile:
-    """A file the client produced, captured relative to its run folder.
-
-    ``path`` is always stored POSIX-style (forward slashes) so a cassette is
-    portable across operating systems. ``content`` is the file text for the
-    default ``utf-8`` encoding; for bytes that are not valid UTF-8 it is base64
-    and ``encoding`` is ``"base64"``.
-    """
-
-    path: str
-    content: str
-    encoding: str = "utf-8"
-
-    def to_bytes(self) -> bytes:
-        if self.encoding == "utf-8":
-            return self.content.encode("utf-8")
-        if self.encoding == "base64":
-            return base64.b64decode(self.content.encode("ascii"))
-        raise CassetteFormatError(f"unknown file encoding: {self.encoding!r}")
-
-    @classmethod
-    def from_bytes(cls, path: str, data: bytes) -> "CapturedFile":
-        try:
-            return cls(path=path, content=data.decode("utf-8"), encoding="utf-8")
-        except UnicodeDecodeError:
-            # v0.0.1 targets UTF-8 text; binary is captured losslessly via base64
-            # so a stray binary artifact never crashes a recording.
-            return cls(
-                path=path,
-                content=base64.b64encode(data).decode("ascii"),
-                encoding="base64",
-            )
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {"path": self.path, "content": self.content, "encoding": self.encoding}
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "CapturedFile":
-        return cls(
-            path=d["path"],
-            content=d["content"],
-            encoding=d.get("encoding", "utf-8"),
-        )
-
-
-@dataclass
-class Response:
-    stdout: str = ""
-    stderr: str = ""
-    exit: int = 0
-    files: List[CapturedFile] = field(default_factory=list)
-    #: Normalized token/cost envelope for the recorded call, or ``None`` when no
-    #: usage was captured -- a client that reported none, an output that could not
-    #: be parsed, or a pre-usage (schema 1) cassette. ``None`` means "unknown",
-    #: never "zero".
-    usage: Optional[Usage] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "stdout": self.stdout,
-            "stderr": self.stderr,
-            "exit": self.exit,
-            "files": [f.to_dict() for f in self.files],
-            "usage": self.usage.to_dict() if self.usage is not None else None,
-        }
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "Response":
-        usage_dict = d.get("usage")
-        return cls(
-            stdout=d.get("stdout", ""),
-            stderr=d.get("stderr", ""),
-            exit=int(d.get("exit", 0)),
-            files=[CapturedFile.from_dict(x) for x in d.get("files", [])],
-            usage=Usage.from_dict(usage_dict) if usage_dict is not None else None,
-        )
 
 
 @dataclass

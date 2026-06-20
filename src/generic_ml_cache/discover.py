@@ -13,23 +13,12 @@ caller *what is here*; deciding *what to use* stays with the caller.
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from .adapters.base import ModelInfo
 from .adapters.registry import get_adapter, registered_names
+from .client_status import ClientStatus as ClientStatus
 from .errors import ClientNotFound
-
-
-@dataclass
-class ClientStatus:
-    """What discovery found for one client. Purely informational."""
-
-    name: str
-    present: bool
-    executable: Optional[str] = None  # resolved path, when present
-    version: Optional[str] = None  # first line of `--version`, best-effort
-    detail: Optional[str] = None  # why it's absent, or why version is unknown
+from .model_listing import ModelListing as ModelListing
 
 
 def _probe_version(argv: List[str], timeout: float) -> Tuple[Optional[str], Optional[str]]:
@@ -67,27 +56,6 @@ def probe_all(
     """
     exe = executables or {}
     return [probe(name, executable=exe.get(name), timeout=timeout) for name in registered_names()]
-
-
-@dataclass
-class ModelListing:
-    """What discovery could learn about one client's available models.
-
-    Three honest outcomes, never a guess:
-
-    * absent client -> ``present=False`` (``supported`` is meaningless, left False);
-    * present but no listing mechanism -> ``supported=False`` with a ``reason``;
-    * present and listed -> ``supported=True`` and ``models`` populated (possibly
-      empty if the client genuinely reported none).
-
-    ``models`` is whatever the client relayed -- the cache invents nothing.
-    """
-
-    name: str
-    present: bool
-    supported: bool
-    models: Optional[List[ModelInfo]] = None
-    reason: Optional[str] = None
 
 
 def list_models(name: str, executable: Optional[str] = None, timeout: float = 30.0) -> ModelListing:

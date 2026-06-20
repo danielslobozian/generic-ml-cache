@@ -20,27 +20,12 @@ from __future__ import annotations
 
 import shutil
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, List, Optional, Sequence
 
 from ..errors import ClientNotFound
 from ..usage import ParsedOutput
-
-
-@dataclass
-class ModelInfo:
-    """One model a client reports it can use. Purely what the client relayed.
-
-    ``id`` is the string a caller would pass as ``--model``; ``name`` is the
-    client's own human label. ``default``/``current`` mirror any marker the
-    client printed. The cache neither invents nor validates these fields.
-    """
-
-    id: str
-    name: str
-    default: bool = False
-    current: bool = False
+from .model_info import ModelInfo as ModelInfo
 
 
 class ClientAdapter(ABC):
