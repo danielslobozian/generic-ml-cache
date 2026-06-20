@@ -10,9 +10,9 @@ import subprocess
 
 import pytest
 
-import generic_ml_cache.store as store_mod
+import generic_ml_cache.adapter.out.storage.store as store_mod
 from generic_ml_cache import Mode, Request, cli, resolve
-from generic_ml_cache.cassette import Cassette, Response
+from generic_ml_cache.application.domain.model.cassette import Cassette, Response
 
 
 def req(prompt: str) -> Request:

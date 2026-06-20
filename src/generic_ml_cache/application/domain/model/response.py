@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from generic_ml_cache.application.domain.model.captured_file import CapturedFile
-from generic_ml_cache.usage import Usage
+from generic_ml_cache.application.domain.model.usage import Usage
 
 
 @dataclass

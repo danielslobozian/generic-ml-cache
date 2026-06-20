@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.cache import Request
+from generic_ml_cache.application.domain.service.cache import Request
 from generic_ml_cache.common.checksum import checksum_input_data
 from generic_ml_cache.cli import main
 

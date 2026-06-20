@@ -21,11 +21,29 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from .adapters import ClientAdapter, get_adapter, register  # noqa: E402  # fmt: skip
-from .cache import Mode, Outcome, Request, apply_response, resolve  # noqa: E402  # fmt: skip
-from .cassette import CapturedFile, Cassette, Response  # noqa: E402  # fmt: skip
-from .common.checksum import checksum_input_data, text_checksum  # noqa: E402  # fmt: skip
-from .common.errors import (  # noqa: E402  # fmt: skip
+from generic_ml_cache.adapter.out.client import (  # noqa: E402  # fmt: skip
+    ClientAdapter,
+    get_adapter,
+    register,
+)
+from generic_ml_cache.adapter.out.storage.store import CassetteStore  # noqa: E402  # fmt: skip
+from generic_ml_cache.application.domain.model.cassette import (  # noqa: E402  # fmt: skip
+    CapturedFile,
+    Cassette,
+    Response,
+)
+from generic_ml_cache.application.domain.service.cache import (  # noqa: E402  # fmt: skip
+    Mode,
+    Outcome,
+    Request,
+    apply_response,
+    resolve,
+)
+from generic_ml_cache.common.checksum import (  # noqa: E402  # fmt: skip
+    checksum_input_data,
+    text_checksum,
+)
+from generic_ml_cache.common.errors import (  # noqa: E402  # fmt: skip
     CacheError,
     CacheMiss,
     CassetteFormatError,
@@ -33,7 +51,6 @@ from .common.errors import (  # noqa: E402  # fmt: skip
     RunInterrupted,
     UnknownClient,
 )
-from .store import CassetteStore  # noqa: E402  # fmt: skip
 
 __all__ = [
     "__version__",

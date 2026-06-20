@@ -152,7 +152,7 @@ def test_inspect_directory_is_clean(tmp_path, capsys):
 def test_cassette_uses_posix_paths_on_any_os(tmp_path):
     """Even on Windows, captured paths are stored with forward slashes."""
     from generic_ml_cache import Mode, Request, resolve
-    from generic_ml_cache.store import CassetteStore
+    from generic_ml_cache.adapter.out.storage.store import CassetteStore
 
     store = CassetteStore(tmp_path / "cas")
     req = Request(
@@ -165,7 +165,7 @@ def test_cassette_uses_posix_paths_on_any_os(tmp_path):
 
 def test_multibyte_unicode_roundtrips(tmp_path):
     from generic_ml_cache import Mode, Request, resolve, apply_response
-    from generic_ml_cache.store import CassetteStore
+    from generic_ml_cache.adapter.out.storage.store import CassetteStore
 
     store = CassetteStore(tmp_path / "cas")
     text = "café — 日本語 — \temoji 🚀\n"

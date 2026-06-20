@@ -9,7 +9,7 @@ real run would do, because it reuses run's own key and cacheability logic.
 
 from __future__ import annotations
 
-from generic_ml_cache.cache import Mode, ProbeStatus, Request, probe, resolve
+from generic_ml_cache.application.domain.service.cache import Mode, ProbeStatus, Request, probe, resolve
 
 
 def _request(prompt: str = "hello", **kw) -> Request:

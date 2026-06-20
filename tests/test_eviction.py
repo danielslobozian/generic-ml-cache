@@ -6,8 +6,8 @@ fresh result it was asked to store (soft cap)."""
 
 from __future__ import annotations
 
-from generic_ml_cache.store import CassetteStore
-from generic_ml_cache.cassette import Cassette, Response
+from generic_ml_cache.adapter.out.storage.store import CassetteStore
+from generic_ml_cache.application.domain.model.cassette import Cassette, Response
 
 PAD = "x" * 1000  # make each cassette ~1 KB so sizing is predictable
 

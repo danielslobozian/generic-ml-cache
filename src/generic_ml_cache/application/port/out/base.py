@@ -25,8 +25,7 @@ from typing import ClassVar, List, Optional, Sequence
 
 from generic_ml_cache.application.domain.model.model_info import ModelInfo as ModelInfo
 from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
-
-from ..common.errors import ClientNotFound
+from generic_ml_cache.common.errors import ClientNotFound
 
 
 class ClientAdapter(ABC):

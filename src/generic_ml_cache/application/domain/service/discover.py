@@ -15,11 +15,10 @@ from __future__ import annotations
 import subprocess
 from typing import Dict, List, Optional, Tuple
 
+from generic_ml_cache.adapter.out.client.registry import get_adapter, registered_names
 from generic_ml_cache.application.domain.model.client_status import ClientStatus as ClientStatus
 from generic_ml_cache.application.domain.model.model_listing import ModelListing as ModelListing
-
-from .adapters.registry import get_adapter, registered_names
-from .common.errors import ClientNotFound
+from generic_ml_cache.common.errors import ClientNotFound
 
 
 def _probe_version(argv: List[str], timeout: float) -> Tuple[Optional[str], Optional[str]]:

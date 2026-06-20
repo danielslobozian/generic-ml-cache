@@ -9,7 +9,7 @@ keyed, so the raw strings -- which may hold secrets -- never reach a cassette.
 
 from __future__ import annotations
 
-from generic_ml_cache.cache import Request
+from generic_ml_cache.application.domain.service.cache import Request
 from generic_ml_cache.common.checksum import checksum_input_data
 
 
@@ -61,9 +61,9 @@ def test_raw_args_never_appear_in_the_keyed_data():
 
 from pathlib import Path  # noqa: E402
 
-from generic_ml_cache.adapters.claude import ClaudeAdapter  # noqa: E402
-from generic_ml_cache.adapters.codex import CodexAdapter  # noqa: E402
-from generic_ml_cache.adapters.cursor import CursorAdapter  # noqa: E402
+from generic_ml_cache.adapter.out.client.claude import ClaudeAdapter  # noqa: E402
+from generic_ml_cache.adapter.out.client.codex import CodexAdapter  # noqa: E402
+from generic_ml_cache.adapter.out.client.cursor import CursorAdapter  # noqa: E402
 
 _ARGS = ["--reasoning", "max", "--flag"]
 

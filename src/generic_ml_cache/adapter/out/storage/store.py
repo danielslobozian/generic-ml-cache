@@ -8,10 +8,10 @@ import os
 from pathlib import Path
 from typing import Iterator, Optional
 
-from .access_registry import EVICT, AccessRegistry
-from .cassette import Cassette, match_key
-from .common.checksum import checksum_input_data
-from .common.errors import CassetteFormatError
+from generic_ml_cache.adapter.out.metrics.access_registry import EVICT, AccessRegistry
+from generic_ml_cache.application.domain.model.cassette import Cassette, match_key
+from generic_ml_cache.common.checksum import checksum_input_data
+from generic_ml_cache.common.errors import CassetteFormatError
 
 # A cassette is written once, then frozen. These toggle the write bits in a way
 # that works on every OS: POSIX clears/sets the user/group/other write bits;

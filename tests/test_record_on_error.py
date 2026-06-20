@@ -6,7 +6,7 @@ opts into caching it, and a failing refresh never overwrites a good recording.""
 from __future__ import annotations
 
 from generic_ml_cache import Mode, Request, resolve
-from generic_ml_cache.cassette import Cassette, Response
+from generic_ml_cache.application.domain.model.cassette import Cassette, Response
 
 # The fake client prints, then exits 1 (a real failure that still produced output).
 FAILING = "STDOUT partial output\nEXIT 1"

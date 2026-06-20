@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from generic_ml_cache.adapters.claude import ClaudeAdapter
-from generic_ml_cache.adapters.codex import CodexAdapter
-from generic_ml_cache.adapters.cursor import CursorAdapter
-from generic_ml_cache.cassette import Cassette
+from generic_ml_cache.adapter.out.client.claude import ClaudeAdapter
+from generic_ml_cache.adapter.out.client.codex import CodexAdapter
+from generic_ml_cache.adapter.out.client.cursor import CursorAdapter
+from generic_ml_cache.application.domain.model.cassette import Cassette
 from generic_ml_cache.cli import build_parser
 
 RUN_DIR = Path("/tmp/does-not-matter")

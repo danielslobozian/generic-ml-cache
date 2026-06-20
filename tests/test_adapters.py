@@ -7,7 +7,7 @@ import sys
 import pytest
 
 from generic_ml_cache import UnknownClient, get_adapter
-from generic_ml_cache.adapters.registry import registered_names
+from generic_ml_cache.adapter.out.client.registry import registered_names
 from generic_ml_cache.common.errors import ClientNotFound
 from generic_ml_cache.common.prime_directive import PRIME_DIRECTIVE
 

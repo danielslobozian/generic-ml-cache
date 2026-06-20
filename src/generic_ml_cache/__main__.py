@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .cli import main
+from generic_ml_cache.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

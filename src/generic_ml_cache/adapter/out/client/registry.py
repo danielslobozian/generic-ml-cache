@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Dict
 
-from ..common.errors import UnknownClient
-from .base import ClientAdapter
+from generic_ml_cache.application.port.out.base import ClientAdapter
+from generic_ml_cache.common.errors import UnknownClient
 
 _REGISTRY: Dict[str, ClientAdapter] = {}
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from generic_ml_cache.adapters.base import ModelInfo
+from generic_ml_cache.application.port.out.base import ModelInfo
 
 
 @dataclass

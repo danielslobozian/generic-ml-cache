@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from generic_ml_cache.usage import Usage
+from generic_ml_cache.application.domain.model.usage import Usage
 
 
 @dataclass(frozen=True)

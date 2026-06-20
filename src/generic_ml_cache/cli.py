@@ -31,12 +31,13 @@ try:
 except ImportError:  # completion is a convenience; never let its absence break the CLI
     argcomplete = None
 
+from generic_ml_cache.adapter.out.client.registry import registered_names
+from generic_ml_cache.adapter.out.storage.store import CassetteStore
+from generic_ml_cache.application.domain.service.cache import Mode, Request, apply_response, resolve
+from generic_ml_cache.application.port.out.base import ClientAdapter
+from generic_ml_cache.common.errors import CacheError, CacheMiss, ConfigError, RunInterrupted
+
 from . import __version__, config
-from .adapters.base import ClientAdapter
-from .adapters.registry import registered_names
-from .cache import Mode, Request, apply_response, resolve
-from .common.errors import CacheError, CacheMiss, ConfigError, RunInterrupted
-from .store import CassetteStore
 
 #: capabilities a caller may open with --grant, sourced from the adapter seam so
 #: the CLI choices, the help, and what the adapters implement can never drift.
@@ -240,9 +241,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def _cmd_check(args: argparse.Namespace) -> int:
     import json
 
-    from .cache import ProbeStatus, probe
-    from .cassette import match_key as compute_match_key
-    from .common.checksum import checksum_input_data
+    from generic_ml_cache.application.domain.model.cassette import match_key as compute_match_key
+    from generic_ml_cache.application.domain.service.cache import ProbeStatus, probe
+    from generic_ml_cache.common.checksum import checksum_input_data
 
     request = _build_keyed_request(args)
     try:
@@ -302,7 +303,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
-    from .cassette import Cassette, CassetteFormatError
+    from generic_ml_cache.application.domain.model.cassette import Cassette, CassetteFormatError
 
     arg = args.cassette
     path = Path(arg)
@@ -388,7 +389,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from .discover import probe_all
+    from generic_ml_cache.application.domain.service.discover import probe_all
 
     try:
         file_cfg = config.load()
@@ -419,7 +420,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from .discover import list_models, list_models_all
+    from generic_ml_cache.application.domain.service.discover import list_models, list_models_all
 
     try:
         file_cfg = config.load()
@@ -594,7 +595,7 @@ def _tokens_saved(hit_counts: dict, usage_by_key: dict) -> dict:
 def _cmd_stats(args: argparse.Namespace) -> int:
     import json
 
-    from .cassette import Cassette
+    from generic_ml_cache.application.domain.model.cassette import Cassette
 
     try:
         settings = config.resolve_settings(config.load())
@@ -686,7 +687,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
 def _cmd_list(args: argparse.Namespace) -> int:
     import json
 
-    from .cassette import Cassette
+    from generic_ml_cache.application.domain.model.cassette import Cassette
 
     try:
         settings = config.resolve_settings(config.load())

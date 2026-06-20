@@ -6,7 +6,7 @@ a refresh can still replace it, and a cache hit never writes back into it."""
 from __future__ import annotations
 
 from generic_ml_cache import Mode, Request, resolve
-from generic_ml_cache.cassette import Cassette, Response
+from generic_ml_cache.application.domain.model.cassette import Cassette, Response
 
 INPUT = {"context": "c", "prompt": "p"}
 

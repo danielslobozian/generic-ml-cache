@@ -27,9 +27,8 @@ from typing import Any, Dict
 
 from generic_ml_cache.application.domain.model.captured_file import CapturedFile as CapturedFile
 from generic_ml_cache.application.domain.model.response import Response as Response
-
-from .common.checksum import checksum_input_data
-from .common.errors import CassetteFormatError
+from generic_ml_cache.common.checksum import checksum_input_data
+from generic_ml_cache.common.errors import CassetteFormatError
 
 SCHEMA_VERSION = 2
 

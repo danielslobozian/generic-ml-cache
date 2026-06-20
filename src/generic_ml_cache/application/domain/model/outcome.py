@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from generic_ml_cache.cassette import Cassette, Response
+from generic_ml_cache.application.domain.model.cassette import Cassette, Response
 
 
 @dataclass

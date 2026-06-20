@@ -18,9 +18,9 @@ from typing import List
 import pytest
 
 from generic_ml_cache import cli
-from generic_ml_cache.adapters.base import ClientAdapter
+from generic_ml_cache.application.port.out.base import ClientAdapter
 from generic_ml_cache.common.errors import RunInterrupted
-from generic_ml_cache.isolation import record_real_call
+from generic_ml_cache.adapter.out.client.isolation import record_real_call
 
 
 class _SleepAdapter(ClientAdapter):

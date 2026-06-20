@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import json
 
-from generic_ml_cache.adapters.registry import get_adapter
-from generic_ml_cache.cassette import SCHEMA_VERSION, Cassette, Response
-from generic_ml_cache.usage import Usage, float_or_none, int_or_none
+from generic_ml_cache.adapter.out.client.registry import get_adapter
+from generic_ml_cache.application.domain.model.cassette import SCHEMA_VERSION, Cassette, Response
+from generic_ml_cache.application.domain.model.usage import Usage, float_or_none, int_or_none
 
 # --- real client output samples (structured mode) ---------------------------
 
@@ -227,10 +227,10 @@ def test_usage_is_captured_and_persisted_end_to_end(store):
     from typing import List
 
     from generic_ml_cache import register
-    from generic_ml_cache.adapters.base import ClientAdapter
-    from generic_ml_cache.cache import Mode, Request, resolve
+    from generic_ml_cache.application.port.out.base import ClientAdapter
+    from generic_ml_cache.application.domain.service.cache import Mode, Request, resolve
     from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
-    from generic_ml_cache.usage import Usage
+    from generic_ml_cache.application.domain.model.usage import Usage
 
     class JsonFakeAdapter(ClientAdapter):
         name = "json_fake"
@@ -276,7 +276,7 @@ def test_usage_is_captured_and_persisted_end_to_end(store):
 import sys as _sys  # noqa: E402
 
 from generic_ml_cache import register as _register  # noqa: E402
-from generic_ml_cache.adapters.base import ClientAdapter as _ClientAdapter  # noqa: E402
+from generic_ml_cache.application.port.out.base import ClientAdapter as _ClientAdapter  # noqa: E402
 from generic_ml_cache.cli import main as _main  # noqa: E402
 from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput as _ParsedOutput  # noqa: E402
 

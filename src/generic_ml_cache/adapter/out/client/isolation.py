@@ -30,11 +30,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from .adapters.base import ClientAdapter
-from .cassette import CapturedFile, Response
-from .common.errors import CommandLineTooLong, RunInterrupted
-from .common.prime_directive import build_system_prompt
-from .stream import StreamWriter
+from generic_ml_cache.application.domain.model.cassette import CapturedFile, Response
+from generic_ml_cache.application.port.out.base import ClientAdapter
+from generic_ml_cache.common.errors import CommandLineTooLong, RunInterrupted
+from generic_ml_cache.common.prime_directive import build_system_prompt
+from generic_ml_cache.stream import StreamWriter
 
 
 def _snapshot(root: Path) -> Dict[str, str]:

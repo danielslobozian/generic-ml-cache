@@ -17,8 +17,8 @@ from typing import List
 import pytest
 
 from generic_ml_cache import register
-from generic_ml_cache.adapters.base import ClientAdapter
-from generic_ml_cache.store import CassetteStore
+from generic_ml_cache.application.port.out.base import ClientAdapter
+from generic_ml_cache.adapter.out.storage.store import CassetteStore
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
