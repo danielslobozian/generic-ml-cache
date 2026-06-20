@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the version is `0.x.y` the project is in **alpha** and anything may change
 between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.0`.
 
-## [Unreleased]
+## [0.1.0] - 2026-06-20
+
+**Documentation and specification reset** (ROADMAP 0.1.0): the docs now describe
+the system as it actually behaves.
+
+### Changed
+
+- **Documentation restructured into a layered set** — `architecture/`,
+  `concepts/`, `reference/`, `future/`, and `use-cases/` trees plus a docs index
+  and a new root README, replacing the flat `docs/*.md`. The conceptual model is
+  defined end to end (execution request, cassette, adapters, access registry,
+  usage envelope), with storage, eviction, grants, and generated-file replay
+  documented. Community and legal files unchanged.
+
+### Added
+
+- **Reference aligned with the code** — complete `run`/`check` options; the real
+  configuration keys with their `GMLCACHE_*` environment overrides, precedence,
+  and file/store locations; the cassette per-file entry (`path`/`content`/
+  `encoding`); and how a grant is opened (the uniform per-client config-file
+  mechanism). Not-yet-built capabilities (async, scopes/sessions, alias) are
+  clearly marked future.
 
 ## [0.0.16] - 2026-06-20
 
@@ -423,7 +444,8 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.16...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.16...v0.1.0
 [0.0.16]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.13...v0.0.14

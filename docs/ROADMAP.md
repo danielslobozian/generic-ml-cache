@@ -53,7 +53,7 @@ The current implementation already provides:
 
 ## Road to 1.0.0: productionize the current capability
 
-### 0.1.0 — Documentation and specification reset
+### 0.1.0 — Documentation and specification reset *(released 2026-06-20)*
 
 - Replace historical docs with current conceptual documentation.
 - Define execution request, cassette, adapter, registry, and usage envelope.
