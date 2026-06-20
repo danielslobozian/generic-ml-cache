@@ -330,7 +330,7 @@ def record_real_call(
             # The config home is a SEPARATE folder from run_dir, so the settings
             # file and any seeded credentials are never snapshotted into the
             # cassette and are deleted with the run. Capabilities are enabled by the
-            # file written here, not by argv flags (v0.0.16; see docs/grants.md).
+            # file written here, not by argv flags (v0.0.16; see docs/reference/grants.md).
             config_home = Path(home_tmp)
             adapter.prepare(run_dir, context, prompt, system_prompt)
             baseline = _snapshot(run_dir)

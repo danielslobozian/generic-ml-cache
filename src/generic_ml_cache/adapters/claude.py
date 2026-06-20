@@ -124,7 +124,7 @@ class ClaudeAdapter(ClientAdapter):
         # .claude/ that would outrank it. acceptEdits + Write/Edit are always on so
         # a file-producing call actually writes (the record-path guarantee); each
         # named grant ADDS its allow-token. The cache enables; it never closes
-        # (docs/grants.md).
+        # (docs/reference/grants.md).
         allow = ["Write(**)", "Edit(**)"]
         if "read" in grants:
             allow.append("Read(**)")

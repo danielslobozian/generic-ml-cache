@@ -74,7 +74,7 @@ class Request:
             with no passthrough, so existing cassettes are untouched.
         grants: declared capabilities to *open* for this run (e.g. ``net`` for
             network access). Enablement only -- the cache opens the door and never
-            tries to close it (see ``docs/grants.md``). They enter the key (a
+            tries to close it (see ``docs/reference/grants.md``). They enter the key (a
             granted call is a distinct call and gets its own cassette), kept
             readable and order-independent: a sorted, de-duplicated set folded into
             ``input_data``. ``net`` does not make the call non-cacheable -- choosing

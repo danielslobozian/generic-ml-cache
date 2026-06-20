@@ -128,7 +128,7 @@ class ClientAdapter(ABC):
         ``grants`` are declared capabilities to *open* for this run (e.g. ``"net"``
         for network access). The adapter splices the matching door
         (:meth:`network_access_argv`) in when granted. Grants enable; they never
-        restrict (see ``docs/grants.md``).
+        restrict (see ``docs/reference/grants.md``).
         """
 
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
@@ -196,14 +196,14 @@ class ClientAdapter(ABC):
         """Extra argv opening the client's NETWORK door, spliced when ``net`` is
         granted.
 
-        Grants are *enablement, not restriction* (see ``docs/grants.md``): this
+        Grants are *enablement, not restriction* (see ``docs/reference/grants.md``): this
         opens the door and never tries to close it. Default: none. Each adapter
         overrides with the door for its own client and, like
         :meth:`write_access_argv`, splices it inside its own ``build_argv`` (before
         any trailing positional or stdin marker), because some CLIs reject flags
         placed after the prompt. Codex's is a process-level sandbox toggle,
         Claude's allow-lists its web tools via a settings file, Cursor's is --force;
-        all three are verified against the live CLIs (see docs/grants.md).
+        all three are verified against the live CLIs (see docs/reference/grants.md).
 
         DEPRECATED seam (v0.0.16): capability doors now live in a config FILE, not
         in argv. See :meth:`grant_setup`. Kept only so older callers/tests resolve.
@@ -224,7 +224,7 @@ class ClientAdapter(ABC):
         a private config home, its home variable pointed at it, the settings file
         written inside. Writing into the run folder is always on (the client cannot
         produce output otherwise); the named grants open capability *beyond* that.
-        Grants ENABLE, never restrict (``docs/grants.md``); where a client has no
+        Grants ENABLE, never restrict (``docs/reference/grants.md``); where a client has no
         file-level way to *close* a capability, that is a documented limit, not a
         door this method tries to shut.
 

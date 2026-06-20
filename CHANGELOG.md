@@ -40,7 +40,7 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   and Cursor none for read (documented limits, not doors the cache closes); Cursor's
   external network egress keeps `--force` as a forced transport flag. `--grant` on
   the CLI now lists all five values in `--help`. Validated 2026-06-18 against the
-  live CLIs; see [`docs/grants.md`](docs/grants.md).
+  live CLIs; see [`docs/reference/grants.md`](docs/reference/grants.md).
 
 ## [0.0.15] - 2026-06-18
 
@@ -52,7 +52,7 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
   source." A granted call is keyed (a net call gets its own, inspectable cassette)
   and cached like any other call -- `--force` re-fetches live. Enablement only: the
   cache opens doors, never closes them, and is not a security boundary (see
-  [`docs/grants.md`](docs/grants.md)). Available on `run` and `check`. All three net
+  [`docs/reference/grants.md`](docs/reference/grants.md)). Available on `run` and `check`. All three net
   doors are verified against the live CLIs: Codex via its `workspace-write` sandbox
   network toggle, Claude via a web-tool allow-list in a settings file (the narrow
   `--allowedTools` flag proved flaky), and Cursor via `--force`

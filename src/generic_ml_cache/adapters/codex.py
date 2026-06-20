@@ -126,7 +126,7 @@ class CodexAdapter(ClientAdapter):
         # record-path guarantee); it already permits read + shell, so granting
         # those needs nothing extra (Codex exposes no file-level read/shell *deny*
         # -- a documented limit, not a door we close). net flips network_access on;
-        # web-search sets web_search=live. The cache enables (docs/grants.md).
+        # web-search sets web_search=live. The cache enables (docs/reference/grants.md).
         lines = ['approval_policy = "never"', 'sandbox_mode = "workspace-write"']
         if "web-search" in grants:
             lines.append('web_search = "live"')

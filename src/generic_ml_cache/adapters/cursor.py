@@ -127,7 +127,7 @@ class CursorAdapter(ClientAdapter):
         # *deny* headless -- a documented limit, not a door we close. Cursor folds
         # web search into fetch, so web-search maps to WebFetch. net needs the shell
         # (to reach the network) plus fetch; its external egress is opened by
-        # grant_argv. The cache enables (docs/grants.md).
+        # grant_argv. The cache enables (docs/reference/grants.md).
         allow = ["Write(**)"]
         if "read" in grants:
             allow.append("Read(**)")
@@ -152,7 +152,7 @@ class CursorAdapter(ClientAdapter):
         # file cannot open the network. The verified headless egress lever is
         # --force ("Force allow commands unless explicitly denied"; --yolo is its
         # alias). So net = the file's Shell/WebFetch allow PLUS this forced flag.
-        # Transport forced by the client, not a capability door (docs/grants.md).
+        # Transport forced by the client, not a capability door (docs/reference/grants.md).
         return ["--force"] if "net" in grants else []
 
     def models_argv(self, executable: str) -> Optional[List[str]]:
