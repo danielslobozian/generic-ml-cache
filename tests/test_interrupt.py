@@ -19,7 +19,7 @@ import pytest
 
 from generic_ml_cache import cli
 from generic_ml_cache.adapters.base import ClientAdapter
-from generic_ml_cache.errors import RunInterrupted
+from generic_ml_cache.common.errors import RunInterrupted
 from generic_ml_cache.isolation import record_real_call
 
 

@@ -10,8 +10,8 @@ from typing import Iterator, Optional
 
 from .access_registry import EVICT, AccessRegistry
 from .cassette import Cassette, match_key
-from .checksum import checksum_input_data
-from .errors import CassetteFormatError
+from .common.checksum import checksum_input_data
+from .common.errors import CassetteFormatError
 
 # A cassette is written once, then frozen. These toggle the write bits in a way
 # that works on every OS: POSIX clears/sets the user/group/other write bits;

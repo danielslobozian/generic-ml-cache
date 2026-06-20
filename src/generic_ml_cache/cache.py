@@ -22,7 +22,7 @@ from typing import Optional
 from . import access_registry
 from .adapters.registry import get_adapter
 from .cassette import Cassette, Response
-from .errors import CacheMiss
+from .common.errors import CacheMiss
 from .isolation import record_real_call
 from .mode import Mode as Mode
 from .outcome import Outcome as Outcome
@@ -202,7 +202,7 @@ def _resolve(
 
     if mode is Mode.OFFLINE:
         if existing is None:
-            from .checksum import checksum_input_data
+            from .common.checksum import checksum_input_data
 
             raise CacheMiss(
                 "offline miss: no cassette for "

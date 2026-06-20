@@ -26,8 +26,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict
 
 from .captured_file import CapturedFile as CapturedFile
-from .checksum import checksum_input_data
-from .errors import CassetteFormatError
+from .common.checksum import checksum_input_data
+from .common.errors import CassetteFormatError
 from .response import Response as Response
 
 SCHEMA_VERSION = 2

@@ -10,7 +10,7 @@ keyed, so the raw strings -- which may hold secrets -- never reach a cassette.
 from __future__ import annotations
 
 from generic_ml_cache.cache import Request
-from generic_ml_cache.checksum import checksum_input_data
+from generic_ml_cache.common.checksum import checksum_input_data
 
 
 def _req(**kw) -> Request:

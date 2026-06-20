@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Dict
 
-from ..errors import UnknownClient
+from ..common.errors import UnknownClient
 from .base import ClientAdapter
 
 _REGISTRY: Dict[str, ClientAdapter] = {}

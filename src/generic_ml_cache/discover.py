@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 from .adapters.registry import get_adapter, registered_names
 from .client_status import ClientStatus as ClientStatus
-from .errors import ClientNotFound
+from .common.errors import ClientNotFound
 from .model_listing import ModelListing as ModelListing
 
 

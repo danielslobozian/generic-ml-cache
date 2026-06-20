@@ -23,8 +23,8 @@ except PackageNotFoundError:  # running from an uninstalled source tree
 from .adapters import ClientAdapter, get_adapter, register  # noqa: E402
 from .cache import Mode, Outcome, Request, apply_response, resolve  # noqa: E402
 from .cassette import CapturedFile, Cassette, Response  # noqa: E402
-from .checksum import checksum_input_data, text_checksum  # noqa: E402
-from .errors import (  # noqa: E402
+from .common.checksum import checksum_input_data, text_checksum  # noqa: E402
+from .common.errors import (  # noqa: E402
     CacheError,
     CacheMiss,
     CassetteFormatError,

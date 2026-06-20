@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from generic_ml_cache import CacheMiss, Mode, Request, get_adapter, resolve
-from generic_ml_cache.prime_directive import build_system_prompt
+from generic_ml_cache.common.prime_directive import build_system_prompt
 
 
 def _req(prompt="STDOUT hi", **kw):

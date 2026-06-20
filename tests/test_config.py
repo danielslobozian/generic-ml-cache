@@ -8,7 +8,7 @@ import pytest
 
 from generic_ml_cache import config
 from generic_ml_cache.cli import main
-from generic_ml_cache.errors import ConfigError
+from generic_ml_cache.common.errors import ConfigError
 
 
 def _write(path, text):

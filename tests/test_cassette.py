@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from generic_ml_cache import CapturedFile, Cassette, Response
-from generic_ml_cache.prime_directive import PRIME_DIRECTIVE
+from generic_ml_cache.common.prime_directive import PRIME_DIRECTIVE
 
 
 def make_cassette() -> Cassette:

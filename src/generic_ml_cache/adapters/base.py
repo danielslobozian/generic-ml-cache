@@ -23,7 +23,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import ClassVar, List, Optional, Sequence
 
-from ..errors import ClientNotFound
+from ..common.errors import ClientNotFound
 from ..usage import ParsedOutput
 from .model_info import ModelInfo as ModelInfo
 

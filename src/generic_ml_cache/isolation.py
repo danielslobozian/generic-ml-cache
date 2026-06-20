@@ -32,8 +32,8 @@ from typing import Callable, Dict, List, Optional
 
 from .adapters.base import ClientAdapter
 from .cassette import CapturedFile, Response
-from .errors import CommandLineTooLong, RunInterrupted
-from .prime_directive import build_system_prompt
+from .common.errors import CommandLineTooLong, RunInterrupted
+from .common.prime_directive import build_system_prompt
 from .stream import StreamWriter
 
 

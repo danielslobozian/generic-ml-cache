@@ -35,7 +35,7 @@ from . import __version__, config
 from .adapters.base import ClientAdapter
 from .adapters.registry import registered_names
 from .cache import Mode, Request, apply_response, resolve
-from .errors import CacheError, CacheMiss, ConfigError, RunInterrupted
+from .common.errors import CacheError, CacheMiss, ConfigError, RunInterrupted
 from .store import CassetteStore
 
 #: capabilities a caller may open with --grant, sourced from the adapter seam so
@@ -242,7 +242,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
     from .cache import ProbeStatus, probe
     from .cassette import match_key as compute_match_key
-    from .checksum import checksum_input_data
+    from .common.checksum import checksum_input_data
 
     request = _build_keyed_request(args)
     try:

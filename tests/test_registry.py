@@ -10,7 +10,7 @@ import pytest
 
 from generic_ml_cache import Mode, Request, resolve
 from generic_ml_cache.access_registry import AccessRegistry
-from generic_ml_cache.errors import CacheMiss
+from generic_ml_cache.common.errors import CacheMiss
 
 
 def req(prompt: str) -> Request:

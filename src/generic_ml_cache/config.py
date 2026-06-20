@@ -66,7 +66,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from .cache import Mode
-from .errors import ConfigError
+from .common.errors import ConfigError
 
 CONFIG_ENV = "GMLCACHE_CONFIG"
 APP_DIR = "generic-ml-cache"

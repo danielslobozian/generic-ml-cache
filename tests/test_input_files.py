@@ -10,9 +10,9 @@ import pytest
 
 from generic_ml_cache import CacheMiss, Mode, Request, resolve
 from generic_ml_cache import config
-from generic_ml_cache.checksum import checksum_input_data
+from generic_ml_cache.common.checksum import checksum_input_data
 from generic_ml_cache.cli import main
-from generic_ml_cache.prime_directive import build_system_prompt
+from generic_ml_cache.common.prime_directive import build_system_prompt
 
 
 def _sha(data: bytes) -> str:

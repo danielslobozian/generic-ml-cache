@@ -6,7 +6,7 @@ import base64
 from dataclasses import dataclass
 from typing import Any, Dict
 
-from .errors import CassetteFormatError
+from .common.errors import CassetteFormatError
 
 
 @dataclass(frozen=True)
