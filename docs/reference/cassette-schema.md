@@ -34,7 +34,13 @@ A simplified shape:
     "stdout": "...",
     "stderr": "...",
     "exit": 0,
-    "files": [],
+    "files": [
+      {
+        "path": "out.txt",
+        "content": "...",
+        "encoding": "utf-8"
+      }
+    ],
     "usage": {
       "input_tokens": 0,
       "output_tokens": 0,
@@ -50,6 +56,10 @@ A simplified shape:
 
 Unknown usage values are `null`, not zero. `raw` preserves adapter-provided usage
 when available.
+
+Each entry in `files` is a captured file with `path` (relative to the run folder),
+`content`, and `encoding`. Encoding is `utf-8` for text; for bytes that are not
+valid UTF-8 the content is base64-encoded and `encoding` is `base64`.
 
 ---
 
