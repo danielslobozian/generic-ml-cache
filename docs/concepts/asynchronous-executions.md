@@ -22,6 +22,12 @@
 
 ---
 
+> [!NOTE]
+> Only the **synchronous** flow below is implemented today. Asynchronous execution
+> — `--detach`, execution IDs, and the `execution`/`session` commands — is a
+> planned delivery mode, not yet built. The command shapes shown are conceptual and
+> may change.
+
 Asynchronous execution is a delivery mode for the same execution model.
 
 It is not the daemon itself. A daemon can later expose the same model through a
