@@ -1,140 +1,184 @@
+<div align="center">
+
 # Design
 
-This document explains how `generic-ml-cache` is built and, more importantly,
-*why* it is built that way. The what-and-how of using it lives in
-[`usage.md`](usage.md); the formal contract lives in [`SPEC.md`](SPEC.md).
+<sub>Core documentation</sub>
 
-## The one-sentence model
+<br>
 
-Record a real agentic CLI call once into an inspectable JSON "cassette", then
-replay it forever by matching on the exact launch parameters plus a
-container-independent checksum of the input.
+[Documentation home](README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Repository README](../README.md)
 
-## What it captures
+</div>
 
-Caching an agentic **CLI** call — one that spawns a subprocess, reasons over a
-prompt, and writes files to disk — means capturing more than a return value. It
-requires capturing the subprocess's stdout, stderr, exit code, **and** its
-filesystem side effects, then reproducing all of it on replay. That is what this
-tool does, and it is why the cache is a standalone concern, independent of whatever
-calls it.
+---
 
-## Core components
+> [!IMPORTANT]
+> This document is normative for the current documentation set. Preserve its meaning when editing related pages.
 
-The package is small and each module has one job.
+## At a glance
 
-- **`checksum.py`** — turns `input_data` into a stable, container-independent
-  digest. This is the heart of correctness (see below).
-- **`cassette.py`** — the data model: `Cassette`, `Response`, `CapturedFile`, and
-  the `match_key`. Knows how to serialize to and from one tidy JSON file.
-- **`store.py`** — a directory of cassettes keyed by match key. Lookups and
-  atomic saves. Nothing clever.
-- **`adapters/`** — one adapter per CLI client. An adapter knows how to turn
-  `(model, effort, prompt, context, system prompt)` into an argv and stdin for
-  that specific tool, and where it expects to find the executable.
-- **`isolation.py`** — runs the real client inside a private temp folder, snapshots
-  the folder before and after, and attributes new/changed files to the run.
-- **`prime_directive.py`** — the system prompt injected at record time that keeps
-  the client inside its sandbox.
-- **`cache.py`** — the three-mode state machine (`offline` / `cache` / `refresh`)
-  that ties lookup, real execution, recording, and replay together.
-- **`cli.py`** — the `gmlcache` command-line surface.
+- [Identity](#identity)
+- [The central abstraction: execution request](#the-central-abstraction-execution-request)
+- [Dumbness means non-interpretation](#dumbness-means-non-interpretation)
+- [Sound replay over high hit rate](#sound-replay-over-high-hit-rate)
+- [Isolation is correctness](#isolation-is-correctness)
+- [Generated files are first-class](#generated-files-are-first-class)
+- [Adapters, not special cases](#adapters-not-special-cases)
+- [Observability is a pillar](#observability-is-a-pillar)
+- [Scopes and sessions are metadata](#scopes-and-sessions-are-metadata)
+- [Daemon is transport](#daemon-is-transport)
+- [Development principle](#development-principle)
 
-## The decisions that matter
+---
 
-### Container independence is the whole game
+## Identity
 
-The same text must produce the same checksum whether it arrived as a file or as a
-string inside JSON. So the checksum decodes UTF-8 bytes to text and hashes the
-text, with explicit field framing so that moving a byte from the end of one field
-to the start of the next cannot collide. Newlines and tabs are *content* and are
-never normalized away. If this invariant broke, two identical inputs could miss
-each other, or two different inputs could collide — either way the cache would be
-untrustworthy. It is the single most heavily tested behavior in the project.
+gmlcache is a Detached ML Execution Platform.
 
-### The cache is dumb on purpose
+It records and replays detached ML executions through adapters. The cache is
+exact and content-addressed, but the project is broader than a stdout cache: it
+also records generated files, preserves usage metadata, exposes inspection and
+statistics, and provides a foundation for scopes, sessions, asynchronous
+executions, and future daemon transport.
 
-The cache adds **no** intelligence to the data. A fresh UUID in the context is a
-permanent miss, by design. Determinism is the caller's responsibility. This keeps
-the mental model honest: a hit means "byte-for-byte the same question, asked the
-same way" and nothing fuzzier. Anything smarter (semantic matching, normalization)
-would make hits unpredictable and the tool untrustworthy.
+The project should not be presented as a replacement for an ML client, an
+interactive session manager, or a hosted gateway. It is a local-first execution
+and replay layer for detached work.
 
-### Match key = explicit params + input checksum, never the wording
+## The central abstraction: execution request
 
-The match key is the exact `(client, model, effort)` tuple plus the checksum of
-`input_data`. The *command wording* — the actual flags used to launch the tool —
-is deliberately **not** part of the key and **not** stored. Two callers who phrase
-the launch differently but ask the same model the same question with the same
-effort should hit the same cassette.
+The cache key is derived from the execution request.
 
-### Isolation is correctness, not hygiene
+An execution request includes:
 
-The client always runs in the cache's own private folder, never the caller's. The
-reason is not tidiness — it is that in a shared folder you cannot soundly attribute
-a created or modified file to the run versus the user's pre-existing files. A
-before/after diff is only trustworthy when the folder started empty and belongs to
-the run. Isolation is what makes file capture correct.
+- adapter,
+- model,
+- effort,
+- prompt and context,
+- declared input files,
+- allowed scan paths,
+- grants,
+- passthrough client arguments,
+- execution mode.
 
-### The prime directive is injected, never stored
+The prompt alone is not the request. A prompt executed by another adapter, model,
+effort, grant set, or input set is a different execution request.
 
-At record time the client receives a system prompt instructing it to read and
-write only within its folder, and to exit to stderr immediately (never block,
-never wait) if the task asks it to touch anything outside. That directive shapes
-the recorded behavior but is **not** persisted in the cassette — the cassette
-records what the client *did*, not the instructions it was given. The directive is
-injected ahead of any caller-supplied system prompt so it cannot be overridden.
+## Dumbness means non-interpretation
 
-### Grants open doors, never close them
+The cache is intentionally dumb about content.
 
-A *grant* is the cache opening a capability a launched step needs — today the
-network/web door (`run --grant net`). The cache's job here is **enablement, not
-restriction**: it makes a client *able* to do something and never tries to *limit*
-what a client can do. That is a deliberate boundary. The probes behind this feature
-(recorded in [`grants.md`](grants.md)) showed that two of the three clients cannot be
-reliably *confined* by the configuration the cache controls — a denied tool is
-reachable again through the shell, and one client reads workspace files outside any
-permission gate. Chasing an airtight limit the client itself will not honour would be
-a false promise, so the cache does not pretend to be a sandbox. A user who needs hard
-isolation provides it at the layer that can enforce it — a restricted OS user, or a
-container — as they would for any untrusted tool. If a client misbehaves once a door
-is open, that is the client's and the deployment's concern, not the cache's.
+It does not read a prompt and decide what the prompt means. It does not compare
+prompts semantically. It does not ask the model which files it depended on and
+trust the answer. It does not decide that two different execution requests are
+“similar enough”.
 
-A granted web call stays **cacheable**, on the ordinary prompt key, like every other
-call: the web is a source the model consulted while producing the recorded answer,
-not a separate keyed input. The live page is not fingerprinted, so a cassette is "the
-answer as of when it was recorded" — the same way the cache already treats model
-nondeterminism — and `refresh` is how a caller asks for a live re-fetch. (This differs
-from `--allow-path`, which stays non-cacheable by default; that earlier choice targets
-*locally mutated* folders the caller edits between runs, where silent staleness is
-likeliest.)
+This does **not** mean the cache must avoid state, reporting, sessions, scopes,
+or asynchronous execution. Those features live on the transport and bookkeeping
+side. They must never change cassette identity or replay correctness.
 
-### The executable seam
+The invariant is:
 
-Adapters resolve their executable through one chokepoint: an explicit path is used
-verbatim (and errors if missing), while a bare name is looked up on `PATH`. This
-is what lets the test suite substitute a fake client and exercise every cache
-mechanism on any OS without a real `claude` / `codex` / `cursor-agent` installed.
+> Bookkeeping may describe executions, but it must not reinterpret them.
 
-### Atomic, diff-friendly storage
+## Sound replay over high hit rate
 
-Cassettes are written to a temp file and then atomically moved into place, so a
-crash mid-write never corrupts the store. JSON is emitted with sorted keys and
-stable indentation so cassettes diff cleanly in version control and stay readable
-by humans.
+gmlcache prefers a miss over an unsound hit.
 
-## Replay fidelity
+A false miss costs another model call. A false hit can return the wrong output,
+write the wrong files, or hide a real change. The cache must therefore only replay
+when it can explain why the execution request matches the recorded cassette.
 
-In quiet mode, replay reproduces the recorded stdout and stderr byte-for-byte,
-exits with the recorded code, and writes the captured files into the caller's
-current directory — refusing any path that would escape it. Verbose mode adds
-`gmlc:` diagnostics on stderr, which by definition breaks byte-exact fidelity; it
-exists for debugging, not for piping.
+## Isolation is correctness
 
-## Testing strategy
+For full execution mode, the underlying client runs in a cache-owned temporary
+execution folder.
 
-The suite never depends on a real CLI. A deterministic fake client, driven by
-directives embedded in its prompt, stands in for a real agent and lets the tests
-assert on checksums, mode transitions, file capture, isolation, prime-directive
-compliance, and byte-exact replay — identically on Linux, macOS, and Windows.
-Paths are stored POSIX-style so cassettes are portable across operating systems.
+That folder is not Fort Knox. It is not a security sandbox. It is an execution
+workspace that makes inputs and outputs observable.
+
+It solves three problems:
+
+1. **Input discipline.** Declared files can be fingerprinted and included in the
+   key. Declared scan paths can be handled explicitly and marked as non-cacheable
+   unless the caller opts into trust.
+2. **Output attribution.** Files created or modified inside the execution folder
+   can be attributed to the execution by comparing before/after state.
+3. **Replay.** Captured files can later be materialized as part of replay or
+   result retrieval.
+
+Folders are a useful filesystem representation, not a trust boundary. The store
+may physically organize files in folders, but relationships such as scope,
+session, usage, and access history belong to metadata and registry state.
+
+## Generated files are first-class
+
+Generated files are not an extra. They are part of the result.
+
+Many detached ML executions produce files as their meaningful output. A cache that
+only stores stdout would be simpler, but it would not faithfully replay a file-
+producing execution.
+
+A cassette records the observable result of the execution: stdout, stderr, exit
+code, generated files, and usage metadata when available.
+
+## Adapters, not special cases
+
+The engine should be adapter-based.
+
+Adapters translate an execution request into the mechanics required by a
+particular backend. Today those backends are detached CLI clients. Future adapters
+may target provider APIs. The execution model should not need to be rewritten
+when a new adapter is introduced.
+
+Adapter differences are real. They appear in model naming, effort support, prompt
+delivery, grants, usage reporting, and structured output. The adapter layer owns
+that translation.
+
+## Observability is a pillar
+
+Replay is one source of value. Observability is another.
+
+gmlcache can be useful even when every execution misses the cache. It still gives
+a caller a record of what was executed, which adapter and model were used, what
+files were produced, what usage was reported, and what cost estimate the client
+provided when available.
+
+Future scopes and sessions extend that same principle from a single execution to
+a workflow, namespace, or long-running body of work.
+
+## Scopes and sessions are metadata
+
+Future scope tokens and sessions must not participate in cassette identity.
+
+A scope partitions cache visibility and reporting. A session groups executions for
+analysis. Neither changes what the underlying client receives. Neither changes
+what cassette key an execution request produces.
+
+This keeps correctness separate from observability.
+
+## Daemon is transport
+
+A daemon is not required for the execution model.
+
+Asynchronous execution can be represented locally by persisted execution state,
+status, event logs, and result retrieval. A daemon may later expose the same model
+through HTTP, server-sent events, websockets, or another transport, but it should
+not become a second execution engine.
+
+## Development principle
+
+Features should be added because they serve a real need in the project’s intended
+use, not because the architecture could theoretically support them.
+
+A feature may benefit many people. That is welcome. But the project should avoid
+turning into a generic hosted gateway, account system, policy engine, or security
+platform merely because those things could be layered on top.
+
+---
+
+<div align="center">
+
+<sub>[Documentation home](README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Repository README](../README.md)</sub>
+
+</div>

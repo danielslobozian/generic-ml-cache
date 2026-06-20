@@ -1,60 +1,166 @@
-# generic-ml-cache — v0.0.1 spec
+<div align="center">
 
-A standalone, content-addressed cache/proxy for AI calls: record a real call once,
-replay it forever by checksum. Python.
+# Specification
 
-## Why it exists
-- A cache (especially multi-provider, eventually incl. APIs) is broadly useful on its
-  own, independent of whatever calls it.
-- It caches **agentic CLI subprocess calls with filesystem effects** — capturing a
-  subprocess's stdout, stderr, exit code, and the files it wrote, and reproducing them
-  on replay.
+<sub>Core documentation</sub>
 
-## The cassette (one clean, inspectable JSON file)
-- Fields: `client`, `model`, `effort` (explicit launch params — never folded into or
-  hashed with the data, never stores the command wording);
-  `input_data: { context, prompt }`; `response: { stdout, stderr, exit, files: [{path, content}] }`.
-- **Match key** = exact (`client`, `model`, `effort`) + `checksum(input_data)`.
-- Checksum is **container-independent**: decode the UTF-8 text and hash that, so the same
-  text yields the same checksum whether it lives in a standalone file or inside a JSON
-  string. Don't strip newlines/tabs — they're meaningful. Implement + test this invariant.
-- The cache is **dumb**: determinism is the *caller's* responsibility. A fresh UUID in the
-  context = a permanent miss, by design. The cache adds no intelligence to the data.
+<br>
 
-## Modes
-- `offline` (`--offline`): never call real; serve from cache; **miss → error**. (This is
-  the former "mock" — a knowing switch to offline, not a transparent proxy.)
-- `cache` (default): hit → serve; miss → call real, record, serve.
-- `refresh` (`--force`): always call real, overwrite the cassette.
+[Documentation home](README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Repository README](../README.md)
 
-## Isolation = correctness (not just hygiene)
-- The client **always runs in the cache's own isolated folder**, never the caller's.
-  Reason: in a shared folder you cannot attribute created/modified/removed files to the
-  execution vs. the user — before/after diffing is unsound. Isolation makes file capture
-  correct.
-- **Prime directive** (injected as a system prompt at record time, NOT stored in the
-  cassette): you may read/write only within the current folder; if the context or prompt
-  asks you to touch anything outside it, exit to stderr immediately — never block, never
-  wait. State this in the project docs.
-- Files the client generates land in the isolated folder → captured into the cassette's
-  `files`. On replay the cache writes them into the **caller's** current folder, mirroring
-  a real client (and replays stdout/stderr/exit identically).
+</div>
 
-## v0.0.1 scope (deliberately small)
-- CLI clients only (claude / codex / cursor, headless/detached). One adapter per client
-  for: how to launch with (model, effort, prompt, context), and how to read its output.
-- No reading the caller's ambient files (that's a *session* use-case, not detached — out
-  of scope). All needed context must be inside `input_data`.
-- Modes: offline / cache / refresh.
+---
 
-## Out of scope now (named, for later)
-- **API/HTTP proxy caching** (v2): different mechanism (HTTP intercept). The aim is
-  *unified CLI + API* caching behind one cassette format.
-- **Dependency-aware caching** (validity tracking external files by checksum): if ever
-  built, use **OS-level FS tracing** (strace / fs_usage), NOT model self-report — asking
-  the model what it read is best-effort, not sound.
+> [!IMPORTANT]
+> This document is normative for the current documentation set. Preserve its meaning when editing related pages.
 
-## Naming / publishing
-- Public name `generic-ml-cache`. Renamable on GitHub anytime (URL auto-redirects).
-  Public = scrapable; nothing secret goes in here. Standard `.gitignore` for
-  secrets/state.
+## At a glance
+
+- [Terms](#terms)
+- [Execution request identity](#execution-request-identity)
+- [Execution modes](#execution-modes)
+- [Cacheability](#cacheability)
+- [Cassette response](#cassette-response)
+- [Usage envelope](#usage-envelope)
+- [Registry](#registry)
+- [Future scope/session rules](#future-scopesession-rules)
+
+---
+
+This document describes the current conceptual specification of gmlcache. It is
+not a historical snapshot of version 0.0.1.
+
+## Terms
+
+### Execution Request
+
+The complete input to gmlcache for a detached ML execution.
+
+Includes adapter, model, effort, prompt, context, declared input files, allowed
+paths, grants, passthrough arguments, and execution mode.
+
+### Execution
+
+One attempt to satisfy an execution request. It may be served from cache, recorded
+by calling an adapter, rejected as non-cacheable, or fail.
+
+### Adapter
+
+The translation layer between gmlcache’s execution request model and a concrete
+backend such as a detached CLI client. Future adapters may target provider APIs.
+
+### Cassette
+
+An immutable JSON record of a successful recorded execution. A cassette contains
+execution identity, input data, response data, generated files, and usage metadata
+when available.
+
+### Scope
+
+A future cache/reporting namespace selected by a generated scope token. A scope is
+not a user account and not authentication.
+
+### Session
+
+A future workflow boundary inside a scope. A session groups executions for usage,
+cost, and cache-effectiveness reporting.
+
+## Execution request identity
+
+A cassette key is derived from the execution request. At minimum, identity
+includes:
+
+- adapter/client,
+- model,
+- effort where applicable,
+- prompt and context checksums,
+- declared input file content checksums,
+- grants and passthrough arguments,
+- cache-relevant execution options.
+
+The exact implementation may evolve, but the rule is stable: anything that can
+change the client’s output must either be part of the key or make the request
+non-cacheable.
+
+## Execution modes
+
+### offline
+
+Serve from cache only. A miss is an error.
+
+### cache
+
+Serve from cache if present. Otherwise call the adapter and record the result when
+recording is allowed.
+
+### refresh
+
+Call the adapter and record a fresh result even if a matching cassette already
+exists.
+
+Future asynchronous execution adds another delivery mode, not a different cache
+identity model.
+
+## Cacheability
+
+A request is cacheable when gmlcache can account for the data that matters to
+replay.
+
+Declared input files are fingerprinted by content. Declared scan paths are not
+fingerprinted by default and are therefore non-cacheable unless the caller opts
+into scan trust. Undeclared ambient filesystem dependencies remain the caller’s
+responsibility.
+
+## Cassette response
+
+A cassette response contains:
+
+- stdout,
+- stderr,
+- exit code,
+- generated files,
+- usage envelope when available.
+
+Generated files are first-class artifacts. Replay must be able to reproduce them
+when the execution mode requires materialization.
+
+## Usage envelope
+
+The normalized usage envelope may contain:
+
+- input tokens,
+- output tokens,
+- cache-read tokens,
+- cache-write tokens,
+- reasoning tokens,
+- client-reported cost,
+- raw client usage block.
+
+Unknown values remain unknown. They are not converted to zero.
+
+Client-reported cost is advisory. It is not authoritative billing.
+
+## Registry
+
+The access registry records non-load-bearing events such as hits, records, misses,
+and evictions. The registry supports statistics, LRU eviction ordering, and future
+scope/session reporting. It must not decide whether a cassette is correct.
+
+## Future scope/session rules
+
+When implemented:
+
+- scope tokens are generated by gmlcache,
+- the token itself is not stored; a hash identifies the scope,
+- sessions are generated by gmlcache and require a scope,
+- scope/session metadata must not participate in cassette identity,
+- scope invalidation is a storage cleanup operation, not an authentication event.
+
+---
+
+<div align="center">
+
+<sub>[Documentation home](README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Repository README](../README.md)</sub>
+
+</div>

@@ -1,175 +1,179 @@
-# generic-ml-cache
+<div align="center">
 
-**A content-addressed cache for expensive, non-deterministic AI calls.** Record a
-real call once, replay it forever by checksum — turning a slow, costly, variable
-invocation into a cheap, reproducible one. It does one thing well.
+<br>
 
-Today it caches **agentic CLI calls** (headless `claude` / `codex` / `cursor`,
-including the files they write). The roadmap extends the same cassette format to
-**API / HTTP calls**, so a project's whole model surface — subprocess *and* API —
-can be cached behind one format (see [`docs/ROADMAP.md`](docs/ROADMAP.md)).
+# gmlcache
 
-> ⚠️ **Status: alpha.** The format and CLI are still settling and may
-> change between 0.0.x releases. It is usable today for caching headless
-> `claude` / `codex` / `cursor` calls; it is not yet API-stable. The version
-> reaches **1.0.0** only when the full v1 feature set (see
-> [`docs/ROADMAP.md`](docs/ROADMAP.md)) is in.
+#### Detached ML Execution Platform
 
-## Why it exists
+A cache that **runs**, **records**, and **replays** detached ML workloads — exact, content-addressed, and inspectable.
 
-Recording an HTTP fixture for a test is routine; recording an *agentic* call — one
-that thinks, writes files, and prints output — is not. This tool makes that just as
-ordinary. It caches **agentic CLI subprocess calls with filesystem effects** (a
-`claude -p ...` run that edits files) today, and grows toward caching **API / HTTP**
-calls too — one cassette format for *both* CLI and API, so a project's whole model
-surface caches in one place.
+<br>
 
-What it buys you:
+[![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=for-the-badge)](LICENSE)
+[![Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=for-the-badge)](docs/ROADMAP.md)
+[![Adapters](https://img.shields.io/badge/Adapters-claude%20%C2%B7%20codex%20%C2%B7%20cursor--agent-7c3aed?style=for-the-badge)](docs/concepts/adapters.md)
 
-- **Tests & CI** that exercise AI-driven workflows run offline, deterministically,
-  and for free, against recorded fixtures.
-- **Iterating** on the code *around* a model call without paying for (or waiting
-  on) the model every run.
-- **Reproducibility**: a cassette is a single, inspectable JSON file you can read,
-  diff, and commit.
+<br>
 
-## How it works
+[Design](docs/design.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Specification](docs/SPEC.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Usage](docs/usage.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Storage](docs/storage.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
 
-Every call is keyed by an exact match of **`(client, model, effort)`** plus a
-**container-independent checksum** of the input (`context` + `prompt`). The same
-text always produces the same key, whether that text lived in a file or inside a
-JSON string.
+</div>
 
-A real call is recorded by running the client inside the cache's **own isolated
-folder** (never yours) so that created/modified files can be attributed to the
-run rather than to whatever you already had on disk. The result — stdout, stderr,
-exit code, and produced files — is written to a **cassette**. On replay, the
-cache reproduces stdout/stderr/exit exactly and writes the produced files into
-your current folder, mirroring a real client.
+<br>
 
-```
-                 ┌─────────── match key ───────────┐
-request ──▶ (client, model, effort) + checksum(context, prompt)
-                                  │
-                 ┌────────────────┴─────────────────┐
-              hit │                                  │ miss
-                  ▼                                  ▼
-        replay cassette                 run client in isolated folder,
-   (stdout/stderr/exit/files)           capture response → write cassette
-```
+---
 
-### The cassette
+## Overview
 
-```jsonc
-{
-  "schema_version": 1,
-  "client": "claude",
-  "model": "claude-sonnet-4",
-  "effort": "high",
-  "input_checksum": "…",          // recomputed on match; shown for inspection
-  "input_data":  { "context": "…", "prompt": "…" },
-  "response": {
-    "stdout": "…", "stderr": "…", "exit": 0,
-    "files": [ { "path": "out/result.txt", "content": "…", "encoding": "utf-8" } ]
-  }
-}
-```
+gmlcache executes detached ML workloads through adapters, records the observable result of those executions, and replays them when the same execution request is seen again.
 
-The launch params (`client`, `model`, `effort`) are explicit fields — they are
-part of the *key* but are **never** folded into the data checksum, and the actual
-command wording is never stored. The cache is deliberately **dumb**: making the
-input deterministic (no stray UUIDs, timestamps, or paths in the context) is the
-*caller's* job. A fresh UUID in the context is, correctly, a permanent miss.
+Its core cache is **exact and content-addressed**. The surrounding model gives callers inspection, usage reporting, cost visibility, and a path toward scoped, sessional, and asynchronous execution.
 
-## Install
+> [!NOTE]
+> **gmlcache is not an interactive ML client.**
+>
+> It does not capture or replay conversations opened inside a client UI. It is for calls launched as detached work: a prompt, a model, declared inputs, grants, and a result.
 
-Install from source (works today):
+<br>
 
-```bash
-pip install git+https://github.com/danielslobozian/generic-ml-cache.git
-```
+## Two sources of value
 
-A PyPI release (`pip install generic-ml-cache`) is planned but not yet available.
+<table>
+<tr>
+<td width="50%" valign="top">
 
-Requires Python ≥ 3.9. The only runtime dependency is `argcomplete` (Apache-2.0), which powers shell completion.
+### ♻️ Avoided executions
 
-### Shell completion
+When an execution request is **identical** to one already recorded, gmlcache replays the cassette instead of calling the underlying client again.
 
-`gmlcache` completes commands and flags via argcomplete. Activate it once in your shell — for bash, add this to `~/.bashrc`:
+</td>
+<td width="50%" valign="top">
 
-```bash
-eval "$(register-python-argcomplete gmlcache)"
-```
+### 🔭 Observability
 
-zsh and fish work the same way; see the argcomplete docs for their one-liners.
+Even on a **cache miss**, executions can still be inspected, listed, grouped, and measured. Usage and cost information are recorded when clients provide it.
 
-## Usage
+Future scope and session features build on that same metadata to report cost and cache performance across a workflow.
 
-```bash
-# First run: cache miss → calls real `claude`, records a cassette, replays it.
-gmlcache run \
-  --client claude --model claude-sonnet-4 --effort high \
-  --context-file context.md --prompt-file task.md
+</td>
+</tr>
+</table>
 
-# Same inputs again: cache hit → instant, free, identical output.
-gmlcache run --client claude --model claude-sonnet-4 --effort high \
-  --context-file context.md --prompt-file task.md
-```
+<br>
 
-### Modes
+## What it does today
 
-| Mode | Flag | Behavior |
-| --- | --- | --- |
-| `cache` (default) | — | hit → serve; miss → call real, record, serve |
-| `offline` | `--offline` | serve from cache only; **a miss is an error** |
-| `refresh` | `--force` | always call real, overwrite the cassette |
+| Capability | Description |
+|---|---|
+| **Adapters** | Runs supported detached CLI adapters: `claude`, `codex`, `cursor-agent` |
+| **Cache key** | Builds a cache key from the full execution request, not from prompt text alone |
+| **Recording** | Records stdout, stderr, exit code, generated files, and usage metadata into an inspectable cassette |
+| **Replay** | Replays a matching cassette without calling the underlying client again |
+| **Inputs** | Fingerprints declared input files |
+| **Trust** | Allows declared scan paths with explicit trust rules |
+| **Grants** | Grants declared capabilities such as network, shell, read, and write where adapters support them |
+| **Reporting** | Reports cache statistics, hits, records, usage, and saved client-reported cost |
+| **Inspection** | Inspects and lists recorded cassettes |
+| **Eviction** | Enforces optional size-based LRU eviction on insertion |
 
-Offline mode is the "known fixtures only" mode for CI: it never reaches the
-network and fails loudly if a cassette is missing.
+<br>
 
-### Other commands
+## What is an execution request?
 
-```bash
-gmlcache check --client claude --model sonnet --prompt "…"   # is this call cached? (read-only)
-gmlcache run --client claude --model sonnet --prompt "…" --client-arg=--verbose   # pass extra args to the client (keyed; stored as a fingerprint)
-gmlcache inspect ./cassettes/<key>.json   # human-readable summary of a cassette
-gmlcache --version
-```
+An **execution request** is the complete description of the work being launched. It includes the adapter, model, effort, prompt, context, declared input files, allowed paths, grants, passthrough client arguments, and execution mode.
 
-See [`docs/usage.md`](docs/usage.md) for the full reference and
-[`docs/design.md`](docs/design.md) for the architecture.
+> [!IMPORTANT]
+> The prompt alone is not the call.
+>
+> Changing the model, effort, declared inputs, or capabilities can change what the underlying client can do and therefore changes cache identity.
 
-## Hopes & non-goals
+<br>
 
-**Hopes.** That recording an agentic CLI call becomes as ordinary as recording an
-HTTP fixture — a thing you reach for without thinking, that makes AI-driven code
-testable and cheap to iterate on. Eventually: one cache that covers **both** CLI
-subprocesses and HTTP/API calls, so a workflow's whole model surface can be
-captured in one place.
+## Why cassettes include files
 
-**Non-goals.** This is not an orchestrator or a prompt framework. It adds no
-intelligence to your data, makes no decisions about *what*
-to call, and will never try to be smart about determinism on your behalf.
+gmlcache is **not** a stdout-only cache. Detached ML executions often create or modify files. Those files can be the real output of the execution: generated source code, configuration, documentation, migration files, or other artifacts.
 
-## Who can use it
+For that reason, a cassette records:
 
-Everyone. Released under the **Apache License 2.0** — free for personal,
-academic, and commercial use, including in closed-source products, with a patent
-grant. See [`LICENSE`](LICENSE). Contributions are welcome under the same license;
-see [`CONTRIBUTING.md`](CONTRIBUTING.md) and the
-[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+- stdout,
+- stderr,
+- exit code,
+- generated files,
+- usage metadata when available,
+- the execution request identity that produced the result.
 
-## Project docs
+> [!TIP]
+> If a caller only needs stdout and never wants generated artifacts, a simpler alias-style wrapper may eventually be sufficient.
+>
+> The full execution model exists for the richer case where files matter.
 
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) — the path from 0.0.1 (alpha) to 1.0.0 and beyond
-- [`docs/SPEC.md`](docs/SPEC.md) — the v0.0.1 specification
-- [`docs/design.md`](docs/design.md) — architecture and the reasoning behind it
-- [`docs/usage.md`](docs/usage.md) — full CLI and library reference
-- [`docs/storage.md`](docs/storage.md) — the on-disk store layout
-- [`CHANGELOG.md`](CHANGELOG.md) — release history
-- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability
-- [`GOVERNANCE.md`](GOVERNANCE.md) — how decisions get made
+<br>
 
-## License
+## Deliberate non-goals
 
-Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+> [!CAUTION]
+> The cache is “dumb” in one specific sense: it does not read, transform, or judge the meaning of the content.
+>
+> The richness of the tool lives in transport, recording, replay, and reporting.
+
+gmlcache deliberately does not:
+
+- interpret prompt meaning,
+- decide whether two different prompts are “close enough”,
+- perform semantic caching,
+- infer undeclared filesystem dependencies,
+- act as a security sandbox,
+- provide authentication or user-account management,
+- record interactive client sessions,
+- claim client-reported costs are authoritative billing.
+
+<br>
+
+## Documentation
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Start here
+
+| Document | Purpose |
+|---|---|
+| [Design](docs/design.md) | Project principles and why the system works this way |
+| [Specification](docs/SPEC.md) | Current conceptual model |
+| [Usage](docs/usage.md) | Current CLI behavior |
+| [Storage](docs/storage.md) | Cassette store, registry, and eviction |
+| [Roadmap](docs/ROADMAP.md) | Versioned path from current alpha to 1.x |
+
+</td>
+<td width="50%" valign="top">
+
+### Concepts
+
+- [Execution requests](docs/concepts/execution-requests.md)
+- [Cassettes](docs/concepts/cassettes.md)
+- [Adapters](docs/concepts/adapters.md)
+- [Grants](docs/concepts/grants.md)
+- [Observability](docs/concepts/observability.md)
+- [Cost and usage](docs/concepts/cost-and-usage.md)
+- [Cache eviction](docs/concepts/cache-eviction.md)
+- [Alias mode](docs/concepts/alias-mode.md)
+- [Scopes and sessions](docs/concepts/scopes-and-sessions.md)
+- [Asynchronous executions](docs/concepts/asynchronous-executions.md)
+
+</td>
+</tr>
+</table>
+
+<br>
+
+---
+
+<div align="center">
+
+Open source under the **Apache License 2.0**.
+
+<sub>`CONTRIBUTING.md` · `GOVERNANCE.md` · `SECURITY.md` · `LICENSE` are intentionally maintained outside this documentation replacement.</sub>
+
+</div>

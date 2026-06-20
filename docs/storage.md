@@ -1,66 +1,129 @@
-# On-disk layout
+<div align="center">
 
-Everything the cache stores lives in one **store directory**. Its location is set
-only by the config file's `store` key (or the built-in per-user default,
-`~/.local/share/generic-ml-cache/cassettes`, honoring `XDG_DATA_HOME`); there is no
-flag or environment override for it, because the store is the cache's own
-structure, not a per-call knob.
+# Storage
 
-The directory is flat and contains two kinds of entry:
+<sub>Core documentation</sub>
 
+<br>
+
+[Documentation home](README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Repository README](../README.md)
+
+</div>
+
+---
+
+## At a glance
+
+- [Authority](#authority)
+- [Current cassette layout](#current-cassette-layout)
+- [Registry](#registry)
+- [Current eviction](#current-eviction)
+- [Future scope-aware storage](#future-scope-aware-storage)
+- [Scope invalidation](#scope-invalidation)
+
+---
+
+gmlcache stores immutable cassettes and non-load-bearing registry data.
+
+The current store is local and filesystem-backed. Cassettes are JSON files. The
+access registry is SQLite. The database and filesystem serve different purposes:
+
+- **cassettes** hold recorded execution results,
+- **registry data** holds access events, hit counts, eviction ordering, and future
+  scope/session/reporting metadata,
+- **folders** are a useful representation and organization mechanism, not a
+  security boundary.
+
+## Authority
+
+The database is the authoritative place for relationships and metadata.
+
+The filesystem layout is an implementation detail. It may be flat, grouped by
+scope, grouped by object type, or reorganized later. A folder name should not be
+treated as proof of ownership, authorization, or correctness.
+
+## Current cassette layout
+
+Today cassettes are stored as JSON files named by their match key. A simplified
+example:
+
+```text
+<cassette-store>/
+  <match-key>.json
+  registry.sqlite3
 ```
-<store>/
-  3f9a…b2.json        a recorded call (one per cassette)
-  7c41…e8.json
-  …
-  registry.sqlite3    the access registry (side log)
+
+The key is derived from the execution request. The file content contains the
+recorded request identity, response, generated files, schema version, and usage
+metadata.
+
+## Registry
+
+The registry records events such as:
+
+- hit,
+- miss,
+- record,
+- evict.
+
+The registry supports:
+
+- `stats`,
+- hit counts in `list`,
+- LRU-style eviction ordering,
+- future scope/session reporting.
+
+The registry is not load-bearing for correctness. If registry data is missing or
+unavailable, the cassette format still defines what was recorded.
+
+## Current eviction
+
+Current eviction is optional and size-based.
+
+When `max_size` is configured, the store evicts least-recently-used cassettes on
+insertion to make room for a new cassette. LRU ordering uses last access from the
+registry, falling back to file metadata when needed.
+
+The new cassette is never evicted by the insertion it caused. The cap is therefore
+a soft cap: a single large cassette may exceed it.
+
+There is no background scheduler for current size eviction.
+
+See [Cache eviction](concepts/cache-eviction.md).
+
+## Future scope-aware storage
+
+Future scopes may introduce additional metadata and possibly additional physical
+organization. The likely model is:
+
+```text
+Scope
+  owns Sessions
+  references Cassettes
+
+Session
+  observes Executions
+
+Execution
+  records or reuses a Cassette
 ```
 
-## Cassettes — `<match_key>.json`
+A public scope may be available when no scope token is supplied. Private scopes
+selected by scope token may reuse public cassettes according to policy, but that
+relationship should be metadata-driven rather than inferred from folder paths.
 
-One file per recorded call. The filename is the **match-key digest**, so a lookup
-is a direct O(1) file check; the file *contents* repeat the readable fields so any
-cassette is fully inspectable on its own (`gmlcache inspect <file>`):
+## Scope invalidation
 
-- `client` / `model` / `effort`
-- `input_data` — the `context`, the `prompt`, and checksums of any declared input
-  files (content, not paths, is what the key is built from)
-- `response` — `stdout`, `stderr`, `exit`, and any files the call created in its
-  isolated run folder
-- `schema_version`
+Future scope-token invalidation should be treated as storage cleanup.
 
-Cassettes are **write-once and read-only**. A cassette is built entirely in memory
-and only written once the keep decision is made, in a single atomic step (temp file
-then replace), and is then marked read-only on disk. A cache hit is a pure read and
-never writes back into it. Read-only is a best-effort deterrent against a stray
-edit, not a guarantee — the file is in a directory you control.
+Invalidating a scope token means deleting or orphaning that scope’s metadata,
+sessions, and scope-owned cassette references. It is not a login revocation
+operation and should not be documented as authentication.
 
-You can copy or read a cassette freely. Deleting one by hand just means the next
-identical call records it again (and leaves its rows in the registry orphaned —
-prefer letting size eviction handle space, or wipe the whole directory for a clean
-reset).
+---
 
-## Access registry — `registry.sqlite3`
+<div align="center">
 
-A small SQLite log (stdlib `sqlite3`, no dependency) of access events — `hit`,
-`miss`, `record`, `evict` — read by `stats` and by size eviction (for
-least-recently-used ordering).
+<sub>[Documentation home](README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Repository README](../README.md)</sub>
 
-It is **non-load-bearing**: the cache resolves calls correctly whether or not it
-exists. Deleting it is safe — you only lose access history and stats, and LRU
-ordering falls back to file age until the log rebuilds. It records access only; it
-holds no integrity/checksum role (a checksum kept beside the data it guards, in a
-directory you can write, would protect nothing).
-
-## Transient files
-
-During a write the cache may briefly create a `<key>.json.<pid>.tmp` file, which it
-removes on success or on any failure. A crash at the wrong instant could rarely
-leave one behind; it is harmless and ignored (lookups and `stats` only read
-`*.json`).
-
-## Wiping the cache
-
-Delete the whole store directory. Cassettes and the registry both live inside it,
-so removing the directory clears everything cleanly with nothing orphaned; the
-cache recreates what it needs on the next call.
+</div>
