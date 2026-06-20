@@ -12,7 +12,7 @@ Version numbers track capability and stability only. Project logistics — renam
 the project, publishing to PyPI, moving repositories — are independent of the
 version and can happen at any point.
 
-## Where we are: 0.0.15 (alpha)
+## Where we are: 0.0.16 (alpha)
 
 The core idea end to end — record a real agentic **CLI** call once, replay it
 forever by content checksum — plus read-only discovery of what is installed.
@@ -215,6 +215,27 @@ Added in 0.0.15 (the web/network door):
   via a web-tool allow-list in a settings file, Cursor via `--force` — with the
   per-adapter mechanics recorded in [`grants.md`](grants.md). `web-search`,
   sub-agent, and MCP grants remain deferred.
+
+Added in 0.0.16 (grants generalized + machine-readable output):
+
+- **Grants became one uniform mechanism and grew to five capabilities.** The
+  per-client net flags of 0.0.15 were replaced by a single config-file mechanism:
+  the cache writes each client's own configuration into a redirected config home
+  (Claude `settings.json`, Codex `config.toml`, Cursor `cli-config.json`), seeds
+  credentials there, and runs the client against that home — so the settings file
+  and seeded credentials never enter a cassette. On top of `net`, the grants now
+  cover **`read`, `write`, `shell`, and `web-search`**, each keyed into its own
+  cassette and cached like any other call. Some are enablement-only where a client
+  has no matching file-level deny (documented limits, not doors the cache closes).
+  Validated against the live CLIs on 2026-06-18; see [`grants.md`](grants.md).
+- **`run --json` — a machine-readable result envelope.** `run` can emit a JSON
+  envelope (status, exit, files, the answer, and the **normalized usage** dict —
+  the same shape `check --json` exposes: input/output/cache/reasoning tokens and the
+  advisory cost) instead of the raw answer, so a parent process (the workflow engine
+  reading per-call usage for its cost view) gets the result and the usage in one
+  parse after a real execution. Files are still written to the cwd.
+- **`--stream` — opt-in live progress.** A line-delimited (NDJSON) progress feed
+  for a running call, off by default; the default output is unchanged.
 
 ## Road to 1.0.0 (the rest of the alpha series)
 
