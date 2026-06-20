@@ -32,8 +32,8 @@ This document should be updated whenever adapter behavior changes.
 ## Adapter differences
 
 Adapters differ in prompt delivery, model naming, grant mechanics, structured
-output, and usage reporting. Those differences belong in adapter code and
-reference documentation, not in the engine.
+output, and usage reporting. Those differences live in the adapter code; the
+engine stays adapter-agnostic.
 
 ---
 
