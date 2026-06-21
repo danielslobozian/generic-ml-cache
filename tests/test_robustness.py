@@ -42,10 +42,14 @@ def test_timeout_kills_the_call_and_records_nothing(store):
 
 
 def test_cli_maps_timeout_to_124(monkeypatch):
-    def _raise_timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired(cmd="client", timeout=0.5)
+    class _TimingOutService:
+        def execute(self, command):
+            raise subprocess.TimeoutExpired(cmd="client", timeout=0.5)
 
-    monkeypatch.setattr(cli, "resolve", _raise_timeout)
+    class _Wired:
+        run_managed = _TimingOutService()
+
+    monkeypatch.setattr(cli, "build_use_cases", lambda *args, **kwargs: _Wired())
     code = cli.main(
         ["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi", "--timeout", "0.5"]
     )

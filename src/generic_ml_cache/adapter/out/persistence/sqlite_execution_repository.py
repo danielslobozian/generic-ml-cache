@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -31,6 +32,16 @@ from generic_ml_cache.application.port.out.execution_repository_port import (
 )
 
 _DB_NAME = "executions.sqlite3"
+
+
+@dataclass(frozen=True)
+class ExecutionSummary:
+    """A uniform reporting row for an execution, across all identity kinds."""
+
+    execution_key: str
+    kind: str
+    client: str
+    model: str
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS call_identities (
@@ -126,6 +137,41 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             rows = connection.execute(
                 f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key = ? ORDER BY id",
                 (execution_key,),
+            ).fetchall()
+            return [self._load_execution(connection, row) for row in rows]
+        finally:
+            connection.close()
+
+    # -- reporting (concrete; beyond the use-case port) -------------------
+
+    def current_execution_summaries(self) -> List["ExecutionSummary"]:
+        """A uniform reporting view of the current (servable) executions: key,
+        kind, and the denormalized client/model — across all identity kinds."""
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT e.execution_key, e.kind, i.client, i.model FROM executions e "
+                "JOIN call_identities i ON i.execution_key = e.execution_key "
+                "WHERE e.state = ? AND e.output_persisted = 1 AND e.superseded_at IS NULL "
+                "ORDER BY e.id",
+                (ExecutionState.SUCCESS.value,),
+            ).fetchall()
+            return [
+                ExecutionSummary(execution_key=key, kind=kind, client=client, model=model)
+                for (key, kind, client, model) in rows
+            ]
+        finally:
+            connection.close()
+
+    def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
+        """The current executions whose key starts with ``key_prefix`` (so a short
+        key from ``list`` is enough to ``inspect``)."""
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key LIKE ? "
+                "AND state = ? AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id",
+                (key_prefix + "%", ExecutionState.SUCCESS.value),
             ).fetchall()
             return [self._load_execution(connection, row) for row in rows]
         finally:
