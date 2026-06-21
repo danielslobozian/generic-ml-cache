@@ -12,7 +12,9 @@ from generic_ml_cache.adapter.out.persistence.in_memory_execution_repository imp
     InMemoryExecutionRepository,
 )
 from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -202,8 +204,14 @@ def test_different_identities_are_isolated():
     second = _identity("second")
     repository.save(_execution(first, content=b"one"))
     repository.save(_execution(second, content=b"two"))
-    assert repository.find_current(first.generate_key()).artifacts[0].blob_key == "blob_" + b"one".hex()
-    assert repository.find_current(second.generate_key()).artifacts[0].blob_key == "blob_" + b"two".hex()
+    assert (
+        repository.find_current(first.generate_key()).artifacts[0].blob_key
+        == "blob_" + b"one".hex()
+    )
+    assert (
+        repository.find_current(second.generate_key()).artifacts[0].blob_key
+        == "blob_" + b"two".hex()
+    )
     assert len(repository.find_all(first.generate_key())) == 1
 
 

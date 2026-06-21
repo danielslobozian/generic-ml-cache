@@ -48,7 +48,9 @@ def _command(**overrides) -> ProbeCommand:
     return ProbeCommand(**base)
 
 
-def _store_current_execution(repository: InMemoryExecutionRepository, command: ProbeCommand) -> None:
+def _store_current_execution(
+    repository: InMemoryExecutionRepository, command: ProbeCommand
+) -> None:
     identity = build_call_identity(FakeFingerprint(), command)
     repository.save(
         MlExecution(

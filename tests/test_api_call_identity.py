@@ -28,7 +28,10 @@ def test_key_is_hex_and_deterministic():
 
 
 def test_different_providers_differ():
-    assert _identity(provider="openai").generate_key() != _identity(provider="anthropic").generate_key()
+    assert (
+        _identity(provider="openai").generate_key()
+        != _identity(provider="anthropic").generate_key()
+    )
 
 
 def test_different_models_differ():
@@ -36,7 +39,10 @@ def test_different_models_differ():
 
 
 def test_different_messages_differ():
-    assert _identity(messages_fingerprint="a").generate_key() != _identity(messages_fingerprint="b").generate_key()
+    assert (
+        _identity(messages_fingerprint="a").generate_key()
+        != _identity(messages_fingerprint="b").generate_key()
+    )
 
 
 def test_never_collides_with_a_passthrough_key():

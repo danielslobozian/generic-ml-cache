@@ -18,7 +18,9 @@ from generic_ml_cache.application.domain.model.execution.execution_failure impor
 )
 from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
@@ -152,9 +154,7 @@ def test_failed_refresh_does_not_supersede(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()
     repository.save(_execution(identity, content=b"good"))
-    repository.save(
-        _execution(identity, state=ExecutionState.FAILED, output_persisted=False)
-    )
+    repository.save(_execution(identity, state=ExecutionState.FAILED, output_persisted=False))
     current = repository.find_current(identity.generate_key())
     assert current.artifacts[0].blob_key == "blob_" + b"good".hex()
 
@@ -222,9 +222,13 @@ def test_different_kinds_do_not_collide_in_one_store(tmp_path):
     passthrough = PassthroughCallIdentity(client="claude", native_args_fingerprint="x")
     repository.save(_execution(managed, content=b"managed"))
     repository.save(_execution(passthrough, kind=ExecutionKind.LOCAL_PASSTHROUGH, content=b"pass"))
-    assert repository.find_current(managed.generate_key()).artifacts[0].blob_key.endswith(
-        b"managed".hex()
+    assert (
+        repository.find_current(managed.generate_key())
+        .artifacts[0]
+        .blob_key.endswith(b"managed".hex())
     )
-    assert repository.find_current(passthrough.generate_key()).artifacts[0].blob_key.endswith(
-        b"pass".hex()
+    assert (
+        repository.find_current(passthrough.generate_key())
+        .artifacts[0]
+        .blob_key.endswith(b"pass".hex())
     )

@@ -43,6 +43,7 @@ class ExecutionSummary:
     client: str
     model: str
 
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS call_identities (
     execution_key TEXT PRIMARY KEY,

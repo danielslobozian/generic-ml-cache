@@ -5,14 +5,18 @@
 from __future__ import annotations
 
 from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
 
 
 def test_is_a_call_identity():
-    assert isinstance(PassthroughCallIdentity(client="claude", native_args_fingerprint="fp"), CallIdentity)
+    assert isinstance(
+        PassthroughCallIdentity(client="claude", native_args_fingerprint="fp"), CallIdentity
+    )
 
 
 def test_generate_key_is_hex_and_deterministic():

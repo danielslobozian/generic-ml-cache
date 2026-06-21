@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from generic_ml_cache.application.domain.model.identity.api_call_identity import ApiCallIdentity
 from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
@@ -56,9 +58,7 @@ def serialize_identity(identity: CallIdentity) -> SerializedIdentity:
             client=identity.client,
             model="",
             effort="",
-            identity_json=json.dumps(
-                {"native_args_fingerprint": identity.native_args_fingerprint}
-            ),
+            identity_json=json.dumps({"native_args_fingerprint": identity.native_args_fingerprint}),
         )
     if isinstance(identity, ApiCallIdentity):
         return SerializedIdentity(

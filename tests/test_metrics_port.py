@@ -28,7 +28,13 @@ class InMemoryMetrics(MetricsPort):
         effort: str,
     ) -> None:
         self._events.append(
-            {"event": event, "execution_key": execution_key, "client": client, "model": model, "effort": effort}
+            {
+                "event": event,
+                "execution_key": execution_key,
+                "client": client,
+                "model": model,
+                "effort": effort,
+            }
         )
 
     def hit_counts_by_key(self) -> Dict[str, int]:
@@ -55,7 +61,9 @@ def test_port_cannot_be_instantiated_directly():
 
 def test_record_event_appends_event():
     metrics = InMemoryMetrics()
-    metrics.record_event("hit", execution_key="key1", client="claude", model="sonnet", effort="high")
+    metrics.record_event(
+        "hit", execution_key="key1", client="claude", model="sonnet", effort="high"
+    )
     assert metrics.event_counts() == {"hit": 1}
 
 

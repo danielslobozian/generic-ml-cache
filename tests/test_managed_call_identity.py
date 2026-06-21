@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 
 
 def test_abstract_call_identity_cannot_be_instantiated():
@@ -48,23 +50,37 @@ def test_generate_key_is_deterministic():
 
 
 def test_different_clients_produce_different_keys():
-    assert _make_identity(client="claude").generate_key() != _make_identity(client="codex").generate_key()
+    assert (
+        _make_identity(client="claude").generate_key()
+        != _make_identity(client="codex").generate_key()
+    )
 
 
 def test_different_models_produce_different_keys():
-    assert _make_identity(model="sonnet").generate_key() != _make_identity(model="haiku").generate_key()
+    assert (
+        _make_identity(model="sonnet").generate_key()
+        != _make_identity(model="haiku").generate_key()
+    )
 
 
 def test_different_effort_produces_different_keys():
-    assert _make_identity(effort="high").generate_key() != _make_identity(effort="low").generate_key()
+    assert (
+        _make_identity(effort="high").generate_key() != _make_identity(effort="low").generate_key()
+    )
 
 
 def test_different_context_fingerprint_produces_different_keys():
-    assert _make_identity(context_fingerprint="aaa").generate_key() != _make_identity(context_fingerprint="bbb").generate_key()
+    assert (
+        _make_identity(context_fingerprint="aaa").generate_key()
+        != _make_identity(context_fingerprint="bbb").generate_key()
+    )
 
 
 def test_different_prompt_fingerprint_produces_different_keys():
-    assert _make_identity(prompt_fingerprint="aaa").generate_key() != _make_identity(prompt_fingerprint="bbb").generate_key()
+    assert (
+        _make_identity(prompt_fingerprint="aaa").generate_key()
+        != _make_identity(prompt_fingerprint="bbb").generate_key()
+    )
 
 
 def test_different_input_files_produce_different_keys():

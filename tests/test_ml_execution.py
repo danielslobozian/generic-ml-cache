@@ -7,7 +7,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -71,9 +73,7 @@ def test_failed_execution_carries_a_failure_not_an_exit_code():
         execution_state=ExecutionState.FAILED,
         execution_kind=ExecutionKind.LOCAL_MANAGED,
         output_persisted=False,
-        failure=ExecutionFailure(
-            reason=FailureReason.NONZERO_EXIT, message="exit 1", exit_code=1
-        ),
+        failure=ExecutionFailure(reason=FailureReason.NONZERO_EXIT, message="exit 1", exit_code=1),
     )
     assert execution.execution_state is ExecutionState.FAILED
     assert execution.failure.exit_code == 1
@@ -142,9 +142,7 @@ def test_call_identity_is_accessible():
 
 
 def test_dehydrated_execution_has_artifacts_without_content():
-    dehydrated_artifact = Artifact(
-        artifact_type=ArtifactType.STDOUT, blob_key="k", size_bytes=7
-    )
+    dehydrated_artifact = Artifact(artifact_type=ArtifactType.STDOUT, blob_key="k", size_bytes=7)
     execution = MlExecution(
         call_identity=_make_identity(),
         execution_state=ExecutionState.SUCCESS,

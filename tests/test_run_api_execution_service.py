@@ -88,9 +88,7 @@ class FakeMetrics(MetricsPort):
 
 
 def _command(**overrides) -> RunApiExecutionCommand:
-    base = dict(
-        provider="openai", model="gpt-x", messages=[Message(role="user", content="hi")]
-    )
+    base = dict(provider="openai", model="gpt-x", messages=[Message(role="user", content="hi")])
     base.update(overrides)
     return RunApiExecutionCommand(**base)
 
@@ -131,9 +129,7 @@ def test_service_implements_the_inbound_port():
 def test_miss_runs_records_and_returns_an_api_success():
     harness = _Harness(
         FakeApiClient(
-            ClientRunResult(
-                exit_code=0, stdout="answer\n", token_usage=TokenUsage(input_tokens=5)
-            )
+            ClientRunResult(exit_code=0, stdout="answer\n", token_usage=TokenUsage(input_tokens=5))
         )
     )
     execution = harness.service.execute(_command())

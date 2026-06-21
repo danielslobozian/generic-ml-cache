@@ -21,7 +21,14 @@ _ARGS = ["--reasoning", "max", "--flag"]
 
 def _argv(adapter, client_args):
     return adapter.build_argv(
-        adapter.default_executable, Path("/tmp"), "model", "high", "ctx", "PROMPT", "sys", client_args
+        adapter.default_executable,
+        Path("/tmp"),
+        "model",
+        "high",
+        "ctx",
+        "PROMPT",
+        "sys",
+        client_args,
     )
 
 

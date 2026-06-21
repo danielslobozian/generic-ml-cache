@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from typing import List, Protocol
 
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache.common.checksum import fingerprint_arguments, text_checksum
 

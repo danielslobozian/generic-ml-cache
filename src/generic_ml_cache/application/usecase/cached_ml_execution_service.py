@@ -114,9 +114,7 @@ class CachedMlExecutionService(ABC):
     ) -> MlExecution:
         if command.cache_mode is CacheMode.OFFLINE:
             self._record_event(journal_events.MISS, execution_key, command)
-            raise CacheMiss(
-                "offline: this call is not cacheable, so it cannot be served offline"
-            )
+            raise CacheMiss("offline: this call is not cacheable, so it cannot be served offline")
         return self._run_fresh(command, call_identity, execution_key, allow_store=False)
 
     def _run_fresh(

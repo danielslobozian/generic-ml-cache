@@ -12,7 +12,9 @@ from generic_ml_cache.adapter.out.persistence.call_identity_serialization import
     serialize_identity,
 )
 from generic_ml_cache.application.domain.model.identity.api_call_identity import ApiCallIdentity
-from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
 from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
@@ -60,7 +62,9 @@ def test_passthrough_round_trip():
 
 
 def test_passthrough_denormalized_columns():
-    serialized = serialize_identity(PassthroughCallIdentity(client="codex", native_args_fingerprint="fp"))
+    serialized = serialize_identity(
+        PassthroughCallIdentity(client="codex", native_args_fingerprint="fp")
+    )
     assert serialized.kind == "local_passthrough"
     assert serialized.client == "codex"
     assert serialized.model == ""

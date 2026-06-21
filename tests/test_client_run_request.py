@@ -25,7 +25,9 @@ def test_required_fields():
 
 
 def test_optional_fields_default():
-    client_run_request = ClientRunRequest(client="claude", model="m", effort="", context="", prompt="")
+    client_run_request = ClientRunRequest(
+        client="claude", model="m", effort="", context="", prompt=""
+    )
     assert client_run_request.input_file_paths == []
     assert client_run_request.allow_paths == []
     assert client_run_request.client_args == []
@@ -77,6 +79,8 @@ def test_cache_policy_fields_are_absent():
 
 
 def test_is_frozen():
-    client_run_request = ClientRunRequest(client="claude", model="m", effort="", context="", prompt="")
+    client_run_request = ClientRunRequest(
+        client="claude", model="m", effort="", context="", prompt=""
+    )
     with pytest.raises(Exception):
         client_run_request.client = "codex"  # type: ignore[misc]

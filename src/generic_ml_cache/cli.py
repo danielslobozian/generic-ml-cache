@@ -713,9 +713,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.set_defaults(func=_cmd_run)
 
     inspect = sub.add_parser("inspect", help="show a stored execution by its (short) key")
-    inspect.add_argument(
-        "execution", help="an execution key, or a short prefix as shown by `list`"
-    )
+    inspect.add_argument("execution", help="an execution key, or a short prefix as shown by `list`")
     inspect.set_defaults(func=_cmd_inspect)
 
     check = sub.add_parser(

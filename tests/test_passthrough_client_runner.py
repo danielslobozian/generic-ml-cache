@@ -27,9 +27,7 @@ def test_forwards_native_args_and_captures_stdout():
 
 
 def test_captures_stderr():
-    result = PassthroughClientRunner().run(
-        "fake", ["-c", "import sys; sys.stderr.write('warn')"]
-    )
+    result = PassthroughClientRunner().run("fake", ["-c", "import sys; sys.stderr.write('warn')"])
     assert result.stderr == "warn"
 
 

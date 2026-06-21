@@ -102,4 +102,7 @@ def test_failure_persists_with_record_on_error():
 
 def test_persist_output_false_never_persists():
     assert _command(persist_output=False).should_persist(succeeded=True) is False
-    assert _command(persist_output=False, record_on_error=True).should_persist(succeeded=False) is False
+    assert (
+        _command(persist_output=False, record_on_error=True).should_persist(succeeded=False)
+        is False
+    )
