@@ -59,6 +59,16 @@ class InputFileError(CacheError):
     """
 
 
+class ArtifactBlobMissing(CacheError):
+    """Raised when hydrating an execution whose artifact references a blob that
+    the blob store no longer holds.
+
+    The structured record says the output was persisted, but the bytes are gone
+    (an out-of-band deletion, a half-completed prune). The engine fails loud
+    rather than returning a silently empty result.
+    """
+
+
 class IsolationViolation(CacheError):
     """Raised when a recorded run reported touching files outside its folder.
 
