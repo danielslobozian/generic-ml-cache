@@ -8,6 +8,9 @@ import enum
 from dataclasses import dataclass
 from typing import Optional
 
+_UTF8 = "utf-8"
+_BINARY = "binary"
+
 
 class ArtifactType(enum.Enum):
     """The kind of generated output an Artifact holds.
@@ -36,8 +39,38 @@ class Artifact:
     blob_key: str
     size_bytes: int
     name: Optional[str] = None
-    encoding: str = "utf-8"
+    encoding: str = _UTF8
     content: Optional[bytes] = None
+
+    @classmethod
+    def from_content(
+        cls,
+        artifact_type: ArtifactType,
+        blob_key: str,
+        content: bytes,
+        name: Optional[str] = None,
+    ) -> "Artifact":
+        """Build a hydrated artifact from its bytes, deriving size and encoding.
+
+        The caller has already computed ``blob_key`` and stored the bytes; this
+        only assembles the value object from the content it owns.
+        """
+        return cls(
+            artifact_type=artifact_type,
+            blob_key=blob_key,
+            size_bytes=len(content),
+            name=name,
+            encoding=cls._encoding_for(content),
+            content=content,
+        )
+
+    @staticmethod
+    def _encoding_for(content: bytes) -> str:
+        try:
+            content.decode(_UTF8)
+            return _UTF8
+        except UnicodeDecodeError:
+            return _BINARY
 
     @property
     def is_hydrated(self) -> bool:

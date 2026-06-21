@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 
 from generic_ml_cache import checksum_input_data, text_checksum
+from generic_ml_cache.common.checksum import fingerprint_arguments
 
 
 def test_same_text_same_checksum_regardless_of_container(tmp_path):
@@ -59,3 +60,21 @@ def test_text_checksum_is_plain_sha256_of_utf8():
     import hashlib
 
     assert text_checksum("hello") == hashlib.sha256(b"hello").hexdigest()
+
+
+def test_fingerprint_arguments_is_order_sensitive():
+    assert fingerprint_arguments(["a", "b"]) != fingerprint_arguments(["b", "a"])
+
+
+def test_fingerprint_arguments_is_deterministic():
+    assert fingerprint_arguments(["--flag", "x"]) == fingerprint_arguments(["--flag", "x"])
+
+
+def test_fingerprint_arguments_matches_the_legacy_recipe():
+    """The old inline recipe was sha256 of the \\x00-joined utf-8 args; the shared
+    function must reproduce it byte-for-byte so existing keys are preserved."""
+    import hashlib
+
+    arguments = ["--flag", "value"]
+    expected = hashlib.sha256("\x00".join(arguments).encode("utf-8")).hexdigest()
+    assert fingerprint_arguments(arguments) == expected

@@ -63,3 +63,29 @@ def test_is_frozen():
     artifact = Artifact(artifact_type=ArtifactType.STDOUT, blob_key="k", size_bytes=0)
     with pytest.raises(Exception):
         artifact.blob_key = "other"  # type: ignore[misc]
+
+
+# --- from_content factory ----------------------------------------------------
+
+
+def test_from_content_derives_size_and_utf8_encoding():
+    artifact = Artifact.from_content(ArtifactType.STDOUT, "key", b"hello")
+    assert artifact.size_bytes == 5
+    assert artifact.encoding == "utf-8"
+    assert artifact.content == b"hello"
+    assert artifact.blob_key == "key"
+
+
+def test_from_content_detects_binary_content():
+    artifact = Artifact.from_content(
+        ArtifactType.OUTPUT_FILE, "key", b"\xff\xfe\x00", name="blob.bin"
+    )
+    assert artifact.encoding == "binary"
+    assert artifact.name == "blob.bin"
+
+
+def test_from_content_default_name_is_none():
+    artifact = Artifact.from_content(ArtifactType.STDERR, "key", b"")
+    assert artifact.name is None
+    assert artifact.size_bytes == 0
+    assert artifact.is_hydrated is True

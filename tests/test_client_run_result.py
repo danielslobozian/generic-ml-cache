@@ -10,6 +10,8 @@ from generic_ml_cache.application.domain.model.client_run_result import (
     ClientRunResult,
     GeneratedFile,
 )
+from generic_ml_cache.application.domain.model.execution_failure import FailureReason
+from generic_ml_cache.application.domain.model.execution_state import ExecutionState
 
 
 def test_minimal_result_needs_only_exit_code():
@@ -50,3 +52,34 @@ def test_is_frozen():
     result = ClientRunResult(exit_code=0)
     with pytest.raises(Exception):
         result.exit_code = 1  # type: ignore[misc]
+
+
+# --- outcome interpretation (the rule lives on the result) -------------------
+
+
+def test_zero_exit_succeeded():
+    assert ClientRunResult(exit_code=0).succeeded is True
+
+
+def test_nonzero_exit_did_not_succeed():
+    assert ClientRunResult(exit_code=2).succeeded is False
+
+
+def test_outcome_is_success_on_zero_exit():
+    assert ClientRunResult(exit_code=0).outcome() is ExecutionState.SUCCESS
+
+
+def test_outcome_is_failed_on_nonzero_exit():
+    assert ClientRunResult(exit_code=1).outcome() is ExecutionState.FAILED
+
+
+def test_failure_is_none_on_success():
+    assert ClientRunResult(exit_code=0).failure() is None
+
+
+def test_failure_describes_a_nonzero_exit():
+    failure = ClientRunResult(exit_code=3).failure()
+    assert failure is not None
+    assert failure.reason is FailureReason.NONZERO_EXIT
+    assert failure.exit_code == 3
+    assert "3" in failure.message
