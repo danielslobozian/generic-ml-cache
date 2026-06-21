@@ -211,26 +211,41 @@ event-sourced spine.
 
 ---
 
-## 7. Key generation & fingerprinting
+## 7. Key generation, fingerprinting, and input transparency
 
-Three distinct responsibilities, three distinct locations:
+**Transparency stance.** The engine reads as little of the user's input as it
+can, and persists none of it raw. Declared input files are fingerprinted *at
+the filesystem edge* — their content never enters the engine — and only the
+checksum is ever stored. Context and prompt are different: the user types them
+into the command, so they necessarily pass through the engine to reach the
+client; but they too are persisted only as fingerprints, never as raw text.
 
-1. **File reading** — the use case reads the bytes at each declared path.
-   This is I/O and belongs in the application layer (the use case calls a
-   port, or reads directly at the inbound boundary). No file reading happens
-   in the domain.
+Four distinct responsibilities, four distinct locations:
 
-2. **Fingerprint rule** — `sha256` of file bytes. This rule is a **shared
-   core function** (`common/checksum.py`) that every inbound path calls.
-   A second front door (daemon, workflow engine library consumer) that
-   reimplements this function could silently miss the cache. One rule,
-   everywhere.
+1. **File reading + hashing (input files)** — happens inside the
+   `FileFingerprintPort` adapter. The adapter reads the bytes at a declared
+   path, applies the imported core rule, and returns **only the checksum**. The
+   content never crosses back into the use case or the domain. This is how the
+   engine fingerprints a file without ever holding its content.
 
-3. **Key generation** — `CallIdentity.generate_key()`. A pure method on the
-   value object. It hashes the already-in-memory fingerprints. No I/O.
+2. **The fingerprint rule** — `file_content_fingerprint(bytes) -> str`
+   (`common/checksum.py`), the `sha256` of the raw bytes. It is a **fixed core
+   function the adapter imports directly — never injected as a parameter.**
+   Injection would let two front doors (CLI, daemon, library consumer) supply
+   two different rules and silently miss each other's cache. A direct import
+   makes divergence *impossible* (a hard line), not merely discouraged
+   (a convention one can rationalise around). One rule, everywhere.
 
-Summary: *reading* is the use case, the *rule* is core, *key generation* is
-domain.
+3. **Context / prompt fingerprinting** — these already live in the command
+   (the user typed them), so the use case hashes them in place with the shared
+   `text_checksum` rule. No extra exposure: the engine already holds them.
+
+4. **Key generation** — `CallIdentity.generate_key()`. A pure domain method
+   that hashes the already-in-memory fingerprints. No I/O.
+
+Summary: *file reading + file hashing* is the fingerprint adapter (content
+stays at the edge), the *rule* is a directly-imported core function,
+*context/prompt hashing* is the use case, *key generation* is the domain.
 
 **Folder fingerprinting.** It is technically possible to compute a recursive
 checksum of a directory (sort all paths, hash each file's bytes, combine into
@@ -284,6 +299,9 @@ RunManagedLocalExecutionCommand
                                         --   makes the call cacheable despite allow_paths
   client_args        : List[str]        -- raw passthrough args; fingerprinted by use case
   grants             : List[str]        -- capability names (net, read, write, …)
+  package_inputs     : bool             -- opt-in (default False): aggregate declared
+                                        --   files' content into the structured context;
+                                        --   elides file-read grants; keyed (see below)
   cache_mode         : CacheMode        -- CACHE | OFFLINE | REFRESH
   persist_output     : bool             -- store output? default True
 ```
@@ -332,6 +350,36 @@ RunApiExecutionCommand
 **Business rule: `persist_output = False` is incompatible with async execution
 mode** (future §OPEN). An async execution must be stored — the caller retrieves
 the result by ID at a later time and the stored output is the only source.
+
+---
+
+### Context packaging (optional feature; specified here, built later)
+
+Context is modelled as a **structured object**, of which the user's raw context
+is one key's value. An opt-in capability, `package_inputs`, aggregates each
+declared input file — `{name, path, checksum, content}` — into that structure.
+
+- **Local managed mode:** optional. When enabled, the file content rides inside
+  the context, so the client no longer needs file-read grants — making a local
+  run a faithful stand-in for an API run for comparison.
+- **API mode:** always on. The API cannot read disk, so packaging is the only
+  path for file content to reach the model.
+- The engine **never inspects the context**, so it cannot and will not detect
+  if the user *also* placed the same content there by hand. That is the user's
+  responsibility — a direct consequence of the transparency stance (§7).
+- Packaging is the one path where the engine reads file *content* (through an
+  explicit content-read capability, distinct from `FileFingerprintPort`). Even
+  then, only the checksum is persisted — never the content.
+
+**Packaging is part of the call identity.** A packaged run and a non-packaged
+run of the same files are different invocations — different actual model input,
+different grants — and must **never reuse each other's result**. Reusing across
+modes would be unsound *and* would defeat the comparison the feature exists for.
+It follows the established "absent → nothing added to the key" pattern:
+packaging **off** contributes nothing (today's keys unchanged), packaging **on**
+adds a marker (its own distinct key). File fingerprints stay in the key in both
+modes. There is no `scan_trust`-style override here — distinct by default, full
+stop.
 
 ---
 
@@ -401,6 +449,36 @@ class MetricsPort(ABC):
     def last_access(self) -> Dict[str, float]: ...
 ```
 
+**`FileFingerprintPort`** — fingerprint a declared input file *at the edge*.
+The adapter reads the file and applies the imported core rule, returning only
+the checksum; the content never enters the engine (§7).
+
+```python
+class FileFingerprintPort(ABC):
+    @abstractmethod
+    def fingerprint(self, path: str) -> str: ...
+```
+
+**`ExecutionRepositoryPort`** — the "database": store and retrieve the
+structured execution record (state, kind, token_usage, output_persisted,
+timestamps) keyed by `generate_key()`. It holds **no** output bytes (the blob
+store's job) and **no** journal events (the metrics port's job). On a hit the
+use case reads the structured record here *and*, when `output_persisted`, the
+output bytes from the blob store, then assembles the `MlExecution`.
+
+```python
+class ExecutionRepositoryPort(ABC):
+    @abstractmethod
+    def find(self, key: str) -> MlExecution | None: ...   # structure only; output filled from the blob store
+    @abstractmethod
+    def save(self, execution: MlExecution) -> None: ...    # persists structure; never output bytes
+```
+
+**Datasources are injected from the inbound side (§10).** The composition root
+builds the concrete repository / blob / metrics / fingerprint adapters — which
+folder, which database file — and hands them to the use case through its
+constructor. The core names only the ports; it never chooses a datasource.
+
 ### Inbound (the use-case contracts)
 
 One inbound port per use case. Each names the action and declares the command
@@ -417,6 +495,15 @@ Each call is independent: it receives its collaborators through constructor
 injection and processes one command at a time. A daemon (future inbound
 adapter) is stateful — it manages connections, sessions, and live-status
 subscriptions — but the engine it wraps is not.
+
+**Constructor injection is the default shape of every component.** Each use
+case and each adapter is a class that receives its collaborators — ports,
+datasources, config — through its constructor; it never reaches out for them.
+The **composition root owns lifecycle**: a terminal client builds the adapters,
+makes one call, and throws them away (stateless); a daemon or other stateful
+host builds them once and holds them in memory across calls (stateful). The
+components are identical in both cases — only the root differs. This is exactly
+what lets one core serve a one-shot CLI and a long-lived daemon unchanged.
 
 ### Project split
 
@@ -456,6 +543,11 @@ the same boundary the package split will formalise tomorrow.
 - **Configuration is injected, never imposed.** The core receives its
   collaborators through constructors. It never reads a config file or selects
   a datasource.
+- **The engine reads no input content it does not have to.** Declared files are
+  fingerprinted at the edge — content never enters the engine — and context and
+  prompt pass through only because the user typed them; even they are persisted
+  only as fingerprints. The engine reads file *content* solely when the user
+  explicitly enables packaging (§8), and even then stores only the checksum.
 
 ---
 
@@ -468,16 +560,22 @@ the same boundary the package split will formalise tomorrow.
 | `Usage` | `TokenUsage` | `application/domain/model/token_usage.py` |
 | `Cassette` | *(retired)* | — |
 | `Outcome` | *(retired — facts live on `MlExecution`)* | — |
-| `ClientStatus` | *(retired — replaced by `ExecutionState`)* | — |
 | `Mode` | `CacheMode` | `application/domain/model/cache_mode.py` |
 | `match_key()` | `generate_key()` on `CallIdentity` | |
 | — | `MlExecution` | `application/domain/model/ml_execution.py` |
 | — | `ExecutionState` | `application/domain/model/execution_state.py` |
 | — | `ExecutionKind` | `application/domain/model/execution_kind.py` |
 | — | `ClientRunRequest` | `application/domain/model/client_run_request.py` |
+| — | `file_content_fingerprint()` | `common/checksum.py` |
 | — | `BlobStorePort` | `application/port/out/blob_store_port.py` |
 | — | `MetricsPort` | `application/port/out/metrics_port.py` |
+| — | `ClientRunnerPort` | `application/port/out/client_runner_port.py` |
+| — | `FileFingerprintPort` | `application/port/out/file_fingerprint_port.py` |
+| — | `ExecutionRepositoryPort` | `application/port/out/execution_repository_port.py` |
 | — | `ApiClientPort` | `application/port/out/api_client_port.py` |
+
+`ClientStatus` is **kept** (discovery / `doctor` output — unrelated to the
+execution aggregate; an earlier draft wrongly listed it for retirement).
 
 **OPEN (future work, not blocking current build):**
 
