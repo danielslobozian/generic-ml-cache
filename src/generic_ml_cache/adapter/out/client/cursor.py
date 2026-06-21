@@ -71,7 +71,7 @@ class CursorAdapter(ClientAdapter):
             # Streaming output (NDJSON) so a live consumer can watch progress; the
             # recorded answer + usage come from the final `result` event, which is
             # identical to the old single-object json (proven against the live CLI),
-            # so the cassette is unchanged. The prompt stays the trailing positional.
+            # so the stored output is unchanged. The prompt stays the trailing positional.
             "--output-format",
             "stream-json",
             # Passthrough args before the prompt: cursor-agent's prompt is a

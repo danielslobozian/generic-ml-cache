@@ -4,7 +4,7 @@
 
 This text is handed to the client when a real call is recorded. It is the soft
 half of the isolation guarantee (the hard half is: the client always runs inside
-the cache's own throwaway folder). It is NEVER written into the cassette, because
+the cache's own throwaway folder). It is NEVER written into the stored record, because
 it is not part of the cached input -- it is operational scaffolding.
 """
 
@@ -36,7 +36,7 @@ def build_system_prompt(
     folders), the directive is widened to permit reading exactly those paths --
     nothing else outside the folder, and never writing to them. Like the rest of
     the directive, this is record-time scaffolding and is never stored in the
-    cassette.
+    stored record.
     """
     directive = PRIME_DIRECTIVE
     if allowed_read_paths:

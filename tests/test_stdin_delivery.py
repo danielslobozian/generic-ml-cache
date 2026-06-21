@@ -3,7 +3,7 @@
 """Prompt + context are delivered to the client on stdin, never as an argv
 argument, so a large prompt cannot hit the OS single-argument size limit
 (MAX_ARG_STRLEN on Linux, the whole-command-line cap on Windows, ARG_MAX on
-macOS). This is delivery-only: the cassette key is unchanged."""
+macOS). This is delivery-only: the execution key is unchanged."""
 
 from __future__ import annotations
 

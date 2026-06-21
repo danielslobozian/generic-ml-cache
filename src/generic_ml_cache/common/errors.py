@@ -10,7 +10,7 @@ class CacheError(Exception):
 
 
 class CacheMiss(CacheError):
-    """Raised in offline mode when no cassette matches the request.
+    """Raised in offline mode when no stored execution matches the request.
 
     Offline mode is a *knowing* switch to replay-only: a miss is an error, never
     a silent fall-through to a real call.
@@ -46,10 +46,6 @@ class CommandLineTooLong(CacheError):
     """
 
 
-class CassetteFormatError(CacheError):
-    """Raised when a cassette file on disk is malformed or unreadable."""
-
-
 class InputFileError(CacheError):
     """Raised when a declared input file cannot be read for fingerprinting.
 
@@ -83,7 +79,7 @@ class RunInterrupted(Exception):
     workflow engine) before it finished.
 
     Deliberately **not** a ``CacheError``: it is not a fault but a requested stop,
-    and it must never be recorded as a cassette -- an interrupted call is not a
+    and it must never be recorded as an execution -- an interrupted call is not a
     result. The CLI maps it to a distinct exit code so a stop is distinguishable
     from a failure.
     """

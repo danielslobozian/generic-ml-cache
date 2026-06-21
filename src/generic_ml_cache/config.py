@@ -12,7 +12,7 @@ Three rules keep this predictable:
   winner is, in order: a CLI flag, an environment variable, the config file, the
   built-in default. The ``store`` location is the exception -- config file or
   built-in default only, with **no flag and no environment** -- because where the
-  cassettes live is the cache's own concern, not a per-call knob.
+  stored executions live is the cache's own concern, not a per-call knob.
 * **Zero dependencies.** The format is INI (stdlib :mod:`configparser`) and the
   per-user location is resolved inline, so nothing beyond the standard library is
   needed on any supported Python.
@@ -28,7 +28,7 @@ File shape::
     [defaults]
     mode = cache
     # store defaults to the per-user data dir (XDG data home); set a path to change it
-    store = /path/to/cassettes
+    store = /path/to/store
     timeout = 120
     trust_scan = false
 
@@ -50,7 +50,7 @@ may be cached. Allow-path folders cannot be fingerprinted, so by default such a
 call is passthrough (always fresh, never stored). Setting ``trust_scan = true``
 asserts that the scanned folders are stable and lets these calls be cached like
 any other -- on the ordinary key (the prompt already names the folder), with the
-folders themselves never entering the key or the cassette. It is deliberately a
+folders themselves never entering the key or the stored record. It is deliberately a
 config/environment setting, not a per-call flag, because it trades soundness for
 reuse and should be a considered, standing choice. Precedence is the usual
 environment (``GMLCACHE_TRUST_SCAN``) > config file > built-in default.
@@ -82,7 +82,7 @@ DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "timeout": None}
 _MODES = {m.value for m in CacheMode}
 
 #: written by ``gmlcache init`` (and only then); ``{store}`` is filled with the
-#: resolved per-user default so the user can see and edit where cassettes live.
+#: resolved per-user default so the user can see and edit where the store lives.
 _DEFAULT_CONFIG_TEMPLATE = """\
 # generic-ml-cache configuration.
 #
@@ -96,13 +96,13 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 
 [defaults]
 mode = cache
-# Where cassettes live. This is the per-user data dir by default; change freely.
+# Where the store lives. This is the per-user data dir by default; change freely.
 store = {store}
 # timeout = 120
 trust_scan = false
-# Optional cache size cap. Off by default = keep every cassette forever. When set
+# Optional cache size cap. Off by default = keep every execution forever. When set
 # (e.g. 5GB / 500MB / a byte count), the cache evicts the least-recently-used
-# cassettes to make room as it records new ones. Time-based ("not used in N days")
+# executions to make room as it records new ones. Time-based ("not used in N days")
 # eviction arrives with daemon mode.
 # max_size = 5GB
 
@@ -142,7 +142,7 @@ def default_data_dir() -> Path:
 
 
 def default_store_path() -> Path:
-    """Where cassettes live when the config does not say otherwise.
+    """Where the store lives when the config does not say otherwise.
 
     The store is the cache's own internal structure, so its default sits in the
     per-user data directory (honoring ``XDG_DATA_HOME``), never in whatever
@@ -152,7 +152,7 @@ def default_store_path() -> Path:
     the one thing a cache is for -- reuse. To run a fully isolated cache, point
     ``GMLCACHE_CONFIG`` at a different whole config file.
     """
-    return default_data_dir() / "cassettes"
+    return default_data_dir() / "store"
 
 
 @dataclass
@@ -261,7 +261,7 @@ def write_default_config(path: Optional[Path] = None) -> Tuple[Path, bool]:
     Returns ``(path, created)``; ``created`` is ``False`` when a file already
     existed (it is *never* overwritten). The generated file spells out the
     resolved default store path so the user can see -- and edit -- where the
-    cassettes live. This is the only path that ever writes the config: ``load``
+    store lives. This is the only path that ever writes the config: ``load``
     still never creates it, so the cache keeps working with zero files present.
     """
     p = path or resolve_config_path()

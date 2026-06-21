@@ -171,8 +171,8 @@ def test_coercion_helpers_map_absent_to_none_not_zero():
     assert float_or_none("1.5") == 1.5
 
 
-# Cassette round-trip / store end-to-end tests were removed with the cassette
-# format in the Phase 5/6 cutover; usage now flows through ClientRunResult ->
+# Storage round-trip / end-to-end tests were removed with the old record format in
+# the Phase 5/6 cutover; usage now flows through ClientRunResult ->
 # MlExecution -> the SQLite repository, covered by test_sqlite_execution_repository
 # and test_composition. The adapter parse_output behaviour above is the part unique
 # to this file.

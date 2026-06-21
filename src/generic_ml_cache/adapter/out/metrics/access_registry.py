@@ -6,7 +6,7 @@ It is **non-load-bearing by construction** -- it records *that* a hit / miss /
 record / eviction happened, for `stats` and `prune` to read, but it never gates
 correctness. Every operation swallows its own errors: if the database is missing,
 locked, unwritable, or corrupt, the cache still resolves exactly as it would
-without it. It is deliberately separate from the cassettes, which stay pure and
+without it. It is deliberately separate from the executions, which stay pure and
 immutable -- no access counters are ever written back into a recording.
 
 Stored in the store directory as ``registry.sqlite3`` (stdlib ``sqlite3`` only;
@@ -24,7 +24,7 @@ from typing import Dict, Optional
 
 # The four access events. A resolve emits exactly one of HIT / MISS / RECORD
 # (passthrough calls are outside cache accounting and emit nothing); EVICT is
-# emitted by prune/eviction when a cassette is removed.
+# emitted by prune/eviction when an execution is removed.
 HIT = "hit"
 MISS = "miss"
 RECORD = "record"
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS access_events (
 
 
 class AccessRegistry:
-    """A best-effort SQLite log of access events, living beside the cassettes."""
+    """A best-effort SQLite log of access events, living beside the executions."""
 
     def __init__(self, root: Path) -> None:
         self._path = Path(root) / _DB_NAME
@@ -93,8 +93,8 @@ class AccessRegistry:
         """Return {match_key: number-of-hits} across all recorded HIT events
         ({} if unavailable).
 
-        A hit is a real call that was *not* made because a cassette answered it,
-        so multiplying a cassette's recorded usage by its hit count is exactly the
+        A hit is a real call that was *not* made because a stored execution answered it,
+        so multiplying an execution's recorded usage by its hit count is exactly the
         usage that hit saved. Best-effort like everything here: never raises.
         """
         try:
@@ -127,7 +127,7 @@ class AccessRegistry:
 
     def last_access(self) -> Dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
-        ({} if unavailable). A cassette absent here has never been seen by the
+        ({} if unavailable). An execution absent here has never been seen by the
         registry; the caller falls back to file age for it."""
         try:
             conn = self._connect()

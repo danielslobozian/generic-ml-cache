@@ -200,7 +200,7 @@ def _run_client(
     signal from the caller (the workflow engine, DESIGN cross-app clean stop).
 
     On SIGTERM/SIGINT the whole group is torn down and ``RunInterrupted`` is raised,
-    so the caller records no cassette (an interrupted call is not a result). A
+    so the caller records no execution (an interrupted call is not a result). A
     timeout keeps the prior contract: kill the group and re-raise ``TimeoutExpired``.
 
     Signal handlers can only be installed on the main thread; off it (a host that
@@ -325,7 +325,7 @@ def record_real_call(
             run_dir = Path(tmp)
             # The config home is a SEPARATE folder from run_dir, so the settings
             # file and any seeded credentials are never snapshotted into the
-            # cassette and are deleted with the run. Capabilities are enabled by the
+            # stored record and are deleted with the run. Capabilities are enabled by the
             # file written here, not by argv flags (v0.0.16; see docs/reference/grants.md).
             config_home = Path(home_tmp)
             adapter.prepare(run_dir, context, prompt, system_prompt)
@@ -357,7 +357,7 @@ def record_real_call(
             _check_command_line_size(argv)
 
             # A stop signal here raises RunInterrupted, unwinding before any capture
-            # or cassette write -- an interrupted call leaves no half-written record.
+            # or record write -- an interrupted call leaves no half-written record.
             stdout, stderr, returncode = _run_client(
                 argv, run_dir, stdin_payload, timeout, run_env, on_line
             )

@@ -27,7 +27,7 @@ Design rulings this encodes (do not relitigate):
   under-reports (e.g. subagents that billed outside the single invocation we
   launched), that is the client's gap; we mark it unknown rather than invent a
   total.
-* **The model the call ran under lives on the cassette** (its ``model`` field), so
+* **The model the call ran under lives on the stored execution** (its ``model`` field), so
   a reader always shows usage *next to its model* -- a Haiku token is not an Opus
   token. The full per-model / per-subagent breakdown a client may give (e.g.
   Claude's ``modelUsage``) is preserved in :attr:`Usage.raw`, not flattened here.
@@ -73,7 +73,7 @@ class Usage:
     estimate in US dollars when it offered one (advisory only -- see module docs),
     else ``None``. ``raw`` is the client's verbatim usage structure, so a caller
     that wants a client-specific field we did not normalize can read it straight
-    from the cassette.
+    from the stored execution.
     """
 
     #: Prompt/input tokens the call consumed.

@@ -156,8 +156,8 @@ def test_doctor_cli_honors_configured_executable(tmp_path, monkeypatch, capsys):
 
 def test_store_default_is_under_the_per_user_data_dir(tmp_path):
     # the autouse fixture isolates the data dir into tmp (XDG_DATA_HOME on posix,
-    # LOCALAPPDATA on Windows); the store default is <data dir>/cassettes there.
-    expected = config.default_data_dir() / "cassettes"
+    # LOCALAPPDATA on Windows); the store default is <data dir>/store there.
+    expected = config.default_data_dir() / "store"
     assert config.default_store_path() == expected
     assert expected.is_relative_to(tmp_path)  # isolated, never the real machine
     settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))

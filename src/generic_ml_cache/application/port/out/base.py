@@ -31,7 +31,7 @@ from generic_ml_cache.common.errors import ClientNotFound
 class ClientAdapter(ABC):
     """Translate the neutral request into a concrete subprocess invocation."""
 
-    #: short client name used in cassettes and on the CLI (e.g. "claude")
+    #: short client name used in stored records and on the CLI (e.g. "claude")
     name: ClassVar[str]
     #: default executable looked up on PATH when no override is given
     default_executable: ClassVar[str]
@@ -214,7 +214,7 @@ class ClientAdapter(ABC):
         door this method tries to shut.
 
         ``config_home`` is separate from ``run_dir``, so nothing written here is
-        ever mistaken for client output or captured into a cassette. Default: no
+        ever mistaken for client output or captured into a stored record. Default: no
         config home, empty env (adapters override).
         """
         return {}
@@ -246,7 +246,7 @@ def final_result_object(stdout: str):
 
     Claude and Cursor emit *the same* result object in both forms, so the recorded
     answer and usage are identical either way -- this is what lets the live stream
-    switch the client to streaming mode without moving the cassette. Returns
+    switch the client to streaming mode without changing the stored record. Returns
     ``None`` if nothing parseable is present (the adapter then degrades to raw
     stdout with no usage).
     """

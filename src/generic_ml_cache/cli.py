@@ -8,7 +8,7 @@
     gmlcache models  -- list a client's available models (advisory; relayed)
     gmlcache status  -- show the resolved configuration and where it came from
     gmlcache init    -- create the config file in the default location (if absent)
-    gmlcache inspect -- pretty-print a cassette
+    gmlcache inspect -- pretty-print a stored execution
 
 Replay fidelity: in the default (quiet) mode, ``run`` reproduces the client's
 stdout, stderr and exit code exactly. Cache diagnostics appear only with
@@ -51,7 +51,7 @@ _GRANT_HELP = (
     "open a capability for the client -- enablement, not restriction. One of "
     "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "
     "widen file and command access, web-search enables the search tool. Part of "
-    "the key (a granted call is its own cassette) and cacheable like any call; use "
+    "the key (a granted call is its own execution) and cacheable like any call; use "
     "--force for a live re-fetch. Repeatable."
 )
 
@@ -456,7 +456,7 @@ def _cmd_init(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
     value, source = settings["store"]
-    print(f"cassette store: {value}  (from {source})")
+    print(f"store: {value}  (from {source})")
     return 0
 
 
@@ -666,7 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "an extra argument appended verbatim to the client launch -- an escape "
             "hatch for client features the cache does not model. Part of the key "
-            "(different args = different cassette); only its fingerprint is stored, "
+            "(different args = different execution); only its fingerprint is stored, "
             "never the raw value. Repeatable; order is significant. Pass a "
             "dash-leading value with the =form: --client-arg=--flag."
         ),
@@ -800,17 +800,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     stats = sub.add_parser(
         "stats",
-        help="show how many cassettes are stored, their total size split by client/model, "
+        help="show how many executions are stored, their total size split by client/model, "
         "and access counts",
     )
     stats.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     stats.set_defaults(func=_cmd_stats)
 
     listp = sub.add_parser(
-        "list", help="list stored cassettes, grouped by client/model (read-only)"
+        "list", help="list stored executions, grouped by client/model (read-only)"
     )
-    listp.add_argument("--client", help="only cassettes recorded for this client")
-    listp.add_argument("--model", help="only cassettes recorded for this model")
+    listp.add_argument("--client", help="only executions recorded for this client")
+    listp.add_argument("--model", help="only executions recorded for this model")
     listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     listp.set_defaults(func=_cmd_list)
 

@@ -112,7 +112,7 @@ class FakeStdinAdapter(ClientAdapter):
 def _isolate_config(monkeypatch, tmp_path):
     """Isolate config *and* store from the real machine: point config discovery at
     a guaranteed-absent file, send the per-user data dir (and thus the default
-    cassette store) into tmp via the standard XDG/Windows base-dir vars, and clear
+    store) into tmp via the standard XDG/Windows base-dir vars, and clear
     the env layers -- so no test reads the real user config or writes into the
     real store."""
     monkeypatch.setenv("GMLCACHE_CONFIG", str(tmp_path / "no-such-config.ini"))

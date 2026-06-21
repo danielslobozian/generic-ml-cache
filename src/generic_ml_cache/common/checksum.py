@@ -22,7 +22,7 @@ import hashlib
 from typing import Mapping, Sequence
 
 # Control characters used purely as internal framing while hashing. They never
-# touch user data and never appear in the cassette on disk.
+# touch user data and never appear in the stored record on disk.
 _FIELD_SEP = b"\x1f"  # unit separator
 _RECORD_SEP = b"\x1e"  # record separator
 # Separates ordered arguments before hashing; order is significant (CLI flags
