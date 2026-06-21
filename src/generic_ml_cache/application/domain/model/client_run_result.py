@@ -12,6 +12,7 @@ from generic_ml_cache.application.domain.model.execution_failure import (
     FailureReason,
 )
 from generic_ml_cache.application.domain.model.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.token_usage import TokenUsage
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,10 @@ class ClientRunResult:
     stdout: str = ""
     stderr: str = ""
     files: List[GeneratedFile] = field(default_factory=list)
+    #: Token accounting the runner observed (a structured client or an API), or
+    #: None when none was reported. Carried to MlExecution.token_usage by the
+    #: shared flow; not stored as output bytes (it is database-bound accounting).
+    token_usage: Optional[TokenUsage] = None
 
     @property
     def succeeded(self) -> bool:

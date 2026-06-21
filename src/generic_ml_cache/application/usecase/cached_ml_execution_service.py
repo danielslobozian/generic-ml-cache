@@ -135,6 +135,7 @@ class CachedMlExecutionService(ABC):
             execution_kind=self._execution_kind(),
             output_persisted=should_store,
             artifacts=artifacts,
+            token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
         )
         if should_store:

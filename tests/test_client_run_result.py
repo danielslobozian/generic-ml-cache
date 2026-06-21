@@ -20,6 +20,14 @@ def test_minimal_result_needs_only_exit_code():
     assert result.stdout == ""
     assert result.stderr == ""
     assert result.files == []
+    assert result.token_usage is None
+
+
+def test_result_can_carry_token_usage():
+    from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+
+    result = ClientRunResult(exit_code=0, token_usage=TokenUsage(input_tokens=10, output_tokens=3))
+    assert result.token_usage.input_tokens == 10
 
 
 def test_result_carries_streams():
