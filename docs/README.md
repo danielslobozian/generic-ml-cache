@@ -14,9 +14,19 @@ A guided entry point for the design, specification, usage, architecture, referen
 
 ---
 
+> [!IMPORTANT]
+> **Docs are being rewritten for the v0.x hexagonal architecture.** The codebase
+> was refactored to ports-and-adapters and the on-disk **"cassette"** record format
+> was retired (records are now *executions* in a SQLite store + content-addressed
+> blob store). Pages that still describe the cassette format or a single-package
+> layout — notably `concepts/cassettes.md` and `reference/cassette-schema.md` — are
+> **out of date** and will be rewritten after the planned core/CLI package split.
+> Treat the source (`src/generic_ml_cache/`) and `docs/domain-model.md` as the
+> ground truth until then.
+
 ## Overview
 
-This documentation describes gmlcache as a Detached ML Execution Platform: an exact record/replay cache with adapter-based execution, inspectable cassettes, usage reporting, and planned scope/session/async features.
+This documentation describes gmlcache as a Detached ML Execution Platform: an exact record/replay cache with adapter-based execution, inspectable execution records, usage reporting, and planned scope/session/async features.
 
 <br>
 

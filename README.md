@@ -22,6 +22,12 @@ A cache that **runs**, **records**, and **replays** detached ML workloads — ex
 
 <br>
 
+> [!IMPORTANT]
+> The codebase has moved to a hexagonal (ports-and-adapters) architecture and the
+> on-disk **"cassette"** record format is retired (records are now *executions* in a
+> SQLite store + blob store). Some `docs/` pages still describe the old format and are
+> being rewritten for the v0.x architecture — see the [docs index](docs/README.md).
+
 ---
 
 ## Overview
