@@ -33,3 +33,18 @@ class RunManagedLocalExecutionCommand:
     cache_mode: CacheMode = CacheMode.CACHE
     persist_output: bool = True
     record_on_error: bool = False
+
+    @property
+    def is_uncacheable(self) -> bool:
+        """Declaring allow-path folders the cache cannot fingerprint makes the
+        call non-cacheable — unless the caller takes responsibility with
+        ``scan_trust``."""
+        return bool(self.allow_paths) and not self.scan_trust
+
+    def should_persist(self, succeeded: bool) -> bool:
+        """Whether this command's policy stores an output for a run that ended
+        with ``succeeded``: never without ``persist_output``; a failure only with
+        ``record_on_error``."""
+        if not self.persist_output:
+            return False
+        return succeeded or self.record_on_error

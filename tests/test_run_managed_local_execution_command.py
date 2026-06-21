@@ -12,6 +12,12 @@ from generic_ml_cache.application.usecase.run_managed_local_execution_command im
 )
 
 
+def _command(**overrides) -> RunManagedLocalExecutionCommand:
+    base = dict(client="claude", model="sonnet", effort="high", context="ctx", prompt="do it")
+    base.update(overrides)
+    return RunManagedLocalExecutionCommand(**base)
+
+
 def test_required_fields():
     command = RunManagedLocalExecutionCommand(
         client="claude",
@@ -62,3 +68,38 @@ def test_is_frozen():
     )
     with pytest.raises(Exception):
         command.prompt = "other"  # type: ignore[misc]
+
+
+# --- cacheability query ------------------------------------------------------
+
+
+def test_plain_call_is_cacheable():
+    assert _command().is_uncacheable is False
+
+
+def test_allow_paths_make_it_uncacheable():
+    assert _command(allow_paths=["/workspace"]).is_uncacheable is True
+
+
+def test_scan_trust_makes_allow_paths_cacheable_again():
+    assert _command(allow_paths=["/workspace"], scan_trust=True).is_uncacheable is False
+
+
+# --- persistence policy query ------------------------------------------------
+
+
+def test_success_persists_by_default():
+    assert _command().should_persist(succeeded=True) is True
+
+
+def test_failure_does_not_persist_by_default():
+    assert _command().should_persist(succeeded=False) is False
+
+
+def test_failure_persists_with_record_on_error():
+    assert _command(record_on_error=True).should_persist(succeeded=False) is True
+
+
+def test_persist_output_false_never_persists():
+    assert _command(persist_output=False).should_persist(succeeded=True) is False
+    assert _command(persist_output=False, record_on_error=True).should_persist(succeeded=False) is False
