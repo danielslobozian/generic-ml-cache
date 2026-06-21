@@ -32,6 +32,18 @@ def text_checksum(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def file_content_fingerprint(data: bytes) -> str:
+    """The one shared rule for fingerprinting a declared input file's content.
+
+    SHA-256 of the raw bytes -- binary-safe, so any file type fingerprints the
+    same way regardless of encoding. This is the single function every front
+    door (CLI, daemon, library consumer) must call; it is imported directly,
+    never reimplemented, so two front doors can never derive different keys for
+    the same file and silently miss each other's cache.
+    """
+    return hashlib.sha256(data).hexdigest()
+
+
 def checksum_input_data(input_data: Mapping[str, str]) -> str:
     """Return the container-independent SHA-256 checksum of ``input_data``.
 

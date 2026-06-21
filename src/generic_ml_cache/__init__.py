@@ -41,6 +41,7 @@ from generic_ml_cache.application.domain.service.cache import (  # noqa: E402  #
 )
 from generic_ml_cache.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
+    file_content_fingerprint,
     text_checksum,
 )
 from generic_ml_cache.common.errors import (  # noqa: E402  # fmt: skip
@@ -68,6 +69,7 @@ __all__ = [
     "ClientAdapter",
     "checksum_input_data",
     "text_checksum",
+    "file_content_fingerprint",
     "CacheError",
     "CacheMiss",
     "CassetteFormatError",
