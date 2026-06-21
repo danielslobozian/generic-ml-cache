@@ -51,7 +51,7 @@ A full execution request can include:
 - record/cache/refresh/offline mode,
 - future scope/session/detach metadata.
 
-Only fields that can affect execution semantics belong to cassette identity.
+Only fields that can affect execution semantics belong to execution identity.
 Observability metadata, such as future session IDs, must not change cache
 identity.
 

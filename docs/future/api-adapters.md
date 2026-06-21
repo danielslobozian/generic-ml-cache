@@ -17,7 +17,7 @@
 
 API adapters should be peers to CLI adapters.
 
-The engine should still receive an execution request and produce a cassette. The
+The engine should still receive an execution request and produce an execution record. The
 adapter decides how to call the provider API, how to pass model/options, and how
 to normalize usage.
 

@@ -75,7 +75,7 @@ trust the answer. It does not decide that two different execution requests are
 
 This does **not** mean the cache must avoid state, reporting, sessions, scopes,
 or asynchronous execution. Those features live on the transport and bookkeeping
-side. They must never change cassette identity or replay correctness.
+side. They must never change execution identity or replay correctness.
 
 The invariant is:
 
@@ -87,7 +87,7 @@ gmlcache prefers a miss over an unsound hit.
 
 A false miss costs another model call. A false hit can return the wrong output,
 write the wrong files, or hide a real change. The cache must therefore only replay
-when it can explain why the execution request matches the recorded cassette.
+when it can explain why the execution request matches the recorded execution.
 
 ## Isolation is correctness
 
@@ -119,7 +119,7 @@ Many detached ML executions produce files as their meaningful output. A cache th
 only stores stdout would be simpler, but it would not faithfully replay a file-
 producing execution.
 
-A cassette records the observable result of the execution: stdout, stderr, exit
+A recorded execution captures the observable result of the execution: stdout, stderr, exit
 code, generated files, and usage metadata when available.
 
 ## Adapters, not special cases
@@ -149,11 +149,11 @@ a workflow, namespace, or long-running body of work.
 
 ## Scopes and sessions are metadata
 
-Future scope tokens and sessions must not participate in cassette identity.
+Future scope tokens and sessions must not participate in execution identity.
 
 A scope partitions cache visibility and reporting. A session groups executions for
 analysis. Neither changes what the underlying client receives. Neither changes
-what cassette key an execution request produces.
+what execution key an execution request produces.
 
 This keeps correctness separate from observability.
 

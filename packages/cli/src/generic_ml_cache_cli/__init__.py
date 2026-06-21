@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Daniel Slobozian
+# SPDX-License-Identifier: Apache-2.0
+"""generic-ml-cache-cli: the terminal UI over generic-ml-cache-core.
+
+A thin inbound driver: it reads configuration (an INI file), provides the data
+source (store location), and maps the ``gmlcache`` terminal commands onto the
+core library's public APIs. All the engine logic and adapters live in
+generic-ml-cache-core, on which this package depends.
+"""
+
+from __future__ import annotations
+
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
+try:
+    __version__ = _pkg_version("generic-ml-cache-cli")
+except PackageNotFoundError:  # running from an uninstalled source tree
+    __version__ = "0+unknown"
+
+from generic_ml_cache_core import (  # noqa: E402  # re-export the stable surface
+    ClientAdapter,
+    UnknownClient,
+    get_adapter,
+    register,
+)
+
+__all__ = ["__version__", "register", "get_adapter", "ClientAdapter", "UnknownClient"]

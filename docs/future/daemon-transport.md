@@ -26,7 +26,7 @@ The daemon can add:
 - shared process state,
 - easier integration for multiple callers.
 
-The underlying execution concepts remain execution request, adapter, cassette,
+The underlying execution concepts remain execution request, adapter, execution record,
 scope, session, and report.
 
 ---

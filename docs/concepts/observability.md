@@ -26,7 +26,7 @@ Replay is one source of value. Observability is another.
 
 Even when an execution misses the cache, gmlcache can still record what happened:
 which adapter ran, which model was used, what usage was reported, whether files
-were generated, how often a cassette was replayed, and what cost estimate the
+were generated, how often an execution was replayed, and what cost estimate the
 client exposed.
 
 ## Current observability
@@ -36,7 +36,7 @@ Today, observability appears through:
 - `stats`,
 - `list`,
 - `inspect`,
-- cassette metadata,
+- execution metadata,
 - access registry events,
 - normalized usage envelopes.
 
@@ -52,7 +52,7 @@ Session
   observes Executions
 
 Execution
-  records or reuses Cassettes
+  records or reuses Executions
 ```
 
 A session report can show workflow-level usage and cache effectiveness. A scope
@@ -62,7 +62,7 @@ report can aggregate many sessions.
 
 Observability must never change execution behavior.
 
-Reports can describe. They must not decide cassette identity.
+Reports can describe. They must not decide execution identity.
 
 ---
 

@@ -30,7 +30,7 @@ saved. They do not decide cache correctness.
 ## Current usage envelope
 
 When an adapter exposes structured usage, gmlcache stores a normalized envelope in
-the cassette. The current envelope can include:
+the execution. The current envelope can include:
 
 - input tokens,
 - output tokens,
@@ -76,7 +76,7 @@ shown as an estimate, never as authoritative billing.
 
 ### Estimated saved cost
 
-When a cassette with recorded usage is replayed, gmlcache can estimate what was
+When an execution with recorded usage is replayed, gmlcache can estimate what was
 saved by not calling the client again. This estimate depends on recorded client
 usage and recorded client cost. Replays without usage metadata are excluded from
 that estimate.
@@ -88,7 +88,7 @@ invent provider pricing.
 
 ## Sanitized example
 
-A cassette may contain a normalized usage block like:
+An execution may contain a normalized usage block like:
 
 ```json
 {
@@ -102,7 +102,7 @@ A cassette may contain a normalized usage block like:
 }
 ```
 
-A stats report may then summarize saved usage from replayed cassettes:
+A stats report may then summarize saved usage from replayed executions:
 
 ```text
 saved: from 7 replay(s) — input 111777, output 24078, cache-read 480730 tokens
