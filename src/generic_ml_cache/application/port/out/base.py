@@ -111,9 +111,9 @@ class ClientAdapter(ABC):
         (otherwise they would be swallowed as prompt text rather than applied).
 
         ``grants`` are declared capabilities to *open* for this run (e.g. ``"net"``
-        for network access). The adapter splices the matching door
-        (:meth:`network_access_argv`) in when granted. Grants enable; they never
-        restrict (see ``docs/reference/grants.md``).
+        for network access). The adapter opens the matching door via
+        :meth:`grant_setup` (a config-file mechanism) when granted. Grants enable;
+        they never restrict (see ``docs/reference/grants.md``).
         """
 
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
@@ -174,24 +174,6 @@ class ClientAdapter(ABC):
         Default: none. The per-client flags below are verified against the live
         CLIs (see ``docs/client-mapping.md``); adapter hardening keeps them small
         and correctable should a CLI change.
-        """
-        return []
-
-    def network_access_argv(self) -> List[str]:
-        """Extra argv opening the client's NETWORK door, spliced when ``net`` is
-        granted.
-
-        Grants are *enablement, not restriction* (see ``docs/reference/grants.md``): this
-        opens the door and never tries to close it. Default: none. Each adapter
-        overrides with the door for its own client and, like
-        :meth:`write_access_argv`, splices it inside its own ``build_argv`` (before
-        any trailing positional or stdin marker), because some CLIs reject flags
-        placed after the prompt. Codex's is a process-level sandbox toggle,
-        Claude's allow-lists its web tools via a settings file, Cursor's is --force;
-        all three are verified against the live CLIs (see docs/reference/grants.md).
-
-        DEPRECATED seam (v0.0.16): capability doors now live in a config FILE, not
-        in argv. See :meth:`grant_setup`. Kept only so older callers/tests resolve.
         """
         return []
 

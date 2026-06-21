@@ -106,15 +106,3 @@ class Usage:
             "cost_usd": self.cost_usd,
             "raw": self.raw,
         }
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "Usage":
-        return cls(
-            input_tokens=int_or_none(d.get("input_tokens")),
-            output_tokens=int_or_none(d.get("output_tokens")),
-            cache_read_tokens=int_or_none(d.get("cache_read_tokens")),
-            cache_write_tokens=int_or_none(d.get("cache_write_tokens")),
-            reasoning_tokens=int_or_none(d.get("reasoning_tokens")),
-            cost_usd=float_or_none(d.get("cost_usd")),
-            raw=dict(d.get("raw", {})),
-        )

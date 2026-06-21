@@ -65,15 +65,6 @@ class ArtifactBlobMissing(CacheError):
     """
 
 
-class IsolationViolation(CacheError):
-    """Raised when a recorded run reported touching files outside its folder.
-
-    Hard isolation (containers, chroot) is out of scope for v0.0.1; this surfaces
-    the *soft* signal a well-behaved client emits when the prime directive is
-    violated.
-    """
-
-
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

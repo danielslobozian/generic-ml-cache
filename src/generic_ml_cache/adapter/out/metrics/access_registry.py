@@ -22,13 +22,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-# The four access events. A resolve emits exactly one of HIT / MISS / RECORD
-# (passthrough calls are outside cache accounting and emit nothing); EVICT is
-# emitted by prune/eviction when an execution is removed.
+# The access events. A resolve emits exactly one of HIT / MISS / RECORD
+# (passthrough calls are outside cache accounting and emit nothing).
 HIT = "hit"
 MISS = "miss"
 RECORD = "record"
-EVICT = "evict"
 
 _DB_NAME = "registry.sqlite3"
 _SCHEMA = """
