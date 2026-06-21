@@ -118,6 +118,19 @@ CallIdentity
 Owns `generate_key() -> str` — a pure method that hashes only the in-memory
 fields above. No I/O, no database access, no filesystem reads.
 
+**Input-file keying is path-sensitive (a soundness ruling).** Both the file's
+path *and* its content fingerprint enter the key. A rename (same content, new
+name) therefore yields a **new key → a miss → a re-run**, never a hit. This is
+deliberate: the prompt may reference a declared file by name, so a rename can
+change the real result — keying on content alone would be a false-positive hit,
+which the prime directive ("sound replay over hit-rate; prefer a miss to a wrong
+hit") forbids. The case where a rename *should* be transparent (a prompt that
+globs `rule*.md`) is the `allow_paths` / `scan_trust` mechanism, not this one:
+globbing needs folder access, which is non-cacheable unless the user explicitly
+trusts the folder. Granularity: the path is the user's declared path resolved to
+absolute (most conservative); a portable/relative-keying mode can be an opt-in
+later if a shared cache makes machine-specific keys a problem.
+
 `allow_paths` (permission grant paths) are **not** a field on `CallIdentity`.
 They do not enter the key (folder contents cannot be fingerprinted reliably).
 They travel to the client runner via `ClientRunRequest` (§8).

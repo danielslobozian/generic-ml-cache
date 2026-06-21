@@ -42,8 +42,11 @@ class ManagedCallIdentity(CallIdentity):
             "context": self.context_fingerprint,
             "prompt": self.prompt_fingerprint,
         }
+        # Path-sensitive: the path enters the key alongside the content fingerprint.
+        # A rename is a real change (the prompt may reference the file by name), so it
+        # must yield a new key — soundness over hit-rate (prefer a miss to a wrong hit).
         for file_path, file_fingerprint in sorted(self.input_file_fingerprints.items()):
-            key_data[f"file:{file_fingerprint}"] = file_fingerprint
+            key_data[f"file:{file_path}"] = file_fingerprint
         if self.client_args_fingerprint is not None:
             key_data[f"args:{self.client_args_fingerprint}"] = self.client_args_fingerprint
         if self.grants:

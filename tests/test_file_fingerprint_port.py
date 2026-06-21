@@ -67,3 +67,19 @@ def test_missing_file_raises_input_file_error(tmp_path):
 def test_directory_path_raises_input_file_error(tmp_path):
     with pytest.raises(InputFileError):
         FilesystemFileFingerprint().fingerprint(str(tmp_path))
+
+
+def test_unreadable_existing_file_raises_input_file_error(tmp_path, monkeypatch):
+    """A file that exists but cannot be read (e.g. a permission error mid-read)
+    translates the foreign OSError into InputFileError — not a silent skip."""
+    from pathlib import Path
+
+    input_file = tmp_path / "locked.txt"
+    input_file.write_bytes(b"secret")
+
+    def _deny_read(self):
+        raise PermissionError("permission denied")
+
+    monkeypatch.setattr(Path, "read_bytes", _deny_read)
+    with pytest.raises(InputFileError):
+        FilesystemFileFingerprint().fingerprint(str(input_file))

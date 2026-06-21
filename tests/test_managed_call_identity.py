@@ -73,6 +73,21 @@ def test_different_input_files_produce_different_keys():
     assert without_files.generate_key() != with_file.generate_key()
 
 
+def test_same_content_at_a_different_path_produces_a_different_key():
+    # Path-sensitive: a rename (same content, new name) is a new key — soundness
+    # over hit-rate. Without this, renaming a file the prompt names by hand would
+    # be a false-positive hit.
+    before_rename = _make_identity(input_file_fingerprints={"/dir/file_two.md": "sha"})
+    after_rename = _make_identity(input_file_fingerprints={"/dir/file_three.md": "sha"})
+    assert before_rename.generate_key() != after_rename.generate_key()
+
+
+def test_same_path_and_content_produces_the_same_key():
+    first = _make_identity(input_file_fingerprints={"/dir/f.md": "sha"})
+    second = _make_identity(input_file_fingerprints={"/dir/f.md": "sha"})
+    assert first.generate_key() == second.generate_key()
+
+
 def test_grants_are_order_independent():
     with_net_first = _make_identity(grants=frozenset({"net", "read"}))
     with_read_first = _make_identity(grants=frozenset({"read", "net"}))
