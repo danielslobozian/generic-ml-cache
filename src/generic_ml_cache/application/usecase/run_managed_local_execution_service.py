@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""RunManagedLocalExecutionUseCase."""
+"""RunManagedLocalExecutionService."""
 
 from __future__ import annotations
 
@@ -14,6 +14,12 @@ from generic_ml_cache.application.domain.model.client_run_request import ClientR
 from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
 from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
 from generic_ml_cache.application.domain.model.ml_execution import MlExecution
+from generic_ml_cache.application.port.inbound.run_managed_local_execution_command import (
+    RunManagedLocalExecutionCommand,
+)
+from generic_ml_cache.application.port.inbound.run_managed_local_execution_use_case import (
+    RunManagedLocalExecutionUseCase,
+)
 from generic_ml_cache.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache.application.port.out.client_runner_port import ClientRunnerPort
 from generic_ml_cache.application.port.out.execution_repository_port import (
@@ -22,9 +28,6 @@ from generic_ml_cache.application.port.out.execution_repository_port import (
 from generic_ml_cache.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache.application.usecase import journal_events
-from generic_ml_cache.application.usecase.run_managed_local_execution_command import (
-    RunManagedLocalExecutionCommand,
-)
 from generic_ml_cache.common.checksum import (
     file_content_fingerprint,
     fingerprint_arguments,
@@ -35,15 +38,15 @@ from generic_ml_cache.common.errors import ArtifactBlobMissing, CacheMiss
 _TEXT_ENCODING = "utf-8"
 
 
-class RunManagedLocalExecutionUseCase:
+class RunManagedLocalExecutionService(RunManagedLocalExecutionUseCase):
     """Record-or-replay a fully managed local ML client call.
 
-    Orchestrates five outbound ports — it fingerprints inputs, builds the
-    CallIdentity, resolves the cache under the requested mode, runs the client
-    on a miss, stores the output as content-addressed artifacts, journals one
-    event, and returns the hydrated MlExecution. The rules live on the domain
-    objects; the I/O lives behind the ports; this use case only decides what
-    happens in what order.
+    The implementation of the inbound port. Orchestrates five outbound ports —
+    it fingerprints inputs, builds the CallIdentity, resolves the cache under the
+    requested mode, runs the client on a miss, stores the output as
+    content-addressed artifacts, journals one event, and returns the hydrated
+    MlExecution. The rules live on the domain objects; the I/O lives behind the
+    ports; this service only decides what happens in what order.
     """
 
     def __init__(

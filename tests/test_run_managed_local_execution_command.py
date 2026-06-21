@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from generic_ml_cache.application.domain.model.cache_mode import CacheMode
-from generic_ml_cache.application.usecase.run_managed_local_execution_command import (
+from generic_ml_cache.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
 

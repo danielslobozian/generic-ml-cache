@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for RunManagedLocalExecutionUseCase."""
+"""Tests for RunManagedLocalExecutionService."""
 
 from __future__ import annotations
 
@@ -25,11 +25,14 @@ from generic_ml_cache.application.port.out.client_runner_port import ClientRunne
 from generic_ml_cache.application.port.out.clock_port import ClockPort
 from generic_ml_cache.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache.application.usecase.run_managed_local_execution_command import (
+from generic_ml_cache.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
-from generic_ml_cache.application.usecase.run_managed_local_execution_use_case import (
+from generic_ml_cache.application.port.inbound.run_managed_local_execution_use_case import (
     RunManagedLocalExecutionUseCase,
+)
+from generic_ml_cache.application.usecase.run_managed_local_execution_service import (
+    RunManagedLocalExecutionService,
 )
 from generic_ml_cache.common.errors import ArtifactBlobMissing, CacheMiss
 
@@ -112,7 +115,7 @@ class _Harness:
         self.blob = FakeBlobStore()
         self.repository = InMemoryExecutionRepository(clock=FixedClock())
         self.metrics = FakeMetrics()
-        self.use_case = RunManagedLocalExecutionUseCase(
+        self.use_case = RunManagedLocalExecutionService(
             file_fingerprint=self.fingerprint,
             client_runner=self.runner,
             blob_store=self.blob,
@@ -126,6 +129,18 @@ def _stdout(execution) -> Optional[bytes]:
         if artifact.artifact_type is ArtifactType.STDOUT:
             return artifact.content
     return None
+
+
+# --- inbound port wiring -----------------------------------------------------
+
+
+def test_inbound_port_cannot_be_instantiated_directly():
+    with pytest.raises(TypeError):
+        RunManagedLocalExecutionUseCase()  # type: ignore[abstract]
+
+
+def test_service_implements_the_inbound_port():
+    assert isinstance(_Harness().use_case, RunManagedLocalExecutionUseCase)
 
 
 # --- miss / record -----------------------------------------------------------
