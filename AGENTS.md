@@ -184,6 +184,42 @@ computation is a method on that object.
   *rules* to the domain and the *I/O* to ports. A use case that contains business
   rules has absorbed something that belongs in the domain.
 
+### The static-method tell (the hard line)
+
+The rule above is too easy to rationalise ("it's just a small helper"), so it gets a
+mechanical detector. **Orchestration is methods that use the injected ports.** A method
+on a use case that touches *neither `self` nor a port* — in Python, anything you can
+mark `@staticmethod` — is therefore **not orchestration**: it computes a value purely
+from domain or command fields, which makes it a **rule**, and a rule belongs on the
+object whose data it reads.
+
+- **A `@staticmethod` on a use case / service is a defect by default. Move it to the
+  domain object that owns the data it reasons over.**
+- **The one allowed exception: a boundary mapping** — translating the inbound command
+  into an outbound port DTO. That is the use case's own job (it alone knows both
+  boundaries) and it *cannot* move onto either object: the command is an inbound-port
+  type and the DTO is a domain type, so neither may depend on the other.
+- **More than that one mapping is an alarm.** Two or more static methods on a use case
+  means rules have leaked into the orchestrator — stop and re-analyse before going on.
+
+```python
+# WRONG — a rule living in the use case (no self, no port): domain logic, wrong layer.
+class RunManagedLocalExecutionService:
+    @staticmethod
+    def _interpret(result: ClientRunResult) -> ExecutionState:
+        return ExecutionState.FAILED if result.exit_code else ExecutionState.SUCCESS
+
+# RIGHT — the rule sits on the object that owns the field it reads.
+class ClientRunResult:
+    def outcome(self) -> ExecutionState:
+        return ExecutionState.FAILED if self.exit_code else ExecutionState.SUCCESS
+```
+
+Pure, dependency-free logic has exactly two homes, **neither of which is a use case**:
+a method on the domain value object whose fields it computes over, or — when it belongs
+to no single object — a module-level function in `common/`. A `@staticmethod` on a use
+case or service is neither, and is the signal to relocate.
+
 ---
 
 # Family C — Code-quality floor (anticipate Sonar; clear it on the first write)
