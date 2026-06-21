@@ -13,18 +13,18 @@
 
 ## 1. The core reframe
 
-The project began as a **cache**: store a *cassette* (inputs, key, outputs), and on
-a matching input, replay it. As it grew — direct client calls, streaming,
-events, token/session statistics, execution types that deliberately do not store
-output — the cassette stopped being the thing the system is *about*.
+The project began as a **cache**: store a *record* (inputs, key, outputs), and on a
+matching input, replay it. As it grew — direct client calls, streaming, events,
+token/session statistics, execution types that deliberately do not store output —
+that stored record stopped being the thing the system is *about*.
 
-The tell: a `LOCAL_PASSTHROUGH` execution (one that runs but stores no output)
-has no cassette, yet is unmistakably a real thing — it has inputs, it ran, it
-produced output, it cost tokens. If the cassette were the aggregate, that call
-would be nothing. It is obviously *something*.
+The tell: a `LOCAL_PASSTHROUGH` execution (one that runs but stores no output) has no
+stored record, yet is unmistakably a real thing — it has inputs, it ran, it produced
+output, it cost tokens. If the stored record were the aggregate, that call would be
+nothing. It is obviously *something*.
 
-**Decision: the aggregate is `MlExecution`.** The cassette concept is fully
-retired (see §4).
+**Decision: the aggregate is `MlExecution`.** The earlier framing — a stored record as
+the aggregate — is fully retired (see §4).
 
 ---
 
@@ -215,12 +215,6 @@ TokenUsage
 
 `None` means "not reported by this client", never zero.
 
-### `CapturedFile`
-
-The old per-file value object (path + content + encoding) used by the retired
-cassette. Subsumed by `Artifact` (an `OUTPUT_FILE`); kept only until the old
-cassette code is removed in Phase 6.
-
 ### `ExecutionState`
 
 ```python
@@ -243,15 +237,14 @@ See §8 for what each kind means operationally.
 
 ---
 
-## 4. The cassette — fully retired
+## 4. No on-disk record schema
 
-The structured cassette file — a JSON document with named slots for stdout,
-stderr, usage, and files — was **schema in a file**: a second schema in a
-second technology, drifting from the authoritative database. That dissolves
+An earlier design stored each result as a structured file — a JSON document with named
+slots for stdout, stderr, usage, and files. That was **schema in a file**: a second
+schema in a second technology, drifting from the authoritative database. It dissolves
 entirely.
 
-- There is no `Cassette` class.
-- There is no `Cassette` file format.
+- There is no per-result file format, and no class for one.
 - The blob store holds **opaque bytes** addressed by the key that
   `CallIdentity.generate_key()` produces.
 - All structure (identity, state, cost, timestamps) lives in the database.

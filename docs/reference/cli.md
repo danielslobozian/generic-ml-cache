@@ -72,7 +72,7 @@ Capability and passthrough:
 
 | Option | Meaning |
 |---|---|
-| `--grant` | Open a capability for the client: `net`, `read`, `write`, `shell`, or `web-search` — enablement, not restriction. Keyed into the call (a granted call is its own cassette) and cacheable; use `--force` for a live re-fetch. Repeatable. See [Grants reference](grants.md). |
+| `--grant` | Open a capability for the client: `net`, `read`, `write`, `shell`, or `web-search` — enablement, not restriction. Keyed into the call (a granted call is its own execution) and cacheable; use `--force` for a live re-fetch. Repeatable. See [Grants reference](grants.md). |
 | `--client-arg` | An extra argument appended verbatim to the client launch — an escape hatch for client features the cache does not model. Part of the key; only its fingerprint is stored, never the raw value. Repeatable; order is significant. Use the `=` form for dash-leading values: `--client-arg=--flag`. |
 | `--executable` | Override the client executable (the seam). |
 
@@ -108,7 +108,7 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 
 | Command | Options |
 |---|---|
-| `inspect <key-or-path>` | `--raw` also prints the client's verbatim usage block. Accepts a cassette path or a short key as shown by `list`. |
+| `inspect <key-or-path>` | `--raw` also prints the client's verbatim usage block. Accepts a short key as shown by `list` as shown by `list`. |
 | `list` | `--client`, `--model` filter the listing; `--json` for machine output. |
 | `models <client>` | `--executable` overrides the client executable; `--timeout`; `--json`. Omit `<client>` to query every registered client. |
 | `doctor` | `--timeout` (default 10s); `--json`. |

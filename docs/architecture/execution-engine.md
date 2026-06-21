@@ -19,11 +19,11 @@ Conceptual flow:
 
 ```text
 Execution Request
-  -> key/cacheability decision
-  -> hit: replay cassette
-  -> miss: adapter execution
-  -> record cassette when allowed
-  -> update registry
+  -> key / cacheability decision
+  -> hit:  replay the stored execution
+  -> miss: run the adapter
+  -> record a new execution when allowed
+  -> note the access event
 ```
 
 The engine should not contain adapter-specific launch mechanics. Those belong in

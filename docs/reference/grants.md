@@ -49,7 +49,7 @@ configuration into a redirected config home and runs the client against it:
 
 The cache sets these variables itself when launching the client; they are not
 caller-facing settings. The redirected home is separate from the run folder, so
-the settings file and any seeded credentials never enter a cassette. Some
+the settings file and any seeded credentials never enter an execution record. Some
 capabilities are enablement-only where a client has no matching deny (a documented
 limit, not a door the cache closes).
 

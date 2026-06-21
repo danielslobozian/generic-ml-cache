@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the version is `0.x.y` the project is in **alpha** and anything may change
 between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.0`.
 
+Since `0.2.0` the project is a **monorepo of two lockstep-versioned packages** — the
+library [`generic-ml-cache-core`](packages/core) and the client
+[`generic-ml-cache-cli`](packages/cli). Both share the version below, and this file is
+the single changelog for both; entries note which package(s) a change touches.
+
 ## [Unreleased]
+
+### Changed
+
+- **Restructured into a monorepo of two packages** (core, cli): the library
+  `generic-ml-cache-core` (the engine — domain, use cases, ports, and the default
+  adapters; stateless and dependency-free) and the client `generic-ml-cache-cli` (the
+  `gmlcache` terminal UI). The engine is now embeddable in any application by injecting
+  a data source; the CLI is one inbound driver over it. The two packages are versioned
+  in lockstep.
+- **Rebuilt on a hexagonal (ports-and-adapters) architecture** (core): the engine
+  depends only inward; concrete adapters (client runner, SQLite execution repository,
+  filesystem blob store, metrics, clock, fingerprint) implement ports owned by the
+  core and are wired by a `build_use_cases` composition factory.
+
+### Removed
+
+- **Retired the on-disk "cassette" record format** (core): executions are now stored
+  as structured records in a SQLite repository plus a content-addressed blob store for
+  output bytes. As before, only fingerprints are persisted — never raw prompts or
+  context.
 
 ## [0.1.0] - 2026-06-20
 

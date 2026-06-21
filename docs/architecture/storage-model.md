@@ -12,15 +12,17 @@
 
 ---
 
-Storage has two layers:
+Storage separates structure from bytes:
 
-1. Immutable cassette files.
-2. Registry and metadata state.
+1. The **execution repository** (SQLite) — the structured record of each execution
+   (identity, kind, outcome, usage, and references to its output).
+2. The **blob store** (content-addressed) — the output bytes, shared when identical.
+3. The **access registry** (SQLite) — access events and hit counts, non-load-bearing.
 
-Cassettes preserve recorded execution results. Registry metadata records access,
-eviction, and future scope/session/reporting relationships.
+The execution repository preserves what was recorded; the registry records access and
+future scope/session/reporting relationships.
 
-Filesystem folders are representation. Metadata is authority.
+Bytes are addressed by content; folders are representation. The database is authority.
 
 ---
 

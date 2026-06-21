@@ -2,8 +2,8 @@
 
 This document describes how decisions get made in `generic-ml-cache`. It is
 deliberately lightweight, matching the size of the project: this is early, alpha
-software with a small maintainer team. As the project grows, this document can
-grow with it (see [Changing this document](#changing-this-document)).
+software with a small maintainer team. As the project grows, this document can grow
+with it (see [Changing this document](#changing-this-document)).
 
 ## Roles
 
@@ -34,13 +34,13 @@ guiding aim is rough consensus: if a proposal is uncontroversial and fits the
 project's scope, it lands; if a maintainer raises a concern, it is discussed until
 resolved rather than forced through.
 
-For larger or contested decisions — anything that changes the public CLI, the
-cassette format, the checksum behavior, or the project's scope — the maintainers
-decide together, and the reasoning is recorded in the relevant issue or pull
-request so it can be revisited later. Where maintainers disagree and cannot reach
-consensus, the original author has the final say. This is a practical arrangement
-for an alpha project, not a permanent power structure; it is expected to give way
-to a more shared model as the maintainer team grows.
+For larger or contested decisions — anything that changes the public CLI, the core
+library's public API, the storage format, the checksum behavior, or the project's
+scope — the maintainers decide together, and the reasoning is recorded in the
+relevant issue or pull request so it can be revisited later. Where maintainers
+disagree and cannot reach consensus, the original author has the final say. This is a
+practical arrangement for an alpha project, not a permanent power structure; it is
+expected to give way to a more shared model as the maintainer team grows.
 
 ## Design stances that shape decisions
 
@@ -53,13 +53,14 @@ and [`docs/ROADMAP.md`](docs/ROADMAP.md); the load-bearing ones are:
   caller's responsibility. Proposals that make cache hits fuzzy or heuristic work
   against this.
 - **Container-independent checksums.** Identical text must checksum identically
-  whether it came from a file or a JSON string, with newlines and tabs
+  whether it came from a file or an inline string, with newlines and tabs
   significant.
 - **Launch parameters are explicit, never hashed with the data**, and the command
-  wording and the prime directive are never stored in a cassette.
+  wording and the prime directive are never stored in an execution record.
 - **No test doubles inside the app.** Real boundaries only; offline behavior comes
   from the cache itself.
-- **A small, dependency-free core.** New runtime dependencies are a high bar.
+- **A small, dependency-free library core.** New runtime dependencies — especially
+  in the core — are a high bar.
 
 A maintainer may still decide that a stance should change — but doing so is a
 deliberate, recorded decision, not an incidental side effect of another change.
@@ -83,7 +84,6 @@ matter of trust earned over time, not a reward for a single large contribution.
 
 This governance document is itself subject to the process it describes. Proposed
 changes go through a pull request and require maintainer agreement. As the project
-matures past alpha and the contributor base grows, the expectation is that
-governance moves away from "the original author decides ties" toward a more
-explicitly shared model, and this document should be updated to match reality when
-that happens.
+matures past alpha and the contributor base grows, the expectation is that governance moves
+away from "the original author decides ties" toward a more explicitly shared model,
+and this document should be updated to match reality when that happens.

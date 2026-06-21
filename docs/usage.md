@@ -31,8 +31,8 @@ for the exact command syntax of the installed version.
 |---|---|
 | `run` | Execute or replay an execution request |
 | `check` | Forecast hit/miss/non-cacheable without launching the adapter |
-| `list` | List stored cassettes |
-| `inspect` | Inspect a cassette |
+| `list` | List stored executions |
+| `inspect` | Inspect a stored execution |
 | `stats` | Report store and replay statistics |
 | `doctor` | Inspect configured client availability |
 | `models` | Ask an adapter for model listings when supported |
@@ -43,7 +43,7 @@ for the exact command syntax of the installed version.
 
 - `offline`: serve only from cache.
 - `cache`: serve hits, record misses when cacheable.
-- `refresh`: call the adapter and record a fresh cassette.
+- `refresh`: call the adapter and record a fresh execution.
 
 ## Inputs
 

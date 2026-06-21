@@ -24,16 +24,23 @@ this project enforces, made concrete.
 
 ## The project in one paragraph (context for placement)
 
-This is a hexagonal application. The **core** (the `application/` layers) depends on
-nothing outward and contains the business rules. The aggregate is an **ML
-execution** — a demand to run a client and what came back. Around the core sit
-**ports** (interfaces the core owns) and **adapters** (implementations, outside the
-core). Structure is database; bytes are filesystem: the database owns everything
-queryable (an execution's identity, cost, outcome, event log), the filesystem owns
-only opaque output blobs addressed by key. Inbound adapters (terminal, later a
-daemon) map their native input into a command and call a use case; outbound adapters
-(client runner, blob store, metrics store) are dumb and swappable. Place new code by
-asking which ring it belongs to and letting the dependency direction decide.
+This is a hexagonal application shipped as a **monorepo of two package rings**: the
+**library** (`packages/core`, `generic_ml_cache_core`) and the **clients**
+(`packages/cli` today, a daemon later). The **library is the whole application
+*except* the user interface and the data source**: it contains the hexagon's
+`application/` rings (domain, use cases, ports — the business rules, depending on
+nothing outward), **and the default outbound adapters** (`adapter/out/...`: client
+runner, blob store, SQLite repository, metrics), **and** the composition factory that
+wires them. The aggregate is an **ML execution** — a demand to run a client and what
+came back. A **client** is thin: it provides the data source and configuration and
+maps its native surface (a terminal, later a REST API) onto the library's public API.
+Structure is database; bytes are filesystem: the database owns everything queryable
+(an execution's identity, cost, outcome, event log), the filesystem owns only opaque
+output blobs addressed by key. Mind two distinct boundaries: the **ring** boundary —
+inside the library, `application/` imports nothing from `adapter/` — and the
+**package** boundary — a client imports the library; the library imports no client.
+Place new code by asking which ring *and which package* it belongs to, and letting
+the dependency direction decide.
 
 ---
 
@@ -54,11 +61,11 @@ The type is already in the type; the name must add the referent and the role.
 
 ```python
 # WRONG — type-names and abbreviations; the reader still has to ask "of what?"
-p = self._root / f"{k}.json"
+p = self._root / f"{k}.bin"
 data = client.run(req)
 
 # RIGHT — the referent and role are in the name
-cassette_path = self._root / f"{execution_key}.json"
+blob_path = self._root / f"{blob_key}.bin"
 client_result = client.run(execution_command)
 ```
 
@@ -111,28 +118,38 @@ not enforce any of it.
 ## 4. Code positioning — which folder holds what
 
 The hexagon is the map. Every new file has exactly one correct home; place it by
-ring.
+ring *and* package.
 
 ```
-application/domain/model/     domain objects & value objects — the nouns the
-                              system is about (execution, call-identity, result,
-                              usage). Pure. No I/O, no framework, no adapters.
-application/domain/service/   domain services — pure rules that span objects.
-application/usecase/          use cases — orchestration; each names an action and
-                              takes a command as input.
-application/port/in/          inbound port contracts (the use-case interfaces).
-application/port/out/         outbound port contracts (store, metrics, client
-                              runner) — owned by the core.
-adapter/in/...                inbound adapters (terminal, daemon) — map native
-                              input to a command, call a use case. OUTSIDE the core.
-adapter/out/...               outbound adapters (client, blob storage, metrics db)
-                              — implement an out-port. OUTSIDE the core. Dumb.
-common/                       genuinely cross-cutting leaves (errors, checksums).
+packages/core/   THE LIBRARY (generic_ml_cache_core) — everything but the UI & the data source
+  application/domain/model/    domain objects & value objects — the nouns the
+                               system is about (execution, call-identity, result,
+                               usage). Pure. No I/O, no framework, no adapters.
+  application/domain/service/  domain services — pure rules that span objects.
+  application/usecase/         use cases — orchestration; each names an action and
+                               takes a command as input.
+  application/port/inbound/    inbound port contracts (the use-case interfaces).
+  application/port/out/        outbound port contracts (store, metrics, client
+                               runner) — owned by the core ring.
+  adapter/out/...              the DEFAULT outbound adapters (client runner, blob
+                               store, SQLite repository, metrics) — implementations
+                               that SHIP with the library. Dumb, swappable.
+  adapter/inbound/             the composition factory (build_use_cases): wires the
+                               default adapters around an injected data source.
+  common/                      cross-cutting leaves (errors, checksums, coercion).
+
+packages/cli/    A CLIENT (generic_ml_cache_cli) — the thin terminal UI
+  cli.py                       argparse, output formatting, exit codes.
+  config.py                    the INI config reader (a client concern).
+  __main__.py                  the entry point.
+                               Depends on the library; supplies the data source and
+                               config; maps terminal commands onto the public API.
 ```
 
 Note: `in` is a Python keyword, so an inbound package directory cannot be literally
-named `in`; use `inbound` (or the agreed concrete name) while keeping the `port/in`
-*concept*.
+named `in`; use `inbound` while keeping the `port/in` *concept*. The driving inbound
+adapter (the terminal UI) is a separate **client package**, not a folder under the
+library's `adapter/`; the library's `adapter/inbound/` holds only the wiring factory.
 
 ### The use-case triple (inbound naming, settled)
 
@@ -158,11 +175,21 @@ and the driving adapter has nothing to depend on but the concrete class.
 These are hard architectural lines. A change that crosses one is wrong even if it
 passes every test.
 
-- **The core depends only inward.** `application/` imports nothing from `adapter/`.
-  Dependencies point toward the domain; never outward.
-- **Ports are owned by the core.** The interface lives in `application/port/...`;
-  the implementation lives in `adapter/...`. The core names the contract and depends
-  on the contract, never on the concrete adapter.
+- **The core ring depends only inward.** `application/` imports nothing from
+  `adapter/`. Dependencies point toward the domain; never outward. (This is the
+  *ring* boundary; it holds *inside the library* — which contains both rings.)
+- **The package boundary: the library ships the adapters; a client never reimplements
+  them.** The library (`packages/core`) depends on nothing in the repo; a client
+  (`packages/cli`, a daemon) depends on the library; **the library imports no client.**
+  The library is the whole application minus the UI and the data source, so it ships
+  the default outbound adapters — a consumer reuses them by *injecting a data source*,
+  never by rewriting them. This is the Spring Batch model: the framework ships the
+  writers; you provide the `DataSource`. *Failing case: a `SqliteExecutionRepository`
+  (or any adapter) placed in `packages/cli`, forcing an embedding application to
+  re-implement it — that defeats the point of the library.*
+- **Ports are owned by the core ring.** The interface lives in `application/port/...`;
+  the implementation lives in `adapter/...` (still inside the library). The core ring
+  names the contract and depends on the contract, never on the concrete adapter.
 - **No I/O in the domain.** Domain objects and domain services read no files, open
   no sockets, touch no database. I/O is an adapter concern. (A domain object may
   compute over data it already holds — e.g. generate a key from in-memory
@@ -174,10 +201,16 @@ passes every test.
   translates that key to its own address and persists. A store never computes keys,
   never knows the hashing rule, never interprets payloads. This is what keeps it
   swappable (filesystem ↔ S3 ↔ memory).
-- **Configuration is injected, never imposed.** The core receives its collaborators
-  and config through constructors; it never reads a config file or chooses a
-  datasource. The composition root (an inbound adapter, or a consuming application)
-  builds the concrete adapters and hands them in.
+- **Configuration is injected, never imposed; the library is stateless and holds no
+  *location*.** The library receives its collaborators and config through constructors;
+  it never reads a config file or chooses a datasource. What is **baked in** is
+  *structure* — table names, the on-disk blob naming, the schema by which data is
+  retrieved. What is **injected** is every *location* — the store path, the database
+  path, the blob root — and any config. A hardcoded path, a default store directory, or
+  a config-file read *inside the library* is a defect. A client (or a consuming
+  application) owns config, locations, and any process state (threads, a scheduler);
+  the composition root hands the wired adapters in. *Failing case: the library
+  defaulting its own store directory instead of receiving it.*
 
 ```python
 # WRONG — domain reaches outward and parses a stored schema
@@ -265,11 +298,40 @@ a comment that announces sections.
 ## 8. Reusability / no duplication
 
 - A value or expression built in more than one place becomes **one named method**.
-  (The key→filename mapping lives in a single `_path_for`, not inline in every
+  (The key→path mapping lives in a single `_path_for`, not inline in every
   method that needs it.)
 - No duplicated string literals (`S1192` — hoist to a named constant), no
   copy-pasted blocks, no dead or commented-out code (`S125`), no unused
   imports / variables / parameters (`S1481`/`S1172`/`S1128`).
+
+### No code for unbuilt futures (YAGNI) — but know a skeleton from a relic
+
+- Dead code includes code kept *"for later"*: a symbol with **zero callers** — a
+  method, a constant for an unbuilt feature, a "kept for compatibility" seam nobody
+  calls — is **deleted**, not retained "just in case". A `vulture`/coverage flag is
+  right until proven otherwise.
+- The line is **callers + a plan**, not *real vs stub*. A **stubbed but
+  wired-and-tested** implementation of a committed seam (a placeholder adapter the
+  composition root injects and the suite drives end-to-end) is a *walking skeleton*,
+  not dead code. A symbol with no caller **and** no plan is a *relic*.
+  - *Relic (delete): an `EVICT` event constant for an eviction feature that does not
+    exist — no implementation, no caller, no test.*
+  - *Skeleton (keep): a stub API-client adapter the use case and tests drive while the
+    real provider adapter is pending — **provided the API run kind is actually on the
+    roadmap, not aspirational.** If the seam is not committed, it is a relic too.*
+
+### A removed concept leaves no trace
+
+- When a feature or concept is removed, its **vocabulary** is removed with it — not
+  just its code. After removal, a search for the concept's name returns **nothing**:
+  no identifiers, no comments, no docstrings, no help text, no docs (this file
+  included). A lingering name is disinformation (§1). *Failing case: a record format
+  is deleted, yet variables still named for it, comments describing it, and a help
+  string mentioning it survive — a grep for the retired name still lights up.*
+  - **The one exception is the `CHANGELOG`'s history.** A released version's entry is
+    a factual record of what shipped; if a past release had the feature, its entry
+    legitimately names it. Scope the grep to live code, docs, and *forward-looking*
+    changelog sections — never rewrite shipped entries to erase a retired name.
 
 ## 9. Control flow
 
@@ -281,12 +343,12 @@ a comment that announces sections.
 
 ```python
 # WRONG — main path buried, condition hidden
-return Cassette.from_json(path.read_text()) if path.exists() else None
+return blob_path.read_bytes() if blob_path.exists() else None
 
 # RIGHT — guard first, main path plain
-if not path.exists():
+if not blob_path.exists():
     return None
-return Cassette.from_json(path.read_text())
+return blob_path.read_bytes()
 ```
 
 ## 10. Error handling
@@ -322,6 +384,13 @@ return Cassette.from_json(path.read_text())
   method name, a rule in the wrong layer) is still a violation; the test is the one
   at the top — *could this be rationalised as compliant?* If yes, it is a defect and
   the rule gets tightened here so it cannot be next time.
+- **Show, don't assert.** A claim that something is *removed, clean, done, or passing*
+  is demonstrated, never asserted — a grep that returns nothing, a green test run, a
+  tool report. "I removed all of X" without the search that proves it is how a stray
+  name from a deleted feature survives. Evidence first, claim second.
+- **Green means both linters.** A change is not green until `ruff check` **and**
+  `ruff format --check` both pass — formatting is part of the floor, and CI runs both.
+  Running only `ruff check` is a partial check, not a pass.
 - This file evolves with the project. When a new structural decision is made, it is
   recorded here as an enforceable line with its failing case, so the standard and
   the code never drift.

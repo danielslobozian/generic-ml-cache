@@ -24,7 +24,7 @@
 
 Scopes and sessions are future observability and organization features.
 
-They should not affect cassette identity.
+They should not affect execution identity.
 
 ## Scopes
 
@@ -62,13 +62,13 @@ Examples of session boundaries:
 ```text
 Scope
   owns Sessions
-  owns or references Cassettes
+  owns or references Executions
 
 Session
   observes Executions
 
 Execution
-  records or reuses a Cassette
+  records or reuses an Execution
 ```
 
 ## Reports

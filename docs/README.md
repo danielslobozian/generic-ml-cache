@@ -15,14 +15,12 @@ A guided entry point for the design, specification, usage, architecture, referen
 ---
 
 > [!IMPORTANT]
-> **Docs are being rewritten for the v0.x hexagonal architecture.** The codebase
-> was refactored to ports-and-adapters and the on-disk **"cassette"** record format
-> was retired (records are now *executions* in a SQLite store + content-addressed
-> blob store). Pages that still describe the cassette format or a single-package
-> layout — notably `concepts/cassettes.md` and `reference/cassette-schema.md` — are
-> **out of date** and will be rewritten after the planned core/CLI package split.
-> Treat the source (`src/generic_ml_cache/`) and `docs/domain-model.md` as the
-> ground truth until then.
+> **These docs are being aligned to the v0.x hexagonal, two-package architecture.**
+> The codebase moved to ports-and-adapters, split across `packages/core` (the library)
+> and `packages/cli` (the `gmlcache` client), and the old on-disk record format was
+> retired — records are now *executions* in a SQLite store plus a content-addressed
+> blob store. Some pages may still lag the code; treat the source
+> under `packages/` and [`domain-model.md`](domain-model.md) as the ground truth.
 
 ## Overview
 
@@ -37,7 +35,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 | [Design](design.md) | Project identity, principles, and design constraints |
 | [Specification](SPEC.md) | Current conceptual specification and terminology |
 | [Usage](usage.md) | Current CLI behavior at a conceptual level |
-| [Storage](storage.md) | Cassette layout, registry, eviction, and future storage rules |
+| [Storage](storage.md) | The execution store (SQLite) and content-addressed blob store |
 | [Client mapping](client-mapping.md) | Common request fields and adapter differences |
 | [Roadmap](ROADMAP.md) | Current alpha capability and path to 1.x |
 
@@ -50,7 +48,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 <td width="50%" valign="top">
 
 - [Execution requests](concepts/execution-requests.md)
-- [Cassettes](concepts/cassettes.md)
+- [Executions](concepts/executions.md)
 - [Adapters](concepts/adapters.md)
 - [Grants](concepts/grants.md)
 - [Observability](concepts/observability.md)
@@ -59,7 +57,6 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 <td width="50%" valign="top">
 
 - [Cost and usage](concepts/cost-and-usage.md)
-- [Cache eviction](concepts/cache-eviction.md)
 - [Alias mode](concepts/alias-mode.md)
 - [Scopes and sessions](concepts/scopes-and-sessions.md)
 - [Asynchronous executions](concepts/asynchronous-executions.md)
@@ -75,7 +72,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 | Document | Focus |
 |---|---|
 | [Execution engine](architecture/execution-engine.md) | How executions are launched, recorded, and replayed |
-| [Storage model](architecture/storage-model.md) | How cassettes and metadata are organized |
+| [Storage model](architecture/storage-model.md) | How execution records and output blobs are organized |
 | [Adapter contract](architecture/adapter-contract.md) | What adapters must provide to the engine |
 
 <br>
@@ -98,7 +95,6 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 | [CLI reference](reference/cli.md) | Current and future command groups |
 | [Configuration](reference/configuration.md) | Supported configuration keys |
 | [Grants reference](reference/grants.md) | Current and planned grant vocabulary |
-| [Cassette schema](reference/cassette-schema.md) | Cassette structure and normalized fields |
 
 <br>
 
