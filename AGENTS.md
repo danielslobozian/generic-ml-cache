@@ -134,6 +134,25 @@ Note: `in` is a Python keyword, so an inbound package directory cannot be litera
 named `in`; use `inbound` (or the agreed concrete name) while keeping the `port/in`
 *concept*.
 
+### The use-case triple (inbound naming, settled)
+
+Each use case is **three files in two homes**, following the ports-and-adapters
+convention:
+
+- `port/inbound/<action>_use_case.py` → **`<Action>UseCase`** — the inbound port,
+  an `ABC` with the single `execute(command) -> <Result>` method. The driving
+  adapter depends on *this*, never on the implementation.
+- `port/inbound/<action>_command.py` → **`<Action>Command`** — the command. It is
+  part of the inbound contract (the port method takes it), so it lives with the
+  port, **not** with the implementation.
+- `usecase/<action>_service.py` → **`<Action>Service`** — the implementation,
+  which subclasses the port. This is the orchestration.
+
+So the interface carries the `UseCase` name and the implementation carries
+`Service`. The failing case: a concrete class named `<Action>UseCase` in
+`usecase/` with no interface above it is wrong — the name belongs to the port,
+and the driving adapter has nothing to depend on but the concrete class.
+
 ## 5. Layer & dependency discipline (the invariants)
 
 These are hard architectural lines. A change that crosses one is wrong even if it
@@ -196,9 +215,11 @@ object whose data it reads.
 - **A `@staticmethod` on a use case / service is a defect by default. Move it to the
   domain object that owns the data it reasons over.**
 - **The one allowed exception: a boundary mapping** — translating the inbound command
-  into an outbound port DTO. That is the use case's own job (it alone knows both
-  boundaries) and it *cannot* move onto either object: the command is an inbound-port
-  type and the DTO is a domain type, so neither may depend on the other.
+  into an outbound port's request DTO. Mediating between the inbound and outbound
+  boundaries is the use case's *defining* job. The mapping must not move onto the
+  inbound command: that would make the inbound shape know an outbound port's contract —
+  the precise coupling the use case exists to absorb. So this one self-less method
+  stays in the service.
 - **More than that one mapping is an alarm.** Two or more static methods on a use case
   means rules have leaked into the orchestrator — stop and re-analyse before going on.
 
