@@ -35,7 +35,7 @@ Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
 Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-cov", "coverage>=7", "vulture>=2"]
+dev = ["pytest>=7", "pytest-cov", "coverage>=7", "vulture>=2", "ruff>=0.15"]
 
 [project.scripts]
 gmlcache = "generic_ml_cache.cli:main"
