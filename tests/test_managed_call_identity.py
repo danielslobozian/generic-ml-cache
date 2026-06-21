@@ -1,15 +1,28 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for CallIdentity and generate_key()."""
+"""Tests for ManagedCallIdentity and generate_key()."""
 
 from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
 
 
-def _make_identity(**overrides) -> CallIdentity:
+def test_abstract_call_identity_cannot_be_instantiated():
+    from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+
+    with pytest.raises(TypeError):
+        CallIdentity()  # type: ignore[abstract]
+
+
+def test_managed_identity_is_a_call_identity():
+    from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+
+    assert isinstance(_make_identity(), CallIdentity)
+
+
+def _make_identity(**overrides) -> ManagedCallIdentity:
     defaults = dict(
         client="claude",
         model="sonnet",
@@ -18,7 +31,7 @@ def _make_identity(**overrides) -> CallIdentity:
         prompt_fingerprint="prompt_sha256",
     )
     defaults.update(overrides)
-    return CallIdentity(**defaults)
+    return ManagedCallIdentity(**defaults)
 
 
 def test_generate_key_returns_hex_string():
@@ -91,4 +104,4 @@ def test_is_frozen():
 
 
 def test_allow_paths_are_not_a_field():
-    assert not hasattr(CallIdentity, "allow_paths")
+    assert not hasattr(ManagedCallIdentity, "allow_paths")

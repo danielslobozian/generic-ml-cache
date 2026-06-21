@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
 from generic_ml_cache.application.domain.model.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -18,8 +18,8 @@ from generic_ml_cache.application.domain.model.ml_execution import MlExecution
 from generic_ml_cache.application.domain.model.token_usage import TokenUsage
 
 
-def _make_identity() -> CallIdentity:
-    return CallIdentity(
+def _make_identity() -> ManagedCallIdentity:
+    return ManagedCallIdentity(
         client="claude",
         model="sonnet",
         effort="high",

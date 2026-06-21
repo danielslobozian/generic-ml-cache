@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import List, Protocol
 
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
 from generic_ml_cache.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache.common.checksum import fingerprint_arguments, text_checksum
 
@@ -35,9 +35,10 @@ class KeyedCallInputs(Protocol):
 
 def build_call_identity(
     file_fingerprint: FileFingerprintPort, keyed_inputs: KeyedCallInputs
-) -> CallIdentity:
+) -> ManagedCallIdentity:
     """Fingerprint the keyed inputs (files at the edge, text in place) and assemble
-    the CallIdentity. The file content never enters the engine — only checksums."""
+    the managed identity. The file content never enters the engine — only
+    checksums."""
     input_file_fingerprints = {
         input_file_path: file_fingerprint.fingerprint(input_file_path)
         for input_file_path in keyed_inputs.input_file_paths
@@ -45,7 +46,7 @@ def build_call_identity(
     client_args_fingerprint = (
         fingerprint_arguments(keyed_inputs.client_args) if keyed_inputs.client_args else None
     )
-    return CallIdentity(
+    return ManagedCallIdentity(
         client=keyed_inputs.client,
         model=keyed_inputs.model,
         effort=keyed_inputs.effort,

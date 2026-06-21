@@ -12,7 +12,7 @@ from generic_ml_cache.adapter.out.persistence.in_memory_execution_repository imp
     InMemoryExecutionRepository,
 )
 from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
 from generic_ml_cache.application.domain.model.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -36,8 +36,8 @@ class FixedClock(ClockPort):
         return self._moment
 
 
-def _identity(prompt_fingerprint: str = "prompt_sha") -> CallIdentity:
-    return CallIdentity(
+def _identity(prompt_fingerprint: str = "prompt_sha") -> ManagedCallIdentity:
+    return ManagedCallIdentity(
         client="claude",
         model="sonnet",
         effort="high",
@@ -47,7 +47,7 @@ def _identity(prompt_fingerprint: str = "prompt_sha") -> CallIdentity:
 
 
 def _execution(
-    identity: CallIdentity,
+    identity: ManagedCallIdentity,
     state: ExecutionState = ExecutionState.SUCCESS,
     output_persisted: bool = True,
     content: bytes = b"answer",
