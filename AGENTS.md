@@ -134,6 +134,25 @@ Note: `in` is a Python keyword, so an inbound package directory cannot be litera
 named `in`; use `inbound` (or the agreed concrete name) while keeping the `port/in`
 *concept*.
 
+### The use-case triple (inbound naming, settled)
+
+Each use case is **three files in two homes**, following the ports-and-adapters
+convention:
+
+- `port/inbound/<action>_use_case.py` → **`<Action>UseCase`** — the inbound port,
+  an `ABC` with the single `execute(command) -> <Result>` method. The driving
+  adapter depends on *this*, never on the implementation.
+- `port/inbound/<action>_command.py` → **`<Action>Command`** — the command. It is
+  part of the inbound contract (the port method takes it), so it lives with the
+  port, **not** with the implementation.
+- `usecase/<action>_service.py` → **`<Action>Service`** — the implementation,
+  which subclasses the port. This is the orchestration.
+
+So the interface carries the `UseCase` name and the implementation carries
+`Service`. The failing case: a concrete class named `<Action>UseCase` in
+`usecase/` with no interface above it is wrong — the name belongs to the port,
+and the driving adapter has nothing to depend on but the concrete class.
+
 ## 5. Layer & dependency discipline (the invariants)
 
 These are hard architectural lines. A change that crosses one is wrong even if it
@@ -183,6 +202,44 @@ computation is a method on that object.
 - A use case orchestrates (decides *what* happens in *what order*); it delegates the
   *rules* to the domain and the *I/O* to ports. A use case that contains business
   rules has absorbed something that belongs in the domain.
+
+### The static-method tell (the hard line)
+
+The rule above is too easy to rationalise ("it's just a small helper"), so it gets a
+mechanical detector. **Orchestration is methods that use the injected ports.** A method
+on a use case that touches *neither `self` nor a port* — in Python, anything you can
+mark `@staticmethod` — is therefore **not orchestration**: it computes a value purely
+from domain or command fields, which makes it a **rule**, and a rule belongs on the
+object whose data it reads.
+
+- **A `@staticmethod` on a use case / service is a defect by default. Move it to the
+  domain object that owns the data it reasons over.**
+- **The one allowed exception: a boundary mapping** — translating the inbound command
+  into an outbound port's request DTO. Mediating between the inbound and outbound
+  boundaries is the use case's *defining* job. The mapping must not move onto the
+  inbound command: that would make the inbound shape know an outbound port's contract —
+  the precise coupling the use case exists to absorb. So this one self-less method
+  stays in the service.
+- **More than that one mapping is an alarm.** Two or more static methods on a use case
+  means rules have leaked into the orchestrator — stop and re-analyse before going on.
+
+```python
+# WRONG — a rule living in the use case (no self, no port): domain logic, wrong layer.
+class RunManagedLocalExecutionService:
+    @staticmethod
+    def _interpret(result: ClientRunResult) -> ExecutionState:
+        return ExecutionState.FAILED if result.exit_code else ExecutionState.SUCCESS
+
+# RIGHT — the rule sits on the object that owns the field it reads.
+class ClientRunResult:
+    def outcome(self) -> ExecutionState:
+        return ExecutionState.FAILED if self.exit_code else ExecutionState.SUCCESS
+```
+
+Pure, dependency-free logic has exactly two homes, **neither of which is a use case**:
+a method on the domain value object whose fields it computes over, or — when it belongs
+to no single object — a module-level function in `common/`. A `@staticmethod` on a use
+case or service is neither, and is the signal to relocate.
 
 ---
 

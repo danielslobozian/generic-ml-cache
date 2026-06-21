@@ -70,11 +70,15 @@ def test_record_real_call_stops_on_signal_and_records_nothing():
 
 def test_cli_run_maps_interruption_to_a_distinct_exit_code(monkeypatch):
     """A stop is not a failure: the CLI returns 130, separate from miss (3) /
-    error (4), and -- because resolve raised before any save -- nothing is stored."""
+    error (4). The use case raised before any record, so nothing is stored."""
 
-    def _raise_interrupted(*_args, **_kwargs):
-        raise RunInterrupted("client run was stopped before it completed")
+    class _RaisingService:
+        def execute(self, command):
+            raise RunInterrupted("client run was stopped before it completed")
 
-    monkeypatch.setattr(cli, "resolve", _raise_interrupted)
+    class _Wired:
+        run_managed = _RaisingService()
+
+    monkeypatch.setattr(cli, "build_use_cases", lambda *args, **kwargs: _Wired())
     code = cli.main(["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi"])
     assert code == 130

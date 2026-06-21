@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from generic_ml_cache.adapter.out.client.registry import register
 from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
-from generic_ml_cache.application.domain.model.usage import Usage, float_or_none, int_or_none
+from generic_ml_cache.application.domain.model.usage.usage import Usage, float_or_none, int_or_none
 from generic_ml_cache.application.port.out.base import ClientAdapter, final_result_object
 
 
@@ -51,7 +51,7 @@ class ClaudeAdapter(ClientAdapter):
         # Streaming output mode (one NDJSON event per line) so a live consumer can
         # watch progress; the recorded answer + usage are lifted from the final
         # `result` event, which is byte-identical to the old single-object json
-        # (proven against the live CLI), so the cassette is unchanged. --verbose is
+        # (proven against the live CLI), so the stored output is unchanged. --verbose is
         # required for stream-json to emit the full stream; --include-partial-
         # messages adds token-level deltas for the live feed.
         argv += [

@@ -10,7 +10,7 @@ class CacheError(Exception):
 
 
 class CacheMiss(CacheError):
-    """Raised in offline mode when no cassette matches the request.
+    """Raised in offline mode when no stored execution matches the request.
 
     Offline mode is a *knowing* switch to replay-only: a miss is an error, never
     a silent fall-through to a real call.
@@ -46,16 +46,22 @@ class CommandLineTooLong(CacheError):
     """
 
 
-class CassetteFormatError(CacheError):
-    """Raised when a cassette file on disk is malformed or unreadable."""
+class InputFileError(CacheError):
+    """Raised when a declared input file cannot be read for fingerprinting.
+
+    The path does not point to a regular file, or the bytes could not be read.
+    The filesystem fingerprint adapter translates the foreign ``OSError`` into
+    this cause-named exception so the core never sees a library error type.
+    """
 
 
-class IsolationViolation(CacheError):
-    """Raised when a recorded run reported touching files outside its folder.
+class ArtifactBlobMissing(CacheError):
+    """Raised when hydrating an execution whose artifact references a blob that
+    the blob store no longer holds.
 
-    Hard isolation (containers, chroot) is out of scope for v0.0.1; this surfaces
-    the *soft* signal a well-behaved client emits when the prime directive is
-    violated.
+    The structured record says the output was persisted, but the bytes are gone
+    (an out-of-band deletion, a half-completed prune). The engine fails loud
+    rather than returning a silently empty result.
     """
 
 
@@ -64,7 +70,7 @@ class RunInterrupted(Exception):
     workflow engine) before it finished.
 
     Deliberately **not** a ``CacheError``: it is not a fault but a requested stop,
-    and it must never be recorded as a cassette -- an interrupted call is not a
+    and it must never be recorded as an execution -- an interrupted call is not a
     result. The CLI maps it to a distinct exit code so a stop is distinguishable
     from a failure.
     """

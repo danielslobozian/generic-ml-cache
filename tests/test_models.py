@@ -10,7 +10,7 @@ from generic_ml_cache import register
 from generic_ml_cache.application.port.out.base import ClientAdapter, ModelInfo
 from generic_ml_cache.adapter.out.client.cursor import CursorAdapter
 from generic_ml_cache.cli import main
-from generic_ml_cache.application.domain.service.discover import list_models
+from generic_ml_cache.adapter.out.client.discover import list_models
 
 # A trimmed sample of real `cursor-agent --list-models` output: a header line,
 # ordinary entries, a "(current)"/"(default)" marker, and the trailing tip.

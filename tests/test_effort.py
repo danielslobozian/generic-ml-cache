@@ -7,7 +7,6 @@ from pathlib import Path
 from generic_ml_cache.adapter.out.client.claude import ClaudeAdapter
 from generic_ml_cache.adapter.out.client.codex import CodexAdapter
 from generic_ml_cache.adapter.out.client.cursor import CursorAdapter
-from generic_ml_cache.application.domain.model.cassette import Cassette
 from generic_ml_cache.cli import build_parser
 
 RUN_DIR = Path("/tmp/does-not-matter")
@@ -45,11 +44,3 @@ def test_cursor_uses_model_verbatim_when_no_effort():
 def test_run_effort_is_optional_in_cli():
     args = build_parser().parse_args(["run", "--client", "fake", "--model", "m", "--prompt", "p"])
     assert args.effort == ""
-
-
-def test_effort_is_a_distinct_part_of_the_match_key():
-    data = {"context": "", "prompt": "hi"}
-    with_effort = Cassette(client="cursor", model="m", effort="high", input_data=data)
-    without = Cassette(client="cursor", model="m", effort="", input_data=data)
-    # same client/model/input, different effort -> different cassettes
-    assert with_effort.match_key != without.match_key

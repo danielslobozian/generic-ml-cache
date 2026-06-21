@@ -8,7 +8,7 @@
     gmlcache models  -- list a client's available models (advisory; relayed)
     gmlcache status  -- show the resolved configuration and where it came from
     gmlcache init    -- create the config file in the default location (if absent)
-    gmlcache inspect -- pretty-print a cassette
+    gmlcache inspect -- pretty-print a stored execution
 
 Replay fidelity: in the default (quiet) mode, ``run`` reproduces the client's
 stdout, stderr and exit code exactly. Cache diagnostics appear only with
@@ -19,7 +19,6 @@ design breaks byte-exact stderr fidelity -- use quiet mode when that matters.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import subprocess
 import sys
@@ -31,9 +30,15 @@ try:
 except ImportError:  # completion is a convenience; never let its absence break the CLI
     argcomplete = None
 
+from generic_ml_cache.adapter.inbound.composition import build_use_cases
 from generic_ml_cache.adapter.out.client.registry import registered_names
-from generic_ml_cache.adapter.out.storage.store import CassetteStore
-from generic_ml_cache.application.domain.service.cache import Mode, Request, apply_response, resolve
+from generic_ml_cache.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache.application.port.inbound.run_managed_local_execution_command import (
+    RunManagedLocalExecutionCommand,
+)
 from generic_ml_cache.application.port.out.base import ClientAdapter
 from generic_ml_cache.common.errors import CacheError, CacheMiss, ConfigError, RunInterrupted
 
@@ -42,13 +47,11 @@ from . import __version__, config
 #: capabilities a caller may open with --grant, sourced from the adapter seam so
 #: the CLI choices, the help, and what the adapters implement can never drift.
 GRANT_CHOICES: List[str] = list(ClientAdapter.GRANTS)
-#: default file written when --stream is passed with no path.
-_DEFAULT_STREAM_FILE = "gmlc-stream.jsonl"
 _GRANT_HELP = (
     "open a capability for the client -- enablement, not restriction. One of "
     "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "
     "widen file and command access, web-search enables the search tool. Part of "
-    "the key (a granted call is its own cassette) and cacheable like any call; use "
+    "the key (a granted call is its own execution) and cacheable like any call; use "
     "--force for a live re-fetch. Repeatable."
 )
 
@@ -61,111 +64,131 @@ def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str
     return inline if inline is not None else ""
 
 
-def _build_keyed_request(args: argparse.Namespace) -> Request:
-    """Build a Request from the inputs shared by ``run`` and ``check``.
+def _resolve_input_file_paths(raw_paths) -> List[str]:
+    """Declared input files, resolved to absolute (path-sensitive keying). The
+    use case's fingerprint adapter validates readability and raises on a bad one."""
+    return [str(Path(raw).resolve()) for raw in (raw_paths or [])]
 
-    These are the fields the cache key is derived from -- client, model, effort,
-    context, prompt, and the content fingerprints of declared input files -- plus
-    the allow-path folders, which decide cacheability (never keyed). The system
-    prompt is deliberately excluded: it is record-time scaffolding, not keyed, so
-    only ``run`` layers it on. Keeping this in one place means ``run`` and
-    ``check`` derive the *same* key from the same arguments, so a probe can never
-    disagree with a run about whether a call is cached.
-    """
+
+def _resolve_allow_paths(raw_paths) -> List[str]:
+    """Declared scan folders: validated directories, normalised to absolute."""
+    resolved: List[str] = []
+    for raw in raw_paths or []:
+        path = Path(raw)
+        if not path.is_dir():
+            raise SystemExit(f"error: allow-path is not a directory: {raw}")
+        resolved.append(str(path.resolve()))
+    return resolved
+
+
+def _artifact_text(execution: MlExecution, artifact_type: ArtifactType) -> str:
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is artifact_type:
+            return (artifact.content or b"").decode("utf-8", errors="replace")
+    return ""
+
+
+def _run_exit_code(execution: MlExecution) -> int:
+    if execution.failure is not None and execution.failure.exit_code is not None:
+        return execution.failure.exit_code
+    return 0 if execution.execution_state is ExecutionState.SUCCESS else 1
+
+
+def _apply_output_files(execution: MlExecution, output_dir: Path) -> None:
+    """Write captured output files into ``output_dir``, mirroring a real client.
+    Any attempt to escape the directory (``..`` / absolute) is refused."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base = output_dir.resolve()
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is not ArtifactType.OUTPUT_FILE or artifact.name is None:
+            continue
+        target = (output_dir / Path(artifact.name)).resolve()
+        if base != target and base not in target.parents:
+            raise ValueError(f"refusing to write outside output dir: {artifact.name!r}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(artifact.content or b"")
+
+
+def _print_run_json(execution: MlExecution, command: RunManagedLocalExecutionCommand) -> int:
+    import json
+
+    usage = execution.token_usage
+    files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
+    status = "success" if execution.execution_state is ExecutionState.SUCCESS else "failed"
+    payload = {
+        "status": status,
+        "exit": _run_exit_code(execution),
+        "client": command.client,
+        "model": command.model,
+        "effort": command.effort,
+        "files": len(files),
+        "usage": usage.to_dict() if usage is not None else None,
+        "stdout": _artifact_text(execution, ArtifactType.STDOUT),
+    }
+    print(json.dumps(payload, indent=2))
+    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
+    sys.stderr.flush()
+    return _run_exit_code(execution)
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
     context = _read_text_arg(args.context, args.context_file, "context")
     prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
     if not prompt:
         raise SystemExit("error: a non-empty --prompt or --prompt-file is required")
+    system_prompt = (
+        _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
+    )
 
-    # Declared input files: fingerprint each by content (any file type) -> {abs_path: sha}.
-    input_files: Dict[str, str] = {}
-    for raw in args.input_file or []:
-        p = Path(raw)
-        if not p.is_file():
-            raise SystemExit(f"error: input file not found: {raw}")
-        try:
-            data = p.read_bytes()
-        except OSError as exc:
-            raise SystemExit(f"error: cannot read input file {raw}: {exc}")
-        input_files[str(p.resolve())] = hashlib.sha256(data).hexdigest()
+    try:
+        file_cfg = config.load()
+        settings = config.resolve_settings(file_cfg, mode_flag=args.mode, timeout_flag=args.timeout)
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
 
-    # Declared scan folders (allow-path): validated directories, normalised to abs.
-    allow_paths: List[str] = []
-    for raw in args.allow_path or []:
-        p = Path(raw)
-        if not p.is_dir():
-            raise SystemExit(f"error: allow-path is not a directory: {raw}")
-        allow_paths.append(str(p.resolve()))
+    store_root = Path(str(settings["store"][0]))
+    timeout = settings["timeout"][0]
+    trust_scan = bool(settings["trust_scan"][0])
+    # --offline / --force are explicit flags and win over the resolved mode.
+    if args.offline:
+        cache_mode = CacheMode.OFFLINE
+    elif args.force:
+        cache_mode = CacheMode.REFRESH
+    else:
+        cache_mode = CacheMode(str(settings["mode"][0]))
 
-    return Request(
+    command = RunManagedLocalExecutionCommand(
         client=args.client,
         model=args.model,
         effort=args.effort,
         context=context,
         prompt=prompt,
-        input_files=input_files,
-        allow_paths=allow_paths,
+        user_system_prompt=system_prompt,
+        input_file_paths=_resolve_input_file_paths(args.input_file),
+        allow_paths=_resolve_allow_paths(args.allow_path),
+        scan_trust=trust_scan,
         client_args=list(getattr(args, "client_arg", None) or []),
         grants=list(getattr(args, "grant", None) or []),
+        cache_mode=cache_mode,
+        record_on_error=args.record_on_error,
     )
 
+    def executable_override(client: str):
+        return config.executable_for(file_cfg, client, flag=args.executable)
 
-def _cmd_run(args: argparse.Namespace) -> int:
-    request = _build_keyed_request(args)
-    request.user_system_prompt = (
-        _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
-    )
-    try:
-        file_cfg = config.load()
-        settings = config.resolve_settings(
-            file_cfg,
-            mode_flag=args.mode,
-            timeout_flag=args.timeout,
-        )
-    except ConfigError as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 4
-
-    max_size = settings["max_size"][0]
-    store = CassetteStore(
-        Path(str(settings["store"][0])),
-        max_bytes=int(max_size) if max_size is not None else None,
-    )
-    timeout = settings["timeout"][0]
-    trust_scan = bool(settings["trust_scan"][0])
-    # --offline / --force are explicit flags and win over the resolved mode.
-    if args.offline:
-        mode = Mode.OFFLINE
-    elif args.force:
-        mode = Mode.REFRESH
-    else:
-        mode = Mode(str(settings["mode"][0]))
-
-    def log(msg: str) -> None:
-        if args.verbose:
-            print(f"gmlc: {msg}", file=sys.stderr)
+    wired = build_use_cases(store_root, executable_override, timeout)
 
     try:
-        outcome = resolve(
-            request,
-            store,
-            mode=mode,
-            executable=config.executable_for(file_cfg, args.client, flag=args.executable),
-            timeout=timeout,
-            trust_scan=trust_scan,
-            record_on_error=args.record_on_error,
-            stream_path=getattr(args, "stream", None),
-        )
+        execution = wired.run_managed.execute(command)
     except RunInterrupted as exc:
-        # A requested stop, not a failure: no cassette was written. Exit code 130
-        # (the conventional "terminated by Ctrl-C") tells the caller it was stopped.
+        # A requested stop, not a failure: nothing was recorded. Exit 130 is the
+        # conventional "terminated by Ctrl-C".
         print(f"gmlc: {exc}", file=sys.stderr)
         return 130
     except subprocess.TimeoutExpired as exc:
-        # The real call ran past --timeout and was killed; the unwinding happened
-        # before any cassette write, so nothing was stored. Exit 124 is the
-        # `timeout(1)` convention for "command timed out", distinct from miss (3)
-        # and error (4).
+        # The real call ran past --timeout and was killed before any record. Exit
+        # 124 is the timeout(1) convention, distinct from miss (3) and error (4).
         print(
             f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
             file=sys.stderr,
@@ -178,218 +201,132 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    if outcome.hit:
-        log("cache hit; replaying cassette")
-    elif outcome.passthrough:
-        log("allow-path call — ran fresh, stored nothing (not cacheable)")
-    elif outcome.failed_unstored:
-        log(
-            f"real call failed (exit {outcome.response.exit}); not cached "
-            "(pass --record-on-error to store failures)"
-        )
-    elif outcome.recorded:
-        log(f"recorded real call -> cassette {outcome.cassette.match_key}.json")
-
-    # The cache writes produced files into the directory it was called in,
-    # exactly as the real client would. There is no output-dir knob: to put the
-    # outputs elsewhere, run the cache there -- same as you would the client.
-    apply_response(outcome.response, Path.cwd())
+    # Materialise captured files into the cwd, exactly as the real client would.
+    _apply_output_files(execution, Path.cwd())
 
     if getattr(args, "json", False):
-        # Machine-readable envelope for a parent process (e.g. the workflow engine
-        # reading normalized usage). Same usage shape as `check --json`; adds the
-        # run outcome (status/exit) and the answer, so the caller gets result and
-        # usage in one parse. Files are still materialized to the cwd as above.
-        import json
+        return _print_run_json(execution, command)
 
-        if outcome.hit:
-            status = "hit"
-        elif outcome.passthrough:
-            status = "passthrough"
-        elif outcome.failed_unstored:
-            status = "failed"
-        elif outcome.recorded:
-            status = "recorded"
-        else:
-            status = "miss"
-        usage = outcome.response.usage
-        payload = {
-            "status": status,
-            "cached": outcome.hit,
-            "exit": outcome.response.exit,
-            "client": request.client,
-            "model": request.model,
-            "effort": request.effort,
-            "files": len(outcome.response.files),
-            "usage": usage.to_dict() if usage is not None else None,
-            "stdout": outcome.response.stdout,
-        }
-        print(json.dumps(payload, indent=2))
-        # Client diagnostics still go to stderr; the JSON on stdout stays clean.
-        sys.stderr.write(outcome.response.stderr)
-        sys.stderr.flush()
-        return outcome.response.exit
-
-    # Reproduce the client's streams exactly.
-    sys.stdout.write(outcome.response.stdout)
+    sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
     sys.stdout.flush()
-    sys.stderr.write(outcome.response.stderr)
+    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
     sys.stderr.flush()
-    return outcome.response.exit
+    return _run_exit_code(execution)
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
     import json
 
-    from generic_ml_cache.application.domain.model.cassette import match_key as compute_match_key
-    from generic_ml_cache.application.domain.service.cache import ProbeStatus, probe
-    from generic_ml_cache.common.checksum import checksum_input_data
+    from generic_ml_cache.application.domain.model.probe.probe_status import ProbeStatus
+    from generic_ml_cache.application.port.inbound.probe_command import ProbeCommand
 
-    request = _build_keyed_request(args)
+    context = _read_text_arg(args.context, args.context_file, "context")
+    prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
+    if not prompt:
+        raise SystemExit("error: a non-empty --prompt or --prompt-file is required")
     try:
         settings = config.resolve_settings(config.load())
     except ConfigError as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    store = CassetteStore(Path(str(settings["store"][0])))
-    trust_scan = bool(settings["trust_scan"][0])
-
-    result = probe(request, store, trust_scan=trust_scan)
-
-    # Identity is derived from the request (same key a run would compute), so it is
-    # shown for every verdict, including a miss where there is no cassette to read.
-    checksum = checksum_input_data(request.input_data)
-    key = compute_match_key(request.client, request.model, request.effort, checksum)
-    cassette = result.cassette
-    usage = cassette.response.usage if cassette is not None else None
+    store_root = Path(str(settings["store"][0]))
+    command = ProbeCommand(
+        client=args.client,
+        model=args.model,
+        effort=args.effort,
+        context=context,
+        prompt=prompt,
+        input_file_paths=_resolve_input_file_paths(args.input_file),
+        allow_paths=_resolve_allow_paths(args.allow_path),
+        scan_trust=bool(settings["trust_scan"][0]),
+        client_args=list(getattr(args, "client_arg", None) or []),
+        grants=list(getattr(args, "grant", None) or []),
+    )
+    report = build_use_cases(store_root).probe.execute(command)
+    execution = report.execution
+    usage = execution.token_usage if execution is not None else None
+    file_count = (
+        len([a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE])
+        if execution is not None
+        else 0
+    )
 
     if args.json:
         payload = {
-            "status": result.status.value,
-            "cached": result.status is ProbeStatus.HIT,
-            "client": request.client,
-            "model": request.model,
-            "effort": request.effort,
-            "checksum": checksum,
-            "key": key,
+            "status": report.status.value,
+            "cached": report.status is ProbeStatus.HIT,
+            "client": args.client,
+            "model": args.model,
+            "effort": args.effort,
+            "key": report.execution_key,
         }
-        if cassette is not None:
-            payload["files"] = len(cassette.response.files)
+        if execution is not None:
+            payload["files"] = file_count
             payload["usage"] = usage.to_dict() if usage is not None else None
         print(json.dumps(payload, indent=2))
         return 0
 
-    print(f"status  : {result.status.value}")
-    print(f"client  : {request.client}")
-    print(f"model   : {request.model}")
-    print(f"effort  : {request.effort}")
-    print(f"checksum: {checksum}")
-    print(f"key     : {key}")
-    if result.status is ProbeStatus.HIT and cassette is not None:
-        print(f"files   : {len(cassette.response.files)}")
+    print(f"status  : {report.status.value}")
+    print(f"client  : {args.client}")
+    print(f"model   : {args.model}")
+    print(f"effort  : {args.effort}")
+    print(f"key     : {report.execution_key}")
+    if report.status is ProbeStatus.HIT and execution is not None:
+        print(f"files   : {file_count}")
         if usage is None:
             print("usage   : (none captured)")
         else:
             print(f"usage   : {_usage_summary(usage)}")
-            if usage.cost_usd is not None:
-                print(
-                    f"          cost ~ ${usage.cost_usd:.4f} (client estimate, not authoritative)"
-                )
-    elif result.status is ProbeStatus.NON_CACHEABLE:
+    elif report.status is ProbeStatus.NON_CACHEABLE:
         print("note    : declares allow-path folders the cache cannot fingerprint, so this")
         print("          call always runs fresh and is never cached.")
     return 0
 
 
 def _cmd_inspect(args: argparse.Namespace) -> int:
-    from generic_ml_cache.application.domain.model.cassette import Cassette, CassetteFormatError
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
 
-    arg = args.cassette
-    path = Path(arg)
-    if path.exists():
-        if not path.is_file():
-            print(f"gmlc: cannot read cassette {path}: not a regular file", file=sys.stderr)
-            return 4
-    else:
-        # Not a filesystem path -> treat it as a (short) key and resolve it against
-        # the store, so the short key shown by `list` is enough to inspect.
-        try:
-            settings = config.resolve_settings(config.load())
-        except ConfigError as exc:
-            print(f"gmlc: {exc}", file=sys.stderr)
-            return 4
-        root = CassetteStore(Path(str(settings["store"][0]))).root
-        matches = (
-            sorted(p for p in root.glob("*.json") if p.stem.startswith(arg))
-            if root.exists()
-            else []
+    store_root = Path(str(settings["store"][0]))
+    matches = build_use_cases(store_root).repository.find_current_by_key_prefix(args.execution)
+    if not matches:
+        print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
+        return 4
+    if len(matches) > 1:
+        print(
+            f"gmlc: key {args.execution!r} is ambiguous — matches {len(matches)} executions:",
+            file=sys.stderr,
         )
-        if not matches:
-            print(
-                f"gmlc: no such cassette: {arg} (not a file, and no key matches)", file=sys.stderr
-            )
-            return 4
-        if len(matches) > 1:
-            print(
-                f"gmlc: key {arg!r} is ambiguous — matches {len(matches)} cassettes:",
-                file=sys.stderr,
-            )
-            for m in matches:
-                print(f"  {m.stem}", file=sys.stderr)
-            return 4
-        path = matches[0]
-
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        print(f"gmlc: cannot read cassette {path}: {exc}", file=sys.stderr)
+        for ambiguous in matches:
+            print(f"  {ambiguous.call_identity.generate_key()}", file=sys.stderr)
         return 4
 
-    try:
-        cassette = Cassette.from_json(text)
-    except CassetteFormatError as exc:
-        print(f"gmlc: not a valid cassette {path}: {exc}", file=sys.stderr)
-        return 4
-
-    d = cassette.to_dict()
-    print(f"client : {d['client']}")
-    print(f"model  : {d['model']}")
-    print(f"effort : {d['effort']}")
-    print(f"checksum: {d['input_checksum']}")
-    print(f"key    : {cassette.match_key}")
-    print(f"context: {len(cassette.input_data.get('context', ''))} chars")
-    print(f"prompt : {len(cassette.input_data.get('prompt', ''))} chars")
-    infiles = sorted(k for k in cassette.input_data if k.startswith("input_file:"))
-    if infiles:
-        print(f"input files: {len(infiles)} (fingerprints)")
-        for k in infiles:
-            print(f"         - {k[len('input_file:') :][:12]}…")
-    print(f"exit   : {cassette.response.exit}")
-    print(f"stdout : {len(cassette.response.stdout)} chars")
-    print(f"stderr : {len(cassette.response.stderr)} chars")
-    print(f"files  : {len(cassette.response.files)}")
-    for f in cassette.response.files:
-        print(f"         - {f.path} ({f.encoding}, {len(f.content)} chars)")
-    usage = cassette.response.usage
+    execution = matches[0]
+    print(f"key    : {execution.call_identity.generate_key()}")
+    print(f"kind   : {execution.execution_kind.value}")
+    print(f"state  : {execution.execution_state.value}")
+    output_files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
+    print(f"files  : {len(output_files)}")
+    for artifact in output_files:
+        print(f"         - {artifact.name} ({artifact.encoding}, {artifact.size_bytes} bytes)")
+    usage = execution.token_usage
     if usage is None:
         print("usage  : (none captured)")
     else:
         print(f"usage  : {_usage_summary(usage)}")
         if usage.cost_usd is not None:
             print(f"         cost ~ ${usage.cost_usd:.4f} (client estimate, not authoritative)")
-        if args.raw:
-            import json as _json
-
-            print("raw usage (verbatim from the client):")
-            print(_indent(_json.dumps(usage.raw, indent=2, sort_keys=True), "         "))
     return 0
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache.application.domain.service.discover import probe_all
+    from generic_ml_cache.adapter.out.client.discover import probe_all
 
     try:
         file_cfg = config.load()
@@ -420,7 +357,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache.application.domain.service.discover import list_models, list_models_all
+    from generic_ml_cache.adapter.out.client.discover import list_models, list_models_all
 
     try:
         file_cfg = config.load()
@@ -519,17 +456,8 @@ def _cmd_init(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
     value, source = settings["store"]
-    print(f"cassette store: {value}  (from {source})")
+    print(f"store: {value}  (from {source})")
     return 0
-
-
-def _human_size(num_bytes: int) -> str:
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024 or unit == "TB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"
 
 
 def _token_str(count: "int | None") -> str:
@@ -548,54 +476,8 @@ def _usage_summary(usage) -> str:
     )
 
 
-def _indent(text: str, prefix: str) -> str:
-    return "\n".join(prefix + line for line in text.splitlines())
-
-
-def _tokens_saved(hit_counts: dict, usage_by_key: dict) -> dict:
-    """Sum the usage that cache hits avoided spending.
-
-    Each hit on a cassette would otherwise have been a real call costing that
-    cassette's recorded usage, so the saving is ``usage * hits`` summed over
-    cassettes. A field stays ``None`` ("unknown") if no contributing cassette
-    reported it -- never silently 0. Hits whose cassette is gone or carried no
-    usage are counted separately so the figure is not quietly understated.
-    """
-    fields = ("input_tokens", "output_tokens", "cache_read_tokens")
-    sums = {f: 0 for f in fields}
-    known = {f: False for f in fields}
-    cost_sum = 0.0
-    cost_known = False
-    replays = 0
-    replays_without_usage = 0
-    for key, hits in hit_counts.items():
-        usage = usage_by_key.get(key)
-        if usage is None:
-            replays_without_usage += hits
-            continue
-        replays += hits
-        for f in fields:
-            value = getattr(usage, f)
-            if value is not None:
-                sums[f] += value * hits
-                known[f] = True
-        if usage.cost_usd is not None:
-            cost_sum += usage.cost_usd * hits
-            cost_known = True
-    return {
-        "replays": replays,
-        "replays_without_usage": replays_without_usage,
-        "input_tokens": sums["input_tokens"] if known["input_tokens"] else None,
-        "output_tokens": sums["output_tokens"] if known["output_tokens"] else None,
-        "cache_read_tokens": sums["cache_read_tokens"] if known["cache_read_tokens"] else None,
-        "cost_usd": cost_sum if cost_known else None,
-    }
-
-
 def _cmd_stats(args: argparse.Namespace) -> int:
     import json
-
-    from generic_ml_cache.application.domain.model.cassette import Cassette
 
     try:
         settings = config.resolve_settings(config.load())
@@ -603,91 +485,46 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    store = CassetteStore(Path(str(settings["store"][0])))
-    root = store.root
-
-    # Tally cassettes by (client, model). stats is an occasional, explicit call,
-    # so reading each cassette to learn its client/model is fine; a corrupt or
-    # unreadable file is skipped rather than aborting the report.
-    by_client_model: Dict[tuple, List[int]] = {}
-    usage_by_key: Dict[str, object] = {}
-    total_count = 0
-    total_bytes = 0
-    if root.exists():
-        for path in sorted(root.glob("*.json")):
-            try:
-                size = path.stat().st_size
-                cassette = Cassette.from_json(path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            slot = by_client_model.setdefault((cassette.client, cassette.model), [0, 0])
-            slot[0] += 1
-            slot[1] += size
-            total_count += 1
-            total_bytes += size
-            if cassette.response.usage is not None:
-                usage_by_key[cassette.match_key] = cassette.response.usage
-
-    access = store.registry.event_counts()
-    saved = _tokens_saved(store.registry.hit_counts_by_key(), usage_by_key)
+    wired = build_use_cases(Path(str(settings["store"][0])))
+    summaries = wired.repository.current_execution_summaries()
+    access = wired.metrics.event_counts()
+    by_client_model: Dict[tuple, int] = {}
+    for summary in summaries:
+        by_client_model[(summary.client, summary.model)] = (
+            by_client_model.get((summary.client, summary.model), 0) + 1
+        )
 
     if args.json:
         print(
             json.dumps(
                 {
-                    "store": str(root),
-                    "cassettes": total_count,
-                    "bytes": total_bytes,
+                    "executions": len(summaries),
                     "by_client_model": [
-                        {"client": client, "model": model, "cassettes": n, "bytes": b}
-                        for (client, model), (n, b) in sorted(by_client_model.items())
+                        {"client": client, "model": model, "executions": count}
+                        for (client, model), count in sorted(by_client_model.items())
                     ],
                     "access_events": access,
-                    "tokens_saved": saved,
                 },
                 indent=2,
             )
         )
         return 0
 
-    print(f"store     : {root}")
-    print(f"cassettes : {total_count}  ({_human_size(total_bytes)} total)")
+    print(f"executions : {len(summaries)}")
     if by_client_model:
         print("by client / model:")
-        for (client, model), (n, b) in sorted(by_client_model.items()):
-            print(f"  {client:<8} {model:<26} {n:>5}  {_human_size(b)}")
+        for (client, model), count in sorted(by_client_model.items()):
+            print(f"  {client:<8} {model:<26} {count:>5}")
     if access:
         parts = ", ".join(f"{event}={count}" for event, count in sorted(access.items()))
-        print(f"access    : {parts}")
+        print(f"access     : {parts}")
     else:
-        print("access    : (no events recorded yet)")
-
-    if saved["replays"] == 0:
-        print("saved     : (no replays yet — savings appear once cassettes are reused)")
-    else:
-        print(
-            f"saved     : from {saved['replays']} replay(s) — "
-            f"input {_token_str(saved['input_tokens'])}, "
-            f"output {_token_str(saved['output_tokens'])}, "
-            f"cache-read {_token_str(saved['cache_read_tokens'])} tokens"
-        )
-        if saved["cost_usd"] is not None:
-            print(
-                f"            ~ ${saved['cost_usd']:.4f} (from client cost estimates; "
-                "not authoritative)"
-            )
-        if saved["replays_without_usage"]:
-            print(
-                f"            ({saved['replays_without_usage']} replay(s) had no recorded "
-                "usage and are not counted)"
-            )
+        print("access     : (no events recorded yet)")
     return 0
 
 
 def _cmd_list(args: argparse.Namespace) -> int:
     import json
-
-    from generic_ml_cache.application.domain.model.cassette import Cassette
 
     try:
         settings = config.resolve_settings(config.load())
@@ -695,60 +532,35 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    store = CassetteStore(Path(str(settings["store"][0])))
-    root = store.root
-    hit_counts = store.registry.hit_counts_by_key()
-
-    # One entry per cassette; a corrupt or unreadable file is skipped, not fatal.
-    entries: List[dict] = []
-    if root.exists():
-        for path in sorted(root.glob("*.json")):
-            try:
-                size = path.stat().st_size
-                cassette = Cassette.from_json(path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            if args.client and cassette.client != args.client:
-                continue
-            if args.model and cassette.model != args.model:
-                continue
-            entries.append(
-                {
-                    "client": cassette.client,
-                    "model": cassette.model,
-                    "effort": cassette.effort,
-                    "key": cassette.match_key,
-                    "hits": hit_counts.get(cassette.match_key, 0),
-                    "bytes": size,
-                    "path": str(path),
-                }
-            )
+    wired = build_use_cases(Path(str(settings["store"][0])))
+    hit_counts = wired.metrics.hit_counts_by_key()
+    entries = [
+        {
+            "client": summary.client,
+            "model": summary.model,
+            "kind": summary.kind,
+            "key": summary.execution_key,
+            "hits": hit_counts.get(summary.execution_key, 0),
+        }
+        for summary in wired.repository.current_execution_summaries()
+        if (not args.client or summary.client == args.client)
+        and (not args.model or summary.model == args.model)
+    ]
 
     if args.json:
-        print(json.dumps({"store": str(root), "cassettes": entries}, indent=2))
+        print(json.dumps({"executions": entries}, indent=2))
         return 0
 
     if not entries:
-        narrowing = [f"{k}={getattr(args, k)!r}" for k in ("client", "model") if getattr(args, k)]
-        suffix = f" matching {', '.join(narrowing)}" if narrowing else ""
-        print(f"no cassettes{suffix} in {root}")
+        print("no current executions")
         return 0
 
-    groups: Dict[tuple, List[dict]] = {}
-    for entry in entries:
-        groups.setdefault((entry["client"], entry["model"]), []).append(entry)
-
-    plural = "s" if len(entries) != 1 else ""
-    print(f"store : {root}  ({len(entries)} cassette{plural})")
-    for (client, model), items in sorted(groups.items()):
-        total = sum(i["bytes"] for i in items)
-        print(f"\n{client} / {model}  ({len(items)} · {_human_size(total)})")
-        for i in sorted(items, key=lambda x: x["bytes"], reverse=True):
-            effort = i["effort"] or "-"
-            print(
-                f"  {effort:<6} {i['key'][:12]}  {_human_size(i['bytes']):>9}  "
-                f"hits:{i['hits']:<4} {i['path']}"
-            )
+    print(f"executions : {len(entries)}")
+    for entry in sorted(entries, key=lambda item: (item["client"], item["model"], item["key"])):
+        print(
+            f"  {entry['client']:<8} {entry['model']:<20} {entry['kind']:<18} "
+            f"{entry['key'][:12]}  hits:{entry['hits']}"
+        )
     return 0
 
 
@@ -854,7 +666,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "an extra argument appended verbatim to the client launch -- an escape "
             "hatch for client features the cache does not model. Part of the key "
-            "(different args = different cassette); only its fingerprint is stored, "
+            "(different args = different execution); only its fingerprint is stored, "
             "never the raw value. Repeatable; order is significant. Pass a "
             "dash-leading value with the =form: --client-arg=--flag."
         ),
@@ -867,20 +679,6 @@ def build_parser() -> argparse.ArgumentParser:
         help=_GRANT_HELP,
     )
     run.add_argument(
-        "--stream",
-        dest="stream",
-        nargs="?",
-        const=_DEFAULT_STREAM_FILE,
-        default=None,
-        metavar="PATH",
-        help=(
-            "write a live NDJSON progress stream as the call runs -- display-only, "
-            "it never changes what is recorded. Give a path, or pass --stream alone "
-            "to write ./gmlc-stream.jsonl. Tail it, or have a parent process read it "
-            "line by line."
-        ),
-    )
-    run.add_argument(
         "--json",
         action="store_true",
         help=(
@@ -891,7 +689,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--mode",
-        choices=[m.value for m in Mode],
+        choices=[m.value for m in CacheMode],
         default=None,
         help="resolution mode (default: cache, or config/env)",
     )
@@ -914,15 +712,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.set_defaults(func=_cmd_run)
 
-    inspect = sub.add_parser("inspect", help="pretty-print a cassette (by file path or short key)")
-    inspect.add_argument(
-        "cassette", help="a cassette file path, or a (short) key as shown by `list`"
-    )
-    inspect.add_argument(
-        "--raw",
-        action="store_true",
-        help="also print the client's verbatim usage block (as the client reported it)",
-    )
+    inspect = sub.add_parser("inspect", help="show a stored execution by its (short) key")
+    inspect.add_argument("execution", help="an execution key, or a short prefix as shown by `list`")
     inspect.set_defaults(func=_cmd_inspect)
 
     check = sub.add_parser(
@@ -1007,17 +798,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     stats = sub.add_parser(
         "stats",
-        help="show how many cassettes are stored, their total size split by client/model, "
+        help="show how many executions are stored, their total size split by client/model, "
         "and access counts",
     )
     stats.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     stats.set_defaults(func=_cmd_stats)
 
     listp = sub.add_parser(
-        "list", help="list stored cassettes, grouped by client/model (read-only)"
+        "list", help="list stored executions, grouped by client/model (read-only)"
     )
-    listp.add_argument("--client", help="only cassettes recorded for this client")
-    listp.add_argument("--model", help="only cassettes recorded for this model")
+    listp.add_argument("--client", help="only executions recorded for this client")
+    listp.add_argument("--model", help="only executions recorded for this model")
     listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     listp.set_defaults(func=_cmd_list)
 

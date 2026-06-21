@@ -18,7 +18,6 @@ import pytest
 
 from generic_ml_cache import register
 from generic_ml_cache.application.port.out.base import ClientAdapter
-from generic_ml_cache.adapter.out.storage.store import CassetteStore
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
@@ -113,7 +112,7 @@ class FakeStdinAdapter(ClientAdapter):
 def _isolate_config(monkeypatch, tmp_path):
     """Isolate config *and* store from the real machine: point config discovery at
     a guaranteed-absent file, send the per-user data dir (and thus the default
-    cassette store) into tmp via the standard XDG/Windows base-dir vars, and clear
+    store) into tmp via the standard XDG/Windows base-dir vars, and clear
     the env layers -- so no test reads the real user config or writes into the
     real store."""
     monkeypatch.setenv("GMLCACHE_CONFIG", str(tmp_path / "no-such-config.ini"))
@@ -121,11 +120,6 @@ def _isolate_config(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
     for var in ("GMLCACHE_MODE", "GMLCACHE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-
-
-@pytest.fixture()
-def store(tmp_path) -> CassetteStore:
-    return CassetteStore(tmp_path / "cassettes")
 
 
 def write_directive(relpath: str, content: str) -> str:

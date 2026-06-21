@@ -31,7 +31,7 @@ from generic_ml_cache.common.errors import ClientNotFound
 class ClientAdapter(ABC):
     """Translate the neutral request into a concrete subprocess invocation."""
 
-    #: short client name used in cassettes and on the CLI (e.g. "claude")
+    #: short client name used in stored records and on the CLI (e.g. "claude")
     name: ClassVar[str]
     #: default executable looked up on PATH when no override is given
     default_executable: ClassVar[str]
@@ -111,9 +111,9 @@ class ClientAdapter(ABC):
         (otherwise they would be swallowed as prompt text rather than applied).
 
         ``grants`` are declared capabilities to *open* for this run (e.g. ``"net"``
-        for network access). The adapter splices the matching door
-        (:meth:`network_access_argv`) in when granted. Grants enable; they never
-        restrict (see ``docs/reference/grants.md``).
+        for network access). The adapter opens the matching door via
+        :meth:`grant_setup` (a config-file mechanism) when granted. Grants enable;
+        they never restrict (see ``docs/reference/grants.md``).
         """
 
     def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> Optional[str]:
@@ -177,24 +177,6 @@ class ClientAdapter(ABC):
         """
         return []
 
-    def network_access_argv(self) -> List[str]:
-        """Extra argv opening the client's NETWORK door, spliced when ``net`` is
-        granted.
-
-        Grants are *enablement, not restriction* (see ``docs/reference/grants.md``): this
-        opens the door and never tries to close it. Default: none. Each adapter
-        overrides with the door for its own client and, like
-        :meth:`write_access_argv`, splices it inside its own ``build_argv`` (before
-        any trailing positional or stdin marker), because some CLIs reject flags
-        placed after the prompt. Codex's is a process-level sandbox toggle,
-        Claude's allow-lists its web tools via a settings file, Cursor's is --force;
-        all three are verified against the live CLIs (see docs/reference/grants.md).
-
-        DEPRECATED seam (v0.0.16): capability doors now live in a config FILE, not
-        in argv. See :meth:`grant_setup`. Kept only so older callers/tests resolve.
-        """
-        return []
-
     #: capabilities the cache can OPEN via the uniform config-file mechanism.
     GRANTS: ClassVar[tuple] = ("net", "read", "write", "shell", "web-search")
 
@@ -214,7 +196,7 @@ class ClientAdapter(ABC):
         door this method tries to shut.
 
         ``config_home`` is separate from ``run_dir``, so nothing written here is
-        ever mistaken for client output or captured into a cassette. Default: no
+        ever mistaken for client output or captured into a stored record. Default: no
         config home, empty env (adapters override).
         """
         return {}
@@ -246,7 +228,7 @@ def final_result_object(stdout: str):
 
     Claude and Cursor emit *the same* result object in both forms, so the recorded
     answer and usage are identical either way -- this is what lets the live stream
-    switch the client to streaming mode without moving the cassette. Returns
+    switch the client to streaming mode without changing the stored record. Returns
     ``None`` if nothing parseable is present (the adapter then degrades to raw
     stdout with no usage).
     """

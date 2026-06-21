@@ -19,17 +19,41 @@ Each field is length-prefixed before hashing so that, e.g., ``{"context": "ab",
 from __future__ import annotations
 
 import hashlib
-from typing import Mapping
+from typing import Mapping, Sequence
 
 # Control characters used purely as internal framing while hashing. They never
-# touch user data and never appear in the cassette on disk.
+# touch user data and never appear in the stored record on disk.
 _FIELD_SEP = b"\x1f"  # unit separator
 _RECORD_SEP = b"\x1e"  # record separator
+# Separates ordered arguments before hashing; order is significant (CLI flags
+# are positional), so the join preserves it.
+_ARGUMENT_SEP = "\x00"
 
 
 def text_checksum(text: str) -> str:
     """SHA-256 of a single decoded string's UTF-8 bytes."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def file_content_fingerprint(data: bytes) -> str:
+    """The one shared rule for fingerprinting a declared input file's content.
+
+    SHA-256 of the raw bytes -- binary-safe, so any file type fingerprints the
+    same way regardless of encoding. This is the single function every front
+    door (CLI, daemon, library consumer) must call; it is imported directly,
+    never reimplemented, so two front doors can never derive different keys for
+    the same file and silently miss each other's cache.
+    """
+    return hashlib.sha256(data).hexdigest()
+
+
+def fingerprint_arguments(arguments: Sequence[str]) -> str:
+    """Fingerprint an ordered argument list into the key.
+
+    The raw arguments may carry secrets, so only their digest is ever keyed or
+    stored. Order is significant; the join with a control separator preserves it.
+    """
+    return text_checksum(_ARGUMENT_SEP.join(arguments))
 
 
 def checksum_input_data(input_data: Mapping[str, str]) -> str:

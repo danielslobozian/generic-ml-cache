@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """generic-ml-cache: a content-addressed cache/proxy for agentic CLI calls.
 
-Record a real call once, replay it forever by checksum.
+Record a real ML client (or API) call once, replay it forever by its content key.
 
-Public API (stable surface for v0.x):
-    Request, Mode, resolve, apply_response  -- the cache core
-    Cassette, CapturedFile, Response        -- the cassette format
-    CassetteStore                           -- the on-disk store
-    register, get_adapter, ClientAdapter    -- the adapter seam
+The hexagonal core lives under ``application/`` (domain model, use cases, ports);
+the adapters and the CLI live under ``adapter/``. This module re-exports a small,
+stable surface; the full library API (the inbound ports and commands) is imported
+from ``application.port.inbound``.
 """
 
 from __future__ import annotations
@@ -26,27 +25,14 @@ from generic_ml_cache.adapter.out.client import (  # noqa: E402  # fmt: skip
     get_adapter,
     register,
 )
-from generic_ml_cache.adapter.out.storage.store import CassetteStore  # noqa: E402  # fmt: skip
-from generic_ml_cache.application.domain.model.cassette import (  # noqa: E402  # fmt: skip
-    CapturedFile,
-    Cassette,
-    Response,
-)
-from generic_ml_cache.application.domain.service.cache import (  # noqa: E402  # fmt: skip
-    Mode,
-    Outcome,
-    Request,
-    apply_response,
-    resolve,
-)
 from generic_ml_cache.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
+    file_content_fingerprint,
     text_checksum,
 )
 from generic_ml_cache.common.errors import (  # noqa: E402  # fmt: skip
     CacheError,
     CacheMiss,
-    CassetteFormatError,
     ClientNotFound,
     RunInterrupted,
     UnknownClient,
@@ -54,23 +40,14 @@ from generic_ml_cache.common.errors import (  # noqa: E402  # fmt: skip
 
 __all__ = [
     "__version__",
-    "Request",
-    "Mode",
-    "Outcome",
-    "resolve",
-    "apply_response",
-    "Cassette",
-    "CapturedFile",
-    "Response",
-    "CassetteStore",
     "register",
     "get_adapter",
     "ClientAdapter",
     "checksum_input_data",
     "text_checksum",
+    "file_content_fingerprint",
     "CacheError",
     "CacheMiss",
-    "CassetteFormatError",
     "ClientNotFound",
     "RunInterrupted",
     "UnknownClient",

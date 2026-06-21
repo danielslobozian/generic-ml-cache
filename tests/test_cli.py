@@ -2,11 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-import os
 
 import pytest
 
-from generic_ml_cache import config
 from generic_ml_cache.cli import main
 from conftest import write_directive
 
@@ -95,85 +93,20 @@ def test_cli_writes_files_to_cwd(tmp_path, monkeypatch):
     assert (workdir / "deep" / "file.txt").read_text(encoding="utf-8") == "data\n"
 
 
-def test_cli_inspect(tmp_path, monkeypatch, capsys):
-    workdir = tmp_path / "work"
-    workdir.mkdir()
-    monkeypatch.chdir(workdir)
-    run_cli(
-        [
-            "run",
-            "--client",
-            "fake",
-            "--model",
-            "m1",
-            "--effort",
-            "high",
-            "--prompt",
-            write_directive("r.txt", "hi\n"),
-        ]
-    )
-    cassette_path = next(config.default_store_path().glob("*.json"))
-    rc = run_cli(["inspect", str(cassette_path)])
-    assert rc == 0
-    report = capsys.readouterr().out
-    assert "client : fake" in report
-    assert "r.txt" in report
-
-
-def test_inspect_missing_file_is_clean(tmp_path, capsys):
-    rc = run_cli(["inspect", str(tmp_path / "does-not-exist.json")])
-    assert rc == 4
-    err = capsys.readouterr().err
-    assert "no such cassette" in err
-    assert "Traceback" not in err
-
-
-def test_inspect_malformed_file_is_clean(tmp_path, capsys):
-    bad = tmp_path / "bad.json"
-    bad.write_text("{ not valid json", encoding="utf-8")
-    rc = run_cli(["inspect", str(bad)])
-    assert rc == 4
-    err = capsys.readouterr().err
-    assert "not a valid cassette" in err
-    assert "Traceback" not in err
-
-
-def test_inspect_directory_is_clean(tmp_path, capsys):
-    d = tmp_path / "a-directory"
-    d.mkdir()
-    rc = run_cli(["inspect", str(d)])
-    assert rc == 4
-    assert "cannot read cassette" in capsys.readouterr().err
-
-
 # --- cross-platform invariants --------------------------------------------
 
 
-def test_cassette_uses_posix_paths_on_any_os(tmp_path):
-    """Even on Windows, captured paths are stored with forward slashes."""
-    from generic_ml_cache import Mode, Request, resolve
-    from generic_ml_cache.adapter.out.storage.store import CassetteStore
-
-    store = CassetteStore(tmp_path / "cas")
-    req = Request(
-        "fake", "m1", "high", "ctx", write_directive(os.path.join("a", "b", "c.txt"), "x\n")
-    )
-    out = resolve(req, store, mode=Mode.CACHE)
-    # fake_client received an OS-native path but the cache normalizes on capture
-    assert any("/" in f.path and "\\" not in f.path for f in out.response.files)
-
-
-def test_multibyte_unicode_roundtrips(tmp_path):
-    from generic_ml_cache import Mode, Request, resolve, apply_response
-    from generic_ml_cache.adapter.out.storage.store import CassetteStore
-
-    store = CassetteStore(tmp_path / "cas")
+def test_multibyte_unicode_roundtrips_through_a_run(tmp_path, monkeypatch):
+    """A file the client produces with multibyte content materialises byte-exact."""
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
     text = "café — 日本語 — \temoji 🚀\n"
-    req = Request("fake", "m1", "high", "ctx", write_directive("u.txt", text))
-    out = resolve(req, store, mode=Mode.CACHE)
-    dest = tmp_path / "out"
-    apply_response(out.response, dest)
-    assert (dest / "u.txt").read_text(encoding="utf-8") == text
+    rc = run_cli(
+        ["run", "--client", "fake", "--model", "m1", "--prompt", write_directive("u.txt", text)]
+    )
+    assert rc == 0
+    assert (workdir / "u.txt").read_text(encoding="utf-8") == text
 
 
 def test_cli_init_creates_config_then_idempotent(tmp_path, monkeypatch, capsys):
@@ -261,7 +194,7 @@ def test_list_empty_store_is_clean(capsys):
     rc = main(["list"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "no cassettes" in out
+    assert "no current executions" in out
 
 
 def test_list_groups_by_client_model(tmp_path, monkeypatch, capsys):
@@ -270,9 +203,9 @@ def test_list_groups_by_client_model(tmp_path, monkeypatch, capsys):
     rc = main(["list"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "fake / m1" in out
-    assert "fake / m2" in out
-    assert ".json" in out  # each cassette's path is shown, for inspect
+    assert "fake" in out
+    assert "m1" in out
+    assert "m2" in out
 
 
 def test_list_model_filter(tmp_path, monkeypatch, capsys):
@@ -281,7 +214,7 @@ def test_list_model_filter(tmp_path, monkeypatch, capsys):
     rc = main(["list", "--model", "m1"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "fake / m1" in out
+    assert "m1" in out
     assert "m2" not in out
 
 
@@ -293,9 +226,9 @@ def test_list_json(tmp_path, monkeypatch, capsys):
     rc = main(["list", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert rc == 0
-    models = {c["model"] for c in data["cassettes"]}
+    models = {entry["model"] for entry in data["executions"]}
     assert models == {"m1", "m2"}
-    assert "key" in data["cassettes"][0] and "path" in data["cassettes"][0]
+    assert "key" in data["executions"][0]
 
 
 def test_main_offers_the_parser_to_argcomplete(monkeypatch):
@@ -325,7 +258,7 @@ def test_list_shows_hit_counts(tmp_path, monkeypatch, capsys):
 
     assert main(["list", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
-    assert data["cassettes"][0]["hits"] == 1
+    assert data["executions"][0]["hits"] == 1
 
 
 def test_inspect_by_short_key(tmp_path, monkeypatch, capsys):
@@ -349,11 +282,33 @@ def test_inspect_by_short_key(tmp_path, monkeypatch, capsys):
     )
     capsys.readouterr()
     main(["list", "--json"])
-    short_key = json.loads(capsys.readouterr().out)["cassettes"][0]["key"][:12]
+    short_key = json.loads(capsys.readouterr().out)["executions"][0]["key"][:12]
 
     capsys.readouterr()
     rc = main(["inspect", short_key])  # short key alone is enough
     out = capsys.readouterr().out
     assert rc == 0
-    assert "client : fake" in out
-    assert "model  : m1" in out
+    assert short_key in out
+    assert "kind   : local_managed" in out
+
+
+def test_stats_reports_executions_and_access(tmp_path, monkeypatch, capsys):
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "executions : 2" in out
+    assert "record" in out  # access events
+
+
+def test_check_reports_hit_after_a_run(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    args = ["--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT hi"]
+    run_cli(["run", *args])
+    capsys.readouterr()
+    rc = main(["check", *args])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "status  : hit" in out

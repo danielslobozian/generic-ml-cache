@@ -1,0 +1,398 @@
+# SPDX-FileCopyrightText: 2026 Daniel Slobozian
+# SPDX-License-Identifier: Apache-2.0
+"""SqliteExecutionRepository: the durable, append-only execution store."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
+
+from generic_ml_cache.adapter.out.persistence.call_identity_serialization import (
+    SerializedIdentity,
+    deserialize_identity,
+    serialize_identity,
+)
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.execution.execution_failure import (
+    ExecutionFailure,
+    FailureReason,
+)
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache.application.port.out.clock_port import ClockPort
+from generic_ml_cache.application.port.out.execution_repository_port import (
+    ExecutionRepositoryPort,
+)
+
+_DB_NAME = "executions.sqlite3"
+
+
+@dataclass(frozen=True)
+class ExecutionSummary:
+    """A uniform reporting row for an execution, across all identity kinds."""
+
+    execution_key: str
+    kind: str
+    client: str
+    model: str
+
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS call_identities (
+    execution_key TEXT PRIMARY KEY,
+    kind          TEXT NOT NULL,
+    client        TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    effort        TEXT NOT NULL,
+    identity_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS executions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    execution_key     TEXT NOT NULL,
+    kind              TEXT NOT NULL,
+    state             TEXT NOT NULL,
+    output_persisted  INTEGER NOT NULL,
+    superseded_at     TEXT,
+    failure_reason    TEXT,
+    failure_message   TEXT,
+    failure_exit_code INTEGER,
+    created_at        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_executions_key ON executions(execution_key);
+CREATE TABLE IF NOT EXISTS artifacts (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    execution_id  INTEGER NOT NULL,
+    artifact_type TEXT NOT NULL,
+    name          TEXT,
+    encoding      TEXT NOT NULL,
+    blob_key      TEXT NOT NULL,
+    size_bytes    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_execution ON artifacts(execution_id);
+CREATE TABLE IF NOT EXISTS token_usage (
+    execution_id       INTEGER PRIMARY KEY,
+    input_tokens       INTEGER,
+    output_tokens      INTEGER,
+    cache_read_tokens  INTEGER,
+    cache_write_tokens INTEGER,
+    reasoning_tokens   INTEGER,
+    cost_usd           REAL,
+    raw_json           TEXT NOT NULL
+);
+"""
+
+
+class SqliteExecutionRepository(ExecutionRepositoryPort):
+    """A durable, append-only execution store over SQLite.
+
+    The hybrid identity persistence (domain-model §3): the queryable fields are
+    real columns; the divergent identity fields ride in a JSON column. Executions
+    are append-only — many per key — and a servable success atomically supersedes
+    the prior current one inside a single transaction. The store holds structure
+    only; artifact bytes live in the blob store, so reconstructed artifacts are
+    dehydrated (content is None). The clock is injected and stamps supersession.
+    """
+
+    def __init__(self, path: Path, clock: ClockPort) -> None:
+        self._path = Path(path)
+        self._clock = clock
+        self._ensure_schema()
+
+    def _connect(self) -> sqlite3.Connection:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(self._path)
+
+    def _ensure_schema(self) -> None:
+        connection = self._connect()
+        try:
+            connection.executescript(_SCHEMA)
+            connection.commit()
+        finally:
+            connection.close()
+
+    # -- reads ------------------------------------------------------------
+
+    def find_current(self, execution_key: str) -> Optional[MlExecution]:
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key = ? "
+                "AND state = ? AND output_persisted = 1 AND superseded_at IS NULL "
+                "ORDER BY id DESC LIMIT 1",
+                (execution_key, ExecutionState.SUCCESS.value),
+            ).fetchone()
+            return self._load_execution(connection, row) if row is not None else None
+        finally:
+            connection.close()
+
+    def find_all(self, execution_key: str) -> List[MlExecution]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key = ? ORDER BY id",
+                (execution_key,),
+            ).fetchall()
+            return [self._load_execution(connection, row) for row in rows]
+        finally:
+            connection.close()
+
+    # -- reporting (concrete; beyond the use-case port) -------------------
+
+    def current_execution_summaries(self) -> List["ExecutionSummary"]:
+        """A uniform reporting view of the current (servable) executions: key,
+        kind, and the denormalized client/model — across all identity kinds."""
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT e.execution_key, e.kind, i.client, i.model FROM executions e "
+                "JOIN call_identities i ON i.execution_key = e.execution_key "
+                "WHERE e.state = ? AND e.output_persisted = 1 AND e.superseded_at IS NULL "
+                "ORDER BY e.id",
+                (ExecutionState.SUCCESS.value,),
+            ).fetchall()
+            return [
+                ExecutionSummary(execution_key=key, kind=kind, client=client, model=model)
+                for (key, kind, client, model) in rows
+            ]
+        finally:
+            connection.close()
+
+    def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
+        """The current executions whose key starts with ``key_prefix`` (so a short
+        key from ``list`` is enough to ``inspect``)."""
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key LIKE ? "
+                "AND state = ? AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id",
+                (key_prefix + "%", ExecutionState.SUCCESS.value),
+            ).fetchall()
+            return [self._load_execution(connection, row) for row in rows]
+        finally:
+            connection.close()
+
+    # -- write ------------------------------------------------------------
+
+    def save(self, execution: MlExecution) -> None:
+        execution_key = execution.call_identity.generate_key()
+        stamped_at = self._clock.now()
+        connection = self._connect()
+        try:
+            self._upsert_identity(connection, execution_key, execution.call_identity)
+            if self._is_servable(execution):
+                self._supersede_prior_current(connection, execution_key, stamped_at)
+            execution_id = self._insert_execution(connection, execution_key, execution, stamped_at)
+            self._insert_artifacts(connection, execution_id, execution.artifacts)
+            self._insert_token_usage(connection, execution_id, execution.token_usage)
+            connection.commit()
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _upsert_identity(
+        connection: sqlite3.Connection, execution_key: str, identity: CallIdentity
+    ) -> None:
+        serialized = serialize_identity(identity)
+        connection.execute(
+            "INSERT OR IGNORE INTO call_identities "
+            "(execution_key, kind, client, model, effort, identity_json) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                execution_key,
+                serialized.kind,
+                serialized.client,
+                serialized.model,
+                serialized.effort,
+                serialized.identity_json,
+            ),
+        )
+
+    @staticmethod
+    def _supersede_prior_current(
+        connection: sqlite3.Connection, execution_key: str, stamped_at: datetime
+    ) -> None:
+        connection.execute(
+            "UPDATE executions SET superseded_at = ? WHERE execution_key = ? "
+            "AND state = ? AND output_persisted = 1 AND superseded_at IS NULL",
+            (stamped_at.isoformat(), execution_key, ExecutionState.SUCCESS.value),
+        )
+
+    @staticmethod
+    def _insert_execution(
+        connection: sqlite3.Connection,
+        execution_key: str,
+        execution: MlExecution,
+        stamped_at: datetime,
+    ) -> int:
+        failure = execution.failure
+        cursor = connection.execute(
+            "INSERT INTO executions (execution_key, kind, state, output_persisted, superseded_at, "
+            "failure_reason, failure_message, failure_exit_code, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                execution_key,
+                execution.execution_kind.value,
+                execution.execution_state.value,
+                1 if execution.output_persisted else 0,
+                execution.superseded_at.isoformat() if execution.superseded_at else None,
+                failure.reason.value if failure else None,
+                failure.message if failure else None,
+                failure.exit_code if failure else None,
+                stamped_at.isoformat(),
+            ),
+        )
+        return int(cursor.lastrowid)
+
+    @staticmethod
+    def _insert_artifacts(
+        connection: sqlite3.Connection, execution_id: int, artifacts: List[Artifact]
+    ) -> None:
+        for artifact in artifacts:
+            connection.execute(
+                "INSERT INTO artifacts (execution_id, artifact_type, name, encoding, blob_key, "
+                "size_bytes) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    execution_id,
+                    artifact.artifact_type.value,
+                    artifact.name,
+                    artifact.encoding,
+                    artifact.blob_key,
+                    artifact.size_bytes,
+                ),
+            )
+
+    @staticmethod
+    def _insert_token_usage(
+        connection: sqlite3.Connection, execution_id: int, token_usage: Optional[TokenUsage]
+    ) -> None:
+        if token_usage is None:
+            return
+        connection.execute(
+            "INSERT INTO token_usage (execution_id, input_tokens, output_tokens, cache_read_tokens, "
+            "cache_write_tokens, reasoning_tokens, cost_usd, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                execution_id,
+                token_usage.input_tokens,
+                token_usage.output_tokens,
+                token_usage.cache_read_tokens,
+                token_usage.cache_write_tokens,
+                token_usage.reasoning_tokens,
+                token_usage.cost_usd,
+                json.dumps(token_usage.raw),
+            ),
+        )
+
+    # -- reconstruction ---------------------------------------------------
+
+    def _load_execution(self, connection: sqlite3.Connection, row: tuple) -> MlExecution:
+        (
+            execution_id,
+            execution_key,
+            kind,
+            state,
+            output_persisted,
+            superseded_at,
+            failure_reason,
+            failure_message,
+            failure_exit_code,
+        ) = row
+        return MlExecution(
+            call_identity=self._load_identity(connection, execution_key),
+            execution_state=ExecutionState(state),
+            execution_kind=ExecutionKind(kind),
+            output_persisted=bool(output_persisted),
+            artifacts=self._load_artifacts(connection, execution_id),
+            token_usage=self._load_token_usage(connection, execution_id),
+            failure=(
+                ExecutionFailure(
+                    reason=FailureReason(failure_reason),
+                    message=failure_message,
+                    exit_code=failure_exit_code,
+                )
+                if failure_reason is not None
+                else None
+            ),
+            superseded_at=datetime.fromisoformat(superseded_at) if superseded_at else None,
+        )
+
+    @staticmethod
+    def _load_identity(connection: sqlite3.Connection, execution_key: str) -> CallIdentity:
+        kind, client, model, effort, identity_json = connection.execute(
+            "SELECT kind, client, model, effort, identity_json FROM call_identities "
+            "WHERE execution_key = ?",
+            (execution_key,),
+        ).fetchone()
+        return deserialize_identity(
+            SerializedIdentity(
+                kind=kind, client=client, model=model, effort=effort, identity_json=identity_json
+            )
+        )
+
+    @staticmethod
+    def _load_artifacts(connection: sqlite3.Connection, execution_id: int) -> List[Artifact]:
+        rows = connection.execute(
+            "SELECT artifact_type, name, encoding, blob_key, size_bytes FROM artifacts "
+            "WHERE execution_id = ? ORDER BY id",
+            (execution_id,),
+        ).fetchall()
+        return [
+            Artifact(
+                artifact_type=ArtifactType(artifact_type),
+                blob_key=blob_key,
+                size_bytes=size_bytes,
+                name=name,
+                encoding=encoding,
+                content=None,
+            )
+            for (artifact_type, name, encoding, blob_key, size_bytes) in rows
+        ]
+
+    @staticmethod
+    def _load_token_usage(
+        connection: sqlite3.Connection, execution_id: int
+    ) -> Optional[TokenUsage]:
+        row = connection.execute(
+            "SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
+            "reasoning_tokens, cost_usd, raw_json FROM token_usage WHERE execution_id = ?",
+            (execution_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        (
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_write_tokens,
+            reasoning_tokens,
+            cost_usd,
+            raw_json,
+        ) = row
+        return TokenUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cost_usd=cost_usd,
+            raw=json.loads(raw_json),
+        )
+
+    @staticmethod
+    def _is_servable(execution: MlExecution) -> bool:
+        return (
+            execution.execution_state is ExecutionState.SUCCESS
+            and execution.output_persisted
+            and execution.superseded_at is None
+        )
+
+
+_EXECUTION_COLUMNS = (
+    "id, execution_key, kind, state, output_persisted, superseded_at, "
+    "failure_reason, failure_message, failure_exit_code"
+)
