@@ -26,10 +26,23 @@ def test_required_fields():
 
 def test_optional_fields_default():
     client_run_request = ClientRunRequest(client="claude", model="m", effort="", context="", prompt="")
+    assert client_run_request.input_file_paths == []
     assert client_run_request.allow_paths == []
     assert client_run_request.client_args == []
     assert client_run_request.grants == frozenset()
     assert client_run_request.user_system_prompt is None
+
+
+def test_carries_input_file_paths_for_read_access():
+    client_run_request = ClientRunRequest(
+        client="claude",
+        model="m",
+        effort="",
+        context="",
+        prompt="",
+        input_file_paths=["/src/a.py", "/src/b.py"],
+    )
+    assert client_run_request.input_file_paths == ["/src/a.py", "/src/b.py"]
 
 
 def test_allow_paths_are_present():

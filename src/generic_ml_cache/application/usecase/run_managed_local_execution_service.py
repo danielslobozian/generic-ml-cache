@@ -77,6 +77,7 @@ class RunManagedLocalExecutionService(CachedMlExecutionService, RunManagedLocalE
             context=command.context,
             prompt=command.prompt,
             user_system_prompt=command.user_system_prompt,
+            input_file_paths=command.input_file_paths,
             allow_paths=command.allow_paths,
             client_args=command.client_args,
             grants=frozenset(command.grants),

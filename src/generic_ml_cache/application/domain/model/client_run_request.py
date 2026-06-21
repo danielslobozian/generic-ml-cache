@@ -17,8 +17,10 @@ class ClientRunRequest:
     scan_trust) do not appear here — they are the use case's concern, not
     the client runner's.
 
-    allow_paths are the permission-grant folder paths: the client runner
-    opens the read-door for these paths without trying to fingerprint them.
+    input_file_paths are the declared files the client is granted read access to
+    (their content is already fingerprinted into the key); allow_paths are the
+    permission-grant folder paths the client may scan. The runner opens the
+    read-door for both; it fingerprints neither (that already happened).
     """
 
     client: str
@@ -26,6 +28,7 @@ class ClientRunRequest:
     effort: str
     context: str
     prompt: str
+    input_file_paths: List[str] = field(default_factory=list)
     allow_paths: List[str] = field(default_factory=list)
     client_args: List[str] = field(default_factory=list)
     grants: FrozenSet[str] = field(default_factory=frozenset)
