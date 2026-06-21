@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from generic_ml_cache.application.domain.model.cache_mode import CacheMode
+from generic_ml_cache.application.domain.service.cacheability import is_call_uncacheable
 
 
 @dataclass(frozen=True)
@@ -36,10 +37,7 @@ class RunManagedLocalExecutionCommand:
 
     @property
     def is_uncacheable(self) -> bool:
-        """Declaring allow-path folders the cache cannot fingerprint makes the
-        call non-cacheable — unless the caller takes responsibility with
-        ``scan_trust``."""
-        return bool(self.allow_paths) and not self.scan_trust
+        return is_call_uncacheable(self.allow_paths, self.scan_trust)
 
     def should_persist(self, succeeded: bool) -> bool:
         """Whether this command's policy stores an output for a run that ended

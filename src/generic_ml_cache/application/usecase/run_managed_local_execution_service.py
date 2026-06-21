@@ -28,11 +28,8 @@ from generic_ml_cache.application.port.out.execution_repository_port import (
 from generic_ml_cache.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache.application.usecase import journal_events
-from generic_ml_cache.common.checksum import (
-    file_content_fingerprint,
-    fingerprint_arguments,
-    text_checksum,
-)
+from generic_ml_cache.application.usecase.call_identity_building import build_call_identity
+from generic_ml_cache.common.checksum import file_content_fingerprint
 from generic_ml_cache.common.errors import ArtifactBlobMissing, CacheMiss
 
 _TEXT_ENCODING = "utf-8"
@@ -64,7 +61,7 @@ class RunManagedLocalExecutionService(RunManagedLocalExecutionUseCase):
         self._metrics = metrics
 
     def execute(self, command: RunManagedLocalExecutionCommand) -> MlExecution:
-        call_identity = self._build_call_identity(command)
+        call_identity = build_call_identity(self._file_fingerprint, command)
         execution_key = call_identity.generate_key()
 
         if command.is_uncacheable:
@@ -79,27 +76,6 @@ class RunManagedLocalExecutionService(RunManagedLocalExecutionUseCase):
                 return self._serve_hit(command, execution_key, current_execution)
 
         return self._run_fresh(command, call_identity, execution_key, allow_store=True)
-
-    # -- identity ---------------------------------------------------------
-
-    def _build_call_identity(self, command: RunManagedLocalExecutionCommand) -> CallIdentity:
-        input_file_fingerprints = {
-            input_file_path: self._file_fingerprint.fingerprint(input_file_path)
-            for input_file_path in command.input_file_paths
-        }
-        client_args_fingerprint = (
-            fingerprint_arguments(command.client_args) if command.client_args else None
-        )
-        return CallIdentity(
-            client=command.client,
-            model=command.model,
-            effort=command.effort,
-            context_fingerprint=text_checksum(command.context),
-            prompt_fingerprint=text_checksum(command.prompt),
-            input_file_fingerprints=input_file_fingerprints,
-            client_args_fingerprint=client_args_fingerprint,
-            grants=frozenset(command.grants),
-        )
 
     # -- resolution paths -------------------------------------------------
 
