@@ -26,3 +26,12 @@ class BlobStorePort(ABC):
     @abstractmethod
     def put(self, key: str, output: bytes) -> None:
         """Persist ``output`` under ``key``, overwriting any prior value."""
+
+    @abstractmethod
+    def remove(self, key: str) -> None:
+        """Delete the bytes stored under ``key``; a no-op if nothing is stored.
+
+        Removal is driven by a reference-counted prune (a blob is content-
+        addressed and may be shared by many executions), so a caller removes a
+        key only after confirming no execution still references it.
+        """

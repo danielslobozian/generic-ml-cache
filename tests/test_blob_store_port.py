@@ -21,6 +21,9 @@ class InMemoryBlobStore(BlobStorePort):
     def put(self, key: str, output: bytes) -> None:
         self._store[key] = output
 
+    def remove(self, key: str) -> None:
+        self._store.pop(key, None)
+
 
 def test_get_returns_none_for_unknown_key():
     blob_store = InMemoryBlobStore()
@@ -48,6 +51,28 @@ def test_different_keys_are_independent():
     assert blob_store.get("key2") == b"value2"
 
 
+def test_remove_deletes_stored_bytes():
+    blob_store = InMemoryBlobStore()
+    blob_store.put("key1", b"value")
+    blob_store.remove("key1")
+    assert blob_store.get("key1") is None
+
+
+def test_remove_is_a_no_op_for_unknown_key():
+    blob_store = InMemoryBlobStore()
+    blob_store.remove("never-stored")  # must not raise
+    assert blob_store.get("never-stored") is None
+
+
+def test_remove_leaves_other_keys_intact():
+    blob_store = InMemoryBlobStore()
+    blob_store.put("key1", b"one")
+    blob_store.put("key2", b"two")
+    blob_store.remove("key1")
+    assert blob_store.get("key1") is None
+    assert blob_store.get("key2") == b"two"
+
+
 def test_port_cannot_be_instantiated_directly():
     with pytest.raises(TypeError):
         BlobStorePort()  # type: ignore[abstract]
@@ -56,6 +81,9 @@ def test_port_cannot_be_instantiated_directly():
 def test_port_requires_get_implementation():
     class MissingGet(BlobStorePort):
         def put(self, key: str, output: bytes) -> None:
+            pass
+
+        def remove(self, key: str) -> None:
             pass
 
     with pytest.raises(TypeError):
@@ -67,5 +95,20 @@ def test_port_requires_put_implementation():
         def get(self, key: str):
             return None
 
+        def remove(self, key: str) -> None:
+            pass
+
     with pytest.raises(TypeError):
         MissingPut()  # type: ignore[abstract]
+
+
+def test_port_requires_remove_implementation():
+    class MissingRemove(BlobStorePort):
+        def get(self, key: str):
+            return None
+
+        def put(self, key: str, output: bytes) -> None:
+            pass
+
+    with pytest.raises(TypeError):
+        MissingRemove()  # type: ignore[abstract]
