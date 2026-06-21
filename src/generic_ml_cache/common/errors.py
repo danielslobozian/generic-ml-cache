@@ -50,6 +50,15 @@ class CassetteFormatError(CacheError):
     """Raised when a cassette file on disk is malformed or unreadable."""
 
 
+class InputFileError(CacheError):
+    """Raised when a declared input file cannot be read for fingerprinting.
+
+    The path does not point to a regular file, or the bytes could not be read.
+    The filesystem fingerprint adapter translates the foreign ``OSError`` into
+    this cause-named exception so the core never sees a library error type.
+    """
+
+
 class IsolationViolation(CacheError):
     """Raised when a recorded run reported touching files outside its folder.
 
