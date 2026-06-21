@@ -35,26 +35,34 @@ aggregate root.
 
 ```
 MlExecution
-  call_identity    : CallIdentity      -- the value object that determines the key
-  execution_state  : ExecutionState    -- IN_PROGRESS | SUCCESS | FAILED (the run)
-  execution_kind   : ExecutionKind     -- LOCAL_MANAGED | LOCAL_PASSTHROUGH | API
-  execution_output : ExecutionOutput?  -- absent while IN_PROGRESS / when dehydrated
-  token_usage      : TokenUsage?       -- accounting; absent if not captured
-  output_persisted : bool              -- fact: was the output stored to the blob store?
-  superseded_at    : timestamp?        -- cache currency: null = current; set = stale
+  call_identity    : CallIdentity        -- the value object that determines the key
+  execution_state  : ExecutionState      -- IN_PROGRESS | SUCCESS | FAILED (the run)
+  execution_kind   : ExecutionKind       -- LOCAL_MANAGED | LOCAL_PASSTHROUGH | API
+  artifacts        : List[Artifact]      -- the output, unified (stdout/stderr/files)
+  token_usage      : TokenUsage?         -- accounting; absent if not captured
+  failure          : ExecutionFailure?   -- the cause; present only when FAILED
+  output_persisted : bool                -- fact: was the output stored to the blob store?
+  superseded_at    : timestamp?          -- cache currency: null = current; set = stale
   -- future --
-  trace            : ...               -- journal link, session, scope
+  trace            : ...                 -- journal link, session, scope
 ```
+
+The output is a **list of `Artifact`s** (§3), not a separate `ExecutionOutput`
+object — stdout, stderr, and each generated file are each one artifact. There is
+no top-level `exit_code`: a success carries none (success means "all good"), and
+a failure's exit code is one detail of its `failure` (§3), which also covers
+API-mode causes that have no exit code at all.
 
 **Lifecycle.** An execution exists *before* its result does:
 
 1. On launch the execution is written to the database in `IN_PROGRESS`,
    carrying its identity.
-2. The client runs and returns a result (stdout, stderr, exit code, files,
-   usage).
-3. If `output_persisted` is true, the output bytes are written to the blob
-   store; structured fields are written to the database.
-4. State is settled: `SUCCESS` or `FAILED`.
+2. The client runs; the runner returns a `ClientRunResult` (§9) — raw exit code,
+   stdout, stderr, generated files. Nothing is stored yet.
+3. The use case turns each raw piece into a stored `Artifact` (hash → `blob.put`
+   → `blob_key`); if `output_persisted` is true the bytes land in the blob store
+   and the structured record in the database.
+4. State is settled: `SUCCESS`, or `FAILED` with an `ExecutionFailure`.
 
 **`PASSTHROUGH` is not a state.** It is an `ExecutionKind` (see §3). A
 `LOCAL_PASSTHROUGH` execution has the same `IN_PROGRESS → SUCCESS | FAILED`
@@ -114,21 +122,68 @@ fields above. No I/O, no database access, no filesystem reads.
 They do not enter the key (folder contents cannot be fingerprinted reliably).
 They travel to the client runner via `ClientRunRequest` (§8).
 
-### `ExecutionOutput`
+### `Artifact`
 
-The execution's heavy result. Opaque from the core's perspective; stored as
-bytes by the blob store port.
+One generated document of an execution's output. stdout, stderr, and each output
+file are each an `Artifact`. An artifact is a **stored** thing — it always has a
+`blob_key` (the content checksum addressing its bytes in the blob store). Its
+`content` is materialised only when hydrated; dehydrated, only the reference
+remains.
 
 ```
-ExecutionOutput
-  stdout   : str
-  stderr   : str
+ArtifactType : STDOUT | STDERR | OUTPUT_FILE      -- (RAW_USAGE later)
+
+Artifact  (frozen)
+  artifact_type : ArtifactType
+  name          : str | None    -- relative path for OUTPUT_FILE; None for stdout/stderr
+  encoding      : str           -- utf-8 | binary
+  blob_key      : str           -- content checksum; always present (an artifact is stored)
+  size_bytes    : int
+  content       : bytes | None  -- materialised when hydrated; None when dehydrated
+```
+
+`Artifact` replaces the old `ExecutionOutput` (retired) and subsumes
+`CapturedFile`. `TokenUsage` is **not** an artifact — it is accounting, a
+separate field on `MlExecution`.
+
+### `ClientRunResult`
+
+The **transient, raw** result the `ClientRunnerPort` returns — the contract
+surface of the runner port, not an adapter-internal type. It carries what the
+client produced, before anything is hashed or stored. The **use case** turns it
+into stored `Artifact`s (it owns the blob storage; the runner never touches the
+blob store).
+
+```
+GeneratedFile  (frozen)
+  name    : str
+  content : bytes
+
+ClientRunResult  (frozen)
   exit_code : int
-  files    : List[CapturedFile]
+  stdout    : str
+  stderr    : str
+  files     : List[GeneratedFile]
 ```
 
-`TokenUsage` is **not** part of `ExecutionOutput`. Usage is mutable accounting
-(database-bound, appended over time); it is a separate field on `MlExecution`.
+### `ExecutionFailure`
+
+The interpreted cause of a failed run — present only when `state == FAILED`.
+Separate from stderr (which is captured output, an `Artifact`): this is *why* it
+failed. It generalises across local and API executions.
+
+```
+FailureReason : NONZERO_EXIT    -- (TIMEOUT | NETWORK | CLIENT_ERROR … as features land)
+
+ExecutionFailure  (frozen)
+  reason    : FailureReason
+  message   : str            -- the client/API's own error text
+  exit_code : int | None     -- the local client's exit code when that's the cause; None for API
+```
+
+Exit code lives here, not on `MlExecution`: it only carries meaning on failure,
+and it is one cause among several (a future timeout or network drop has no exit
+code). API failures use a `reason` + `message` with no exit code.
 
 ### `TokenUsage`
 
@@ -149,8 +204,9 @@ TokenUsage
 
 ### `CapturedFile`
 
-A file produced inside the execution's isolated run folder and captured for
-replay. Unchanged from current implementation.
+The old per-file value object (path + content + encoding) used by the retired
+cassette. Subsumed by `Artifact` (an `OUTPUT_FILE`); kept only until the old
+cassette code is removed in Phase 6.
 
 ### `ExecutionState`
 
@@ -500,8 +556,12 @@ result. The adapter knows the specific CLI; the core does not.
 ```python
 class ClientRunnerPort(ABC):
     @abstractmethod
-    def run(self, request: ClientRunRequest) -> ExecutionOutput: ...
+    def run(self, request: ClientRunRequest) -> ClientRunResult: ...
 ```
+
+The runner returns a **raw** `ClientRunResult` (§3) — it never hashes, never
+computes a key, never stores. The use case turns that result into stored
+`Artifact`s and persists them.
 
 **`ApiClientPort`** — call an ML provider API directly. Separate port from
 `ClientRunnerPort` because the contract is fundamentally different (no
@@ -511,8 +571,12 @@ subprocess, no filesystem, no grants). An initial `StubApiClientAdapter` in
 ```python
 class ApiClientPort(ABC):
     @abstractmethod
-    def call(self, request: RunApiExecutionCommand) -> ExecutionOutput: ...
+    def call(self, request: RunApiExecutionCommand) -> ClientRunResult: ...
 ```
+
+Like the client runner, the API adapter returns a raw `ClientRunResult` (with no
+exit code / a synthetic one, and the response body as stdout); the use case
+stores it. (Its exact shape is settled when the API use case is built.)
 
 **`BlobStorePort`** — store and retrieve opaque output bytes by key.
 
@@ -649,7 +713,7 @@ the same boundary the package split will formalise tomorrow.
 | Old name | Settled name | Location |
 |---|---|---|
 | `Request` | `CallIdentity` | `application/domain/model/call_identity.py` |
-| `Response` | `ExecutionOutput` | `application/domain/model/execution_output.py` |
+| `Response` | *(retired — replaced by `Artifact` + `ClientRunResult`)* | — |
 | `Usage` | `TokenUsage` | `application/domain/model/token_usage.py` |
 | `Cassette` | *(retired)* | — |
 | `Outcome` | *(retired — facts live on `MlExecution`)* | — |
@@ -658,6 +722,9 @@ the same boundary the package split will formalise tomorrow.
 | — | `MlExecution` | `application/domain/model/ml_execution.py` |
 | — | `ExecutionState` | `application/domain/model/execution_state.py` |
 | — | `ExecutionKind` | `application/domain/model/execution_kind.py` |
+| — | `Artifact` / `ArtifactType` | `application/domain/model/artifact.py` |
+| — | `ExecutionFailure` / `FailureReason` | `application/domain/model/execution_failure.py` |
+| — | `ClientRunResult` / `GeneratedFile` | `application/domain/model/client_run_result.py` |
 | — | `ClientRunRequest` | `application/domain/model/client_run_request.py` |
 | — | `file_content_fingerprint()` | `common/checksum.py` |
 | — | `BlobStorePort` | `application/port/out/blob_store_port.py` |
@@ -665,7 +732,9 @@ the same boundary the package split will formalise tomorrow.
 | — | `ClientRunnerPort` | `application/port/out/client_runner_port.py` |
 | — | `FileFingerprintPort` | `application/port/out/file_fingerprint_port.py` |
 | — | `ExecutionRepositoryPort` | `application/port/out/execution_repository_port.py` |
+| — | `ClockPort` / `SystemClock` | `application/port/out/clock_port.py` |
 | — | `ApiClientPort` | `application/port/out/api_client_port.py` |
+| `ExecutionOutput` | *(retired mid-refactor — superseded by `Artifact`)* | — |
 
 `ClientStatus` is **kept** (discovery / `doctor` output — unrelated to the
 execution aggregate; an earlier draft wrongly listed it for retirement).
@@ -678,9 +747,9 @@ execution aggregate; an earlier draft wrongly listed it for retirement).
 - The exact event vocabulary of `MetricsPort.record_event`.
 - Whether `deep_fingerprint_paths` (recursive folder checksum) becomes a
   supported field on `RunManagedLocalExecutionCommand`.
-- On a cache hit: return a full `MlExecution` reconstructed from storage, or
-  return `ExecutionOutput` only? Leaning: reconstruct an `MlExecution` so the
-  aggregate is always the thing returned, but exact implementation is open.
+- On a cache hit: the use case reconstructs (hydrates) a full `MlExecution` from
+  the dehydrated repository record plus the blob bytes. Settled in principle; the
+  exact hydration helper is built with the managed-local use case.
 
 ---
 
