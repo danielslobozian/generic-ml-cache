@@ -1,0 +1,4 @@
+# Make coverage record file paths relative to the repo root, so the per-package
+# Cobertura reports resolve against sonar.sources (packages/*/src) in SonarQube Cloud.
+[run]
+relative_files = true
