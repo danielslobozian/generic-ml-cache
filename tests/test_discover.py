@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 from generic_ml_cache.cli import main
-from generic_ml_cache.application.domain.service.discover import probe, probe_all
+from generic_ml_cache.adapter.out.client.discover import probe, probe_all
 
 
 def test_probe_present_client_reports_version():

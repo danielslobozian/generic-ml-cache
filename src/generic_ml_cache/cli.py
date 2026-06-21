@@ -326,7 +326,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache.application.domain.service.discover import probe_all
+    from generic_ml_cache.adapter.out.client.discover import probe_all
 
     try:
         file_cfg = config.load()
@@ -357,7 +357,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache.application.domain.service.discover import list_models, list_models_all
+    from generic_ml_cache.adapter.out.client.discover import list_models, list_models_all
 
     try:
         file_cfg = config.load()
