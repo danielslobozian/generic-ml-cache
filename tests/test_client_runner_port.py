@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from generic_ml_cache.application.domain.model.client_run_request import ClientRunRequest
-from generic_ml_cache.application.domain.model.execution_output import ExecutionOutput
+from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
 from generic_ml_cache.application.port.out.client_runner_port import ClientRunnerPort
 
 
@@ -24,8 +24,8 @@ def _make_request() -> ClientRunRequest:
 class EchoClientRunner(ClientRunnerPort):
     """Minimal implementation that echoes the prompt as stdout."""
 
-    def run(self, client_run_request: ClientRunRequest) -> ExecutionOutput:
-        return ExecutionOutput(stdout=client_run_request.prompt, exit_code=0)
+    def run(self, client_run_request: ClientRunRequest) -> ClientRunResult:
+        return ClientRunResult(exit_code=0, stdout=client_run_request.prompt)
 
 
 def test_port_cannot_be_instantiated_directly():
@@ -33,17 +33,17 @@ def test_port_cannot_be_instantiated_directly():
         ClientRunnerPort()  # type: ignore[abstract]
 
 
-def test_run_returns_execution_output():
+def test_run_returns_client_run_result():
     runner = EchoClientRunner()
-    execution_output = runner.run(_make_request())
-    assert isinstance(execution_output, ExecutionOutput)
+    result = runner.run(_make_request())
+    assert isinstance(result, ClientRunResult)
 
 
-def test_run_output_reflects_request():
+def test_run_result_reflects_request():
     runner = EchoClientRunner()
-    execution_output = runner.run(_make_request())
-    assert execution_output.stdout == "summarise this"
-    assert execution_output.exit_code == 0
+    result = runner.run(_make_request())
+    assert result.stdout == "summarise this"
+    assert result.exit_code == 0
 
 
 def test_run_accepts_client_run_request():
@@ -56,5 +56,5 @@ def test_run_accepts_client_run_request():
         prompt="hello",
         grants=frozenset({"net"}),
     )
-    execution_output = runner.run(request)
-    assert execution_output.stdout == "hello"
+    result = runner.run(request)
+    assert result.stdout == "hello"

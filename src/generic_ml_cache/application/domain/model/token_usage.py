@@ -14,7 +14,7 @@ from generic_ml_cache.application.domain.model.usage import float_or_none, int_o
 class TokenUsage:
     """Normalized token counts for one ML execution, with the raw block kept.
 
-    Accounting data: database-bound, separate from ExecutionOutput.
+    Accounting data: database-bound, separate from the output artifacts.
     Every count is Optional[int]: a value the client reported, or None when it
     did not report that field at all. None means unknown, never zero.
     cost_usd is the client's own advisory estimate; never derived by gmlcache.

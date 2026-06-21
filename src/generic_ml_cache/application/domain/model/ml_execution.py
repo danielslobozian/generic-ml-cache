@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List, Optional
 
+from generic_ml_cache.application.domain.model.artifact import Artifact
 from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.execution_failure import ExecutionFailure
 from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_output import ExecutionOutput
 from generic_ml_cache.application.domain.model.execution_state import ExecutionState
 from generic_ml_cache.application.domain.model.token_usage import TokenUsage
 
@@ -18,14 +20,20 @@ from generic_ml_cache.application.domain.model.token_usage import TokenUsage
 class MlExecution:
     """Aggregate root: a demand to run an ML client and what came back.
 
-    Lifecycle: IN_PROGRESS -> SUCCESS | FAILED.
-    execution_output and token_usage are absent while IN_PROGRESS.
-    output_persisted records whether the output was stored to the blob store.
+    The run lifecycle is ``execution_state`` (IN_PROGRESS -> SUCCESS | FAILED).
+    The output is a list of ``Artifact`` (stdout, stderr, output files) — there
+    is no separate output object and no top-level exit code. A failure's cause
+    lives in ``failure`` (present only when FAILED). ``superseded_at`` is the
+    cache-currency axis (None = current, set = stale); executions are append-only
+    per call identity. ``artifacts`` may be dehydrated (refs only) or hydrated
+    (bytes materialised).
     """
 
     call_identity: CallIdentity
     execution_state: ExecutionState
     execution_kind: ExecutionKind
     output_persisted: bool
-    execution_output: Optional[ExecutionOutput] = None
+    artifacts: List[Artifact] = field(default_factory=list)
     token_usage: Optional[TokenUsage] = None
+    failure: Optional[ExecutionFailure] = None
+    superseded_at: Optional[datetime] = None
