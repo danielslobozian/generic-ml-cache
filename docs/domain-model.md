@@ -36,11 +36,12 @@ aggregate root.
 ```
 MlExecution
   call_identity    : CallIdentity      -- the value object that determines the key
-  execution_state  : ExecutionState    -- IN_PROGRESS | SUCCESS | FAILED
+  execution_state  : ExecutionState    -- IN_PROGRESS | SUCCESS | FAILED (the run)
   execution_kind   : ExecutionKind     -- LOCAL_MANAGED | LOCAL_PASSTHROUGH | API
-  execution_output : ExecutionOutput?  -- absent while IN_PROGRESS
+  execution_output : ExecutionOutput?  -- absent while IN_PROGRESS / when dehydrated
   token_usage      : TokenUsage?       -- accounting; absent if not captured
   output_persisted : bool              -- fact: was the output stored to the blob store?
+  superseded_at    : timestamp?        -- cache currency: null = current; set = stale
   -- future --
   trace            : ...               -- journal link, session, scope
 ```
@@ -63,6 +64,28 @@ lifecycle as any other; what differs is how much gmlcache manages (see §8).
 (`persist_output`) lives on the execution command (§8). An execution can
 succeed but not persist its output — by explicit user choice — and it is still
 a fully valid, journalled `MlExecution`.
+
+**Executions are append-only; refresh never destroys.** A `call_identity` (one
+key) has **many** executions over time — each row is one real client call.
+`ExecutionState` is the **run** axis (`IN_PROGRESS | SUCCESS | FAILED`: how the
+call ended). `superseded_at` is a **separate cache-currency axis** (is this
+still the authoritative answer): null = current, set = stale. The two never
+conflate — a stale execution was a success; staleness only marks it as no longer
+in use.
+
+- **Current answer** = `state == SUCCESS AND superseded_at IS NULL AND
+  output_persisted`. At most one per key at a time.
+- **Refresh** creates a *new* `IN_PROGRESS` execution and leaves the old current
+  one untouched and still serving. Only at the **atomic instant the new run
+  succeeds** do old and new flip in a single transaction (old gets
+  `superseded_at`, new becomes current). If the new run **fails**, the old stays
+  current and keeps answering — no good value is ever destroyed for a failed
+  refresh.
+- A concurrent cache-mode reader during a refresh sees the old row, still
+  `SUCCESS + current`, so it always gets a consistent value — never a half-state.
+- This also yields the count distinction for free: **real client calls** for a
+  key = its execution rows; **cache requests** = journal events; **served from
+  cache** = hit events.
 
 ---
 
@@ -184,15 +207,77 @@ only opaque bytes.**
 - session and scope links (future)
 - hit-counts and stats — as **projections** over the journal, not stored truths
 
-**Blob store** — opaque output bytes only:
-- raw stdout, raw stderr, captured output files — bundled as opaque bytes,
-  addressed by `CallIdentity.generate_key()`
-- The store is **dumb**: `get(key) -> bytes | None`, `put(key, bytes) -> None`.
-  It never parses a payload, never computes a key, never interprets content.
+**Blob store** — opaque artifact bytes only:
+- Each artifact is its own blob: **stdout, stderr, each output file, and the raw
+  usage document** are separate blobs. The database holds one `artifacts`
+  metadata row per artifact (type, name, checksum, size, encoding).
+- The blob is **content-addressed**: its key is the artifact's *own* content
+  checksum (`file_content_fingerprint` of its bytes), not the execution key.
+  This gives free deduplication (identical output across runs is stored once)
+  and free integrity.
+- The store is **dumb**: `get(key) -> bytes | None`, `put(key, bytes) -> None`,
+  `remove(key) -> None`. It never parses a payload, never computes a key, never
+  interprets content.
+
+**Content-addressed blobs are shared, so deletion is reference-counted.** One
+blob may be referenced by many executions (two pipelines that produce the same
+answer share one blob). A blob is removed **only when no `artifacts` row still
+references its `blob_key`** — the `artifacts` table is the reference index.
+Because executions are append-only, a *refresh deletes nothing synchronously*;
+cleanup is a separate, reference-counted prune that removes a blob only when its
+last referencing execution is gone. The ref-count check spans the repository
+(artifacts) and the blob store (bytes), so the GC orchestration lives in a
+**prune use case**, never inside either port.
+
+**Normalized vs raw usage.** The normalized token counts (input/output/cache/
+reasoning/cost) are queryable → database columns. The **raw** usage block is
+client-specific and its shape varies per client and per API, so it is not forced
+into a schema — it is an artifact of type `raw_usage`, stored as opaque bytes.
 
 **Never store raw inputs.** Prompts, context, file contents are never
 persisted. They exist in the system only as fingerprints in `CallIdentity`.
 The identity is small and structured; it lives in the database.
+
+### Reference schema (the SQLite adapter's internal concern)
+
+The core only ever sees the ports and domain objects; this relational shape is
+owned by the persistence *adapter* and informs the port contract and the
+aggregate's hydrate/dehydrate behaviour. It will evolve.
+
+```
+call_identities             -- the keyed "call": the user's choices, as fingerprints
+  id PK; execution_key TEXT UNIQUE (generate_key()); client; model; effort;
+  context_fingerprint; prompt_fingerprint; client_args_fingerprint NULL;
+  package_inputs INTEGER (future)
+call_identity_input_files   -- {path: fingerprint} map, one row each
+  call_identity_id FK; path; fingerprint
+call_identity_grants        -- the grant set, one row each
+  call_identity_id FK; grant_name
+
+executions                  -- the aggregate root; APPEND-ONLY (many per call_identity)
+  id PK; call_identity_id FK; kind; state; exit_code NULL;
+  output_persisted INTEGER; superseded_at TEXT NULL; created_at; updated_at;
+  session_id FK NULL (future)
+artifacts                   -- one row per stored artifact; bytes live in the blob store
+  id PK; execution_id FK; type (stdout|stderr|output_file|raw_usage);
+  name NULL; encoding; blob_key (content checksum); size_bytes; created_at
+token_usage                 -- normalized accounting, 1:1 with execution
+  execution_id FK UNIQUE; input_tokens NULL; output_tokens NULL;
+  cache_read_tokens NULL; cache_write_tokens NULL; reasoning_tokens NULL;
+  reported_cost NULL
+events                      -- the call journal (today's access_registry, folded in later)
+  id PK; ts; event; execution_key NULL; client; model; effort; session_id NULL
+
+scopes / sessions           -- future (roadmap 1.1 / 1.2)
+```
+
+**Hydrate / dehydrate.** The repository stores and returns a *dehydrated*
+`MlExecution`: the structured row + call identity + **artifact metadata** +
+normalized usage, with **no bytes** (`execution_output is None`). The use case
+*hydrates* it by fetching each artifact's bytes from the blob store and
+reassembling `ExecutionOutput`. So the repository deals in structure, the blob
+store deals in bytes, and the **use case bridges them** — the two ports never
+call each other.
 
 ---
 
@@ -437,6 +522,8 @@ class BlobStorePort(ABC):
     def get(self, key: str) -> bytes | None: ...
     @abstractmethod
     def put(self, key: str, output: bytes) -> None: ...
+    @abstractmethod
+    def remove(self, key: str) -> None: ...   # used by reference-counted prune (§5)
 ```
 
 **`MetricsPort`** — append journal events; query projections for reporting.
@@ -469,10 +556,16 @@ output bytes from the blob store, then assembles the `MlExecution`.
 ```python
 class ExecutionRepositoryPort(ABC):
     @abstractmethod
-    def find(self, key: str) -> MlExecution | None: ...   # structure only; output filled from the blob store
+    def find_current(self, execution_key: str) -> MlExecution | None: ...   # the cache lookup: current success, dehydrated
     @abstractmethod
-    def save(self, execution: MlExecution) -> None: ...    # persists structure; never output bytes
+    def save(self, execution: MlExecution) -> None: ...    # append a new execution; if SUCCESS, atomically supersede the prior current
 ```
+
+`find_current` returns the dehydrated current answer (`state == SUCCESS`,
+`superseded_at` null, `output_persisted`); the use case hydrates it from the
+blob store. `save` appends a new execution and, when that execution is a
+success, atomically supersedes the prior current one — the supersession
+transaction lives inside the adapter, where atomicity belongs.
 
 **Datasources are injected from the inbound side (§10).** The composition root
 builds the concrete repository / blob / metrics / fingerprint adapters — which
