@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from generic_ml_cache.application.domain.model.usage import float_or_none, int_or_none
+from generic_ml_cache.application.domain.model.usage.usage import float_or_none, int_or_none
 
 
 @dataclass(frozen=True)

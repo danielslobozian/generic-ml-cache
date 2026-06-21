@@ -65,7 +65,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache.common.errors import ConfigError
 
 CONFIG_ENV = "GMLCACHE_CONFIG"

@@ -13,13 +13,13 @@ from generic_ml_cache.adapter.out.api.stub_api_client_adapter import StubApiClie
 from generic_ml_cache.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
-from generic_ml_cache.application.domain.model.artifact import ArtifactType
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.message import Message
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.run.message import Message
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache.application.port.inbound.run_api_execution_command import (
     RunApiExecutionCommand,
 )

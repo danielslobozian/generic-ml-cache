@@ -6,16 +6,16 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
-from generic_ml_cache.application.domain.model.execution_failure import (
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
 )
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 
 
 def _make_identity() -> ManagedCallIdentity:

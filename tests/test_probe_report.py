@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.probe_report import ProbeReport
-from generic_ml_cache.application.domain.model.probe_status import ProbeStatus
+from generic_ml_cache.application.domain.model.probe.probe_report import ProbeReport
+from generic_ml_cache.application.domain.model.probe.probe_status import ProbeStatus
 
 
 def test_miss_report_has_a_key_and_no_execution():

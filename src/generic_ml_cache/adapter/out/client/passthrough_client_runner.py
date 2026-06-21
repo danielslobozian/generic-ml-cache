@@ -8,7 +8,7 @@ import subprocess
 from typing import Callable, List, Optional
 
 from generic_ml_cache.adapter.out.client.registry import get_adapter
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache.application.port.out.passthrough_runner_port import PassthroughRunnerPort
 
 _TEXT_ENCODING = "utf-8"

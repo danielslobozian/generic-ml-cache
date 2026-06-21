@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache.application.port.inbound.run_passthrough_execution_command import (
     RunPassthroughExecutionCommand,
 )

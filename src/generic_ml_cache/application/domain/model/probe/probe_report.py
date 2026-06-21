@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
-from generic_ml_cache.application.domain.model.probe_status import ProbeStatus
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.probe.probe_status import ProbeStatus
 
 
 @dataclass(frozen=True)

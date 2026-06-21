@@ -7,12 +7,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from generic_ml_cache.application.domain.model.execution_failure import (
+from generic_ml_cache.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
 )
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 
 
 @dataclass(frozen=True)

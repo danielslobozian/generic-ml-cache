@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
 
 
 def test_cache_value():

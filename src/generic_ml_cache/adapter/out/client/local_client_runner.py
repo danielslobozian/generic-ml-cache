@@ -8,8 +8,8 @@ from typing import Callable, Optional
 
 from generic_ml_cache.adapter.out.client.isolation import record_real_call
 from generic_ml_cache.adapter.out.client.registry import get_adapter
-from generic_ml_cache.application.domain.model.client_run_request import ClientRunRequest
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.client_run_request import ClientRunRequest
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache.application.port.out.client_runner_port import ClientRunnerPort
 
 

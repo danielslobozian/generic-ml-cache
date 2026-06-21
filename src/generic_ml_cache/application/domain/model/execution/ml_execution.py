@@ -8,12 +8,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
-from generic_ml_cache.application.domain.model.artifact import Artifact
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.execution_failure import ExecutionFailure
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.execution.execution_failure import ExecutionFailure
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 
 
 @dataclass

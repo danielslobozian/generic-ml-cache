@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 
 
 def test_all_fields_default_to_none():

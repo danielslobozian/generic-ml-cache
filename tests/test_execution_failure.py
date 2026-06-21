@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.execution_failure import (
+from generic_ml_cache.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
 )

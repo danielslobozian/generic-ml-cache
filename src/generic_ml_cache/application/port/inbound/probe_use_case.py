@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from generic_ml_cache.application.domain.model.probe_report import ProbeReport
+from generic_ml_cache.application.domain.model.probe.probe_report import ProbeReport
 from generic_ml_cache.application.port.inbound.probe_command import ProbeCommand
 
 

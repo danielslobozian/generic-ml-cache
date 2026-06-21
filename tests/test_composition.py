@@ -11,10 +11,10 @@ from __future__ import annotations
 from typing import Optional
 
 from generic_ml_cache.adapter.inbound.composition import build_use_cases
-from generic_ml_cache.application.domain.model.artifact import ArtifactType
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.message import Message
+from generic_ml_cache.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.run.message import Message
 from generic_ml_cache.application.port.inbound.run_api_execution_command import (
     RunApiExecutionCommand,
 )

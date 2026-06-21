@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
 
 
 class ExecutionRepositoryPort(ABC):

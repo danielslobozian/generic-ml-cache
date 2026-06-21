@@ -12,11 +12,11 @@ import pytest
 from generic_ml_cache.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
-from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
-from generic_ml_cache.application.domain.model.probe_status import ProbeStatus
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.probe.probe_status import ProbeStatus
 from generic_ml_cache.application.port.inbound.probe_command import ProbeCommand
 from generic_ml_cache.application.port.inbound.probe_use_case import ProbeUseCase
 from generic_ml_cache.application.port.inbound.run_managed_local_execution_command import (

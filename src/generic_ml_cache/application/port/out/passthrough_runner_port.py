@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List
 
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
 
 
 class PassthroughRunnerPort(ABC):

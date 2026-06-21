@@ -7,8 +7,8 @@ from __future__ import annotations
 import base64
 
 from generic_ml_cache.adapter.out.client.local_client_runner import LocalClientRunner
-from generic_ml_cache.application.domain.model.client_run_request import ClientRunRequest
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.client_run_request import ClientRunRequest
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache.application.port.out.client_runner_port import ClientRunnerPort
 
 

@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.client_run_result import (
+from generic_ml_cache.application.domain.model.run.client_run_result import (
     ClientRunResult,
     GeneratedFile,
 )
-from generic_ml_cache.application.domain.model.execution_failure import FailureReason
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.execution_failure import FailureReason
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
 
 
 def test_minimal_result_needs_only_exit_code():
@@ -24,7 +24,7 @@ def test_minimal_result_needs_only_exit_code():
 
 
 def test_result_can_carry_token_usage():
-    from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+    from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 
     result = ClientRunResult(exit_code=0, token_usage=TokenUsage(input_tokens=10, output_tokens=3))
     assert result.token_usage.input_tokens == 10

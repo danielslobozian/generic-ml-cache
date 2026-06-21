@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Dict, List, Optional
 
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache.application.port.out.clock_port import ClockPort
 from generic_ml_cache.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,

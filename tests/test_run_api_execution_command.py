@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
-from generic_ml_cache.application.domain.model.message import Message
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.run.message import Message
 from generic_ml_cache.application.port.inbound.run_api_execution_command import (
     RunApiExecutionCommand,
 )

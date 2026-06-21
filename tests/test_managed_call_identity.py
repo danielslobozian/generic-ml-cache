@@ -6,18 +6,18 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
 
 
 def test_abstract_call_identity_cannot_be_instantiated():
-    from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+    from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
 
     with pytest.raises(TypeError):
         CallIdentity()  # type: ignore[abstract]
 
 
 def test_managed_identity_is_a_call_identity():
-    from generic_ml_cache.application.domain.model.call_identity import CallIdentity
+    from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
 
     assert isinstance(_make_identity(), CallIdentity)
 

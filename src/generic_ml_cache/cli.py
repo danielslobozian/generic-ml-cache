@@ -32,10 +32,10 @@ except ImportError:  # completion is a convenience; never let its absence break 
 
 from generic_ml_cache.adapter.inbound.composition import build_use_cases
 from generic_ml_cache.adapter.out.client.registry import registered_names
-from generic_ml_cache.application.domain.model.artifact import ArtifactType
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
@@ -217,7 +217,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def _cmd_check(args: argparse.Namespace) -> int:
     import json
 
-    from generic_ml_cache.application.domain.model.probe_status import ProbeStatus
+    from generic_ml_cache.application.domain.model.probe.probe_status import ProbeStatus
     from generic_ml_cache.application.port.inbound.probe_command import ProbeCommand
 
     context = _read_text_arg(args.context, args.context_file, "context")

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.client_run_request import ClientRunRequest
+from generic_ml_cache.application.domain.model.run.client_run_request import ClientRunRequest
 
 
 def test_required_fields():

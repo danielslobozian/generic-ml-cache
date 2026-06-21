@@ -8,12 +8,12 @@ from abc import ABC, abstractmethod
 from dataclasses import replace
 from typing import List, Optional, Protocol, Tuple
 
-from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 
 from generic_ml_cache.adapter.out.client.registry import get_adapter
-from generic_ml_cache.application.domain.model.usage import float_or_none, int_or_none
+from generic_ml_cache.application.domain.model.usage.usage import float_or_none, int_or_none
 
 # --- real client output samples (structured mode) ---------------------------
 

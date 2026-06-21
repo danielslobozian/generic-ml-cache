@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
 
 
 def test_local_managed_value():

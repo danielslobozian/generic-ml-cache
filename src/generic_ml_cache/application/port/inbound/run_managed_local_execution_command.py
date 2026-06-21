@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache.application.domain.service.cacheability import is_call_uncacheable
 
 

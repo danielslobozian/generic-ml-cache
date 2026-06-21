@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
 
 
 def test_artifact_type_values():

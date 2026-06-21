@@ -13,11 +13,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from generic_ml_cache.application.domain.model.api_call_identity import ApiCallIdentity
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.managed_call_identity import ManagedCallIdentity
-from generic_ml_cache.application.domain.model.passthrough_call_identity import (
+from generic_ml_cache.application.domain.model.identity.api_call_identity import ApiCallIdentity
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.identity.managed_call_identity import ManagedCallIdentity
+from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
 

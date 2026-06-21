@@ -7,8 +7,8 @@ from __future__ import annotations
 import pytest
 
 from generic_ml_cache.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
-from generic_ml_cache.application.domain.model.message import Message
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.message import Message
 from generic_ml_cache.application.port.out.api_client_port import ApiClientPort
 
 

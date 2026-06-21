@@ -12,14 +12,14 @@ import pytest
 from generic_ml_cache.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
-from generic_ml_cache.application.domain.model.artifact import ArtifactType
-from generic_ml_cache.application.domain.model.cache_mode import CacheMode
-from generic_ml_cache.application.domain.model.client_run_request import ClientRunRequest
-from generic_ml_cache.application.domain.model.client_run_result import (
+from generic_ml_cache.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache.application.domain.model.run.client_run_request import ClientRunRequest
+from generic_ml_cache.application.domain.model.run.client_run_result import (
     ClientRunResult,
     GeneratedFile,
 )
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache.application.port.out.client_runner_port import ClientRunnerPort
 from generic_ml_cache.application.port.out.clock_port import ClockPort

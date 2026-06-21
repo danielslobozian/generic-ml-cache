@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
 
 
 def test_in_progress_value():

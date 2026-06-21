@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from typing import List
 
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
-from generic_ml_cache.application.domain.model.message import Message
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.message import Message
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache.application.port.out.api_client_port import ApiClientPort
 
 

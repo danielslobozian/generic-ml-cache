@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Dict, Sequence
 
-from generic_ml_cache.application.domain.model.message import Message
+from generic_ml_cache.application.domain.model.run.message import Message
 from generic_ml_cache.common.checksum import checksum_input_data
 
 

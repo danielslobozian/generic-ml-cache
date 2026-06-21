@@ -11,7 +11,7 @@ from __future__ import annotations
 from generic_ml_cache.adapter.out.client.passthrough_client_runner import (
     PassthroughClientRunner,
 )
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache.application.port.out.passthrough_runner_port import PassthroughRunnerPort
 
 

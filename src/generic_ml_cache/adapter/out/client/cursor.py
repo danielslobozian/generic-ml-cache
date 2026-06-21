@@ -12,7 +12,7 @@ import json
 from typing import List, Optional
 
 from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
-from generic_ml_cache.application.domain.model.usage import Usage, int_or_none
+from generic_ml_cache.application.domain.model.usage.usage import Usage, int_or_none
 from generic_ml_cache.application.port.out.base import ClientAdapter, ModelInfo, final_result_object
 
 

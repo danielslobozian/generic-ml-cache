@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from typing import Tuple
 
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.passthrough_call_identity import (
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
 from generic_ml_cache.application.port.inbound.run_passthrough_execution_command import (

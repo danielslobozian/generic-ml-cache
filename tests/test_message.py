@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache.application.domain.model.message import Message
+from generic_ml_cache.application.domain.model.run.message import Message
 
 
 def test_carries_role_and_content():

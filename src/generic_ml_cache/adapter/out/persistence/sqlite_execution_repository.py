@@ -16,16 +16,16 @@ from generic_ml_cache.adapter.out.persistence.call_identity_serialization import
     deserialize_identity,
     serialize_identity,
 )
-from generic_ml_cache.application.domain.model.artifact import Artifact, ArtifactType
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.execution_failure import (
+from generic_ml_cache.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
 )
-from generic_ml_cache.application.domain.model.execution_kind import ExecutionKind
-from generic_ml_cache.application.domain.model.execution_state import ExecutionState
-from generic_ml_cache.application.domain.model.ml_execution import MlExecution
-from generic_ml_cache.application.domain.model.token_usage import TokenUsage
+from generic_ml_cache.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache.application.port.out.clock_port import ClockPort
 from generic_ml_cache.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,

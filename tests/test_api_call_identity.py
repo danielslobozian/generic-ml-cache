@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-from generic_ml_cache.application.domain.model.api_call_identity import ApiCallIdentity
-from generic_ml_cache.application.domain.model.call_identity import CallIdentity
-from generic_ml_cache.application.domain.model.passthrough_call_identity import (
+from generic_ml_cache.application.domain.model.identity.api_call_identity import ApiCallIdentity
+from generic_ml_cache.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
 

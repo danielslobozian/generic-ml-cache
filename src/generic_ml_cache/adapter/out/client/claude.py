@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from generic_ml_cache.adapter.out.client.registry import register
 from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
-from generic_ml_cache.application.domain.model.usage import Usage, float_or_none, int_or_none
+from generic_ml_cache.application.domain.model.usage.usage import Usage, float_or_none, int_or_none
 from generic_ml_cache.application.port.out.base import ClientAdapter, final_result_object
 
 

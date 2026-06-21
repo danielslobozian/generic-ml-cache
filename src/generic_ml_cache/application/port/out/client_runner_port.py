@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from generic_ml_cache.application.domain.model.client_run_request import ClientRunRequest
-from generic_ml_cache.application.domain.model.client_run_result import ClientRunResult
+from generic_ml_cache.application.domain.model.run.client_run_request import ClientRunRequest
+from generic_ml_cache.application.domain.model.run.client_run_result import ClientRunResult
 
 
 class ClientRunnerPort(ABC):

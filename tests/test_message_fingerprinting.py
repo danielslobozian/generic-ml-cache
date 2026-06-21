@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from generic_ml_cache.application.domain.model.message import Message
+from generic_ml_cache.application.domain.model.run.message import Message
 from generic_ml_cache.application.domain.service.message_fingerprinting import fingerprint_messages
 
 
