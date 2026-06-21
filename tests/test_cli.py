@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-import os
 
 import pytest
 
@@ -97,31 +96,17 @@ def test_cli_writes_files_to_cwd(tmp_path, monkeypatch):
 # --- cross-platform invariants --------------------------------------------
 
 
-def test_cassette_uses_posix_paths_on_any_os(tmp_path):
-    """Even on Windows, captured paths are stored with forward slashes."""
-    from generic_ml_cache import Mode, Request, resolve
-    from generic_ml_cache.adapter.out.storage.store import CassetteStore
-
-    store = CassetteStore(tmp_path / "cas")
-    req = Request(
-        "fake", "m1", "high", "ctx", write_directive(os.path.join("a", "b", "c.txt"), "x\n")
-    )
-    out = resolve(req, store, mode=Mode.CACHE)
-    # fake_client received an OS-native path but the cache normalizes on capture
-    assert any("/" in f.path and "\\" not in f.path for f in out.response.files)
-
-
-def test_multibyte_unicode_roundtrips(tmp_path):
-    from generic_ml_cache import Mode, Request, resolve, apply_response
-    from generic_ml_cache.adapter.out.storage.store import CassetteStore
-
-    store = CassetteStore(tmp_path / "cas")
+def test_multibyte_unicode_roundtrips_through_a_run(tmp_path, monkeypatch):
+    """A file the client produces with multibyte content materialises byte-exact."""
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
     text = "café — 日本語 — \temoji 🚀\n"
-    req = Request("fake", "m1", "high", "ctx", write_directive("u.txt", text))
-    out = resolve(req, store, mode=Mode.CACHE)
-    dest = tmp_path / "out"
-    apply_response(out.response, dest)
-    assert (dest / "u.txt").read_text(encoding="utf-8") == text
+    rc = run_cli(
+        ["run", "--client", "fake", "--model", "m1", "--prompt", write_directive("u.txt", text)]
+    )
+    assert rc == 0
+    assert (workdir / "u.txt").read_text(encoding="utf-8") == text
 
 
 def test_cli_init_creates_config_then_idempotent(tmp_path, monkeypatch, capsys):

@@ -65,7 +65,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from generic_ml_cache.application.domain.service.cache import Mode
+from generic_ml_cache.application.domain.model.cache_mode import CacheMode
 from generic_ml_cache.common.errors import ConfigError
 
 CONFIG_ENV = "GMLCACHE_CONFIG"
@@ -79,7 +79,7 @@ EXECUTABLES_SECTION = "executables"
 #: data dir) and has no flag/env layer, only the config file.
 DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "timeout": None}
 
-_MODES = {m.value for m in Mode}
+_MODES = {m.value for m in CacheMode}
 
 #: written by ``gmlcache init`` (and only then); ``{store}`` is filled with the
 #: resolved per-user default so the user can see and edit where cassettes live.

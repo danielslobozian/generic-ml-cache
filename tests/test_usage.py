@@ -12,8 +12,7 @@ from __future__ import annotations
 import json
 
 from generic_ml_cache.adapter.out.client.registry import get_adapter
-from generic_ml_cache.application.domain.model.cassette import SCHEMA_VERSION, Cassette, Response
-from generic_ml_cache.application.domain.model.usage import Usage, float_or_none, int_or_none
+from generic_ml_cache.application.domain.model.usage import float_or_none, int_or_none
 
 # --- real client output samples (structured mode) ---------------------------
 
@@ -172,105 +171,8 @@ def test_coercion_helpers_map_absent_to_none_not_zero():
     assert float_or_none("1.5") == 1.5
 
 
-# --- storage: schema v2 round-trip + back-compat with v1 ---------------------
-
-
-def test_usage_survives_cassette_round_trip():
-    usage = Usage(
-        input_tokens=3,
-        output_tokens=100,
-        cache_read_tokens=16945,
-        cache_write_tokens=7397,
-        reasoning_tokens=None,
-        cost_usd=0.0515915,
-        raw={"modelUsage": {"claude-sonnet-4-6": {"costUSD": 0.05}}},
-    )
-    cassette = Cassette(
-        client="claude",
-        model="sonnet",
-        effort="",
-        input_data={"context": "", "prompt": "hi"},
-        response=Response(stdout="hi there", usage=usage),
-    )
-    reloaded = Cassette.from_json(cassette.to_json())
-    assert reloaded.schema_version == SCHEMA_VERSION == 2
-    ru = reloaded.response.usage
-    assert ru.input_tokens == 3
-    assert ru.cache_write_tokens == 7397
-    assert ru.reasoning_tokens is None
-    assert ru.cost_usd == 0.0515915
-    assert ru.raw["modelUsage"]["claude-sonnet-4-6"]["costUSD"] == 0.05
-
-
-def test_pre_usage_cassette_loads_with_unknown_usage():
-    """A schema-1 cassette (no usage key) must still load -> usage is None."""
-    legacy = {
-        "schema_version": 1,
-        "client": "claude",
-        "model": "sonnet",
-        "effort": "",
-        "input_checksum": "ignored-recomputed",
-        "input_data": {"context": "", "prompt": "hi"},
-        "response": {"stdout": "hi", "stderr": "", "exit": 0, "files": []},
-    }
-    cassette = Cassette.from_json(json.dumps(legacy))
-    assert cassette.response.usage is None
-    assert cassette.response.stdout == "hi"
-
-
-# --- end-to-end: usage flows launcher -> cassette -> store -------------------
-
-
-def test_usage_is_captured_and_persisted_end_to_end(store):
-    """A real (fake) call's parsed usage lands in the stored cassette and reloads."""
-    import sys
-    from typing import List
-
-    from generic_ml_cache import register
-    from generic_ml_cache.application.port.out.base import ClientAdapter
-    from generic_ml_cache.application.domain.service.cache import Mode, Request, resolve
-    from generic_ml_cache.application.domain.model.parsed_output import ParsedOutput
-    from generic_ml_cache.application.domain.model.usage import Usage
-
-    class JsonFakeAdapter(ClientAdapter):
-        name = "json_fake"
-        default_executable = sys.executable
-
-        def build_argv(
-            self,
-            executable,
-            run_dir,
-            model,
-            effort,
-            context,
-            prompt,
-            system_prompt,
-            client_args=(),
-            grants=(),
-        ) -> List[str]:
-            return [executable, "-c", "print('the answer')"]
-
-        def parse_output(self, stdout: str) -> ParsedOutput:
-            # Pretend stdout was structured: hand back clean text + a usage block.
-            return ParsedOutput(
-                text=stdout.strip(),
-                usage=Usage(input_tokens=42, output_tokens=7, cache_read_tokens=0, cost_usd=0.001),
-            )
-
-    register(JsonFakeAdapter())
-    request = Request(client="json_fake", model="m", effort="", context="", prompt="go")
-    outcome = resolve(request, store, mode=Mode.CACHE)
-
-    assert outcome.recorded is True
-    assert outcome.response.stdout == "the answer"
-    assert outcome.response.usage.input_tokens == 42
-
-    # And it survives a reload from disk (not just the in-memory object).
-    reloaded = store.lookup("json_fake", "m", "", request.input_data)
-    assert reloaded.response.usage.output_tokens == 7
-    assert reloaded.response.usage.cost_usd == 0.001
-
-
-# Old CLI stats/inspect readouts (cassette-based) were removed in the Phase 5/6
-# cutover; the new CLI surface is covered by tests/test_cli.py, and usage flow
-# end-to-end by tests/test_run_api_execution_service.py and test_composition.py.
+# Cassette round-trip / store end-to-end tests were removed with the cassette
+# format in the Phase 5/6 cutover; usage now flows through ClientRunResult ->
+# MlExecution -> the SQLite repository, covered by test_sqlite_execution_repository
+# and test_composition. The adapter parse_output behaviour above is the part unique
+# to this file.

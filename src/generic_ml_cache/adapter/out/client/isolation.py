@@ -26,11 +26,14 @@ import subprocess
 import sys
 import tempfile
 import threading
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from generic_ml_cache.application.domain.model.cassette import CapturedFile, Response
+from generic_ml_cache.application.domain.model.client_run_result import (
+    ClientRunResult,
+    GeneratedFile,
+)
+from generic_ml_cache.application.domain.model.token_usage import TokenUsage
 from generic_ml_cache.application.port.out.base import ClientAdapter
 from generic_ml_cache.common.errors import CommandLineTooLong, RunInterrupted
 from generic_ml_cache.common.prime_directive import build_system_prompt
@@ -47,25 +50,18 @@ def _snapshot(root: Path) -> Dict[str, str]:
     return snap
 
 
-def _capture_changes(root: Path, baseline: Dict[str, str]) -> List[CapturedFile]:
+def _capture_changes(root: Path, baseline: Dict[str, str]) -> List[GeneratedFile]:
     """Return files that were created or modified, sorted by path.
 
-    Deletions are intentionally ignored in v0.0.1 (the client started in an
-    effectively empty folder, so there is nothing meaningful to delete).
+    Deletions are intentionally ignored (the client started in an effectively
+    empty folder, so there is nothing meaningful to delete).
     """
     after = _snapshot(root)
-    captured: List[CapturedFile] = []
+    captured: List[GeneratedFile] = []
     for rel in sorted(after):
         if baseline.get(rel) != after[rel]:
-            data = (root / rel).read_bytes()
-            captured.append(CapturedFile.from_bytes(rel, data))
+            captured.append(GeneratedFile(name=rel, content=(root / rel).read_bytes()))
     return captured
-
-
-@dataclass
-class RunResult:
-    response: Response
-    run_dir: str  # the (already-deleted) isolated path, for diagnostics
 
 
 def _terminate_group(proc: subprocess.Popen) -> None:
@@ -289,8 +285,8 @@ def record_real_call(
     client_args: Optional[List[str]] = None,
     grants: Optional[List[str]] = None,
     stream_path: Optional[str] = None,
-) -> RunResult:
-    """Execute the client once in isolation and capture its full response.
+) -> ClientRunResult:
+    """Execute the client once in isolation and capture its full result.
 
     The prime directive is injected here (record time) and is deliberately NOT
     returned as part of the cached input -- it is operational scaffolding. When
@@ -383,14 +379,18 @@ def record_real_call(
                 output_tokens=parsed.usage.output_tokens if parsed.usage else None,
             )
 
-        response = Response(
+        # Translate the adapter's parsed usage (its own type) into the core
+        # TokenUsage at this boundary; the dict shape is identical.
+        token_usage = (
+            TokenUsage.from_dict(parsed.usage.to_dict()) if parsed.usage is not None else None
+        )
+        return ClientRunResult(
+            exit_code=returncode,
             stdout=parsed.text,
             stderr=stderr,
-            exit=returncode,
             files=files,
-            usage=parsed.usage,
+            token_usage=token_usage,
         )
-        return RunResult(response=response, run_dir=str(run_dir))
     finally:
         if writer is not None:
             writer.close()

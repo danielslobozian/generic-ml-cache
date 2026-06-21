@@ -18,7 +18,6 @@ import pytest
 
 from generic_ml_cache import register
 from generic_ml_cache.application.port.out.base import ClientAdapter
-from generic_ml_cache.adapter.out.storage.store import CassetteStore
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
@@ -121,11 +120,6 @@ def _isolate_config(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
     for var in ("GMLCACHE_MODE", "GMLCACHE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-
-
-@pytest.fixture()
-def store(tmp_path) -> CassetteStore:
-    return CassetteStore(tmp_path / "cassettes")
 
 
 def write_directive(relpath: str, content: str) -> str:
