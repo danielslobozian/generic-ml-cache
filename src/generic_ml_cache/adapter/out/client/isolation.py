@@ -36,7 +36,7 @@ from generic_ml_cache.application.domain.model.client_run_result import (
 from generic_ml_cache.application.domain.model.token_usage import TokenUsage
 from generic_ml_cache.application.port.out.base import ClientAdapter
 from generic_ml_cache.common.errors import CommandLineTooLong, RunInterrupted
-from generic_ml_cache.common.prime_directive import build_system_prompt
+from generic_ml_cache.adapter.out.client.prime_directive import build_system_prompt
 from generic_ml_cache.stream import StreamWriter
 
 

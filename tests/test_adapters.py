@@ -9,7 +9,7 @@ import pytest
 from generic_ml_cache import UnknownClient, get_adapter
 from generic_ml_cache.adapter.out.client.registry import registered_names
 from generic_ml_cache.common.errors import ClientNotFound
-from generic_ml_cache.common.prime_directive import PRIME_DIRECTIVE
+from generic_ml_cache.adapter.out.client.prime_directive import PRIME_DIRECTIVE
 
 
 def test_builtins_are_registered():
