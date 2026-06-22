@@ -38,3 +38,15 @@ class ExecutionRepositoryPort(ABC):
         """Append a new execution. If it is a servable success, atomically
         supersede the prior current execution for the same key — the supersession
         happens here, where atomicity belongs, never in the caller."""
+
+    @abstractmethod
+    def add_tags(self, execution_key: str, tags: List[str]) -> None:
+        """Attach ``tags`` to the current execution for ``execution_key``,
+        idempotently — already-present tags are left untouched, new ones added.
+        A separate annotation layer: this never rewrites the execution record,
+        and is a no-op if there is no current execution for the key."""
+
+    @abstractmethod
+    def tags_for(self, execution_key: str) -> List[str]:
+        """Return the tags on the current execution for ``execution_key``, sorted;
+        empty if none (or no current execution)."""

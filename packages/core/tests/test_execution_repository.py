@@ -53,7 +53,6 @@ def _execution(
     state: ExecutionState = ExecutionState.SUCCESS,
     output_persisted: bool = True,
     content: bytes = b"answer",
-    tags=None,
 ) -> MlExecution:
     artifact = Artifact(
         artifact_type=ArtifactType.STDOUT,
@@ -73,7 +72,6 @@ def _execution(
         output_persisted=output_persisted,
         artifacts=[artifact],
         failure=failure,
-        tags=tags or [],
     )
 
 
@@ -109,12 +107,29 @@ def test_save_then_find_current_returns_the_execution():
     assert found.execution_state is ExecutionState.SUCCESS
 
 
-def test_tags_are_carried_through_save_and_find():
+def test_add_tags_then_tags_for_returns_them_sorted():
     repository = _repository()
     identity = _identity()
-    repository.save(_execution(identity, tags=["id-scan", "ticket"]))
-    found = repository.find_current(identity.generate_key())
-    assert found.tags == ["id-scan", "ticket"]
+    repository.save(_execution(identity))
+    repository.add_tags(identity.generate_key(), ["ticket", "id-scan"])
+    assert repository.tags_for(identity.generate_key()) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_idempotent_and_accumulates():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.add_tags(key, ["ticket"])
+    repository.add_tags(key, ["ticket", "id-scan"])  # 'ticket' already present
+    assert repository.tags_for(key) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_a_no_op_without_a_current_execution():
+    repository = _repository()
+    identity = _identity()
+    repository.add_tags(identity.generate_key(), ["x"])  # nothing stored
+    assert repository.tags_for(identity.generate_key()) == []
 
 
 def test_find_current_returns_dehydrated_artifacts():

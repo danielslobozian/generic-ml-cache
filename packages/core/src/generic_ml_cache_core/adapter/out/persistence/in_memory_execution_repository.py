@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -30,6 +30,7 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
     def __init__(self, clock: ClockPort) -> None:
         self._clock = clock
         self._by_key: Dict[str, List[MlExecution]] = {}
+        self._tags_by_key: Dict[str, Set[str]] = {}
 
     def find_current(self, execution_key: str) -> Optional[MlExecution]:
         for execution in self._by_key.get(execution_key, []):
@@ -50,6 +51,17 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
                 if self._is_servable(prior):
                     prior.superseded_at = superseded_at
         history.append(stored)
+
+    def add_tags(self, execution_key: str, tags: List[str]) -> None:
+        # Tags the key's current execution; a no-op when there is none.
+        if not tags or self.find_current(execution_key) is None:
+            return
+        self._tags_by_key.setdefault(execution_key, set()).update(tags)
+
+    def tags_for(self, execution_key: str) -> List[str]:
+        if self.find_current(execution_key) is None:
+            return []
+        return sorted(self._tags_by_key.get(execution_key, set()))
 
     @staticmethod
     def _is_servable(execution: MlExecution) -> bool:

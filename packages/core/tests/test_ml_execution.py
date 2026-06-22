@@ -157,28 +157,6 @@ def test_dehydrated_execution_has_artifacts_without_content():
     assert execution.artifacts[0].blob_key == "k"
 
 
-def test_execution_has_no_tags_by_default():
-    execution = MlExecution(
-        call_identity=_make_identity(),
-        execution_state=ExecutionState.IN_PROGRESS,
-        execution_kind=ExecutionKind.LOCAL_MANAGED,
-        output_persisted=False,
-    )
-    assert execution.tags == []
-
-
-def test_execution_carries_tags():
-    execution = MlExecution(
-        call_identity=_make_identity(),
-        execution_state=ExecutionState.SUCCESS,
-        execution_kind=ExecutionKind.LOCAL_MANAGED,
-        output_persisted=True,
-        artifacts=[_stdout_artifact()],
-        tags=["ticket-analysis", "id-document-scan"],
-    )
-    assert execution.tags == ["ticket-analysis", "id-document-scan"]
-
-
 def test_normalize_tags_trims_drops_blanks_dedupes_and_sorts():
     assert normalize_tags(["  beta ", "alpha", "beta", "", "   ", "alpha"]) == ["alpha", "beta"]
 

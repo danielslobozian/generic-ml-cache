@@ -88,9 +88,9 @@ CREATE TABLE IF NOT EXISTS token_usage (
 );
 CREATE TABLE IF NOT EXISTS execution_tags (
     execution_id INTEGER NOT NULL,
-    tag          TEXT NOT NULL
+    tag          TEXT NOT NULL,
+    UNIQUE(execution_id, tag)
 );
-CREATE INDEX IF NOT EXISTS idx_execution_tags_execution ON execution_tags(execution_id);
 """
 
 
@@ -196,7 +196,6 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             execution_id = self._insert_execution(connection, execution_key, execution, stamped_at)
             self._insert_artifacts(connection, execution_id, execution.artifacts)
             self._insert_token_usage(connection, execution_id, execution.token_usage)
-            self._insert_tags(connection, execution_id, execution.tags)
             connection.commit()
         finally:
             connection.close()
@@ -294,13 +293,47 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             ),
         )
 
+    # -- tags (a separate annotation; never rewrites an execution) --------
+
     @staticmethod
-    def _insert_tags(connection: sqlite3.Connection, execution_id: int, tags: List[str]) -> None:
-        for tag in tags:
-            connection.execute(
-                "INSERT INTO execution_tags (execution_id, tag) VALUES (?, ?)",
-                (execution_id, tag),
-            )
+    def _current_execution_id(connection: sqlite3.Connection, execution_key: str) -> Optional[int]:
+        row = connection.execute(
+            "SELECT id FROM executions WHERE execution_key = ? AND state = ? "
+            "AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id DESC LIMIT 1",
+            (execution_key, ExecutionState.SUCCESS.value),
+        ).fetchone()
+        return int(row[0]) if row is not None else None
+
+    def add_tags(self, execution_key: str, tags: List[str]) -> None:
+        if not tags:
+            return
+        connection = self._connect()
+        try:
+            execution_id = self._current_execution_id(connection, execution_key)
+            if execution_id is None:
+                return
+            for tag in tags:
+                connection.execute(
+                    "INSERT OR IGNORE INTO execution_tags (execution_id, tag) VALUES (?, ?)",
+                    (execution_id, tag),
+                )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def tags_for(self, execution_key: str) -> List[str]:
+        connection = self._connect()
+        try:
+            execution_id = self._current_execution_id(connection, execution_key)
+            if execution_id is None:
+                return []
+            rows = connection.execute(
+                "SELECT tag FROM execution_tags WHERE execution_id = ? ORDER BY tag",
+                (execution_id,),
+            ).fetchall()
+            return [tag for (tag,) in rows]
+        finally:
+            connection.close()
 
     # -- reconstruction ---------------------------------------------------
 
@@ -333,16 +366,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
                 else None
             ),
             superseded_at=datetime.fromisoformat(superseded_at) if superseded_at else None,
-            tags=self._load_tags(connection, execution_id),
         )
-
-    @staticmethod
-    def _load_tags(connection: sqlite3.Connection, execution_id: int) -> List[str]:
-        rows = connection.execute(
-            "SELECT tag FROM execution_tags WHERE execution_id = ? ORDER BY tag",
-            (execution_id,),
-        ).fetchall()
-        return [tag for (tag,) in rows]
 
     @staticmethod
     def _load_identity(connection: sqlite3.Connection, execution_key: str) -> CallIdentity:

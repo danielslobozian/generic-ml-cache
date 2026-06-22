@@ -387,19 +387,19 @@ def test_grants_change_the_identity():
 # --- tags (non-identity metadata) --------------------------------------------
 
 
-def test_tags_are_normalized_onto_the_recorded_execution():
+def test_tags_are_normalized_and_applied_to_the_recorded_execution():
     harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
     execution = harness.use_case.execute(_command(tags=["  ticket ", "scan", "ticket", "", "scan"]))
-    assert execution.tags == ["scan", "ticket"]
+    key = execution.call_identity.generate_key()
+    assert harness.repository.tags_for(key) == ["scan", "ticket"]
 
 
-def test_tags_do_not_change_the_cache_key():
+def test_a_hit_accumulates_new_tags_onto_the_entry():
     harness = _Harness()
     first = harness.use_case.execute(_command(tags=["scan"]))
-    second = harness.use_case.execute(_command(tags=["ticket"]))
-    # Same input, different tags -> a hit, not a second run: tags are out of the key.
+    key = first.call_identity.generate_key()
+    harness.use_case.execute(_command(tags=["ticket"]))  # same input -> a hit
+    # Tags are out of the key (still one run) and accumulate on the entry.
     assert len(harness.runner.calls) == 1
     assert harness.metrics.events == ["record", "hit"]
-    # The hit replays the recorded execution, keeping the tags it was recorded with.
-    assert first.tags == ["scan"]
-    assert second.tags == ["scan"]
+    assert harness.repository.tags_for(key) == ["scan", "ticket"]

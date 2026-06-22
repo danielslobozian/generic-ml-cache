@@ -39,7 +39,6 @@ class MlExecution:
     token_usage: Optional[TokenUsage] = None
     failure: Optional[ExecutionFailure] = None
     superseded_at: Optional[datetime] = None
-    tags: List[str] = field(default_factory=list)
 
 
 def normalize_tags(raw_tags: Iterable[str]) -> List[str]:

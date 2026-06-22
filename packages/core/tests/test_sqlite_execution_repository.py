@@ -64,7 +64,6 @@ def _execution(
     content: bytes = b"answer",
     token_usage=None,
     failure=None,
-    tags=None,
 ) -> MlExecution:
     artifact = Artifact(
         artifact_type=ArtifactType.STDOUT,
@@ -80,7 +79,6 @@ def _execution(
         artifacts=[artifact],
         token_usage=token_usage,
         failure=failure,
-        tags=tags or [],
     )
 
 
@@ -175,19 +173,29 @@ def test_token_usage_round_trips(tmp_path):
     assert restored == usage
 
 
-def test_tags_round_trip(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, tags=["id-scan", "ticket"]))
-    restored = repository.find_current(identity.generate_key())
-    assert restored.tags == ["id-scan", "ticket"]
-
-
-def test_no_tags_round_trips_as_empty(tmp_path):
+def test_add_tags_then_tags_for_returns_them_sorted(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()
     repository.save(_execution(identity))
-    assert repository.find_current(identity.generate_key()).tags == []
+    repository.add_tags(identity.generate_key(), ["ticket", "id-scan"])
+    assert repository.tags_for(identity.generate_key()) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_idempotent_and_accumulates(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.add_tags(key, ["ticket"])
+    repository.add_tags(key, ["ticket", "id-scan"])  # 'ticket' already present
+    assert repository.tags_for(key) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_a_no_op_without_a_current_execution(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.add_tags(identity.generate_key(), ["x"])  # nothing stored
+    assert repository.tags_for(identity.generate_key()) == []
 
 
 def test_failure_round_trips_in_history(tmp_path):
