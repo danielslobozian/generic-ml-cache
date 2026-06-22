@@ -15,8 +15,8 @@
 ## At a glance
 
 - [Current alpha capability](#current-alpha-capability)
-- [Road to 1.0.0: productionize the current capability](#road-to-100-productionize-the-current-capability)
-- [1.x feature roadmap](#1x-feature-roadmap)
+- [Road to 1.0.0: a stable, feature-complete cache](#road-to-100-a-stable-feature-complete-cache)
+- [After 1.0.0: dedicated releases](#after-100-dedicated-releases)
 - [Out of scope unless explicitly revisited](#out-of-scope-unless-explicitly-revisited)
 
 ---
@@ -25,15 +25,28 @@ This roadmap describes intended direction. It is not a promise of dates.
 
 The current ruling for versioning is:
 
-- `0.x.y` remains alpha.
-- `x` increases for feature-level or productionization milestones.
-- `y` increases for fixes and small corrections.
-- `1.0.0` represents the current working capability, productionized and stable.
-- New product capabilities after that land as `1.x` features.
+- `0.x.y` remains **alpha**: the execution-record schema, CLI surface, and adapter
+  contract may still change while the feature set is being built.
+- The `0.x` line builds toward a **stable, feature-complete `1.0.0`** — not a thin
+  "current capability" release. Each `0.x` minor lands a feature milestone; `y` covers
+  fixes and small corrections.
+- `1.0.0` is the **stable, feature-rich** release: tagging, persistence depth, scope
+  tokens, at-rest encryption, sessions, reporting, asynchronous executions, alias mode,
+  API adapters, and scope-aware retention have all landed, and the CLI surface,
+  execution-record schema, and adapter contract are locked under a compatibility policy.
+- After `1.0.0`, the **daemon transport ships as a dedicated, independently-versioned
+  package**: core and cli stay lockstep, but the daemon versions on its own cadence
+  against a `generic-ml-cache-core>=X` compatibility range, so a daemon-only change
+  never bumps core or cli.
 
-The project should not stay in alpha until every imagined feature exists. The
-current cache already has substantial working behavior. The path to `1.0.0` is to
-make that behavior clean, documented, tested, packaged, and releasable.
+Schema-shaping features (persistence, scopes, sessions) deliberately land **before**
+`1.0.0`, while `0.x` still permits the record schema to change — so `1.0.0` can lock a
+schema that is already scope- and session-aware rather than promise stability it would
+soon have to break.
+
+The data-handling features (tagging, persistence, scopes, encryption) are **orthogonal,
+composable toggles**, not one feature; their model and the cryptographic cautions are
+recorded in the [data-handling design note](design/data-handling.md).
 
 ## Current alpha capability
 
@@ -48,10 +61,12 @@ The current implementation already provides:
 - grants where supported by adapters,
 - usage capture where clients expose structured output,
 - `check`, `list`, `inspect`, `stats`, `doctor`, `models`, and `status`,
-- optional size-based LRU eviction on insertion,
 - an access registry for non-load-bearing observability.
 
-## Road to 1.0.0: productionize the current capability
+Size-based eviction is **configured but not yet enforced** (`max_size` is reserved);
+it is part of the scope-aware retention milestone below.
+
+## Road to 1.0.0: a stable, feature-complete cache
 
 ### 0.1.0 — Documentation and specification reset *(released 2026-06-20)*
 
@@ -60,54 +75,70 @@ The current implementation already provides:
 - Document storage, eviction, grants, and generated-file replay clearly.
 - Keep community/legal files unchanged.
 
-### 0.2.0 — Code structure and internal guidelines
+### 0.2.0 — Restructure, quality gates, and release automation *(released 2026-06-22)*
 
-- Refactor the CLI into smaller command modules.
-- Clarify package boundaries around execution, adapters, storage, usage, config,
-  and reporting.
-- Add project-specific Python code guidelines.
-- Keep behavior stable while improving maintainability.
+Delivered the planned code-structure work **plus** the quality-gate and packaging
+milestones originally scoped as 0.3.0 and 0.4.0 — they were ready, so they shipped here.
 
-### 0.3.0 — Quality gates
+- Split into a monorepo of two lockstep packages: the `generic-ml-cache-core` library
+  (domain, use cases, ports, and the default adapters; stateless, dependency-free) and
+  the `generic-ml-cache-cli` client (`gmlcache`).
+- Rebuilt on a hexagonal (ports-and-adapters) architecture; retired the on-disk
+  "cassette" record format for a SQLite execution repository + content-addressed blobs.
+- Quality gates: SonarQube Cloud with coverage, ruff lint/format, a cross-platform
+  OS/Python test matrix, and branch protection requiring green checks.
+- Release automation: GitHub Actions CI and PyPI **Trusted Publishing** via OIDC
+  (no stored tokens); documented install and release.
 
-- Strengthen test coverage reporting.
-- Keep cross-platform tests green.
-- Add lint/format/type-quality rules appropriate for the project.
-- Integrate SonarCloud for the public GitHub repository.
-- Treat quality tools as support, not as architectural authority.
+### 0.3.0 — Tags
 
-### 0.4.0 — Packaging and release automation
+Free-form labels for grouping and querying executions. No prerequisites — pure metadata.
 
-- Publish the package through PyPI.
-- Use GitHub Actions for CI and release workflows.
-- Prefer PyPI trusted publishing through GitHub OIDC over stored long-lived PyPI
-  tokens where possible.
-- Document install and release behavior.
+- A call may carry 0, 1, or many user-supplied tags.
+- Tags are **metadata only**: they never enter execution identity (the fingerprint), so
+  the same input under different tags remains one cache entry.
+- Executions become queryable by tag (`list` / report filters).
+- Tags are stored verbatim and never interpreted.
 
-### 1.0.0 — Stable current cache
+### 0.4.0 — Persistence depth (meter / cache / dataset)
 
-- Stable CLI surface for the current feature set.
-- Stable execution-record schema and compatibility policy.
-- Stable adapter contract for current CLI adapters.
-- Stable storage and eviction documentation.
-- Public documentation aligned with actual behavior.
+A single ordered choice over what each execution keeps on disk — each level a superset of
+the last, so the degenerate "input without output" state cannot be expressed. See the
+[data-handling design note](design/data-handling.md).
 
-## 1.x feature roadmap
+- **meter**: metadata/usage only — every call runs, no replay; pairs with tags for
+  cost/usage analytics and can report *would-be* hit/miss without storing anything.
+- **cache** *(default)*: + output — replay on hit (today's behavior).
+- **dataset**: + input — replay **and** a queryable, labeled `(input, output)` corpus,
+  exportable (e.g. JSONL) for distillation/evaluation. Export yields a **raw** corpus; an
+  optional user-supplied quality flag (never inferred) lets export filter it.
 
-The following features are intentionally after `1.0.0`. They are real product
-directions, but they should land as deliberate, reviewable slices.
+### 0.5.0 — Scope tokens
 
-### 1.1.0 — Scope tokens
-
-Scope tokens introduce cache/reporting namespaces.
+Scope tokens introduce cache/reporting namespaces and the data-separation boundary.
 
 - Tokens are generated by gmlcache.
-- Raw tokens are not stored; scope identity is derived from a hash.
+- Raw tokens are not stored; scope identity is derived from a hash of the token.
 - Scopes are not users and not authentication.
 - A public scope exists when no token is used.
-- Scope invalidation removes the scope’s cached data and metadata.
+- Scope invalidation removes the scope's cached data and metadata.
 
-### 1.2.0 — Sessions
+### 0.6.0 — Encryption at rest
+
+Optional, token-keyed encryption of persisted data — the privacy boundary. Builds on
+scope tokens. See the [data-handling design note](design/data-handling.md) for the
+cryptographic cautions.
+
+- All-or-nothing per scope: when on, persisted input **and** output are encrypted under a
+  key derived from the scope's token.
+- The app stores only the token's hash for identity and **never stores the key**; the key
+  lives only in memory during a call the user authorized with the token (client-held-key /
+  zero-knowledge at rest).
+- Protects data at rest (disk theft, backups); does not protect a compromised running
+  process. Lost token = unrecoverable, which is also the erasure property (invalidate =
+  crypto-shred).
+
+### 0.7.0 — Sessions
 
 Sessions group executions inside a scope.
 
@@ -116,7 +147,7 @@ Sessions group executions inside a scope.
 - Sessions record execution events and support workflow-level reports.
 - Sessions do not participate in execution identity.
 
-### 1.3.0 — Session and scope reporting
+### 0.8.0 — Session and scope reporting
 
 - Aggregate executions by session.
 - Aggregate sessions by scope.
@@ -124,17 +155,17 @@ Sessions group executions inside a scope.
 - Distinguish reported, estimated, and unknown values.
 - Keep reports observational only.
 
-### 1.4.0 — Asynchronous executions
+### 0.9.0 — Asynchronous executions
 
 - Submit an execution and receive an execution ID.
 - Query status.
 - Watch or replay event logs.
 - Fetch final result.
 - Materialize generated files explicitly.
-- Avoid writing generated files into the caller’s folder after the launch command
+- Avoid writing generated files into the caller's folder after the launch command
   has already exited.
 
-### 1.5.0 — Alias mode
+### 0.10.0 — Alias mode
 
 Alias mode is a thin native-client wrapper mode.
 
@@ -143,31 +174,47 @@ Alias mode is a thin native-client wrapper mode.
 - No attempt is made to auto-complete or model every native client option.
 - Alias mode is for users who want native client behavior plus basic caching.
 
-### 1.6.0 — API adapters
+### 0.11.0 — API adapters
 
 - Add provider API adapters as peers to CLI adapters.
 - Preserve the execution request model.
 - Capture usage and cost metadata when providers expose it.
 - Keep provider-specific behavior inside adapters.
 
-### 1.7.0 — Scope-aware retention and invalidation
+### 0.12.0 — Scope-aware retention and invalidation
 
 - Per-scope size quotas.
 - Scope invalidation commands.
 - Public/private scope cleanup policies.
 - Metadata-driven ownership and cleanup.
 
-### 1.8.0 — Daemon transport
+### 1.0.0 — Stable, feature-rich cache
+
+- Everything above, productionized.
+- Stable CLI surface under a compatibility policy.
+- Stable execution-record schema (tag-, scope-, and session-aware) and compatibility policy.
+- Stable adapter contract for the CLI and API adapters — including verifying the
+  per-client read-permission mechanism currently confirmed only for Claude.
+- Public documentation aligned with actual behavior.
+
+## After 1.0.0: dedicated releases
+
+These land after the stable release. The daemon is a separate, independently-versioned
+package; scheduled eviction depends on it.
+
+### Daemon transport — *dedicated package*
 
 - Expose the same execution engine through a resident local service.
 - Provide transport-level live status/events.
 - Keep daemon mode as another interface, not another engine.
+- Ships as its own package (`generic-ml-cache-daemon`), versioned independently against a
+  `generic-ml-cache-core` compatibility range rather than in lockstep with core and cli.
 
-### 1.9.0 — Scheduled stale-entry eviction
+### Scheduled stale-entry eviction
 
 - Time-based eviction for entries stale beyond a configured age.
-- Requires a resident process or explicit maintenance command.
-- Complements, but does not replace, size-based insertion-time eviction.
+- Requires a resident process or explicit maintenance command (pairs with the daemon).
+- Complements, but does not replace, the size-based eviction introduced with retention.
 
 ## Out of scope unless explicitly revisited
 

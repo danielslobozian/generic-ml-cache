@@ -330,7 +330,7 @@ token_usage                 -- normalized accounting, 1:1 with execution
 events                      -- the call journal (today's access_registry, folded in later)
   id PK; ts; event; execution_key NULL; client; model; effort; session_id NULL
 
-scopes / sessions           -- future (roadmap 1.1 / 1.2)
+scopes / sessions           -- future (roadmap 0.3 / 0.4)
 ```
 
 **Hydrate / dehydrate.** The repository stores and returns a *dehydrated*
@@ -749,7 +749,7 @@ execution aggregate; an earlier draft wrongly listed it for retirement).
 
 - Async execution mode and its command. Constraint already recorded: async
   requires `persist_output = True`.
-- Scope and session objects and their port contracts (roadmap 1.1–1.2).
+- Scope and session objects and their port contracts (roadmap 0.3–0.4).
 - The exact event vocabulary of `MetricsPort.record_event`.
 - Whether `deep_fingerprint_paths` (recursive folder checksum) becomes a
   supported field on `RunManagedLocalExecutionCommand`.
