@@ -172,6 +172,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         grants=list(getattr(args, "grant", None) or []),
         cache_mode=cache_mode,
         record_on_error=args.record_on_error,
+        tags=list(getattr(args, "tag", None) or []),
     )
 
     def executable_override(client: str):
@@ -708,6 +709,16 @@ def build_parser() -> argparse.ArgumentParser:
         dest="grant",
         choices=GRANT_CHOICES,
         help=_GRANT_HELP,
+    )
+    run.add_argument(
+        "--tag",
+        action="append",
+        dest="tag",
+        metavar="TAG",
+        help=(
+            "label this execution with a tag for later grouping/queries (repeatable; "
+            "metadata only -- never part of the cache key). A relabel on a hit accumulates."
+        ),
     )
     run.add_argument(
         "--json",
