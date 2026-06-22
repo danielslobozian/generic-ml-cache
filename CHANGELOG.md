@@ -14,6 +14,8 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-22
+
 ### Changed
 
 - **Restructured into a monorepo of two packages** (core, cli): the library
