@@ -64,6 +64,7 @@ def _execution(
     content: bytes = b"answer",
     token_usage=None,
     failure=None,
+    tags=None,
 ) -> MlExecution:
     artifact = Artifact(
         artifact_type=ArtifactType.STDOUT,
@@ -79,6 +80,7 @@ def _execution(
         artifacts=[artifact],
         token_usage=token_usage,
         failure=failure,
+        tags=tags or [],
     )
 
 
@@ -171,6 +173,21 @@ def test_token_usage_round_trips(tmp_path):
     repository.save(_execution(identity, token_usage=usage))
     restored = repository.find_current(identity.generate_key()).token_usage
     assert restored == usage
+
+
+def test_tags_round_trip(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, tags=["id-scan", "ticket"]))
+    restored = repository.find_current(identity.generate_key())
+    assert restored.tags == ["id-scan", "ticket"]
+
+
+def test_no_tags_round_trips_as_empty(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    assert repository.find_current(identity.generate_key()).tags == []
 
 
 def test_failure_round_trips_in_history(tmp_path):

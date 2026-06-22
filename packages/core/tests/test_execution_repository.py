@@ -53,6 +53,7 @@ def _execution(
     state: ExecutionState = ExecutionState.SUCCESS,
     output_persisted: bool = True,
     content: bytes = b"answer",
+    tags=None,
 ) -> MlExecution:
     artifact = Artifact(
         artifact_type=ArtifactType.STDOUT,
@@ -72,6 +73,7 @@ def _execution(
         output_persisted=output_persisted,
         artifacts=[artifact],
         failure=failure,
+        tags=tags or [],
     )
 
 
@@ -105,6 +107,14 @@ def test_save_then_find_current_returns_the_execution():
     found = repository.find_current(identity.generate_key())
     assert found is not None
     assert found.execution_state is ExecutionState.SUCCESS
+
+
+def test_tags_are_carried_through_save_and_find():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity, tags=["id-scan", "ticket"]))
+    found = repository.find_current(identity.generate_key())
+    assert found.tags == ["id-scan", "ticket"]
 
 
 def test_find_current_returns_dehydrated_artifacts():

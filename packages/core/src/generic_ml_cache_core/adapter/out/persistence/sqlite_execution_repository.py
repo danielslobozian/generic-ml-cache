@@ -86,6 +86,11 @@ CREATE TABLE IF NOT EXISTS token_usage (
     cost_usd           REAL,
     raw_json           TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS execution_tags (
+    execution_id INTEGER NOT NULL,
+    tag          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_execution_tags_execution ON execution_tags(execution_id);
 """
 
 
@@ -191,6 +196,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             execution_id = self._insert_execution(connection, execution_key, execution, stamped_at)
             self._insert_artifacts(connection, execution_id, execution.artifacts)
             self._insert_token_usage(connection, execution_id, execution.token_usage)
+            self._insert_tags(connection, execution_id, execution.tags)
             connection.commit()
         finally:
             connection.close()
@@ -288,6 +294,14 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             ),
         )
 
+    @staticmethod
+    def _insert_tags(connection: sqlite3.Connection, execution_id: int, tags: List[str]) -> None:
+        for tag in tags:
+            connection.execute(
+                "INSERT INTO execution_tags (execution_id, tag) VALUES (?, ?)",
+                (execution_id, tag),
+            )
+
     # -- reconstruction ---------------------------------------------------
 
     def _load_execution(self, connection: sqlite3.Connection, row: tuple) -> MlExecution:
@@ -319,7 +333,16 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
                 else None
             ),
             superseded_at=datetime.fromisoformat(superseded_at) if superseded_at else None,
+            tags=self._load_tags(connection, execution_id),
         )
+
+    @staticmethod
+    def _load_tags(connection: sqlite3.Connection, execution_id: int) -> List[str]:
+        rows = connection.execute(
+            "SELECT tag FROM execution_tags WHERE execution_id = ? ORDER BY tag",
+            (execution_id,),
+        ).fetchall()
+        return [tag for (tag,) in rows]
 
     @staticmethod
     def _load_identity(connection: sqlite3.Connection, execution_key: str) -> CallIdentity:
