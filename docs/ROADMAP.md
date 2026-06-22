@@ -56,8 +56,10 @@ The current implementation already provides:
 - grants where supported by adapters,
 - usage capture where clients expose structured output,
 - `check`, `list`, `inspect`, `stats`, `doctor`, `models`, and `status`,
-- optional size-based LRU eviction on insertion,
 - an access registry for non-load-bearing observability.
+
+Size-based eviction is **configured but not yet enforced** (`max_size` is reserved);
+it is part of the scope-aware retention milestone below.
 
 ## Road to 1.0.0: a stable, feature-complete cache
 
@@ -169,7 +171,7 @@ package; scheduled eviction depends on it.
 
 - Time-based eviction for entries stale beyond a configured age.
 - Requires a resident process or explicit maintenance command (pairs with the daemon).
-- Complements, but does not replace, size-based insertion-time eviction.
+- Complements, but does not replace, the size-based eviction introduced with retention.
 
 ## Out of scope unless explicitly revisited
 
