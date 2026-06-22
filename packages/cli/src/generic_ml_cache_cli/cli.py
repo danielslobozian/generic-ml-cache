@@ -551,11 +551,15 @@ def _cmd_list(args: argparse.Namespace) -> int:
             "kind": summary.kind,
             "key": summary.execution_key,
             "hits": hit_counts.get(summary.execution_key, 0),
+            "tags": wired.repository.tags_for(summary.execution_key),
         }
         for summary in wired.repository.current_execution_summaries()
         if (not args.client or summary.client == args.client)
         and (not args.model or summary.model == args.model)
     ]
+    wanted_tags = set(getattr(args, "tag", None) or [])
+    if wanted_tags:
+        entries = [entry for entry in entries if wanted_tags & set(entry["tags"])]
 
     if args.json:
         print(json.dumps({"executions": entries}, indent=2))
@@ -569,10 +573,13 @@ def _cmd_list(args: argparse.Namespace) -> int:
     for entry in sorted(entries, key=lambda item: (item["client"], item["model"], item["key"])):
         hits = entry["hits"]
         hits_text = _paint(str(hits), _GREEN) if hits else _paint(str(hits), _GREY)
-        print(
+        line = (
             f"  {entry['client']:<8} {entry['model']:<20} {entry['kind']:<18} "
             f"{_paint(entry['key'][:12], _GREY)}  hits:{hits_text}"
         )
+        if entry["tags"]:
+            line += "  tags:" + _paint(",".join(entry["tags"]), _TEAL)
+        print(line)
     return 0
 
 
@@ -851,6 +858,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     listp.add_argument("--client", help="only executions recorded for this client")
     listp.add_argument("--model", help="only executions recorded for this model")
+    listp.add_argument(
+        "--tag",
+        action="append",
+        dest="tag",
+        metavar="TAG",
+        help="only executions carrying any of these tags (repeatable; match-any)",
+    )
     listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     listp.set_defaults(func=_cmd_list)
 

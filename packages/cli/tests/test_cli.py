@@ -354,3 +354,18 @@ def test_run_tag_stores_tags_through_the_cli(tmp_path):
     stored = sorted(tag for (tag,) in connection.execute("SELECT tag FROM execution_tags"))
     connection.close()
     assert stored == ["id-scan", "ticket"]
+
+
+def test_list_filters_by_tag_and_shows_tags(capsys):
+    import json
+
+    base = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(base + ["--prompt", "STDOUT a", "--tag", "alpha"])
+    run_cli(base + ["--prompt", "STDOUT b", "--tag", "beta"])
+    capsys.readouterr()
+
+    rc = main(["list", "--tag", "alpha", "--json"])
+    assert rc == 0
+    listed = json.loads(capsys.readouterr().out)["executions"]
+    assert len(listed) == 1  # match-any filter keeps only the alpha-tagged entry
+    assert listed[0]["tags"] == ["alpha"]
