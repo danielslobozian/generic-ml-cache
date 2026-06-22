@@ -12,8 +12,29 @@ permissions:
   contents: read
 
 jobs:
+  # Fail fast if the tag does not match the package version, so a mistagged release
+  # (e.g. v0.3.0 pointing at a commit still on 0.2.0) never builds and publishes the
+  # wrong version. Both packages are lockstep, so both must match the tag.
+  guard:
+    name: Tag matches version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag must equal both package versions
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for package in core cli; do
+            version="$(grep -m1 '^version = ' "packages/$package/pyproject.toml" | sed -E 's/version = "(.*)"/\1/')"
+            if [ "$version" != "$tag" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match packages/$package version $version"
+              exit 1
+            fi
+          done
+          echo "tag v$tag matches both package versions"
+
   build:
     name: Build (${{ matrix.package }})
+    needs: guard
     runs-on: ubuntu-latest
     strategy:
       matrix:
