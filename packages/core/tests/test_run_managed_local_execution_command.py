@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
@@ -41,7 +42,7 @@ def test_defaults():
     assert command.client_args == []
     assert command.grants == []
     assert command.cache_mode is CacheMode.CACHE
-    assert command.persist_output is True
+    assert command.persistence_depth is PersistenceDepth.CACHE
     assert command.record_on_error is False
 
 
@@ -100,9 +101,13 @@ def test_failure_persists_with_record_on_error():
     assert _command(record_on_error=True).should_persist(succeeded=False) is True
 
 
-def test_persist_output_false_never_persists():
-    assert _command(persist_output=False).should_persist(succeeded=True) is False
+def test_meter_depth_never_persists():
     assert (
-        _command(persist_output=False, record_on_error=True).should_persist(succeeded=False)
+        _command(persistence_depth=PersistenceDepth.METER).should_persist(succeeded=True) is False
+    )
+    assert (
+        _command(persistence_depth=PersistenceDepth.METER, record_on_error=True).should_persist(
+            succeeded=False
+        )
         is False
     )

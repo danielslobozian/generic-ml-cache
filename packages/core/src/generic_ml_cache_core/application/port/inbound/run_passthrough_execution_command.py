@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 
 
 @dataclass(frozen=True)
@@ -23,13 +24,13 @@ class RunPassthroughExecutionCommand:
     client: str
     native_args: List[str] = field(default_factory=list)
     cache_mode: CacheMode = CacheMode.CACHE
-    persist_output: bool = True
+    persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
     record_on_error: bool = False
 
     def should_persist(self, succeeded: bool) -> bool:
-        """Whether this command's policy stores an output for a run that ended
-        with ``succeeded``: never without ``persist_output``; a failure only with
-        ``record_on_error``."""
-        if not self.persist_output:
+        """Whether this command's policy stores the output for a run that ended
+        with ``succeeded``: never below ``CACHE`` depth (``METER`` stores nothing);
+        a failure only with ``record_on_error``."""
+        if not self.persistence_depth.stores_output:
             return False
         return succeeded or self.record_on_error

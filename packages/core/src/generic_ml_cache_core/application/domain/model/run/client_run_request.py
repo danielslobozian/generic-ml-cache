@@ -13,7 +13,7 @@ class ClientRunRequest:
     """The DTO the use case constructs and passes to ClientRunnerPort.
 
     Carries only what the client runner needs to launch the client. The
-    command's gmlcache-specific policy fields (cache_mode, persist_output,
+    command's gmlcache-specific policy fields (cache_mode, persistence_depth,
     scan_trust) do not appear here — they are the use case's concern, not
     the client runner's.
 

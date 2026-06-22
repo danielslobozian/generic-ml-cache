@@ -14,6 +14,7 @@ from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repositor
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.run.client_run_request import ClientRunRequest
 from generic_ml_cache_core.application.domain.model.run.client_run_result import (
     ClientRunResult,
@@ -272,12 +273,12 @@ def test_failed_call_is_stored_with_record_on_error():
     assert harness.metrics.events == ["record"]
 
 
-# --- persist_output ----------------------------------------------------------
+# --- persistence depth ----------------------------------------------------------
 
 
-def test_persist_output_false_runs_but_stores_nothing():
+def test_meter_depth_runs_but_stores_nothing():
     harness = _Harness(ClientRunResult(exit_code=0, stdout="secret\n"))
-    execution = harness.use_case.execute(_command(persist_output=False))
+    execution = harness.use_case.execute(_command(persistence_depth=PersistenceDepth.METER))
     key = execution.call_identity.generate_key()
 
     assert execution.execution_state is ExecutionState.SUCCESS

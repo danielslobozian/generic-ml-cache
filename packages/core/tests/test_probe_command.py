@@ -38,7 +38,7 @@ def test_scan_trust_makes_it_cacheable_again():
 
 def test_carries_no_run_policy():
     assert not hasattr(ProbeCommand, "cache_mode")
-    assert not hasattr(ProbeCommand, "persist_output")
+    assert not hasattr(ProbeCommand, "persistence_depth")
     assert not hasattr(ProbeCommand, "record_on_error")
 
 

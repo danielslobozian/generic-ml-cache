@@ -15,6 +15,7 @@ from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repositor
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -215,9 +216,9 @@ def test_failed_call_is_not_stored_by_default():
     assert harness.metrics.event_names() == ["run"]
 
 
-def test_persist_output_false_stores_nothing():
+def test_meter_depth_stores_nothing():
     harness = _Harness(FakeApiClient(ClientRunResult(exit_code=0, stdout="secret\n")))
-    execution = harness.service.execute(_command(persist_output=False))
+    execution = harness.service.execute(_command(persistence_depth=PersistenceDepth.METER))
     key = execution.call_identity.generate_key()
     assert execution.output_persisted is False
     assert harness.repository.find_current(key) is None

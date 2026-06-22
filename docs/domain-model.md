@@ -69,9 +69,9 @@ API-mode causes that have no exit code at all.
 lifecycle as any other; what differs is how much gmlcache manages (see §8).
 
 **`output_persisted`** is a fact about this execution, not a policy. The policy
-(`persist_output`) lives on the execution command (§8). An execution can
-succeed but not persist its output — by explicit user choice — and it is still
-a fully valid, journalled `MlExecution`.
+(`persistence_depth`) lives on the execution command (§8). An execution can
+succeed but not persist its output — at `METER` depth, by explicit user choice —
+and it is still a fully valid, journalled `MlExecution`.
 
 **Executions are append-only; refresh never destroys.** A `call_identity` (one
 key) has **many** executions over time — each row is one real client call.
@@ -450,7 +450,7 @@ RunManagedLocalExecutionCommand
                                         --   files' content into the structured context;
                                         --   elides file-read grants; keyed (see below)
   cache_mode         : CacheMode        -- CACHE | OFFLINE | REFRESH
-  persist_output     : bool             -- store output? default True
+  persistence_depth  : PersistenceDepth -- METER | CACHE | DATASET; default CACHE
 ```
 
 `allow_paths` does not enter the cache key. Its purpose is to tell the use
@@ -471,8 +471,8 @@ call.
 RunPassthroughExecutionCommand
   client       : str          -- which adapter
   native_args  : List[str]    -- raw native arguments; opaque; enter the key as-is
-  cache_mode   : CacheMode    -- CACHE | OFFLINE | REFRESH
-  persist_output : bool       -- store output? default True
+  cache_mode        : CacheMode        -- CACHE | OFFLINE | REFRESH
+  persistence_depth : PersistenceDepth -- METER | CACHE | DATASET; default CACHE
 ```
 
 A `LOCAL_PASSTHROUGH` execution can be cached and replayed (for
@@ -490,13 +490,13 @@ RunApiExecutionCommand
   provider       : str              -- which API provider
   model          : str
   messages       : List[Message]    -- full context, built by caller
-  cache_mode     : CacheMode        -- CACHE | OFFLINE | REFRESH
-  persist_output : bool             -- store output? default True
+  cache_mode        : CacheMode        -- CACHE | OFFLINE | REFRESH
+  persistence_depth : PersistenceDepth -- METER | CACHE | DATASET; default CACHE
 ```
 
-**Business rule: `persist_output = False` is incompatible with async execution
-mode** (future §OPEN). An async execution must be stored — the caller retrieves
-the result by ID at a later time and the stored output is the only source.
+**Business rule: the `METER` depth (storing no output) is incompatible with async
+execution mode** (future §OPEN). An async execution must be stored — the caller
+retrieves the result by ID at a later time and the stored output is the only source.
 
 ---
 
@@ -534,7 +534,7 @@ stop.
 
 The DTO the use case constructs and passes to `ClientRunnerPort`. It carries
 only what the client runner needs to launch the client. The command's
-gmlcache-specific policy fields (`cache_mode`, `persist_output`, `scan_trust`)
+gmlcache-specific policy fields (`cache_mode`, `persistence_depth`, `scan_trust`)
 do not travel here.
 
 ```
@@ -692,10 +692,10 @@ the same boundary the package split will formalise tomorrow.
 
 ## 11. Principles carried (the durable rulings)
 
-- **Caching ≠ metrics — two independent concerns.** `persist_output = False`
-  suppresses blob storage. It does not suppress the call journal. A call that
-  stores nothing still logs its events, token cost, and session link. Only a
-  separate explicit "no-trace" decision would suppress logging.
+- **Caching ≠ metrics — two independent concerns.** The `METER` depth suppresses
+  blob storage. It does not suppress the call journal. A call that stores nothing
+  still logs its events, token cost, and session link. Only a separate explicit
+  "no-trace" decision would suppress logging.
 - **`allow_paths` is a permission grant, not a key element.** Its purpose is
   to open the read-door for the ML client. Non-cacheability is a consequence
   (folder contents cannot be fingerprinted), not the intent. `scan_trust`
@@ -748,8 +748,8 @@ execution aggregate; an earlier draft wrongly listed it for retirement).
 **OPEN (future work, not blocking current build):**
 
 - Async execution mode and its command. Constraint already recorded: async
-  requires `persist_output = True`.
-- Scope and session objects and their port contracts (roadmap 0.3–0.4).
+  requires at least `CACHE` depth (it must store its output).
+- Scope and session objects and their port contracts (roadmap 0.5 / 0.7).
 - The exact event vocabulary of `MetricsPort.record_event`.
 - Whether `deep_fingerprint_paths` (recursive folder checksum) becomes a
   supported field on `RunManagedLocalExecutionCommand`.
