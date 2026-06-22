@@ -14,6 +14,17 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-22
+
+### Added
+
+- **Tags** (core + cli): label executions with user-supplied tags for grouping and
+  later queries. `gmlcache run … --tag <name>` (repeatable) tags an execution, and
+  relabeling an already-cached input **accumulates** tags onto the entry;
+  `gmlcache list --tag <name>` filters by tag (match-any) and every listed entry shows
+  its tags. Tags are a **separate annotation** — metadata only, never part of the cache
+  key, and adding one never rewrites an execution.
+
 ## [0.2.0] - 2026-06-22
 
 ### Changed
