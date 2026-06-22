@@ -93,6 +93,19 @@ class CachedMlExecutionService(ABC):
         """Whether this command cannot be cached. Default: always cacheable."""
         return False
 
+    def _execution_tags(self, command: CacheableExecutionCommand) -> List[str]:
+        """User-supplied tags to attach to executions this service records.
+        Metadata only — never part of the key. Default: none."""
+        return []
+
+    def _apply_tags(self, execution_key: str, command: CacheableExecutionCommand) -> None:
+        """Attach the command's tags to the current execution for this key,
+        idempotently (a no-op when there are none). Tags are a separate
+        annotation: adding one never rewrites the execution record."""
+        tags = self._execution_tags(command)
+        if tags:
+            self._repository.add_tags(execution_key, tags)
+
     # -- resolution paths -------------------------------------------------
 
     def _serve_offline(self, command: CacheableExecutionCommand, execution_key: str) -> MlExecution:
@@ -107,6 +120,7 @@ class CachedMlExecutionService(ABC):
     ) -> MlExecution:
         hydrated_execution = self._hydrate(current_execution)
         self._record_event(journal_events.HIT, execution_key, command)
+        self._apply_tags(execution_key, command)
         return hydrated_execution
 
     def _run_uncacheable(
@@ -139,6 +153,7 @@ class CachedMlExecutionService(ABC):
         if should_store:
             self._repository.save(execution)
             self._record_event(journal_events.RECORD, execution_key, command)
+            self._apply_tags(execution_key, command)
         else:
             self._record_event(journal_events.RUN, execution_key, command)
         return execution

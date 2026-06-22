@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import List, Tuple
 
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import normalize_tags
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.run.client_run_request import ClientRunRequest
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
@@ -65,6 +66,9 @@ class RunManagedLocalExecutionService(CachedMlExecutionService, RunManagedLocalE
 
     def _is_uncacheable(self, command: RunManagedLocalExecutionCommand) -> bool:
         return command.is_uncacheable
+
+    def _execution_tags(self, command: RunManagedLocalExecutionCommand) -> List[str]:
+        return normalize_tags(command.tags)
 
     @staticmethod
     def _build_client_run_request(command: RunManagedLocalExecutionCommand) -> ClientRunRequest:

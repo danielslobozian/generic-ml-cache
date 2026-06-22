@@ -324,3 +324,48 @@ def test_check_reports_hit_after_a_run(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "status  : hit" in out
+
+
+def test_run_tag_stores_tags_through_the_cli(tmp_path):
+    import glob
+    import sqlite3
+
+    rc = run_cli(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT hi",
+            "--tag",
+            "ticket",
+            "--tag",
+            "id-scan",
+        ]
+    )
+    assert rc == 0
+    stores = glob.glob(str(tmp_path / "**" / "executions.sqlite3"), recursive=True)
+    assert stores, "no executions store was written"
+    connection = sqlite3.connect(stores[0])
+    stored = sorted(tag for (tag,) in connection.execute("SELECT tag FROM execution_tags"))
+    connection.close()
+    assert stored == ["id-scan", "ticket"]
+
+
+def test_list_filters_by_tag_and_shows_tags(capsys):
+    import json
+
+    base = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(base + ["--prompt", "STDOUT a", "--tag", "alpha"])
+    run_cli(base + ["--prompt", "STDOUT b", "--tag", "beta"])
+    capsys.readouterr()
+
+    rc = main(["list", "--tag", "alpha", "--json"])
+    assert rc == 0
+    listed = json.loads(capsys.readouterr().out)["executions"]
+    assert len(listed) == 1  # match-any filter keeps only the alpha-tagged entry
+    assert listed[0]["tags"] == ["alpha"]

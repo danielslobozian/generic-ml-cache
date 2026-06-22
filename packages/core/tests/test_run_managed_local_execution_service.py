@@ -382,3 +382,24 @@ def test_grants_change_the_identity():
     harness.use_case.execute(_command())
     harness.use_case.execute(_command(grants=["net"]))
     assert len(harness.runner.calls) == 2
+
+
+# --- tags (non-identity metadata) --------------------------------------------
+
+
+def test_tags_are_normalized_and_applied_to_the_recorded_execution():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.use_case.execute(_command(tags=["  ticket ", "scan", "ticket", "", "scan"]))
+    key = execution.call_identity.generate_key()
+    assert harness.repository.tags_for(key) == ["scan", "ticket"]
+
+
+def test_a_hit_accumulates_new_tags_onto_the_entry():
+    harness = _Harness()
+    first = harness.use_case.execute(_command(tags=["scan"]))
+    key = first.call_identity.generate_key()
+    harness.use_case.execute(_command(tags=["ticket"]))  # same input -> a hit
+    # Tags are out of the key (still one run) and accumulate on the entry.
+    assert len(harness.runner.calls) == 1
+    assert harness.metrics.events == ["record", "hit"]
+    assert harness.repository.tags_for(key) == ["scan", "ticket"]

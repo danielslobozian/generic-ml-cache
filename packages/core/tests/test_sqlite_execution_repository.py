@@ -173,6 +173,31 @@ def test_token_usage_round_trips(tmp_path):
     assert restored == usage
 
 
+def test_add_tags_then_tags_for_returns_them_sorted(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    repository.add_tags(identity.generate_key(), ["ticket", "id-scan"])
+    assert repository.tags_for(identity.generate_key()) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_idempotent_and_accumulates(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.add_tags(key, ["ticket"])
+    repository.add_tags(key, ["ticket", "id-scan"])  # 'ticket' already present
+    assert repository.tags_for(key) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_a_no_op_without_a_current_execution(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.add_tags(identity.generate_key(), ["x"])  # nothing stored
+    assert repository.tags_for(identity.generate_key()) == []
+
+
 def test_failure_round_trips_in_history(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()

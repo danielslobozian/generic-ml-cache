@@ -34,6 +34,7 @@ class RunManagedLocalExecutionCommand:
     cache_mode: CacheMode = CacheMode.CACHE
     persist_output: bool = True
     record_on_error: bool = False
+    tags: List[str] = field(default_factory=list)
 
     @property
     def is_uncacheable(self) -> bool:

@@ -107,6 +107,31 @@ def test_save_then_find_current_returns_the_execution():
     assert found.execution_state is ExecutionState.SUCCESS
 
 
+def test_add_tags_then_tags_for_returns_them_sorted():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity))
+    repository.add_tags(identity.generate_key(), ["ticket", "id-scan"])
+    assert repository.tags_for(identity.generate_key()) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_idempotent_and_accumulates():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.add_tags(key, ["ticket"])
+    repository.add_tags(key, ["ticket", "id-scan"])  # 'ticket' already present
+    assert repository.tags_for(key) == ["id-scan", "ticket"]
+
+
+def test_add_tags_is_a_no_op_without_a_current_execution():
+    repository = _repository()
+    identity = _identity()
+    repository.add_tags(identity.generate_key(), ["x"])  # nothing stored
+    assert repository.tags_for(identity.generate_key()) == []
+
+
 def test_find_current_returns_dehydrated_artifacts():
     repository = _repository()
     identity = _identity()

@@ -16,7 +16,10 @@ from generic_ml_cache_core.application.domain.model.execution.execution_failure 
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import (
+    MlExecution,
+    normalize_tags,
+)
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 
 
@@ -152,3 +155,11 @@ def test_dehydrated_execution_has_artifacts_without_content():
     )
     assert execution.artifacts[0].is_hydrated is False
     assert execution.artifacts[0].blob_key == "k"
+
+
+def test_normalize_tags_trims_drops_blanks_dedupes_and_sorts():
+    assert normalize_tags(["  beta ", "alpha", "beta", "", "   ", "alpha"]) == ["alpha", "beta"]
+
+
+def test_normalize_tags_of_nothing_is_empty():
+    assert normalize_tags([]) == []

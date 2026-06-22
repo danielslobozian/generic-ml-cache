@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
@@ -39,3 +39,14 @@ class MlExecution:
     token_usage: Optional[TokenUsage] = None
     failure: Optional[ExecutionFailure] = None
     superseded_at: Optional[datetime] = None
+
+
+def normalize_tags(raw_tags: Iterable[str]) -> List[str]:
+    """Normalise user-supplied tags: trim, drop blanks, de-duplicate, sort.
+
+    Tags are metadata, never part of the cache key. Normalising at the boundary
+    keeps stored tags deterministic (the same set in any input order compares
+    equal) without interpreting their meaning — they are stored verbatim
+    otherwise.
+    """
+    return sorted({tag.strip() for tag in raw_tags if tag and tag.strip()})
