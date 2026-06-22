@@ -93,6 +93,11 @@ class CachedMlExecutionService(ABC):
         """Whether this command cannot be cached. Default: always cacheable."""
         return False
 
+    def _execution_tags(self, command: CacheableExecutionCommand) -> List[str]:
+        """User-supplied tags to attach to executions this service records.
+        Metadata only — never part of the key. Default: none."""
+        return []
+
     # -- resolution paths -------------------------------------------------
 
     def _serve_offline(self, command: CacheableExecutionCommand, execution_key: str) -> MlExecution:
@@ -135,6 +140,7 @@ class CachedMlExecutionService(ABC):
             artifacts=artifacts,
             token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
+            tags=self._execution_tags(command),
         )
         if should_store:
             self._repository.save(execution)
