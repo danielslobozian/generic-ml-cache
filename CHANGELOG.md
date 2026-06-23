@@ -14,6 +14,19 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+### Added
+
+- **Sessions** (core + cli): group one workflow's runs under a session id so they can be
+  reported together. `gmlcache session start` generates an id (scriptable);
+  `gmlcache run --session <id>` / `GMLCACHE_SESSION` attaches a run to it; `gmlcache session
+  report <id>` rolls up the session — invocations (every call), executions (the calls that
+  ran), hits (served from cache), and the per-event breakdown (`--json` too). Built on the
+  existing invocation journal: a session is that journal filtered to a session id, with an
+  additive, self-migrating `session_id` column. The id is journal metadata only — never part
+  of the cache key (the same input under different sessions is one entry), and sessions span
+  every run kind (managed, passthrough, API). Reporting is metadata-only, so it works on an
+  encrypted store without the token. Per-session token usage and cost is a later, richer report.
+
 ## [0.5.0] - 2026-06-23
 
 ### Added
