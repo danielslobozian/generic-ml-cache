@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 import pytest
 
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
 
 
 class InMemoryMetrics(MetricsPort):
@@ -58,6 +58,19 @@ class InMemoryMetrics(MetricsPort):
             if recorded_event["session_id"] == session_id:
                 counts[recorded_event["event"]] += 1
         return dict(counts)
+
+    def session_events(self, session_id: str):
+        return [
+            SessionEventRow(
+                ts="",
+                event=e["event"],
+                client=e["client"],
+                model=e["model"],
+                execution_key=e["execution_key"],
+            )
+            for e in self._events
+            if e["session_id"] == session_id
+        ]
 
     def last_access(self) -> Dict[str, float]:
         return {}

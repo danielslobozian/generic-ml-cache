@@ -20,7 +20,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 # Every cache resolution appends one event; HIT is the one queried for hit-rate.
 HIT = "hit"
@@ -149,6 +149,22 @@ class AccessRegistry:
                 conn.close()
         except Exception:
             return {}
+
+    def session_events(self, session_id: str) -> List[Tuple]:
+        """Return (ts, event, client, model, match_key) rows for one session, oldest
+        first ([] if unknown or unavailable)."""
+        try:
+            conn = self._connect()
+            try:
+                return conn.execute(
+                    "SELECT ts, event, client, model, match_key FROM access_events "
+                    "WHERE session_id = ? ORDER BY id",
+                    (session_id,),
+                ).fetchall()
+            finally:
+                conn.close()
+        except Exception:
+            return []
 
     def last_access(self) -> Dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering

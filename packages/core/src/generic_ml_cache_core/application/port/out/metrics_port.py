@@ -5,7 +5,19 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+from typing import Dict, List, NamedTuple, Optional
+
+
+class SessionEventRow(NamedTuple):
+    """One journal event in a session, with the fields a session report needs:
+    the ISO timestamp (for per-day grouping), the event name, the client/provider
+    and model (the token axis), and the execution key (to look up token usage)."""
+
+    ts: str
+    event: str
+    client: str
+    model: str
+    execution_key: Optional[str]
 
 
 class MetricsPort(ABC):
@@ -52,6 +64,13 @@ class MetricsPort(ABC):
         """Return {event_name: count} for the events recorded under ``session_id``.
 
         An empty dict is the correct response for an unknown session or no data.
+        """
+
+    @abstractmethod
+    def session_events(self, session_id: str) -> List[SessionEventRow]:
+        """Return the events recorded under ``session_id``, oldest first, each with
+        timestamp / event / client / model / execution_key — enough to build a session
+        report (per-day activity and per-model usage). Empty for an unknown session.
         """
 
     @abstractmethod

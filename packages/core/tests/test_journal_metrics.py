@@ -83,6 +83,26 @@ def test_session_event_counts_are_scoped_to_the_session(tmp_path):
     assert metrics.session_event_counts("unknown") == {}
 
 
+def test_session_events_return_full_rows_oldest_first(tmp_path):
+    metrics = _metrics(tmp_path)
+    metrics.record_event(
+        "record", execution_key="k1", client="claude", model="sonnet", effort="", session_id="s"
+    )
+    metrics.record_event(
+        "hit", execution_key="k1", client="claude", model="sonnet", effort="", session_id="s"
+    )
+    metrics.record_event(
+        "record", execution_key="k2", client="openai", model="gpt-x", effort="", session_id="other"
+    )
+    rows = metrics.session_events("s")
+    assert [(r.event, r.client, r.model, r.execution_key) for r in rows] == [
+        ("record", "claude", "sonnet", "k1"),
+        ("hit", "claude", "sonnet", "k1"),
+    ]
+    assert all(r.ts for r in rows)  # each row carries its timestamp
+    assert metrics.session_events("unknown") == []
+
+
 def test_pre_sessions_registry_is_migrated_in_place(tmp_path):
     # A registry created before sessions existed: access_events without session_id.
     path = tmp_path / "registry.sqlite3"
