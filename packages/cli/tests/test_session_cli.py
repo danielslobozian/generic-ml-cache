@@ -71,25 +71,39 @@ def test_session_report_rolls_up_invocations_executions_hits(capsys):
 
     assert main(["session", "report", "wf"]) == 0
     out = capsys.readouterr().out
-    assert "invocations : 2" in out
-    assert "executions  : 1" in out
-    assert "hits        : 1" in out
+    assert "invocations : 2   executions : 1   hits : 1" in out
+    assert "by provider / model:" in out and "fake / m1" in out
+    assert "by day (activity):" in out
+    # no dollars anywhere in the render (cost is a client-specific advisory estimate)
+    assert "$" not in out and "cost" not in out.lower()
 
 
 def test_session_report_json(capsys):
     import json
 
-    main(_RUN + ["--session", "wf"])
+    main(_RUN + ["--session", "wf"])  # one record (the fake client reports no usage)
     capsys.readouterr()
     assert main(["session", "report", "wf", "--json"]) == 0
-    data = json.loads(capsys.readouterr().out)
-    assert data == {
-        "session": "wf",
-        "invocations": 1,
-        "executions": 1,
-        "hits": 0,
-        "events": {"record": 1},
-    }
+    out = capsys.readouterr().out
+    assert "cost" not in out.lower() and "usd" not in out.lower() and "$" not in out
+    data = json.loads(out)
+    assert data["session"] == "wf"
+    assert (data["invocations"], data["executions"], data["hits"]) == (1, 1, 0)
+    assert data["unknown_usage"] == 1
+    assert data["span"]["days"] == 1
+    assert data["by_model"] == [
+        {
+            "client": "fake",
+            "model": "m1",
+            "spent_input": 0,
+            "spent_output": 0,
+            "spent_tokens": 0,
+            "saved_tokens": 0,
+            "executions": 1,
+            "hits": 0,
+        }
+    ]
+    assert len(data["by_day"]) == 1 and data["by_day"][0]["invocations"] == 1
 
 
 def test_session_report_unknown_session_is_clean(capsys):
