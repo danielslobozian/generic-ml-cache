@@ -73,7 +73,7 @@ Its core cache is **exact and content-addressed**. The surrounding model gives c
 | Package | What it is | Install |
 |---|---|---|
 | [`generic-ml-cache-cli`](packages/cli) | the `gmlcache` terminal client | `pip install generic-ml-cache-cli` |
-| [`generic-ml-cache-core`](packages/core) | the engine — domain, use cases, ports, and the default adapters; **stateless and dependency-free** | `pip install generic-ml-cache-core` |
+| [`generic-ml-cache-core`](packages/core) | the engine — domain, use cases, ports, and the default adapters; **stateless** | `pip install generic-ml-cache-core` |
 
 The CLI is one inbound driver over the engine; a daemon could be another. The engine ships everything but the user interface and the data source — to embed it, depend on the core and inject your own data source:
 

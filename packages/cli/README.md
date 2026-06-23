@@ -45,7 +45,7 @@ gmlcache doctor | models | status | init                     # environment & con
 `gmlcache` is the terminal client — one inbound driver over the engine. The whole cache
 logic and every adapter live in
 [`generic-ml-cache-core`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/core),
-a **stateless, dependency-free** library. To embed the cache in your own application
+a **stateless** library. To embed the cache in your own application
 instead of driving it from a terminal, depend on the core and inject your own data
 source — you never reimplement the adapters.
 

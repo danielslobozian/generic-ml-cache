@@ -59,8 +59,6 @@ and [`docs/ROADMAP.md`](docs/ROADMAP.md); the load-bearing ones are:
   wording and the prime directive are never stored in an execution record.
 - **No test doubles inside the app.** Real boundaries only; offline behavior comes
   from the cache itself.
-- **A small, dependency-free library core.** New runtime dependencies — especially
-  in the core — are a high bar.
 
 A maintainer may still decide that a stance should change — but doing so is a
 deliberate, recorded decision, not an incidental side effect of another change.

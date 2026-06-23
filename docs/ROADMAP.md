@@ -81,7 +81,7 @@ Delivered the planned code-structure work **plus** the quality-gate and packagin
 milestones originally scoped as 0.3.0 and 0.4.0 — they were ready, so they shipped here.
 
 - Split into a monorepo of two lockstep packages: the `generic-ml-cache-core` library
-  (domain, use cases, ports, and the default adapters; stateless, dependency-free) and
+  (domain, use cases, ports, and the default adapters; stateless) and
   the `generic-ml-cache-cli` client (`gmlcache`).
 - Rebuilt on a hexagonal (ports-and-adapters) architecture; retired the on-disk
   "cassette" record format for a SQLite execution repository + content-addressed blobs.
