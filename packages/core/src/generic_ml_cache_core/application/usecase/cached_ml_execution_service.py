@@ -33,6 +33,7 @@ class CacheableExecutionCommand(Protocol):
 
     cache_mode: CacheMode
     persistence_depth: PersistenceDepth
+    session_id: Optional[str]
 
     def should_persist(self, succeeded: bool) -> bool: ...
 
@@ -277,5 +278,10 @@ class CachedMlExecutionService(ABC):
     ) -> None:
         client, model, effort = self._journal_fields(command)
         self._metrics.record_event(
-            event, execution_key=execution_key, client=client, model=model, effort=effort
+            event,
+            execution_key=execution_key,
+            client=client,
+            model=model,
+            effort=effort,
+            session_id=command.session_id,
         )

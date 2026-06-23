@@ -28,8 +28,10 @@ class MetricsPort(ABC):
         client: str,
         model: str,
         effort: str,
+        session_id: Optional[str] = None,
     ) -> None:
-        """Append one journal event. Must never raise."""
+        """Append one journal event. Must never raise. ``session_id`` groups events
+        into a workflow session; it is journal metadata only, never part of the key."""
 
     @abstractmethod
     def hit_counts_by_key(self) -> Dict[str, int]:
@@ -43,6 +45,13 @@ class MetricsPort(ABC):
         """Return {event_name: count} across all recorded events.
 
         An empty dict is the correct response when no data is available.
+        """
+
+    @abstractmethod
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        """Return {event_name: count} for the events recorded under ``session_id``.
+
+        An empty dict is the correct response for an unknown session or no data.
         """
 
     @abstractmethod

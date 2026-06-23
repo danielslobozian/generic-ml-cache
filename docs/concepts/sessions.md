@@ -16,14 +16,14 @@
 
 - [What a session is](#what-a-session-is)
 - [Sessions and identity](#sessions-and-identity)
+- [Using sessions](#using-sessions)
 - [Boundaries](#boundaries)
 - [Reports](#reports)
 
 ---
 
-Sessions are a future observability and organization feature: a way to group the executions
-of one workflow into a single reportable unit. Like everything in gmlcache they are
-**single-user** — there is no multi-user namespace above them.
+Sessions group the executions of one workflow into a single reportable unit. Like everything
+in gmlcache they are **single-user** — there is no multi-user namespace above them.
 
 ## What a session is
 
@@ -42,10 +42,22 @@ A session is **metadata, never part of execution identity** (the fingerprint). T
 under different sessions is still one cache entry. Sessions observe and group executions; they
 never change what counts as "the same call."
 
-> Design detail (open): counting in-session cache *hits* means distinguishing an **invocation
-> event** (every call, hit or miss) from an **execution event** (only when a real model call
-> happened) — a miss is both, a hit is invocation-only. This is to be ruled as part of the
-> session design before sessions are built.
+**Invocation vs. execution.** Every journalled event is an *invocation*; the event type says
+whether a real call ran. `HIT` is an invocation that replayed from cache (cost zero); `RECORD`
+/ `RUN` (and `would_hit` / `would_miss` at `meter` depth) are invocations that *executed*. So a
+session distinguishes the two with no separate event stream — it counts invocations, and the
+executions are the subset that ran.
+
+## Using sessions
+
+```text
+SESSION=$(gmlcache session start)        # generate a session id
+gmlcache run --session "$SESSION" …      # or set GMLCACHE_SESSION
+gmlcache session report "$SESSION"       # roll up the session
+```
+
+Sessions span every run kind (managed, passthrough, API). `--session` (or `GMLCACHE_SESSION`)
+attaches the run to the session id; nothing else changes — the cache key is untouched.
 
 ## Boundaries
 
@@ -59,9 +71,10 @@ Typical session boundaries:
 
 ## Reports
 
-A session report can show executions, cache hits, records, non-cacheable calls, adapter/model
-breakdown, token usage, client-reported cost, and unknown-cost executions — all for a single
-user's own workflow.
+`gmlcache session report <id>` rolls up a session's journal: **invocations** (every call),
+**executions** (the calls that ran), **hits** (served from cache), and the per-event breakdown
+(`--json` for machine output). Aggregating token usage and client-reported cost *per session*
+is the next step — a richer report; the rollup above is what ships first.
 
 ---
 

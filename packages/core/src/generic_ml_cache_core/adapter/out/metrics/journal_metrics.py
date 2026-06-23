@@ -30,9 +30,15 @@ class JournalMetrics(MetricsPort):
         client: str,
         model: str,
         effort: str,
+        session_id: Optional[str] = None,
     ) -> None:
         self._registry.record(
-            event, match_key=execution_key, client=client, model=model, effort=effort
+            event,
+            match_key=execution_key,
+            client=client,
+            model=model,
+            effort=effort,
+            session_id=session_id,
         )
 
     def hit_counts_by_key(self) -> Dict[str, int]:
@@ -40,6 +46,9 @@ class JournalMetrics(MetricsPort):
 
     def event_counts(self) -> Dict[str, int]:
         return self._registry.event_counts()
+
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        return self._registry.session_event_counts(session_id)
 
     def last_access(self) -> Dict[str, float]:
         return self._registry.last_access()

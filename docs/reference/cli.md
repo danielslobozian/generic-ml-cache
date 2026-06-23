@@ -41,6 +41,8 @@ gmlcache encrypt
 gmlcache decrypt
 gmlcache rotate
 gmlcache invalidate
+gmlcache session start
+gmlcache session report <id>
 gmlcache stats
 gmlcache doctor
 gmlcache models <client>
@@ -83,6 +85,7 @@ Capability and passthrough:
 | `--client-arg` | An extra argument appended verbatim to the client launch — an escape hatch for client features the cache does not model. Part of the key; only its fingerprint is stored, never the raw value. Repeatable; order is significant. Use the `=` form for dash-leading values: `--client-arg=--flag`. |
 | `--executable` | Override the client executable (the seam). |
 | `--token` | Encryption token for an encrypted store (or set `GMLCACHE_TOKEN`). Needed to read or record when encryption is on; ignored on a public store. |
+| `--session` | Group this run under a session id (or set `GMLCACHE_SESSION`); see [Sessions](#sessions). Journal metadata, never part of the key. |
 
 Mode:
 
@@ -145,15 +148,28 @@ Content commands (`run`, `export`) need it on an encrypted store; metadata-only 
 inputs); execution metadata stays plaintext — see the
 [data-handling note](../design/data-handling.md).
 
+### Sessions
+
+A session groups one workflow's runs so they can be reported together. Sessions are
+single-user and need only a generated id — no token.
+
+| Command | Options |
+|---|---|
+| `session start` | Generate a new session id and print it (scriptable: `SESSION=$(gmlcache session start)`). |
+| `session report <id>` | Roll up the session's journal — invocations, executions (real calls), hits (served from cache), and the per-event breakdown. `--json` for machine output. |
+
+Attach a run to a session with `run --session <id>` or `GMLCACHE_SESSION`. The session id is
+journal metadata, never part of the cache key, and sessions span every run kind. Reporting is
+metadata-only, so it works on an encrypted store without the token.
+
 ## Future session commands
 
 ```text
-gmlcache session start
-gmlcache session report <session-id>
 gmlcache session watch <session-id>
 ```
 
-Sessions are single-user and need only a generated session id — no token.
+`session watch` (a live tail of a running session) is not yet built; `session start` and
+`session report` have shipped — see [Sessions](#sessions) above.
 
 ## Future async commands
 

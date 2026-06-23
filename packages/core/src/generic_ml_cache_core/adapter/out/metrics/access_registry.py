@@ -22,8 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-# The access events. A resolve emits exactly one of HIT / MISS / RECORD
-# (passthrough calls are outside cache accounting and emit nothing).
+# Every cache resolution appends one event; HIT is the one queried for hit-rate.
 HIT = "hit"
 MISS = "miss"
 RECORD = "record"
@@ -31,13 +30,14 @@ RECORD = "record"
 _DB_NAME = "registry.sqlite3"
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS access_events (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts        TEXT NOT NULL,
-    event     TEXT NOT NULL,
-    match_key TEXT,
-    client    TEXT,
-    model     TEXT,
-    effort    TEXT
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         TEXT NOT NULL,
+    event      TEXT NOT NULL,
+    match_key  TEXT,
+    client     TEXT,
+    model      TEXT,
+    effort     TEXT,
+    session_id TEXT
 )
 """
 
@@ -52,7 +52,16 @@ class AccessRegistry:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(self._path)
         conn.execute(_SCHEMA)
+        self._ensure_session_column(conn)
         return conn
+
+    @staticmethod
+    def _ensure_session_column(conn: sqlite3.Connection) -> None:
+        # Additive migration for registries created before sessions existed.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(access_events)")}
+        if "session_id" not in columns:
+            conn.execute("ALTER TABLE access_events ADD COLUMN session_id TEXT")
+            conn.commit()
 
     def record(
         self,
@@ -62,6 +71,7 @@ class AccessRegistry:
         client: str,
         model: str,
         effort: str,
+        session_id: Optional[str] = None,
     ) -> None:
         """Append one access event. Never raises -- failures are swallowed so the
         cache is never affected by the registry being unavailable."""
@@ -69,8 +79,9 @@ class AccessRegistry:
             conn = self._connect()
             try:
                 conn.execute(
-                    "INSERT INTO access_events (ts, event, match_key, client, model, effort) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO access_events "
+                    "(ts, event, match_key, client, model, effort, session_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (
                         datetime.now(timezone.utc).isoformat(timespec="seconds"),
                         event,
@@ -78,6 +89,7 @@ class AccessRegistry:
                         client,
                         model,
                         effort,
+                        session_id,
                     ),
                 )
                 conn.commit()
@@ -116,6 +128,21 @@ class AccessRegistry:
             try:
                 rows = conn.execute(
                     "SELECT event, COUNT(*) FROM access_events GROUP BY event"
+                ).fetchall()
+                return {event: count for event, count in rows}
+            finally:
+                conn.close()
+        except Exception:
+            return {}
+
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        """Return {event: count} for one session ({} if unknown or unavailable)."""
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT event, COUNT(*) FROM access_events WHERE session_id = ? GROUP BY event",
+                    (session_id,),
                 ).fetchall()
                 return {event: count for event, count in rows}
             finally:

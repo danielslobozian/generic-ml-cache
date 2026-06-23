@@ -36,6 +36,7 @@ class RunManagedLocalExecutionCommand:
     persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
     record_on_error: bool = False
     tags: List[str] = field(default_factory=list)
+    session_id: Optional[str] = None
 
     @property
     def is_uncacheable(self) -> bool:

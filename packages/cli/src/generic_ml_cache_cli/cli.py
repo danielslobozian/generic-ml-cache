@@ -195,6 +195,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         persistence_depth=persistence_depth,
         record_on_error=args.record_on_error,
         tags=list(getattr(args, "tag", None) or []),
+        session_id=_resolve_session(args),
     )
 
     def executable_override(client: str):
@@ -877,6 +878,71 @@ def _cmd_invalidate(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- sessions ---------------------------------------------------------------
+
+
+def _resolve_session(args: argparse.Namespace) -> Optional[str]:
+    """The session id for this run: the --session flag, else GMLCACHE_SESSION. A session
+    groups a workflow's calls; it is journal metadata, never part of the cache key."""
+    flag = getattr(args, "session", None)
+    return flag if flag else (os.environ.get("GMLCACHE_SESSION") or None)
+
+
+def _cmd_session_start(args: argparse.Namespace) -> int:
+    import secrets
+
+    # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
+    print(secrets.token_hex(8))
+    return 0
+
+
+#: events where a real client call ran (vs. HIT, which replayed, or an offline MISS).
+_EXECUTED_EVENTS = {"record", "run", "would_hit", "would_miss"}
+
+
+def _cmd_session_report(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    counts = build_use_cases(store_root).metrics.session_event_counts(args.session_id)
+    invocations = sum(counts.values())
+    executions = sum(n for event, n in counts.items() if event in _EXECUTED_EVENTS)
+    hits = counts.get("hit", 0)
+
+    if args.json:
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "session": args.session_id,
+                    "invocations": invocations,
+                    "executions": executions,
+                    "hits": hits,
+                    "events": counts,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if invocations == 0:
+        print(f"no events recorded for session {args.session_id!r}")
+        return 0
+    print(f"session     : {args.session_id}")
+    print(f"invocations : {invocations}")
+    print(f"executions  : {executions}  (real client calls)")
+    print(f"hits        : {hits}  (served from cache)")
+    breakdown = ", ".join(f"{event}={counts[event]}" for event in sorted(counts))
+    print(f"events      : {breakdown}")
+    return 0
+
+
+def _cmd_session(args: argparse.Namespace) -> int:
+    print("usage: gmlcache session start | gmlcache session report <id>", file=sys.stderr)
+    return 2
+
+
 def _use_color() -> bool:
     """Colour only when writing to a real terminal and NO_COLOR is unset, so piped
     or redirected output never carries escape codes (the conventional contract)."""
@@ -1055,6 +1121,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--executable", help="override the client executable (the seam)")
     run.add_argument(
         "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
+    )
+    run.add_argument(
+        "--session", help="group this run under a session id (or set GMLCACHE_SESSION)"
     )
     run.add_argument(
         "--timeout", type=float, default=None, help="seconds before the real call is killed"
@@ -1241,6 +1310,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     invalidatep.add_argument("--yes", action="store_true", help="confirm the irreversible wipe")
     invalidatep.set_defaults(func=_cmd_invalidate)
+
+    session = sub.add_parser("session", help="group a workflow's runs under a session id")
+    session_sub = session.add_subparsers(dest="session_command")
+    session_start = session_sub.add_parser("start", help="generate a new session id and print it")
+    session_start.set_defaults(func=_cmd_session_start)
+    session_report = session_sub.add_parser("report", help="summarise a session's activity")
+    session_report.add_argument("session_id", help="the session id to report on")
+    session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_report.set_defaults(func=_cmd_session_report)
+    session.set_defaults(func=_cmd_session)
 
     init = sub.add_parser(
         "init",
