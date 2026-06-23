@@ -44,7 +44,10 @@ class AesGcmCipher(CipherPort):
     """AES-256-GCM + HKDF-SHA256 implementation of the encryption envelope."""
 
     def generate_token(self) -> str:
-        return secrets.token_urlsafe(_TOKEN_BYTES)
+        # Hex (not url-safe base64): the token never starts with "-", so it is safe to
+        # pass as a CLI argument value (argparse would read a leading "-" as a flag) and
+        # carries no shell-special characters.
+        return secrets.token_hex(_TOKEN_BYTES)
 
     def create_envelope(self, token: str) -> Tuple[EncryptionManifest, bytes]:
         data_key = AESGCM.generate_key(bit_length=_KEY_BYTES * 8)
