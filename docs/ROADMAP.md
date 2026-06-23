@@ -122,9 +122,9 @@ for the cryptographic cautions.
 
 - All-or-nothing: when on, persisted input **and** output are encrypted under a key derived
   from the user's encryption secret.
-- The secret is supplied at runtime (environment variable, file, or command) and **never
-  stored**; gmlcache keeps only non-secret derivation material. Lost secret = unrecoverable,
-  which is also the erasure property (invalidate = crypto-shred).
+- The token is supplied at runtime (`GMLCACHE_TOKEN` or `--token`) and **never stored**;
+  gmlcache keeps only non-secret derivation material. Lost token = unrecoverable, which is also
+  the erasure property (invalidate = crypto-shred).
 - Protects data at rest (disk theft, backups); does not protect a compromised running process.
 - Ships behind an optional extra (the encryption library is the dependency), so the base
   install is unaffected.
