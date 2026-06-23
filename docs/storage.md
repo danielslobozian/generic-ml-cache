@@ -19,8 +19,7 @@
 - [The blob store](#the-blob-store)
 - [The access registry](#the-access-registry)
 - [Eviction](#eviction)
-- [Future scope-aware storage](#future-scope-aware-storage)
-- [Scope invalidation](#scope-invalidation)
+- [Future retention and invalidation](#future-retention-and-invalidation)
 
 ---
 
@@ -91,31 +90,14 @@ Size-based eviction is **planned, not yet implemented**. The `max_size` configur
 is reserved for it but is not enforced today, and there is no background scheduler. See
 the [roadmap](ROADMAP.md).
 
-## Future scope-aware storage
+## Future retention and invalidation
 
-Future scopes may introduce additional metadata and possibly additional physical
-organization. The likely model is:
+Retention work extends today's size-based eviction with explicit prune and invalidation,
+and — with the daemon — time-based cleanup of stale entries. It is single-user storage
+cleanup; there is no per-user namespace.
 
-```text
-Scope
-  owns Sessions
-  references Executions
-
-Session
-  observes Executions
-```
-
-A public scope may be available when no scope token is supplied. Private scopes selected
-by scope token may reuse public executions according to policy, but that relationship
-should be metadata-driven rather than inferred from folder paths.
-
-## Scope invalidation
-
-Future scope-token invalidation should be treated as storage cleanup.
-
-Invalidating a scope token means deleting or orphaning that scope's metadata, sessions,
-and scope-owned execution references. It is not a login revocation operation and should
-not be documented as authentication.
+Invalidation deletes an execution's metadata and its now-unreferenced blobs. It is a
+storage operation, not a login or authentication operation.
 
 ---
 

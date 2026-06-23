@@ -1,6 +1,6 @@
 # generic-ml-cache-core
 
-#### The hexagonal engine behind gmlcache — embeddable, stateless, dependency-free
+#### The hexagonal engine behind gmlcache — embeddable and stateless
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
@@ -13,7 +13,7 @@ adapters** (SQLite execution repository, filesystem blob store, the
 claude/codex/cursor client runner, the API client, metrics, clock, fingerprinting) —
 plus the `build_use_cases` composition factory.
 
-Pure Python, **zero runtime dependencies**, and **stateless**: it bakes in *structure*
+Pure Python and **stateless**: it bakes in *structure*
 (table names, blob naming, schema) but no *location* — you inject the data source.
 
 ## Install
@@ -51,7 +51,7 @@ ports and pass your own adapter.
 - **Ports** (`application/port/...`) — client runner, blob store, execution repository,
   metrics, clock, fingerprint, API client.
 - **Default adapters** (`adapter/out/...`) + the `build_use_cases` composition factory.
-- **`generic_ml_cache_core.testing.InMemoryExecutionRepository`** — a dependency-free
+- **`generic_ml_cache_core.testing.InMemoryExecutionRepository`** — an in-memory
   reference adapter to test your code against the ports.
 
 Inbound drivers —

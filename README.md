@@ -57,12 +57,25 @@ gmlcache doctor | models | status | init                     # environment & con
 
 gmlcache executes detached ML workloads through adapters, records the observable result of those executions, and replays them when the same execution request is seen again.
 
-Its core cache is **exact and content-addressed**. The surrounding model gives callers inspection, usage reporting, cost visibility, and a path toward scoped, sessional, and asynchronous execution.
+Its core cache is **exact and content-addressed**. The surrounding model gives callers inspection, usage reporting, cost visibility, and a path toward sessional and asynchronous execution.
 
 > [!NOTE]
 > **gmlcache is not an interactive ML client.**
 >
 > It does not capture or replay conversations opened inside a client UI. It is for calls launched as detached work: a prompt, a model, declared inputs, grants, and a result.
+
+<br>
+
+## What gmlcache is — and what it isn't
+
+gmlcache is a **single-user** tool for discovering, testing, and integrating AI: it records a real call once and replays it forever by checksum, across whichever subscriptions and APIs **you already hold**. It runs **locally, on your machine, as you**.
+
+It is **not** a gateway, **not** a multi-user router, and **not** a way to make one subscription serve several people. If you want a gateway, the market already has them (LiteLLM, Portkey, Helicone, …) — gmlcache deliberately isn't one.
+
+> [!IMPORTANT]
+> **Being upfront.** Because gmlcache drives the vendors' *own* CLIs, you *could* wire it to front one subscription for many people — the tool doesn't technically stop you, the same way `git` doesn't stop a bad commit. But that is a violation of **your** provider's terms that **you** commit, identical to sharing your password, and it is explicitly **not** what gmlcache is for. We're not hiding behind "it's impossible" — it isn't impossible; it's simply not the intent, and respecting your provider's licence is your responsibility.
+
+→ Full reasoning, the boundaries, and where it shines: **[Positioning](docs/design/positioning.md)**.
 
 <br>
 
@@ -73,7 +86,7 @@ Its core cache is **exact and content-addressed**. The surrounding model gives c
 | Package | What it is | Install |
 |---|---|---|
 | [`generic-ml-cache-cli`](packages/cli) | the `gmlcache` terminal client | `pip install generic-ml-cache-cli` |
-| [`generic-ml-cache-core`](packages/core) | the engine — domain, use cases, ports, and the default adapters; **stateless and dependency-free** | `pip install generic-ml-cache-core` |
+| [`generic-ml-cache-core`](packages/core) | the engine — domain, use cases, ports, and the default adapters; **stateless** | `pip install generic-ml-cache-core` |
 
 The CLI is one inbound driver over the engine; a daemon could be another. The engine ships everything but the user interface and the data source — to embed it, depend on the core and inject your own data source:
 

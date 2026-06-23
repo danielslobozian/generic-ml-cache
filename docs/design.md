@@ -25,7 +25,7 @@
 - [Generated files are first-class](#generated-files-are-first-class)
 - [Adapters, not special cases](#adapters-not-special-cases)
 - [Observability is a pillar](#observability-is-a-pillar)
-- [Scopes and sessions are metadata](#scopes-and-sessions-are-metadata)
+- [Sessions are metadata](#sessions-are-metadata)
 - [Daemon is transport](#daemon-is-transport)
 - [Development principle](#development-principle)
 
@@ -144,16 +144,15 @@ a caller a record of what was executed, which adapter and model were used, what
 files were produced, what usage was reported, and what cost estimate the client
 provided when available.
 
-Future scopes and sessions extend that same principle from a single execution to
-a workflow, namespace, or long-running body of work.
+Future sessions extend that same principle from a single execution to a workflow or
+long-running body of work.
 
-## Scopes and sessions are metadata
+## Sessions are metadata
 
-Future scope tokens and sessions must not participate in execution identity.
+Future sessions must not participate in execution identity.
 
-A scope partitions cache visibility and reporting. A session groups executions for
-analysis. Neither changes what the underlying client receives. Neither changes
-what execution key an execution request produces.
+A session groups executions for analysis. It never changes what the underlying client
+receives, nor what execution key an execution request produces.
 
 This keeps correctness separate from observability.
 

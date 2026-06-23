@@ -13,9 +13,8 @@ Three rules keep this predictable:
   config file, the built-in default. The ``store`` location is the exception -- config file or
   built-in default only, with **no flag and no environment** -- because where the
   stored executions live is the cache's own concern, not a per-call knob.
-* **Zero dependencies.** The format is INI (stdlib :mod:`configparser`) and the
-  per-user location is resolved inline, so nothing beyond the standard library is
-  needed on any supported Python.
+* **Plain INI.** The format is INI (stdlib :mod:`configparser`) and the per-user
+  location is resolved inline.
 
 Location (override everything with ``GMLCACHE_CONFIG=/path/to/file``):
 

@@ -122,17 +122,15 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 | `status` | `--json`. |
 | `init` | (no options) writes a starter config file on explicit request. |
 
-## Future scope/session commands
+## Future session commands
 
 ```text
-gmlcache scope create
-gmlcache scope invalidate --scope-token <token>
-gmlcache scope report --scope-token <token>
-
-gmlcache session start --scope-token <token>
-gmlcache session report <session-id> --scope-token <token>
-gmlcache session watch <session-id> --scope-token <token>
+gmlcache session start
+gmlcache session report <session-id>
+gmlcache session watch <session-id>
 ```
+
+Sessions are single-user and need only a generated session id — no token.
 
 ## Future async commands
 

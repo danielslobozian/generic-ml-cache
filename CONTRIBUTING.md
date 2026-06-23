@@ -24,7 +24,7 @@ all code is held to the standard in [`AGENTS.md`](AGENTS.md).
 
 ```
 packages/core/   generic-ml-cache-core — the library: domain, use cases, ports, and
-                 the default adapters. Pure standard library, zero runtime deps.
+                 the default adapters.
 packages/cli/    generic-ml-cache-cli  — the gmlcache terminal client. Depends on core.
 ```
 
@@ -41,7 +41,7 @@ CLI depends on it:
 git clone https://github.com/danielslobozian/generic-ml-cache.git
 cd generic-ml-cache
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e "packages/core[dev]"    # the library (dependency-free)
+pip install -e "packages/core[dev]"    # the library
 pip install -e "packages/cli[dev]"     # the client (provides the gmlcache command)
 ```
 
@@ -81,9 +81,6 @@ All code must meet [`AGENTS.md`](AGENTS.md) — read it before sending code. In 
 - **Never persist the prime directive or the command wording in an execution record.**
   A stored execution records what the client did, not how it was instructed or launched
   — only fingerprints, never raw prompts or context.
-- **The library stays dependency-free.** Keep `generic-ml-cache-core` on the pure
-  standard library; dev-only tools belong in its `dev` extra. The client may carry
-  runtime dependencies (it depends on the core plus `argcomplete`).
 - **Nothing baked in but structure.** The library never hardcodes a location or reads a
   config file; the data source and configuration are injected (AGENTS §5).
 - **Cross-platform.** Store paths POSIX-style; do not assume a particular OS.

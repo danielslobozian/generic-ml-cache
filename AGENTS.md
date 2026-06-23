@@ -269,7 +269,7 @@ class ClientRunResult:
         return ExecutionState.FAILED if self.exit_code else ExecutionState.SUCCESS
 ```
 
-Pure, dependency-free logic has exactly two homes, **neither of which is a use case**:
+Pure logic has exactly two homes, **neither of which is a use case**:
 a method on the domain value object whose fields it computes over, or — when it belongs
 to no single object — a module-level function in `common/`. A `@staticmethod` on a use
 case or service is neither, and is the signal to relocate.

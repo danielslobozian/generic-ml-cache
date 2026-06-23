@@ -9,8 +9,8 @@ locked, unwritable, or corrupt, the cache still resolves exactly as it would
 without it. It is deliberately separate from the executions, which stay pure and
 immutable -- no access counters are ever written back into a recording.
 
-Stored in the store directory as ``registry.sqlite3`` (stdlib ``sqlite3`` only;
-no third-party dependency). It carries no integrity/checksum role: a checksum kept
+Stored in the store directory as ``registry.sqlite3`` (stdlib ``sqlite3``). It
+carries no integrity/checksum role: a checksum kept
 beside the data it guards, in a folder the user can write, protects nothing a
 determined editor couldn't also rewrite -- so we don't pretend to.
 """
