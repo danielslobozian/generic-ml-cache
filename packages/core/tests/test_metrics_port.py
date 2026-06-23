@@ -35,6 +35,7 @@ class InMemoryMetrics(MetricsPort):
                 "client": client,
                 "model": model,
                 "effort": effort,
+                "session_id": session_id,
             }
         )
 
@@ -49,6 +50,13 @@ class InMemoryMetrics(MetricsPort):
         counts: Dict[str, int] = defaultdict(int)
         for recorded_event in self._events:
             counts[recorded_event["event"]] += 1
+        return dict(counts)
+
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        counts: Dict[str, int] = defaultdict(int)
+        for recorded_event in self._events:
+            if recorded_event["session_id"] == session_id:
+                counts[recorded_event["event"]] += 1
         return dict(counts)
 
     def last_access(self) -> Dict[str, float]:

@@ -61,3 +61,37 @@ def test_session_start_prints_a_scriptable_id(capsys):
 def test_bare_session_shows_usage(capsys):
     assert main(["session"]) == 2
     assert "session start" in capsys.readouterr().err
+
+
+def test_session_report_rolls_up_invocations_executions_hits(capsys):
+    run = _RUN + ["--session", "wf"]
+    main(run)  # miss -> record (a real execution)
+    main(run)  # same input -> hit (no execution)
+    capsys.readouterr()
+
+    assert main(["session", "report", "wf"]) == 0
+    out = capsys.readouterr().out
+    assert "invocations : 2" in out
+    assert "executions  : 1" in out
+    assert "hits        : 1" in out
+
+
+def test_session_report_json(capsys):
+    import json
+
+    main(_RUN + ["--session", "wf"])
+    capsys.readouterr()
+    assert main(["session", "report", "wf", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data == {
+        "session": "wf",
+        "invocations": 1,
+        "executions": 1,
+        "hits": 0,
+        "events": {"record": 1},
+    }
+
+
+def test_session_report_unknown_session_is_clean(capsys):
+    assert main(["session", "report", "nope"]) == 0
+    assert "no events" in capsys.readouterr().out

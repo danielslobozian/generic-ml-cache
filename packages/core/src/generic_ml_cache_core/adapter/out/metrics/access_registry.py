@@ -135,6 +135,21 @@ class AccessRegistry:
         except Exception:
             return {}
 
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        """Return {event: count} for one session ({} if unknown or unavailable)."""
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT event, COUNT(*) FROM access_events WHERE session_id = ? GROUP BY event",
+                    (session_id,),
+                ).fetchall()
+                return {event: count for event, count in rows}
+            finally:
+                conn.close()
+        except Exception:
+            return {}
+
     def last_access(self) -> Dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
         ({} if unavailable). An execution absent here has never been seen by the

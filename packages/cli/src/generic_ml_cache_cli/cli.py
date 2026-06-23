@@ -896,8 +896,50 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
     return 0
 
 
+#: events where a real client call ran (vs. HIT, which replayed, or an offline MISS).
+_EXECUTED_EVENTS = {"record", "run", "would_hit", "would_miss"}
+
+
+def _cmd_session_report(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    counts = build_use_cases(store_root).metrics.session_event_counts(args.session_id)
+    invocations = sum(counts.values())
+    executions = sum(n for event, n in counts.items() if event in _EXECUTED_EVENTS)
+    hits = counts.get("hit", 0)
+
+    if args.json:
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "session": args.session_id,
+                    "invocations": invocations,
+                    "executions": executions,
+                    "hits": hits,
+                    "events": counts,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if invocations == 0:
+        print(f"no events recorded for session {args.session_id!r}")
+        return 0
+    print(f"session     : {args.session_id}")
+    print(f"invocations : {invocations}")
+    print(f"executions  : {executions}  (real client calls)")
+    print(f"hits        : {hits}  (served from cache)")
+    breakdown = ", ".join(f"{event}={counts[event]}" for event in sorted(counts))
+    print(f"events      : {breakdown}")
+    return 0
+
+
 def _cmd_session(args: argparse.Namespace) -> int:
-    print("usage: gmlcache session start", file=sys.stderr)
+    print("usage: gmlcache session start | gmlcache session report <id>", file=sys.stderr)
     return 2
 
 
@@ -1273,6 +1315,10 @@ def build_parser() -> argparse.ArgumentParser:
     session_sub = session.add_subparsers(dest="session_command")
     session_start = session_sub.add_parser("start", help="generate a new session id and print it")
     session_start.set_defaults(func=_cmd_session_start)
+    session_report = session_sub.add_parser("report", help="summarise a session's activity")
+    session_report.add_argument("session_id", help="the session id to report on")
+    session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_report.set_defaults(func=_cmd_session_report)
     session.set_defaults(func=_cmd_session)
 
     init = sub.add_parser(

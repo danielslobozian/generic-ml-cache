@@ -48,6 +48,13 @@ class MetricsPort(ABC):
         """
 
     @abstractmethod
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        """Return {event_name: count} for the events recorded under ``session_id``.
+
+        An empty dict is the correct response for an unknown session or no data.
+        """
+
+    @abstractmethod
     def last_access(self) -> Dict[str, float]:
         """Return {execution_key: epoch_seconds} of the latest event per key.
 

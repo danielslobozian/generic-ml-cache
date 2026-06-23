@@ -47,5 +47,8 @@ class JournalMetrics(MetricsPort):
     def event_counts(self) -> Dict[str, int]:
         return self._registry.event_counts()
 
+    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+        return self._registry.session_event_counts(session_id)
+
     def last_access(self) -> Dict[str, float]:
         return self._registry.last_access()

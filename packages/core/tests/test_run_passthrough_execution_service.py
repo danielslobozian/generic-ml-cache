@@ -80,6 +80,9 @@ class FakeMetrics(MetricsPort):
     def event_counts(self) -> Dict[str, int]:
         return {}
 
+    def session_event_counts(self, session_id) -> Dict[str, int]:
+        return {}
+
     def last_access(self) -> Dict[str, float]:
         return {}
 

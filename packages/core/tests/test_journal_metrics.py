@@ -67,6 +67,22 @@ def test_session_id_is_recorded_on_the_event(tmp_path):
     assert _session_ids(tmp_path) == ["sess-1", None]
 
 
+def test_session_event_counts_are_scoped_to_the_session(tmp_path):
+    metrics = _metrics(tmp_path)
+    metrics.record_event(
+        "record", execution_key="k1", client="c", model="m", effort="", session_id="s"
+    )
+    metrics.record_event(
+        "hit", execution_key="k1", client="c", model="m", effort="", session_id="s"
+    )
+    metrics.record_event(
+        "hit", execution_key="k2", client="c", model="m", effort="", session_id="other"
+    )
+    assert metrics.session_event_counts("s") == {"record": 1, "hit": 1}
+    assert metrics.session_event_counts("other") == {"hit": 1}
+    assert metrics.session_event_counts("unknown") == {}
+
+
 def test_pre_sessions_registry_is_migrated_in_place(tmp_path):
     # A registry created before sessions existed: access_events without session_id.
     path = tmp_path / "registry.sqlite3"
