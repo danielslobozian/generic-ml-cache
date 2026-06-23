@@ -76,6 +76,17 @@ class WrongEncryptionToken(CacheError):
     """
 
 
+class StoreLocked(CacheError):
+    """Raised when an exclusive store operation cannot start because another
+    process already holds the store lock.
+
+    The lock makes the store immutable during an encryption migration
+    (enable/disable). It is an OS-level lock that releases automatically when the
+    holding process dies, so there is never a stale lock to clear by hand;
+    acquisition fails fast rather than blocking.
+    """
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.
