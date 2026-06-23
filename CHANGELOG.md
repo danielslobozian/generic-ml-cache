@@ -14,6 +14,8 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-23
+
 ### Added
 
 - **At-rest encryption** (core + cli): optional, token-keyed encryption of the stored content.
