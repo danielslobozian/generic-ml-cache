@@ -12,9 +12,10 @@
 
 ---
 
-**Status: design intent, not yet implemented.** This records the model and the sharp
-edges while they are fresh; the [roadmap](../ROADMAP.md) sequences the work. Nothing here
-is a commitment.
+**Status: partially implemented.** Persistence depth (meter/cache/dataset), tagging and tag
+query, and dataset export have landed; scope tokens and at-rest encryption are still design
+intent. This records the model and the sharp edges; the [roadmap](../ROADMAP.md) sequences the
+work. Nothing not yet shipped is a commitment.
 
 ## The model: a persistence ladder plus orthogonal toggles
 
@@ -55,7 +56,10 @@ rule the roadmap already states for `session_id`.
   erase = drop the key (crypto-shred).
 - **Dataset builder**: + input persistence + tags → a queryable, labeled `(input, output)`
   corpus, exportable for distillation/evaluation. Encryption optional — plaintext-local if
-  you do not care, encrypted if you do.
+  you do not care, encrypted if you do. Changing your mind is cheap: re-running an
+  already-cached call at dataset depth **back-fills the input onto the existing entry on the
+  hit** (the input is in the request, so no re-run is needed) — exactly as relabeling
+  accumulates tags. Enriching the stored data is the user's decision.
 - **Usage meter**: output caching **off** + tags/usage on → a metering/observability
   front-end. It can still compute the fingerprint to report *would-be* hit/miss
   ("you'd have saved N runs") without storing anything.
@@ -96,13 +100,22 @@ age-style envelope) rather than hand-assembled primitives.
 5. **Per-scope keys break cross-scope dedup** — which is a privacy *gain* (no cross-scope
    blob sharing). The public scope (no token) stays plaintext, content-addressed, shared.
 
-## Dataset caveat (for when export is built)
+## Dataset caveat
 
 Cached outputs include the model's **mistakes**; the cache cannot tell a good output from a
-bad one and must not try (that is interpreting output — out of scope). Export yields a
-**raw** labeled corpus. Curation stays the user's: allow a user-supplied **quality flag**
-(`good`/`bad`/unrated) as metadata — same category as a tag, never inferred — and let export
-filter on it.
+bad one and must not try (that is interpreting output — out of scope). Export therefore yields
+a **raw** labeled corpus.
+
+Curation stays the user's, and it rides entirely on **tags** — there is deliberately *no*
+system-defined quality concept. Quality is perspectival: an output that is good for one
+purpose (say, distilling task X) is bad for another (evaluating task Y), so a single built-in
+`good`/`bad` axis would be a false universal, and a dedicated flag would have the system
+endorse a quality vocabulary it has no business defining. Its only gains over an ordinary tag
+— a fixed enum and a default — are exactly that overreach. So the user applies free-form tags
+(`good-for-distillation`, `wrong`, whatever fits their decision) and filters at export:
+`export --tag <keep>` / `export --exclude-tag <drop>` (match-any include and exclude, with
+exclude winning). A tag is metadata like any other — stored verbatim, never inferred, never
+part of the key.
 
 ---
 

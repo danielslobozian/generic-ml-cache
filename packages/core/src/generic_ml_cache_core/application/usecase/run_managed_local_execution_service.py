@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
+from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import normalize_tags
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.run.client_run_request import ClientRunRequest
@@ -69,6 +70,21 @@ class RunManagedLocalExecutionService(CachedMlExecutionService, RunManagedLocalE
 
     def _execution_tags(self, command: RunManagedLocalExecutionCommand) -> List[str]:
         return normalize_tags(command.tags)
+
+    def _input_parts(
+        self, command: RunManagedLocalExecutionCommand
+    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+        # The text sent to the client, as the input side of the corpus. The prompt
+        # is always present; context and system prompt only when non-empty.
+        parts: List[Tuple[ArtifactType, Optional[str], bytes]] = []
+        if command.context:
+            parts.append((ArtifactType.INPUT_CONTEXT, None, command.context.encode("utf-8")))
+        parts.append((ArtifactType.INPUT_PROMPT, None, command.prompt.encode("utf-8")))
+        if command.user_system_prompt:
+            parts.append(
+                (ArtifactType.INPUT_SYSTEM, None, command.user_system_prompt.encode("utf-8"))
+            )
+        return parts
 
     @staticmethod
     def _build_client_run_request(command: RunManagedLocalExecutionCommand) -> ClientRunRequest:

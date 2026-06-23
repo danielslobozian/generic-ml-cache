@@ -74,7 +74,7 @@ def test_grants_are_a_frozenset():
 
 def test_cache_policy_fields_are_absent():
     assert not hasattr(ClientRunRequest, "cache_mode")
-    assert not hasattr(ClientRunRequest, "persist_output")
+    assert not hasattr(ClientRunRequest, "persistence_depth")
     assert not hasattr(ClientRunRequest, "scan_trust")
 
 

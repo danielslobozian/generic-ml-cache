@@ -10,6 +10,7 @@ from typing import List, Optional, Protocol, Tuple
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -31,6 +32,7 @@ class CacheableExecutionCommand(Protocol):
     persistence policy. The kind-specific fields are read through hooks."""
 
     cache_mode: CacheMode
+    persistence_depth: PersistenceDepth
 
     def should_persist(self, succeeded: bool) -> bool: ...
 
@@ -62,6 +64,11 @@ class CachedMlExecutionService(ABC):
 
         if command.cache_mode is CacheMode.OFFLINE:
             return self._serve_offline(command, execution_key)
+
+        if not command.persistence_depth.stores_output:
+            # METER: never replays — always run, store nothing, but record whether
+            # the call *would* have hit a stored entry (would-be hit/miss).
+            return self._run_metered(command, call_identity, execution_key)
 
         if command.cache_mode is CacheMode.CACHE:
             current_execution = self._repository.find_current(execution_key)
@@ -121,7 +128,21 @@ class CachedMlExecutionService(ABC):
         hydrated_execution = self._hydrate(current_execution)
         self._record_event(journal_events.HIT, execution_key, command)
         self._apply_tags(execution_key, command)
+        self._accumulate_input(command, execution_key, current_execution)
         return hydrated_execution
+
+    def _accumulate_input(
+        self, command: CacheableExecutionCommand, execution_key: str, current_execution: MlExecution
+    ) -> None:
+        """If the user now wants the input kept (DATASET) and this entry doesn't yet
+        carry it, back-fill it onto the existing entry — the input is in the command,
+        so no re-run is needed. Mirrors how tags accumulate on a hit; the user
+        changing their mind to enrich the stored data is their decision."""
+        if not command.persistence_depth.stores_input or current_execution.input_persisted:
+            return
+        input_artifacts = self._build_input_artifacts(command, store=True)
+        if input_artifacts:
+            self._repository.add_input_artifacts(execution_key, input_artifacts)
 
     def _run_uncacheable(
         self, command: CacheableExecutionCommand, call_identity: CallIdentity, execution_key: str
@@ -141,12 +162,17 @@ class CachedMlExecutionService(ABC):
         client_run_result = self._run_client(command)
         should_store = allow_store and command.should_persist(client_run_result.succeeded)
         artifacts = self._build_artifacts(client_run_result, store=should_store)
+        # Input rides on a stored output (DATASET is a superset of CACHE): only
+        # capture it when the output is being stored and the depth keeps input.
+        store_input = should_store and command.persistence_depth.stores_input
+        input_artifacts = self._build_input_artifacts(command, store=store_input)
         execution = MlExecution(
             call_identity=call_identity,
             execution_state=client_run_result.outcome(),
             execution_kind=self._execution_kind(),
             output_persisted=should_store,
-            artifacts=artifacts,
+            input_persisted=bool(input_artifacts),
+            artifacts=artifacts + input_artifacts,
             token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
         )
@@ -156,6 +182,28 @@ class CachedMlExecutionService(ABC):
             self._apply_tags(execution_key, command)
         else:
             self._record_event(journal_events.RUN, execution_key, command)
+        return execution
+
+    def _run_metered(
+        self, command: CacheableExecutionCommand, call_identity: CallIdentity, execution_key: str
+    ) -> MlExecution:
+        """METER depth: always run and store nothing, but journal whether a stored
+        entry existed — so usage analytics can report would-be hit/miss ("you'd
+        have saved N runs") without the cache ever serving or storing anything."""
+        would_hit = self._repository.find_current(execution_key) is not None
+        client_run_result = self._run_client(command)
+        execution = MlExecution(
+            call_identity=call_identity,
+            execution_state=client_run_result.outcome(),
+            execution_kind=self._execution_kind(),
+            output_persisted=False,
+            input_persisted=False,
+            artifacts=self._build_artifacts(client_run_result, store=False),
+            token_usage=client_run_result.token_usage,
+            failure=client_run_result.failure(),
+        )
+        event = journal_events.WOULD_HIT if would_hit else journal_events.WOULD_MISS
+        self._record_event(event, execution_key, command)
         return execution
 
     # -- artifacts --------------------------------------------------------
@@ -188,6 +236,26 @@ class CachedMlExecutionService(ABC):
         if store:
             self._blob_store.put(blob_key, content_bytes)
         return Artifact.from_content(artifact_type, blob_key, content_bytes, name=artifact_name)
+
+    def _build_input_artifacts(
+        self, command: CacheableExecutionCommand, store: bool
+    ) -> List[Artifact]:
+        """The input documents to keep at DATASET depth, content-addressed like
+        any artifact. Empty when ``store`` is false (below DATASET, or nothing was
+        stored) or when the kind has no recordable input."""
+        if not store:
+            return []
+        return [
+            self._store_artifact(artifact_type, name, content_bytes, store=True)
+            for (artifact_type, name, content_bytes) in self._input_parts(command)
+        ]
+
+    def _input_parts(
+        self, command: CacheableExecutionCommand
+    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+        """The ``(type, name, bytes)`` input documents this kind would persist at
+        DATASET depth. Default: none — a kind whose input is not recorded."""
+        return []
 
     def _hydrate(self, execution: MlExecution) -> MlExecution:
         hydrated_artifacts = [self._hydrate_artifact(artifact) for artifact in execution.artifacts]

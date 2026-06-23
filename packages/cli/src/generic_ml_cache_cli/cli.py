@@ -32,8 +32,12 @@ except ImportError:  # completion is a convenience; never let its absence break 
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
 from generic_ml_cache_core.adapter.out.client.registry import registered_names
-from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    INPUT_ARTIFACT_TYPES,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
@@ -142,7 +146,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     try:
         file_cfg = config.load()
-        settings = config.resolve_settings(file_cfg, mode_flag=args.mode, timeout_flag=args.timeout)
+        settings = config.resolve_settings(
+            file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
+        )
     except ConfigError as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
@@ -157,6 +163,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         cache_mode = CacheMode.REFRESH
     else:
         cache_mode = CacheMode(str(settings["mode"][0]))
+    persistence_depth = PersistenceDepth(str(settings["persist"][0]))
 
     command = RunManagedLocalExecutionCommand(
         client=args.client,
@@ -171,6 +178,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         client_args=list(getattr(args, "client_arg", None) or []),
         grants=list(getattr(args, "grant", None) or []),
         cache_mode=cache_mode,
+        persistence_depth=persistence_depth,
         record_on_error=args.record_on_error,
         tags=list(getattr(args, "tag", None) or []),
     )
@@ -319,6 +327,14 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print(f"files  : {len(output_files)}")
     for artifact in output_files:
         print(f"         - {artifact.name} ({artifact.encoding}, {artifact.size_bytes} bytes)")
+    input_parts = [a for a in execution.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES]
+    if input_parts:
+        print(f"input  : stored ({len(input_parts)} part(s))")
+        for artifact in input_parts:
+            label = artifact.artifact_type.value.replace("input_", "")
+            print(f"         - {label} ({artifact.encoding}, {artifact.size_bytes} bytes)")
+    else:
+        print("input  : not stored")
     usage = execution.token_usage
     if usage is None:
         print("usage  : (none captured)")
@@ -431,7 +447,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
     print("effective settings (no run flags applied):")
-    for key in ("mode", "store", "timeout", "trust_scan", "max_size"):
+    for key in ("mode", "persist", "store", "timeout", "trust_scan", "max_size"):
         value, source = settings[key]
         shown = "none" if value is None else value
         if isinstance(shown, bool):
@@ -522,7 +538,13 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         for (client, model), count in sorted(by_client_model.items()):
             print(f"  {client:<8} {model:<26} {count:>5}")
     if access:
-        event_styles = {"hit": (_GREEN,), "miss": (_AMBER,), "record": (_TEAL,)}
+        event_styles = {
+            "hit": (_GREEN,),
+            "miss": (_AMBER,),
+            "record": (_TEAL,),
+            "would_hit": (_GREEN,),
+            "would_miss": (_AMBER,),
+        }
         parts = ", ".join(
             f"{_paint(event, *event_styles.get(event, ()))}={count}"
             for event, count in sorted(access.items())
@@ -560,6 +582,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
     wanted_tags = set(getattr(args, "tag", None) or [])
     if wanted_tags:
         entries = [entry for entry in entries if wanted_tags & set(entry["tags"])]
+    excluded_tags = set(getattr(args, "exclude_tag", None) or [])
+    if excluded_tags:
+        entries = [entry for entry in entries if not excluded_tags & set(entry["tags"])]
 
     if args.json:
         print(json.dumps({"executions": entries}, indent=2))
@@ -580,6 +605,136 @@ def _cmd_list(args: argparse.Namespace) -> int:
         if entry["tags"]:
             line += "  tags:" + _paint(",".join(entry["tags"]), _TEAL)
         print(line)
+    return 0
+
+
+def _cmd_tags(args: argparse.Namespace) -> int:
+    import json
+
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    wired = build_use_cases(Path(str(settings["store"][0])))
+    counts: dict = {}
+    for summary in wired.repository.current_execution_summaries():
+        for tag in wired.repository.tags_for(summary.execution_key):
+            counts[tag] = counts.get(tag, 0) + 1
+
+    tags = [{"tag": tag, "count": counts[tag]} for tag in sorted(counts)]
+
+    if args.json:
+        print(json.dumps({"tags": tags}, indent=2))
+        return 0
+
+    if not tags:
+        print("no tags")
+        return 0
+
+    print(f"tags : {_paint(str(len(tags)), _TEAL, _BOLD)}")
+    for entry in tags:
+        count_text = _paint("count:" + str(entry["count"]), _GREY)
+        print(f"  {entry['tag']:<24} {count_text}")
+    return 0
+
+
+_INPUT_FIELD_BY_TYPE = {
+    ArtifactType.INPUT_CONTEXT: "context",
+    ArtifactType.INPUT_PROMPT: "prompt",
+    ArtifactType.INPUT_SYSTEM: "system",
+}
+
+
+def _export_record(summary, execution, tags, blob_store) -> dict:
+    """Assemble one raw corpus record: the stored input parts and the output,
+    hydrated from the blob store. Curation is the user's (tags); this never
+    judges quality."""
+    import base64
+    import json
+
+    def text(artifact) -> str:
+        return (blob_store.get(artifact.blob_key) or b"").decode("utf-8", "replace")
+
+    input_obj: dict = {}
+    stdout = ""
+    files = []
+    for artifact in execution.artifacts:
+        field_name = _INPUT_FIELD_BY_TYPE.get(artifact.artifact_type)
+        if field_name is not None:
+            input_obj[field_name] = text(artifact)
+        elif artifact.artifact_type is ArtifactType.INPUT_MESSAGES:
+            input_obj["messages"] = json.loads(text(artifact))
+        elif artifact.artifact_type is ArtifactType.INPUT_ARGS:
+            input_obj["args"] = json.loads(text(artifact))
+        elif artifact.artifact_type is ArtifactType.STDOUT:
+            stdout = text(artifact)
+        elif artifact.artifact_type is ArtifactType.OUTPUT_FILE:
+            if artifact.encoding == "binary":
+                raw = blob_store.get(artifact.blob_key) or b""
+                files.append(
+                    {"name": artifact.name, "content_base64": base64.b64encode(raw).decode("ascii")}
+                )
+            else:
+                files.append({"name": artifact.name, "content": text(artifact)})
+
+    output_obj: dict = {"stdout": stdout}
+    if files:
+        output_obj["files"] = files
+    return {
+        "key": summary.execution_key,
+        "kind": summary.kind,
+        "client": summary.client,
+        "model": summary.model,
+        "tags": tags,
+        "input": input_obj,
+        "output": output_obj,
+    }
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
+    import json
+
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    wired = build_use_cases(Path(str(settings["store"][0])))
+    include = set(getattr(args, "tag", None) or [])
+    exclude = set(getattr(args, "exclude_tag", None) or [])
+
+    lines = []
+    skipped_no_input = 0
+    for summary in wired.repository.current_execution_summaries():
+        tags = wired.repository.tags_for(summary.execution_key)
+        if include and not include & set(tags):
+            continue
+        if exclude and exclude & set(tags):
+            continue
+        execution = wired.repository.find_current(summary.execution_key)
+        # Only DATASET-depth entries carry the input side of the corpus.
+        if execution is None or not execution.input_persisted:
+            skipped_no_input += 1
+            continue
+        lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+
+    if args.output:
+        Path(args.output).write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+        destination = args.output
+    else:
+        for line in lines:
+            print(line)
+        destination = "stdout"
+
+    # Summary on stderr so stdout stays a clean JSONL stream.
+    note = f"exported {len(lines)} record(s) to {destination}"
+    if skipped_no_input:
+        entries = "entry" if skipped_no_input == 1 else "entries"
+        note += f"; skipped {skipped_no_input} matching {entries} without stored input (not dataset depth)"
+    print(note, file=sys.stderr)
     return 0
 
 
@@ -742,6 +897,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="resolution mode (default: cache, or config/env)",
     )
+    run.add_argument(
+        "--persist",
+        choices=[d.value for d in PersistenceDepth],
+        default=None,
+        help=(
+            "how much to keep: meter (usage only, never replays), cache (+output, "
+            "the default), or dataset (+input) (default: cache, or config/env)"
+        ),
+    )
     run.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
     run.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
     run.add_argument(
@@ -865,8 +1029,49 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAG",
         help="only executions carrying any of these tags (repeatable; match-any)",
     )
+    listp.add_argument(
+        "--exclude-tag",
+        action="append",
+        dest="exclude_tag",
+        metavar="TAG",
+        help="drop executions carrying any of these tags (repeatable; match-any)",
+    )
     listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     listp.set_defaults(func=_cmd_list)
+
+    tagsp = sub.add_parser(
+        "tags",
+        help="list the distinct tags in use across current executions, with counts (read-only)",
+    )
+    tagsp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    tagsp.set_defaults(func=_cmd_tags)
+
+    exportp = sub.add_parser(
+        "export",
+        help="export the (input, output) dataset corpus as JSONL (read-only). Only entries "
+        "stored at --persist dataset carry an input; others are skipped.",
+    )
+    exportp.add_argument(
+        "--tag",
+        action="append",
+        dest="tag",
+        metavar="TAG",
+        help="only entries carrying any of these tags (repeatable; match-any)",
+    )
+    exportp.add_argument(
+        "--exclude-tag",
+        action="append",
+        dest="exclude_tag",
+        metavar="TAG",
+        help="drop entries carrying any of these tags (repeatable; match-any)",
+    )
+    exportp.add_argument(
+        "-o",
+        "--output",
+        metavar="FILE",
+        help="write JSONL to FILE instead of stdout (a per-record summary still goes to stderr)",
+    )
+    exportp.set_defaults(func=_cmd_export)
 
     init = sub.add_parser(
         "init",

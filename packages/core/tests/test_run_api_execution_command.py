@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.run.message import Message
 from generic_ml_cache_core.application.port.inbound.run_api_execution_command import (
     RunApiExecutionCommand,
@@ -17,7 +18,7 @@ def test_defaults():
     command = RunApiExecutionCommand(provider="openai", model="gpt-x")
     assert command.messages == []
     assert command.cache_mode is CacheMode.CACHE
-    assert command.persist_output is True
+    assert command.persistence_depth is PersistenceDepth.CACHE
     assert command.record_on_error is False
 
 
@@ -36,7 +37,9 @@ def test_should_persist_policy():
         is True
     )
     assert (
-        RunApiExecutionCommand(provider="p", model="m", persist_output=False).should_persist(True)
+        RunApiExecutionCommand(
+            provider="p", model="m", persistence_depth=PersistenceDepth.METER
+        ).should_persist(True)
         is False
     )
 

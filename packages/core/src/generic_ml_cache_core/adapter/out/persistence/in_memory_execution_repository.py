@@ -7,6 +7,10 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import Dict, List, Optional, Set
 
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    INPUT_ARTIFACT_TYPES,
+    Artifact,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
@@ -62,6 +66,20 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
         if self.find_current(execution_key) is None:
             return []
         return sorted(self._tags_by_key.get(execution_key, set()))
+
+    def add_input_artifacts(self, execution_key: str, artifacts: List[Artifact]) -> None:
+        # Back-fill the input onto the key's current execution; idempotent and a
+        # no-op when there is none or it already carries input.
+        if not artifacts:
+            return
+        for execution in self._by_key.get(execution_key, []):
+            if not self._is_servable(execution):
+                continue
+            if any(a.artifact_type in INPUT_ARTIFACT_TYPES for a in execution.artifacts):
+                return
+            execution.artifacts.extend(replace(a, content=None) for a in artifacts)
+            execution.input_persisted = True
+            return
 
     @staticmethod
     def _is_servable(execution: MlExecution) -> bool:

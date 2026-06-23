@@ -8,9 +8,9 @@ Three rules keep this predictable:
   writes it -- the cache works with no file present. :func:`write_default_config`
   (the ``gmlcache init`` command) writes one on explicit request, never on
   install or first run.
-* **Overridable, with explicit precedence.** For ``mode`` and ``timeout`` the
-  winner is, in order: a CLI flag, an environment variable, the config file, the
-  built-in default. The ``store`` location is the exception -- config file or
+* **Overridable, with explicit precedence.** For ``mode``, ``persist`` and
+  ``timeout`` the winner is, in order: a CLI flag, an environment variable, the
+  config file, the built-in default. The ``store`` location is the exception -- config file or
   built-in default only, with **no flag and no environment** -- because where the
   stored executions live is the cache's own concern, not a per-call knob.
 * **Zero dependencies.** The format is INI (stdlib :mod:`configparser`) and the
@@ -27,6 +27,7 @@ File shape::
 
     [defaults]
     mode = cache
+    persist = cache
     # store defaults to the per-user data dir (XDG data home); set a path to change it
     store = /path/to/store
     timeout = 120
@@ -66,6 +67,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.common.errors import ConfigError
 
 CONFIG_ENV = "GMLCACHE_CONFIG"
@@ -77,9 +79,10 @@ EXECUTABLES_SECTION = "executables"
 #: built-in defaults; ``timeout`` of ``None`` means "no timeout". The store has
 #: no static default here -- it resolves to :func:`default_store_path` (per-user
 #: data dir) and has no flag/env layer, only the config file.
-DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "timeout": None}
+DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "persist": "cache", "timeout": None}
 
 _MODES = {m.value for m in CacheMode}
+_DEPTHS = {d.value for d in PersistenceDepth}
 
 #: written by ``gmlcache init`` (and only then); ``{store}`` is filled with the
 #: resolved per-user default so the user can see and edit where the store lives.
@@ -96,6 +99,10 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 
 [defaults]
 mode = cache
+# How much each call keeps on disk: meter (usage/metadata only, never replays),
+# cache (+ output, the default -- replay on hit), or dataset (+ input, for an
+# exportable (input, output) corpus).
+persist = cache
 # Where the store lives. This is the per-user data dir by default; change freely.
 store = {store}
 # timeout = 120
@@ -161,6 +168,7 @@ class FileConfig:
     or ``None`` when no file was present."""
 
     mode: Optional[str] = None
+    persist: Optional[str] = None
     store: Optional[str] = None
     timeout: Optional[float] = None
     trust_scan: Optional[bool] = None
@@ -226,6 +234,10 @@ def load(path: Optional[Path] = None) -> FileConfig:
     if mode is not None and mode not in _MODES:
         raise ConfigError(f"invalid mode {mode!r} in {p}; expected one of {sorted(_MODES)}")
 
+    persist = get("persist")
+    if persist is not None and persist not in _DEPTHS:
+        raise ConfigError(f"invalid persist {persist!r} in {p}; expected one of {sorted(_DEPTHS)}")
+
     timeout_raw = get("timeout")
     timeout = _parse_timeout(timeout_raw, f"in {p}") if timeout_raw else None
 
@@ -246,6 +258,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
 
     return FileConfig(
         mode=mode,
+        persist=persist,
         store=get("store"),
         timeout=timeout,
         trust_scan=trust_scan,
@@ -287,6 +300,7 @@ def resolve_settings(
     file_cfg: FileConfig,
     *,
     mode_flag: Optional[str] = None,
+    persist_flag: Optional[str] = None,
     timeout_flag: Optional[float] = None,
 ) -> Dict[str, Tuple[object, str]]:
     """Resolve each setting to ``(value, source)`` by the documented precedence.
@@ -304,6 +318,12 @@ def resolve_settings(
             f"invalid mode {mode_env!r} in GMLCACHE_MODE; expected one of {sorted(_MODES)}"
         )
 
+    persist_env = env.get("GMLCACHE_PERSIST")
+    if persist_env and persist_env not in _DEPTHS:
+        raise ConfigError(
+            f"invalid persist {persist_env!r} in GMLCACHE_PERSIST; expected one of {sorted(_DEPTHS)}"
+        )
+
     timeout_env_raw = env.get("GMLCACHE_TIMEOUT")
     timeout_env = (
         _parse_timeout(timeout_env_raw, "in GMLCACHE_TIMEOUT") if timeout_env_raw else None
@@ -319,6 +339,8 @@ def resolve_settings(
 
     return {
         "mode": _pick(mode_flag, mode_env, file_cfg.mode, DEFAULTS["mode"]),
+        # persist: per-call depth (meter/cache/dataset), same precedence as mode.
+        "persist": _pick(persist_flag, persist_env, file_cfg.persist, DEFAULTS["persist"]),
         # store: config file or built-in per-user default only. No flag, no env --
         # a per-call store override would fork the cache and defeat reuse.
         "store": _pick(None, None, file_cfg.store, str(default_store_path())),

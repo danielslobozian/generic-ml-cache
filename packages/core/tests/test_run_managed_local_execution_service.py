@@ -12,8 +12,12 @@ import pytest
 from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
-from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    INPUT_ARTIFACT_TYPES,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.run.client_run_request import ClientRunRequest
 from generic_ml_cache_core.application.domain.model.run.client_run_result import (
     ClientRunResult,
@@ -272,12 +276,12 @@ def test_failed_call_is_stored_with_record_on_error():
     assert harness.metrics.events == ["record"]
 
 
-# --- persist_output ----------------------------------------------------------
+# --- persistence depth ----------------------------------------------------------
 
 
-def test_persist_output_false_runs_but_stores_nothing():
+def test_meter_depth_runs_but_stores_nothing():
     harness = _Harness(ClientRunResult(exit_code=0, stdout="secret\n"))
-    execution = harness.use_case.execute(_command(persist_output=False))
+    execution = harness.use_case.execute(_command(persistence_depth=PersistenceDepth.METER))
     key = execution.call_identity.generate_key()
 
     assert execution.execution_state is ExecutionState.SUCCESS
@@ -285,7 +289,123 @@ def test_persist_output_false_runs_but_stores_nothing():
     assert _stdout(execution) == b"secret\n"  # caller still gets the output
     assert harness.repository.find_current(key) is None
     assert harness.blob.puts == []  # nothing written to the blob store
-    assert harness.metrics.events == ["run"]
+    # nothing was cached, so the call would have missed
+    assert harness.metrics.events == ["would_miss"]
+
+
+def test_meter_reports_a_would_be_hit_without_replaying():
+    harness = _Harness(
+        ClientRunResult(exit_code=0, stdout="first\n"),
+        ClientRunResult(exit_code=0, stdout="second\n"),
+    )
+    harness.use_case.execute(_command())  # cache: stores an entry for this key
+    metered = harness.use_case.execute(_command(persistence_depth=PersistenceDepth.METER))
+
+    # meter still runs the client (no replay) — it returns the fresh run, not the cached one
+    assert len(harness.runner.calls) == 2
+    assert _stdout(metered) == b"second\n"
+    # but it records that the call would have hit the stored entry
+    assert harness.metrics.events == ["record", "would_hit"]
+    # and it stored nothing of its own
+    assert metered.output_persisted is False
+
+
+def _input_types(execution) -> set:
+    return {a.artifact_type for a in execution.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES}
+
+
+def test_dataset_depth_stores_the_input_as_artifacts():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.use_case.execute(
+        _command(
+            context="the context",
+            prompt="do it",
+            user_system_prompt="be terse",
+            persistence_depth=PersistenceDepth.DATASET,
+        )
+    )
+    assert execution.input_persisted is True
+    assert _input_types(execution) == {
+        ArtifactType.INPUT_CONTEXT,
+        ArtifactType.INPUT_PROMPT,
+        ArtifactType.INPUT_SYSTEM,
+    }
+    # input bytes are content-addressed in the blob store like any other artifact
+    prompt_artifact = next(
+        a for a in execution.artifacts if a.artifact_type is ArtifactType.INPUT_PROMPT
+    )
+    assert prompt_artifact.content == b"do it"
+    assert prompt_artifact.blob_key in harness.blob.store
+
+
+def test_dataset_omits_empty_input_parts():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.use_case.execute(
+        _command(
+            context="",
+            prompt="just a prompt",
+            user_system_prompt=None,
+            persistence_depth=PersistenceDepth.DATASET,
+        )
+    )
+    # only the (always-present) prompt -- empty context / absent system are skipped
+    assert _input_types(execution) == {ArtifactType.INPUT_PROMPT}
+
+
+def test_cache_depth_does_not_store_the_input():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.use_case.execute(_command(persistence_depth=PersistenceDepth.CACHE))
+    assert execution.input_persisted is False
+    assert _input_types(execution) == set()
+
+
+def test_dataset_still_replays_output_on_a_hit():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    harness.use_case.execute(_command(persistence_depth=PersistenceDepth.DATASET))
+    served = harness.use_case.execute(_command(persistence_depth=PersistenceDepth.DATASET))
+    assert len(harness.runner.calls) == 1  # dataset is a superset of cache: still replays
+    assert _stdout(served) == b"answer\n"
+
+
+def test_dataset_failed_call_stores_no_input_by_default():
+    harness = _Harness(ClientRunResult(exit_code=2, stderr="boom\n"))
+    execution = harness.use_case.execute(_command(persistence_depth=PersistenceDepth.DATASET))
+    # input rides on a stored output; an unrecorded failure stores neither
+    assert execution.input_persisted is False
+    assert _input_types(execution) == set()
+    assert harness.blob.puts == []
+
+
+def test_dataset_hit_backfills_input_onto_a_cache_only_entry():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    first = harness.use_case.execute(_command())  # cache depth: output only
+    key = first.call_identity.generate_key()
+    assert harness.repository.find_current(key).input_persisted is False
+
+    # same input at dataset depth: a HIT (no re-run) that back-fills the input,
+    # mirroring how tags accumulate on a hit
+    harness.use_case.execute(_command(persistence_depth=PersistenceDepth.DATASET))
+    assert len(harness.runner.calls) == 1  # served from cache, not re-run
+    assert harness.metrics.events == ["record", "hit"]
+    current = harness.repository.find_current(key)
+    assert current.input_persisted is True
+    assert {
+        a.artifact_type for a in current.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES
+    } == {
+        ArtifactType.INPUT_CONTEXT,
+        ArtifactType.INPUT_PROMPT,
+    }
+
+
+def test_dataset_input_backfill_is_idempotent():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    harness.use_case.execute(_command())  # cache: output only
+    harness.use_case.execute(_command(persistence_depth=PersistenceDepth.DATASET))  # back-fills
+    harness.use_case.execute(_command(persistence_depth=PersistenceDepth.DATASET))  # hits again
+    key = harness.use_case.execute(_command()).call_identity.generate_key()
+    current = harness.repository.find_current(key)
+    input_artifacts = [a for a in current.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES]
+    assert len(input_artifacts) == 2  # context + prompt, no duplicates from repeated hits
 
 
 # --- allow-paths (uncacheable) -----------------------------------------------

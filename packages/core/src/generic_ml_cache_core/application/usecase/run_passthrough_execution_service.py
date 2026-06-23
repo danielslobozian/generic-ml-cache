@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Tuple
+import json
+from typing import List, Optional, Tuple
 
+from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -65,3 +67,11 @@ class RunPassthroughExecutionService(CachedMlExecutionService, RunPassthroughExe
     def _journal_fields(self, command: RunPassthroughExecutionCommand) -> Tuple[str, str, str]:
         # A passthrough has no modelled model/effort — only the client is known.
         return command.client, "", ""
+
+    def _input_parts(
+        self, command: RunPassthroughExecutionCommand
+    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+        # The passthrough's input is its opaque native-argument list; keep it as one
+        # JSON artifact so the argument vector survives into the exported corpus.
+        payload = json.dumps(list(command.native_args))
+        return [(ArtifactType.INPUT_ARGS, None, payload.encode("utf-8"))]

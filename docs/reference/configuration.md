@@ -24,6 +24,7 @@ explicit request.
 | Key | Meaning | Default | Environment override |
 |---|---|---|---|
 | `mode` | Resolution mode: `cache`, `offline`, or `refresh`. | `cache` | `GMLCACHE_MODE` |
+| `persist` | Persistence depth: `meter` (usage only), `cache` (+ output), or `dataset` (+ input). | `cache` | `GMLCACHE_PERSIST` |
 | `store` | Where the store lives on disk. | per-user data dir (see below) | *(none — by design)* |
 | `timeout` | Seconds before a real call is killed; empty means no timeout. | none | `GMLCACHE_TIMEOUT` |
 | `trust_scan` | Whether `--allow-path` (scan) calls may be cached. `false` keeps them passthrough (always fresh, never stored); `true` asserts the scanned folders are stable and lets them cache. | `false` | `GMLCACHE_TRUST_SCAN` |

@@ -14,6 +14,7 @@ from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repositor
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -226,12 +227,32 @@ def test_failed_call_stored_with_record_on_error():
     assert harness.metrics.event_names() == ["record"]
 
 
-def test_persist_output_false_stores_nothing():
+def test_meter_depth_stores_nothing():
     harness = _Harness(ClientRunResult(exit_code=0, stdout="secret\n"))
-    execution = harness.service.execute(_command(persist_output=False))
+    execution = harness.service.execute(_command(persistence_depth=PersistenceDepth.METER))
     key = execution.call_identity.generate_key()
     assert execution.output_persisted is False
     assert _stdout(execution) == b"secret\n"
     assert harness.repository.find_current(key) is None
     assert harness.blob.puts == []
-    assert harness.metrics.event_names() == ["run"]
+    assert harness.metrics.event_names() == ["would_miss"]  # nothing cached -> would-be miss
+
+
+def test_dataset_depth_stores_the_native_args_as_input():
+    import json
+
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.service.execute(
+        _command(native_args=["--print", "hello"], persistence_depth=PersistenceDepth.DATASET)
+    )
+    assert execution.input_persisted is True
+    args = [a for a in execution.artifacts if a.artifact_type is ArtifactType.INPUT_ARGS]
+    assert len(args) == 1  # the opaque native-arg vector, kept as one JSON artifact
+    assert json.loads(args[0].content.decode("utf-8")) == ["--print", "hello"]
+
+
+def test_cache_depth_stores_no_input():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.service.execute(_command(persistence_depth=PersistenceDepth.CACHE))
+    assert execution.input_persisted is False
+    assert not any(a.artifact_type is ArtifactType.INPUT_ARGS for a in execution.artifacts)

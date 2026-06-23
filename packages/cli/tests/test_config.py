@@ -58,12 +58,37 @@ def test_precedence_default_then_config_then_env_then_flag(tmp_path, monkeypatch
 def test_default_when_nothing_set(tmp_path):
     settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))
     assert settings["mode"] == ("cache", "default")
+    assert settings["persist"] == ("cache", "default")
     assert settings["store"] == (str(config.default_store_path()), "default")
     assert settings["timeout"] == (None, "default")
 
 
 def test_invalid_env_mode_raises(monkeypatch, tmp_path):
     monkeypatch.setenv("GMLCACHE_MODE", "turbo")
+    with pytest.raises(ConfigError):
+        config.resolve_settings(config.load(tmp_path / "absent.ini"))
+
+
+def test_persist_precedence_default_then_config_then_env_then_flag(tmp_path, monkeypatch):
+    # config file sets meter ...
+    p = _write(tmp_path / "c.ini", "[defaults]\npersist = meter\n")
+    cfg = config.load(p)
+    assert config.resolve_settings(cfg)["persist"] == ("meter", "config")
+    # ... env overrides the file ...
+    monkeypatch.setenv("GMLCACHE_PERSIST", "dataset")
+    assert config.resolve_settings(cfg)["persist"] == ("dataset", "env")
+    # ... and an explicit flag overrides env.
+    assert config.resolve_settings(cfg, persist_flag="cache")["persist"] == ("cache", "flag")
+
+
+def test_invalid_persist_in_file_raises(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\npersist = hoard\n")
+    with pytest.raises(ConfigError):
+        config.load(p)
+
+
+def test_invalid_env_persist_raises(monkeypatch, tmp_path):
+    monkeypatch.setenv("GMLCACHE_PERSIST", "hoard")
     with pytest.raises(ConfigError):
         config.resolve_settings(config.load(tmp_path / "absent.ini"))
 
