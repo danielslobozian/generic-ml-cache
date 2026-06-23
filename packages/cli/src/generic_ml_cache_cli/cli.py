@@ -195,6 +195,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         persistence_depth=persistence_depth,
         record_on_error=args.record_on_error,
         tags=list(getattr(args, "tag", None) or []),
+        session_id=_resolve_session(args),
     )
 
     def executable_override(client: str):
@@ -877,6 +878,29 @@ def _cmd_invalidate(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- sessions ---------------------------------------------------------------
+
+
+def _resolve_session(args: argparse.Namespace) -> Optional[str]:
+    """The session id for this run: the --session flag, else GMLCACHE_SESSION. A session
+    groups a workflow's calls; it is journal metadata, never part of the cache key."""
+    flag = getattr(args, "session", None)
+    return flag if flag else (os.environ.get("GMLCACHE_SESSION") or None)
+
+
+def _cmd_session_start(args: argparse.Namespace) -> int:
+    import secrets
+
+    # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
+    print(secrets.token_hex(8))
+    return 0
+
+
+def _cmd_session(args: argparse.Namespace) -> int:
+    print("usage: gmlcache session start", file=sys.stderr)
+    return 2
+
+
 def _use_color() -> bool:
     """Colour only when writing to a real terminal and NO_COLOR is unset, so piped
     or redirected output never carries escape codes (the conventional contract)."""
@@ -1055,6 +1079,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--executable", help="override the client executable (the seam)")
     run.add_argument(
         "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
+    )
+    run.add_argument(
+        "--session", help="group this run under a session id (or set GMLCACHE_SESSION)"
     )
     run.add_argument(
         "--timeout", type=float, default=None, help="seconds before the real call is killed"
@@ -1241,6 +1268,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     invalidatep.add_argument("--yes", action="store_true", help="confirm the irreversible wipe")
     invalidatep.set_defaults(func=_cmd_invalidate)
+
+    session = sub.add_parser("session", help="group a workflow's runs under a session id")
+    session_sub = session.add_subparsers(dest="session_command")
+    session_start = session_sub.add_parser("start", help="generate a new session id and print it")
+    session_start.set_defaults(func=_cmd_session_start)
+    session.set_defaults(func=_cmd_session)
 
     init = sub.add_parser(
         "init",
