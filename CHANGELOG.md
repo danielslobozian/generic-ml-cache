@@ -14,6 +14,8 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-24
+
 ### Added
 
 - **Session reporting** (core + cli): `gmlcache session report <id>` now aggregates token usage
