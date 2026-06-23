@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" fill="none" role="img" aria-label="gmlcache — Detached ML Execution Cache">
+  <rect width="1280" height="640" fill="#f8fafc"/>
+  <g transform="translate(220,200) scale(3)">
+    <g transform="translate(8,14) scale(0.66)">
+      <rect x="15" y="13" width="34" height="6" rx="2" fill="#ea580c"/>
+      <rect x="15" y="23" width="20" height="6" rx="2" stroke="#1f2937" stroke-width="2.2"/>
+      <rect x="15" y="33" width="30" height="6" rx="2" stroke="#1f2937" stroke-width="2.2"/>
+      <rect x="15" y="43" width="14" height="6" rx="2" stroke="#1f2937" stroke-width="2.2"/>
+    </g>
+    <text x="66" y="47" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="32" font-weight="500" letter-spacing="-1">
+      <tspan fill="#ea580c">&gt;</tspan><tspan fill="#1f2937">gmlcache</tspan>
+    </text>
+  </g>
+  <text x="640" y="470" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="30" font-weight="400" letter-spacing="0" fill="#6b7280">Detached ML Execution Cache — record · replay · check</text>
+</svg>
