@@ -31,6 +31,11 @@ except ImportError:  # completion is a convenience; never let its absence break 
     argcomplete = None
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (
+    FilesystemEncryptionManifestStore,
+)
+from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
+from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
 from generic_ml_cache_core.adapter.out.client.registry import registered_names
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -44,7 +49,16 @@ from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_
     RunManagedLocalExecutionCommand,
 )
 from generic_ml_cache_core.application.port.out.base import ClientAdapter
-from generic_ml_cache_core.common.errors import CacheError, CacheMiss, ConfigError, RunInterrupted
+from generic_ml_cache_core.common.errors import (
+    CacheError,
+    CacheMiss,
+    ConfigError,
+    EncryptionStateError,
+    EncryptionTokenRequired,
+    RunInterrupted,
+    StoreLocked,
+    WrongEncryptionToken,
+)
 
 from . import __version__, config
 
@@ -186,9 +200,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     def executable_override(client: str):
         return config.executable_for(file_cfg, client, flag=args.executable)
 
-    wired = build_use_cases(store_root, executable_override, timeout)
-
+    token = _resolve_token(args)
     try:
+        wired = build_use_cases(store_root, executable_override, timeout, encryption_token=token)
         execution = wired.run_managed.execute(command)
     except RunInterrupted as exc:
         # A requested stop, not a failure: nothing was recorded. Exit 130 is the
@@ -206,6 +220,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 3
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
     except CacheError as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
@@ -428,6 +445,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     path = config.resolve_config_path()
     loaded = file_cfg.source is not None
+    encryption = FilesystemEncryptionManifestStore(Path(str(settings["store"][0]))).state().value
 
     if args.json:
         import json
@@ -437,6 +455,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
                 {
                     "config_file": str(path),
                     "loaded": loaded,
+                    "encryption": encryption,
                     "settings": {k: {"value": v[0], "source": v[1]} for k, v in settings.items()},
                     "executables": dict(file_cfg.executables),
                 },
@@ -446,6 +465,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         return 0
 
     print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
+    print(f"encryption  : {encryption}")
     print("effective settings (no run flags applied):")
     for key in ("mode", "persist", "store", "timeout", "trust_scan", "max_size"):
         value, source = settings[key]
@@ -702,24 +722,30 @@ def _cmd_export(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(Path(str(settings["store"][0])))
     include = set(getattr(args, "tag", None) or [])
     exclude = set(getattr(args, "exclude_tag", None) or [])
 
     lines = []
     skipped_no_input = 0
-    for summary in wired.repository.current_execution_summaries():
-        tags = wired.repository.tags_for(summary.execution_key)
-        if include and not include & set(tags):
-            continue
-        if exclude and exclude & set(tags):
-            continue
-        execution = wired.repository.find_current(summary.execution_key)
-        # Only DATASET-depth entries carry the input side of the corpus.
-        if execution is None or not execution.input_persisted:
-            skipped_no_input += 1
-            continue
-        lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+    try:
+        wired = build_use_cases(
+            Path(str(settings["store"][0])), encryption_token=_resolve_token(args)
+        )
+        for summary in wired.repository.current_execution_summaries():
+            tags = wired.repository.tags_for(summary.execution_key)
+            if include and not include & set(tags):
+                continue
+            if exclude and exclude & set(tags):
+                continue
+            execution = wired.repository.find_current(summary.execution_key)
+            # Only DATASET-depth entries carry the input side of the corpus.
+            if execution is None or not execution.input_persisted:
+                skipped_no_input += 1
+                continue
+            lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
 
     if args.output:
         Path(args.output).write_text("".join(line + "\n" for line in lines), encoding="utf-8")
@@ -735,6 +761,119 @@ def _cmd_export(args: argparse.Namespace) -> int:
         entries = "entry" if skipped_no_input == 1 else "entries"
         note += f"; skipped {skipped_no_input} matching {entries} without stored input (not dataset depth)"
     print(note, file=sys.stderr)
+    return 0
+
+
+# -- encryption -------------------------------------------------------------
+
+
+def _resolve_token(args: argparse.Namespace) -> Optional[str]:
+    """The encryption token for this call: the --token flag, else GMLCACHE_TOKEN.
+    A token is a secret, so it is never read from the config file."""
+    flag = getattr(args, "token", None)
+    return flag if flag else (os.environ.get("GMLCACHE_TOKEN") or None)
+
+
+def _load_cipher():
+    """Build the cipher, with a friendly error if the optional extra is missing."""
+    try:
+        from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
+    except ImportError as exc:  # pragma: no cover - exercised only without the extra
+        raise SystemExit(
+            "error: encryption needs an optional dependency — install with "
+            '`pip install "generic-ml-cache-core[encryption]"`'
+        ) from exc
+    return AesGcmCipher()
+
+
+def _store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
+    return StoreEncryptor(
+        store_root,
+        FilesystemEncryptionManifestStore(store_root),
+        SqliteStoreLock(store_root),
+        cipher,
+    )
+
+
+def _store_root() -> Optional[Path]:
+    try:
+        return Path(str(config.resolve_settings(config.load())["store"][0]))
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return None
+
+
+def _cmd_encrypt(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    cipher = _load_cipher()
+    token = cipher.generate_token()
+    try:
+        _store_encryptor(store_root, cipher).enable(token)
+    except (EncryptionStateError, StoreLocked) as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+    print("encryption enabled. Save this token — it is shown once and cannot be recovered:")
+    print(f"\n    {token}\n")
+    print("Pass it with --token or GMLCACHE_TOKEN to read or write this store.")
+    return 0
+
+
+def _cmd_decrypt(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    token = _resolve_token(args)
+    if not token:
+        print("gmlc: provide the token with --token or GMLCACHE_TOKEN", file=sys.stderr)
+        return 4
+    try:
+        _store_encryptor(store_root, _load_cipher()).disable(token)
+    except (WrongEncryptionToken, EncryptionStateError, StoreLocked) as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+    print("encryption disabled. The store is now public; no token is needed.")
+    return 0
+
+
+def _cmd_rotate(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    old_token = _resolve_token(args)
+    if not old_token:
+        print("gmlc: provide the current token with --token or GMLCACHE_TOKEN", file=sys.stderr)
+        return 4
+    cipher = _load_cipher()
+    new_token = cipher.generate_token()
+    try:
+        _store_encryptor(store_root, cipher).rotate(old_token, new_token)
+    except (WrongEncryptionToken, EncryptionStateError, StoreLocked) as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+    print("token rotated. Save the new token — it is shown once:")
+    print(f"\n    {new_token}\n")
+    return 0
+
+
+def _cmd_invalidate(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    if not args.yes:
+        print(
+            "gmlc: this permanently wipes the cache (crypto-shred) and cannot be undone. "
+            "Re-run with --yes to confirm.",
+            file=sys.stderr,
+        )
+        return 4
+    try:
+        _store_encryptor(store_root).invalidate()  # no token needed
+    except StoreLocked as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+    print("store invalidated: the cache was wiped and is now empty and public.")
     return 0
 
 
@@ -915,6 +1054,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--executable", help="override the client executable (the seam)")
     run.add_argument(
+        "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
+    )
+    run.add_argument(
         "--timeout", type=float, default=None, help="seconds before the real call is killed"
     )
     run.add_argument(
@@ -1071,7 +1213,34 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="write JSONL to FILE instead of stdout (a per-record summary still goes to stderr)",
     )
+    exportp.add_argument(
+        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
+    )
     exportp.set_defaults(func=_cmd_export)
+
+    encryptp = sub.add_parser(
+        "encrypt", help="enable at-rest encryption of the store (generates and shows a token)"
+    )
+    encryptp.set_defaults(func=_cmd_encrypt)
+
+    decryptp = sub.add_parser(
+        "decrypt", help="disable encryption (decrypts the store back to plaintext; needs the token)"
+    )
+    decryptp.add_argument("--token", help="the encryption token (or set GMLCACHE_TOKEN)")
+    decryptp.set_defaults(func=_cmd_decrypt)
+
+    rotatep = sub.add_parser(
+        "rotate", help="rotate the encryption token (needs the current token; shows the new one)"
+    )
+    rotatep.add_argument("--token", help="the current encryption token (or set GMLCACHE_TOKEN)")
+    rotatep.set_defaults(func=_cmd_rotate)
+
+    invalidatep = sub.add_parser(
+        "invalidate",
+        help="wipe the cache (crypto-shred) — the escape when the token is lost. Needs --yes.",
+    )
+    invalidatep.add_argument("--yes", action="store_true", help="confirm the irreversible wipe")
+    invalidatep.set_defaults(func=_cmd_invalidate)
 
     init = sub.add_parser(
         "init",

@@ -65,6 +65,44 @@ class ArtifactBlobMissing(CacheError):
     """
 
 
+class WrongEncryptionToken(CacheError):
+    """Raised when a token cannot decrypt the store's wrapped data key.
+
+    The token is wrong (or the wrapped key was tampered with): the authenticated
+    decryption of the key envelope failed. The cipher adapter translates the
+    library's integrity error into this cause-named exception so the core never
+    sees a foreign error type, and the caller can offer "provide the right token
+    or invalidate" rather than leaking a stack trace.
+    """
+
+
+class EncryptionTokenRequired(CacheError):
+    """Raised when an operation needs to read or write encrypted content but no
+    token was supplied.
+
+    The store is globally encrypted, so there is no plaintext fallback: reading a
+    hit or recording a new entry needs the token. Metadata-only operations (list,
+    stats, tags, status) do not touch content and still work without it.
+    """
+
+
+class EncryptionStateError(CacheError):
+    """Raised when an encryption operation does not match the store's state —
+    enabling an already-encrypted store, or disabling/rotating a public one.
+    """
+
+
+class StoreLocked(CacheError):
+    """Raised when an exclusive store operation cannot start because another
+    process already holds the store lock.
+
+    The lock makes the store immutable during an encryption migration
+    (enable/disable). It is an OS-level lock that releases automatically when the
+    holding process dies, so there is never a stale lock to clear by hand;
+    acquisition fails fast rather than blocking.
+    """
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

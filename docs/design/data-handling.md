@@ -12,9 +12,10 @@
 
 ---
 
-**Status: partially implemented.** Persistence depth (meter/cache/dataset), tagging and tag
-query, and dataset export have landed; at-rest encryption is still design intent. This records the model and the sharp edges; the [roadmap](../ROADMAP.md) sequences the
-work. Nothing not yet shipped is a commitment.
+**Status: largely implemented.** Persistence depth (meter/cache/dataset), tagging and tag
+query, dataset export, and at-rest encryption have landed. One documented gap remains:
+encryption covers the content blobs, not the metadata index (see the crypto notes). This
+records the model and the sharp edges; the [roadmap](../ROADMAP.md) sequences the work.
 
 ## The model: a persistence ladder plus orthogonal toggles
 
@@ -80,26 +81,30 @@ rule the roadmap already states for `session_id`.
 
 ## Crypto cautions (for when encryption is built)
 
-These separate a safe scheme from a footgun. The scheme should get a real cryptographic
-review and lean on a **vetted library** (libsodium/PyNaCl, `cryptography`'s `AESGCM`, or an
-age-style envelope) rather than hand-assembled primitives. It ships behind an optional
-`[encryption]` extra — permissively licensed, `pip`-only, no OS-level software — so the base
-install carries no crypto dependency.
+Encryption uses a **vetted library** (`cryptography`: AES-256-GCM + HKDF-SHA256), behind an
+optional `[encryption]` extra — permissively licensed, `pip`-only, no OS-level software, so the
+base install carries no crypto dependency. The scheme still merits an independent cryptographic
+review. How the implementation meets — or defers — each caution:
 
-1. **Derive the key; never use the secret raw.** Run the secret through a vetted KDF; if
-   anything is stored to verify it, derive that with a *separate* HKDF label so the verifier
-   can never relate to the key.
-2. **Secret entropy is security-critical.** Prefer a gmlcache-generated **high-entropy**
-   token; if the secret is a human passphrase, route it through **Argon2id**.
-3. **Key the lookup index, not just the blobs.** With encryption on, derive the input
-   fingerprint as `HMAC(key, canonical_input)` — otherwise the index leaks *which* (possibly
-   low-entropy) inputs were cached even though the values are encrypted. Encrypt the values
-   **and** key the index.
-4. **AEAD bound to context.** Use authenticated encryption (AES-GCM / XChaCha20-Poly1305) with
-   the fingerprint as associated data, so a tampered or *swapped* blob fails to decrypt.
-5. **Encryption is store-wide, not per-entry.** It is on or off for the whole local store —
-   there is no public/private split (that was the scope idea). Off: blobs stay
-   content-addressed and deduplicated. On: everything persisted is encrypted under the one key.
+1. **Derive the key; never use the secret raw.** *Done.* Token → HKDF-SHA256 → a
+   key-encryption-key that wraps a random **data key**; content is encrypted under the data
+   key. Nothing stored relates to the token except the wrapped key, which doubles as the
+   verifier (a wrong token fails its AEAD tag).
+2. **Secret entropy is security-critical.** *Done.* gmlcache generates the token (256-bit,
+   url-safe); no outside passphrase is accepted, so a password-hardening KDF (Argon2id) is
+   unnecessary.
+3. **Key the lookup index, not just the blobs.** **The known gap.** Encryption covers the
+   content blobs; the SQLite metadata stays plaintext, so the content *fingerprints* (and
+   model names, tags, timestamps) are visible to someone holding the encrypted store. The
+   content itself is protected; *which* (possibly low-entropy) inputs were seen is not. Keying
+   the index (`HMAC(key, fingerprint)`) is future hardening.
+4. **AEAD bound to context.** *Done.* AES-256-GCM with domain-separated associated data, so a
+   tampered or *swapped* blob fails to decrypt.
+5. **Store-wide, not per-entry.** *Done.* On or off for the whole local store — no
+   public/private split (that was the scope idea). Off: blobs stay content-addressed and
+   deduplicated. On: everything persisted is encrypted under the one key. Enabling/disabling is
+   a crash-safe migration (stage → atomic commit marker → per-file swap; recovery self-heals a
+   half-done migration on the next open).
 
 ## Dataset caveat
 

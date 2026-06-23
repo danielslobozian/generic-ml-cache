@@ -37,6 +37,10 @@ gmlcache list
 gmlcache inspect <key-or-prefix>
 gmlcache tags
 gmlcache export
+gmlcache encrypt
+gmlcache decrypt
+gmlcache rotate
+gmlcache invalidate
 gmlcache stats
 gmlcache doctor
 gmlcache models <client>
@@ -78,6 +82,7 @@ Capability and passthrough:
 | `--grant` | Open a capability for the client: `net`, `read`, `write`, `shell`, or `web-search` — enablement, not restriction. Keyed into the call (a granted call is its own execution) and cacheable; use `--force` for a live re-fetch. Repeatable. See [Grants reference](grants.md). |
 | `--client-arg` | An extra argument appended verbatim to the client launch — an escape hatch for client features the cache does not model. Part of the key; only its fingerprint is stored, never the raw value. Repeatable; order is significant. Use the `=` form for dash-leading values: `--client-arg=--flag`. |
 | `--executable` | Override the client executable (the seam). |
+| `--token` | Encryption token for an encrypted store (or set `GMLCACHE_TOKEN`). Needed to read or record when encryption is on; ignored on a public store. |
 
 Mode:
 
@@ -115,12 +120,30 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 | `inspect <key-or-path>` | `--raw` also prints the client's verbatim usage block. Accepts a short key as shown by `list`. Shows whether the entry's input was stored (`dataset` depth). |
 | `list` | `--client`, `--model` filter the listing; `--tag` / `--exclude-tag` filter by tag (match-any include / exclude, with exclude winning); `--json` for machine output. |
 | `tags` | List the distinct tags in use across current executions, with counts. `--json` for machine output. |
-| `export` | Export the `dataset`-depth `(input, output)` corpus as JSONL. `--tag` / `--exclude-tag` filter by tag (match-any; exclude wins); `-o` / `--output FILE` writes to a file instead of stdout (a per-record summary still goes to stderr). Entries stored below `dataset` depth carry no input and are skipped (and reported). |
+| `export` | Export the `dataset`-depth `(input, output)` corpus as JSONL. `--tag` / `--exclude-tag` filter by tag (match-any; exclude wins); `-o` / `--output FILE` writes to a file instead of stdout (a per-record summary still goes to stderr). Entries stored below `dataset` depth carry no input and are skipped (and reported). On an encrypted store it needs `--token` / `GMLCACHE_TOKEN`. |
 | `models <client>` | `--executable` overrides the client executable; `--timeout`; `--json`. Omit `<client>` to query every registered client. |
 | `doctor` | `--timeout` (default 10s); `--json`. |
 | `stats` | `--json`. |
-| `status` | `--json`. |
+| `status` | `--json`. Also shows the encryption state (public / encrypted). |
 | `init` | (no options) writes a starter config file on explicit request. |
+
+### Encryption
+
+At-rest encryption is **store-wide** and optional. gmlcache generates the token (no outside
+passwords); keep it safe — it is shown once and is unrecoverable if lost.
+
+| Command | Options |
+|---|---|
+| `encrypt` | Enable encryption: generate a token, encrypt the store, print the token once. |
+| `decrypt` | Disable encryption (decrypt back to plaintext). `--token` / `GMLCACHE_TOKEN`. |
+| `rotate` | Swap to a freshly generated token (the content is not re-encrypted). `--token` is the *current* token. |
+| `invalidate` | Crypto-shred the store — the escape when the token is lost. Requires `--yes`. |
+
+The token is supplied at runtime via `--token` or `GMLCACHE_TOKEN`, **never the config file**.
+Content commands (`run`, `export`) need it on an encrypted store; metadata-only commands
+(`list`, `stats`, `tags`, `status`) do not. Encryption covers the content (prompts, outputs,
+inputs); execution metadata stays plaintext — see the
+[data-handling note](../design/data-handling.md).
 
 ## Future session commands
 

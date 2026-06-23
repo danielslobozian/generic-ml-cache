@@ -54,6 +54,10 @@ Otherwise the default is:
 The default `store` resolves to the per-user data directory (`$XDG_DATA_HOME` /
 `%LOCALAPPDATA%`), under `generic-ml-cache`.
 
+The encryption token (`GMLCACHE_TOKEN`, or the `--token` flag) is **not** a config
+setting — a secret never belongs in a config file. It is read only from the environment
+or the flag, at runtime; see the [CLI reference](cli.md#encryption).
+
 Color output follows the standard `NO_COLOR` convention and is suppressed when
 output is not a terminal.
 

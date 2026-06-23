@@ -28,7 +28,17 @@ from generic_ml_cache_core.adapter.out.metrics.journal_metrics import JournalMet
 from generic_ml_cache_core.adapter.out.persistence.sqlite_execution_repository import (
     SqliteExecutionRepository,
 )
+from generic_ml_cache_core.adapter.out.crypto.encrypting_blob_store import (
+    EncryptingBlobStore,
+    TokenRequiredBlobStore,
+)
+from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (
+    FilesystemEncryptionManifestStore,
+)
+from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
+from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
+from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.run_api_execution_service import (
     RunApiExecutionService,
@@ -56,24 +66,62 @@ class WiredUseCases:
     run_passthrough: RunPassthroughExecutionService
     run_api: RunApiExecutionService
     probe: ProbeService
-    blob_store: FilesystemBlobStore
+    blob_store: BlobStorePort
     repository: SqliteExecutionRepository
     metrics: JournalMetrics
+
+
+def _recover_store(store_root: Path) -> None:
+    """Finish or roll back any interrupted encryption migration before the store is
+    opened, so a crashed enable/disable self-heals and never leaves a half-state.
+    Cipher-free and a cheap no-op when nothing is pending."""
+    StoreEncryptor(
+        store_root,
+        FilesystemEncryptionManifestStore(store_root),
+        SqliteStoreLock(store_root),
+    ).recover()
+
+
+def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> BlobStorePort:
+    """The blob store, wrapped for at-rest encryption when the store is encrypted.
+
+    A store is encrypted iff its manifest is present. With the token, blobs are
+    transparently encrypted on write and decrypted on read; without it, content
+    operations fail with a clear error while metadata-only commands still work; a
+    public store ignores any token. The cipher — and its ``cryptography``
+    dependency — is imported only when an encrypted store is actually opened, so a
+    public store never needs the optional ``[encryption]`` extra.
+    """
+    blob_store: BlobStorePort = FilesystemBlobStore(store_root / _BLOBS_DIRNAME)
+    manifest = FilesystemEncryptionManifestStore(store_root).load()
+    if manifest is None:
+        return blob_store
+    if encryption_token is None:
+        return TokenRequiredBlobStore(blob_store)
+    from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
+
+    cipher = AesGcmCipher()
+    data_key = cipher.open_envelope(encryption_token, manifest)  # raises on a wrong token
+    return EncryptingBlobStore(blob_store, cipher, data_key)
 
 
 def build_use_cases(
     store_root: Path,
     executable_override: Optional[ExecutableOverride] = None,
     timeout: Optional[float] = None,
+    encryption_token: Optional[str] = None,
 ) -> WiredUseCases:
     """Construct the outbound adapters under ``store_root`` and wire the services.
 
     Layout: ``store_root/blobs/`` for output bytes, ``store_root/executions.sqlite3``
-    for the structured records, and the access-event registry beside them.
+    for the structured records, and the access-event registry beside them. When the
+    store is encrypted, ``encryption_token`` unlocks the blob store at rest (see
+    :func:`_resolve_blob_store`).
     """
     store_root = Path(store_root)
+    _recover_store(store_root)
     clock = SystemClock()
-    blob_store = FilesystemBlobStore(store_root / _BLOBS_DIRNAME)
+    blob_store = _resolve_blob_store(store_root, encryption_token)
     repository = SqliteExecutionRepository(store_root / _EXECUTIONS_DB, clock)
     metrics = JournalMetrics(AccessRegistry(store_root))
     file_fingerprint = FilesystemFileFingerprint()

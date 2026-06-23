@@ -14,6 +14,24 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+### Added
+
+- **At-rest encryption** (core + cli): optional, token-keyed encryption of the stored content.
+  `gmlcache encrypt` enables it — gmlcache generates a high-entropy token (no outside
+  passwords), encrypts the store, and prints the token once; `decrypt` (with the token) returns
+  it to plaintext, `rotate` swaps the token (re-wrapping the data key — content is never
+  re-encrypted), and `invalidate --yes` crypto-shreds the store (the escape when the token is
+  lost). Content commands (`run`, `export`) take `--token` / `GMLCACHE_TOKEN`; metadata-only
+  commands need no token, and `status` shows the state.
+  Envelope encryption (AES-256-GCM + HKDF-SHA256): content is encrypted under a random data key
+  that is itself wrapped under the token; only non-secret material is stored — never the token
+  or the key. Encryption is **store-wide and all-or-nothing**, and transparent to the cache key
+  (the token is never part of identity). The enable/disable migration is crash-safe (stage →
+  atomic commit marker → per-file swap; an interrupted migration self-heals on the next open).
+  Ships behind an optional, permissively-licensed, pip-only `[encryption]` extra; the base
+  install is unaffected. Covers the content blobs (prompts/outputs/inputs); execution metadata
+  (fingerprints, model names, tags) stays plaintext — see the data-handling note.
+
 ## [0.4.0] - 2026-06-23
 
 ### Added
