@@ -14,6 +14,8 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-23
+
 ### Added
 
 - **Persistence depth** (core + cli): a single ordered `--persist` choice over what each
