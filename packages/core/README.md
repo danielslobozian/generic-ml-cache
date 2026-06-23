@@ -1,3 +1,10 @@
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-mark-dark.png">
+  <img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-mark.png" alt="gmlcache" width="72">
+</picture>
+</p>
+
 # generic-ml-cache-core
 
 #### The hexagonal engine behind gmlcache — embeddable and stateless
@@ -15,6 +22,10 @@ plus the `build_use_cases` composition factory.
 
 Pure Python and **stateless**: it bakes in *structure*
 (table names, blob naming, schema) but no *location* — you inject the data source.
+
+> **Part of a single-user, local tool — not a gateway.** gmlcache records and replays across
+> the subscriptions and APIs you already hold; it is **not** a multi-user router. See
+> [Positioning](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/design/positioning.md).
 
 ## Install
 

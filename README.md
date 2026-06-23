@@ -2,7 +2,10 @@
 
 <br>
 
-# gmlcache
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/gmlcache-lockup-dark.svg">
+  <img src="docs/images/gmlcache-lockup.svg" alt="gmlcache" width="320">
+</picture>
 
 #### Detached ML Execution Cache
 
