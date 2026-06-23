@@ -112,3 +112,84 @@ def test_run_detach_submits_a_job_and_prints_the_id(capsys, monkeypatch):
     status = store.read_status(job_id)
     assert status["state"] == "submitted" and status["client"] == "fake"
     assert store.read_spec(job_id)["prompt"] == "STDOUT hi"
+
+
+# --- execution status / result / list (Slice 2) ------------------------------
+
+
+def _submit_via_run(monkeypatch, prompt="STDOUT hi"):
+    captured = {}
+    monkeypatch.setattr(
+        async_jobs, "spawn_worker", lambda root, jid: captured.update(root=root, jid=jid)
+    )
+    main(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            prompt,
+            "--detach",
+        ]
+    )
+    return captured["jid"], captured["root"]
+
+
+def _submit_and_run(monkeypatch, prompt="STDOUT hi"):
+    jid, root = _submit_via_run(monkeypatch, prompt)
+    _cmd_worker(argparse.Namespace(store_root=str(root), job_id=jid))
+    return jid, root
+
+
+def test_execution_status_and_result_for_a_succeeded_job(capsys, monkeypatch):
+    jid, _ = _submit_and_run(monkeypatch)
+    capsys.readouterr()
+    assert main(["execution", "status", jid]) == 0
+    out = capsys.readouterr().out
+    assert "state      : succeeded" in out and "result     :" in out
+    assert main(["execution", "result", jid]) == 0
+    assert "hi" in capsys.readouterr().out
+
+
+def test_execution_status_json(capsys, monkeypatch):
+    import json
+
+    jid, _ = _submit_and_run(monkeypatch)
+    capsys.readouterr()
+    assert main(["execution", "status", jid, "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["state"] == "succeeded" and data["execution_key"]
+
+
+def test_interrupted_when_running_but_no_worker_holds_the_lock(capsys, monkeypatch):
+    jid, root = _submit_via_run(monkeypatch)
+    # a worker that set running then vanished: status says running, nothing holds the lock
+    async_jobs.JobStore(root).update_status(jid, state="running", started_at=async_jobs.now())
+    capsys.readouterr()
+    assert main(["execution", "status", jid]) == 0
+    assert "state      : interrupted" in capsys.readouterr().out
+    assert main(["execution", "result", jid]) == 1  # interrupted is not a result
+
+
+def test_result_on_a_live_running_job_is_not_ready(monkeypatch):
+    jid, root = _submit_via_run(monkeypatch)
+    store = async_jobs.JobStore(root)
+    store.update_status(jid, state="running")
+    with async_jobs.hold_job_lock(store.lock_path(jid)):  # a live worker holds the lock
+        assert main(["execution", "result", jid]) == 75  # EX_TEMPFAIL: try again later
+
+
+def test_execution_list_unknown_and_usage(capsys, monkeypatch):
+    jid, _ = _submit_and_run(monkeypatch)
+    capsys.readouterr()
+    assert main(["execution", "list"]) == 0
+    out = capsys.readouterr().out
+    assert jid in out and "succeeded" in out
+    assert main(["execution", "status", "nope"]) == 4  # unknown job
+    capsys.readouterr()
+    assert main(["execution"]) == 2  # bare -> usage
+    assert "execution status" in capsys.readouterr().err

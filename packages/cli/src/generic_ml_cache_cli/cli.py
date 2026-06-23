@@ -108,6 +108,18 @@ def _artifact_text(execution: MlExecution, artifact_type: ArtifactType) -> str:
     return ""
 
 
+def _stored_artifact_text(execution: MlExecution, blob_store, artifact_type: ArtifactType) -> str:
+    """Like ``_artifact_text``, but hydrates the bytes from the blob store when a
+    stored execution carries only artifact metadata (``content is None``)."""
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is artifact_type:
+            content = artifact.content
+            if content is None:
+                content = blob_store.get(artifact.blob_key)
+            return (content or b"").decode("utf-8", errors="replace")
+    return ""
+
+
 def _run_exit_code(execution: MlExecution) -> int:
     if execution.failure is not None and execution.failure.exit_code is not None:
         return execution.failure.exit_code
@@ -335,6 +347,158 @@ def _cmd_worker(args: argparse.Namespace) -> int:
             return 0
     except StoreLocked:
         return 1
+
+
+# -- execution (detached job) readers -----------------------------------------
+
+
+def _state_style(state: str):
+    # Built at call time: the ANSI palette constants are defined later in the module.
+    return {
+        async_jobs.RUNNING: (_TEAL,),
+        async_jobs.SUBMITTED: (_GREY,),
+        async_jobs.SUCCEEDED: (_GREEN,),
+        async_jobs.FAILED: (_AMBER,),
+        async_jobs.INTERRUPTED: (_AMBER,),
+    }.get(state, ())
+
+
+def _job_state(store: "async_jobs.JobStore", job_id: str):
+    """(status dict or None, derived state) for a job, applying the liveness probe."""
+    status = store.read_status(job_id)
+    held = async_jobs.job_lock_held(store.lock_path(job_id))
+    return status, async_jobs.derived_state(status, held)
+
+
+def _cmd_execution_status(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    status, state = _job_state(store, args.job_id)
+    status = status or {}
+
+    if args.json:
+        import json
+
+        print(json.dumps({**status, "state": state}, indent=2))
+        return 0
+
+    print(f"job        : {args.job_id}")
+    print(f"state      : {_paint(state, *_state_style(state))}")
+    if status.get("client"):
+        print(f"client     : {status['client']} / {status.get('model', '')}")
+    for label, field in (
+        ("submitted", "submitted_at"),
+        ("started", "started_at"),
+        ("ended", "ended_at"),
+    ):
+        if status.get(field):
+            print(f"{label:<10} : {status[field]}")
+    if status.get("exit_code") is not None:
+        print(f"exit       : {status['exit_code']}")
+    if state == async_jobs.SUCCEEDED and status.get("execution_key"):
+        print(
+            f"result     : {status['execution_key'][:12]}  (gmlcache execution result {args.job_id})"
+        )
+    if state == async_jobs.INTERRUPTED:
+        print("note       : the worker vanished before finishing (lock released, no result)")
+    elif state == async_jobs.FAILED and status.get("error"):
+        print(f"error      : {status['error']}")
+    return 0
+
+
+def _cmd_execution_result(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    status, state = _job_state(store, args.job_id)
+    status = status or {}
+
+    if state in (async_jobs.SUBMITTED, async_jobs.RUNNING):
+        print(f"gmlc: job {args.job_id} is still {state}; not finished yet", file=sys.stderr)
+        return 75  # EX_TEMPFAIL: "try again later"
+    if state == async_jobs.INTERRUPTED:
+        print(
+            f"gmlc: job {args.job_id} was interrupted — the worker vanished before finishing",
+            file=sys.stderr,
+        )
+        return 1
+    if state != async_jobs.SUCCEEDED:
+        print(
+            f"gmlc: job {args.job_id} failed: {status.get('error', '(no detail)')}", file=sys.stderr
+        )
+        return 1
+
+    key = status.get("execution_key")
+    wired = build_use_cases(store_root) if key else None
+    execution = wired.repository.find_current(key) if wired else None
+    if execution is None:
+        print(
+            f"gmlc: job {args.job_id} has no stored result (was the cache pruned?)", file=sys.stderr
+        )
+        return 4
+    sys.stdout.write(_stored_artifact_text(execution, wired.blob_store, ArtifactType.STDOUT))
+    sys.stdout.flush()
+    sys.stderr.write(_stored_artifact_text(execution, wired.blob_store, ArtifactType.STDERR))
+    sys.stderr.flush()
+    return int(status.get("exit_code") or 0)
+
+
+def _cmd_execution_list(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    rows = []
+    for job_id in store.list_ids():
+        status, state = _job_state(store, job_id)
+        status = status or {}
+        rows.append(
+            (
+                job_id,
+                state,
+                status.get("client", ""),
+                status.get("model", ""),
+                status.get("submitted_at", ""),
+            )
+        )
+
+    if args.json:
+        import json
+
+        print(
+            json.dumps(
+                [
+                    {"job": j, "state": s, "client": c, "model": m, "submitted_at": t}
+                    for j, s, c, m, t in rows
+                ],
+                indent=2,
+            )
+        )
+        return 0
+    if not rows:
+        print("no detached jobs")
+        return 0
+    for job_id, state, client, model, submitted in rows:
+        painted = _paint(f"{state:<11}", *_state_style(state))
+        print(f"{job_id}  {painted} {client}/{model}  {submitted}")
+    return 0
+
+
+def _cmd_execution(args: argparse.Namespace) -> int:
+    print(
+        "usage: gmlcache execution status <id> | result <id> | list",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
@@ -1513,6 +1677,20 @@ def build_parser() -> argparse.ArgumentParser:
     session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_report.set_defaults(func=_cmd_session_report)
     session.set_defaults(func=_cmd_session)
+
+    execution = sub.add_parser("execution", help="inspect detached (--detach) execution jobs")
+    execution_sub = execution.add_subparsers(dest="execution_command")
+    exec_status = execution_sub.add_parser("status", help="show a detached job's state")
+    exec_status.add_argument("job_id", help="the execution id printed by `run --detach`")
+    exec_status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    exec_status.set_defaults(func=_cmd_execution_status)
+    exec_result = execution_sub.add_parser("result", help="print a finished job's output")
+    exec_result.add_argument("job_id", help="the execution id")
+    exec_result.set_defaults(func=_cmd_execution_result)
+    exec_list = execution_sub.add_parser("list", help="list detached jobs and their states")
+    exec_list.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    exec_list.set_defaults(func=_cmd_execution_list)
+    execution.set_defaults(func=_cmd_execution)
 
     init = sub.add_parser(
         "init",
