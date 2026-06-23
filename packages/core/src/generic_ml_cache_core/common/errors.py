@@ -65,6 +65,17 @@ class ArtifactBlobMissing(CacheError):
     """
 
 
+class WrongEncryptionToken(CacheError):
+    """Raised when a token cannot decrypt the store's wrapped data key.
+
+    The token is wrong (or the wrapped key was tampered with): the authenticated
+    decryption of the key envelope failed. The cipher adapter translates the
+    library's integrity error into this cause-named exception so the core never
+    sees a foreign error type, and the caller can offer "provide the right token
+    or invalidate" rather than leaking a stack trace.
+    """
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

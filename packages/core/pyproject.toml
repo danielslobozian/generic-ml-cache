@@ -34,7 +34,11 @@ Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
 Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-cov", "coverage>=7", "vulture>=2", "ruff>=0.15"]
+# Optional at-rest encryption. Permissively licensed (Apache-2.0/BSD), pip-only
+# (bundled native code, no OS-level software). Off by default; the base install
+# carries no crypto dependency.
+encryption = ["cryptography>=42"]
+dev = ["pytest>=7", "pytest-cov", "coverage>=7", "vulture>=2", "ruff>=0.15", "cryptography>=42"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/generic_ml_cache_core"]
