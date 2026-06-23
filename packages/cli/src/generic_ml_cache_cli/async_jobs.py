@@ -1,0 +1,187 @@
+# SPDX-FileCopyrightText: 2026 Daniel Slobozian
+# SPDX-License-Identifier: Apache-2.0
+"""Detached ("async") execution jobs.
+
+A detached managed run is a separate, OS-detached ``gmlcache`` worker process that does an
+ordinary managed run and records the result into the normal content-addressed cache. The
+launch command returns immediately with a **job id**; the worker outlives it.
+
+State lives under ``<store>/jobs/``:
+
+* ``<id>/spec.json``    — the run to perform (the serialized ``run`` arguments).
+* ``<id>/status.json``  — the mutable lifecycle (submitted → running → succeeded | failed),
+  timings, exit code, and the resulting cache key once done.
+* ``<id>/events.jsonl`` — the durable, append-only NDJSON progress log (for ``watch``).
+* ``locks/<id>.lock``   — a **liveness lock** the worker holds for its whole run.
+
+The liveness lock reuses SQLite's ``BEGIN EXCLUSIVE`` (same trick as the encryption store
+lock): it is released by the OS when the holder's process dies, with no stale locks, on every
+platform. So a reader can tell a *live* worker (lock held) from one that *vanished* mid-run
+(lock free while ``status.json`` still says ``running`` → **interrupted**).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterator, List, Optional
+
+from generic_ml_cache_core.common.errors import StoreLocked
+
+# Stored lifecycle states.
+SUBMITTED = "submitted"
+RUNNING = "running"
+SUCCEEDED = "succeeded"
+FAILED = "failed"
+#: Derived (never stored): status says running but no worker holds the lock.
+INTERRUPTED = "interrupted"
+TERMINAL = frozenset({SUCCEEDED, FAILED})
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+class JobStore:
+    """The on-disk layout for detached jobs under ``<store>/jobs/``."""
+
+    def __init__(self, store_root: Path) -> None:
+        self._jobs = Path(store_root) / "jobs"
+
+    def job_dir(self, job_id: str) -> Path:
+        return self._jobs / job_id
+
+    def lock_path(self, job_id: str) -> Path:
+        return self._jobs / "locks" / f"{job_id}.lock"
+
+    def events_path(self, job_id: str) -> Path:
+        return self.job_dir(job_id) / "events.jsonl"
+
+    def _spec_path(self, job_id: str) -> Path:
+        return self.job_dir(job_id) / "spec.json"
+
+    def _status_path(self, job_id: str) -> Path:
+        return self.job_dir(job_id) / "status.json"
+
+    def exists(self, job_id: str) -> bool:
+        return self._status_path(job_id).exists() or self._spec_path(job_id).exists()
+
+    def list_ids(self) -> List[str]:
+        if not self._jobs.exists():
+            return []
+        return sorted(p.name for p in self._jobs.iterdir() if p.is_dir() and p.name != "locks")
+
+    def write_spec(self, job_id: str, spec: dict) -> None:
+        self.job_dir(job_id).mkdir(parents=True, exist_ok=True)
+        self._write_json(self._spec_path(job_id), spec)
+
+    def read_spec(self, job_id: str) -> dict:
+        return json.loads(self._spec_path(job_id).read_text(encoding="utf-8"))
+
+    def read_status(self, job_id: str) -> Optional[dict]:
+        try:
+            return json.loads(self._status_path(job_id).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    def update_status(self, job_id: str, **fields: object) -> dict:
+        """Merge ``fields`` into the job's status.json (creating it), and return it."""
+        status = self.read_status(job_id) or {"job": job_id}
+        status.update(fields)
+        self.job_dir(job_id).mkdir(parents=True, exist_ok=True)
+        self._write_json(self._status_path(job_id), status)
+        return status
+
+    @staticmethod
+    def _write_json(path: Path, data: dict) -> None:
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp.replace(path)
+
+
+# -- liveness lock (SQLite BEGIN EXCLUSIVE; OS-released on process death) ------
+
+
+@contextmanager
+def hold_job_lock(lock_path: Path) -> Iterator[None]:
+    """Hold the job's exclusive lock for the duration of the block. Raises
+    :class:`StoreLocked` if another worker already owns this job."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(lock_path, timeout=0)
+    try:
+        connection.execute("BEGIN EXCLUSIVE")
+    except sqlite3.OperationalError as exc:
+        connection.close()
+        raise StoreLocked(f"job {lock_path.stem} is already owned by a running worker") from exc
+    try:
+        yield
+    finally:
+        try:
+            connection.rollback()
+        finally:
+            connection.close()
+
+
+def job_lock_held(lock_path: Path) -> bool:
+    """Probe: is a worker currently holding this job's lock? (acquire-and-release;
+    held ⇒ a live worker owns the job, free ⇒ no worker is running it)."""
+    if not lock_path.exists():
+        return False
+    try:
+        connection = sqlite3.connect(lock_path, timeout=0)
+    except sqlite3.Error:
+        return False
+    try:
+        connection.execute("BEGIN EXCLUSIVE")
+        connection.rollback()
+        return False
+    except sqlite3.OperationalError:
+        return True
+    finally:
+        connection.close()
+
+
+def derived_state(status: Optional[dict], lock_held: bool) -> str:
+    """The reported state: terminal as stored; a stored ``running`` with no live
+    worker (lock free) is reported as :data:`INTERRUPTED`."""
+    if status is None:
+        return "unknown"
+    state = str(status.get("state", "unknown"))
+    if state == RUNNING and not lock_held:
+        return INTERRUPTED
+    return state
+
+
+# -- detached spawn -----------------------------------------------------------
+
+
+def spawn_worker(store_root: Path, job_id: str) -> None:
+    """Launch a detached ``gmlcache`` worker for ``job_id``. The child is fully
+    detached (new session / process group, no console, I/O to devnull), so it
+    outlives this command. Cross-platform (POSIX setsid; Windows DETACHED_PROCESS)."""
+    argv = [sys.executable, "-m", "generic_ml_cache_cli", "__worker", str(store_root), job_id]
+    devnull = subprocess.DEVNULL
+    if os.name == "nt":
+        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+        subprocess.Popen(
+            argv, stdin=devnull, stdout=devnull, stderr=devnull, creationflags=flags, close_fds=True
+        )
+    else:
+        subprocess.Popen(
+            argv,
+            stdin=devnull,
+            stdout=devnull,
+            stderr=devnull,
+            start_new_session=True,
+            close_fds=True,
+        )
+
+
+def now() -> str:
+    return _now()

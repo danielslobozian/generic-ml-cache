@@ -46,6 +46,7 @@ from generic_ml_cache_core.application.domain.model.run.persistence_depth import
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
+from generic_ml_cache_cli import async_jobs
 from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
@@ -150,7 +151,13 @@ def _print_run_json(execution: MlExecution, command: RunManagedLocalExecutionCom
     return _run_exit_code(execution)
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
+def _resolve_managed_run(args: argparse.Namespace):
+    """Resolve a managed run into a JSON-serializable spec plus its run context.
+
+    Returns ``(spec, store_root, token)``. The spec is the run fully resolved (prompt /
+    context / system text, absolute paths, resolved mode / persist / timeout / executable),
+    so it can drive a sync run *or* be written to a detached job's spec.json and replayed by
+    the worker. Raises ConfigError."""
     context = _read_text_arg(args.context, args.context_file, "context")
     prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
     if not prompt:
@@ -159,18 +166,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
     )
 
-    try:
-        file_cfg = config.load()
-        settings = config.resolve_settings(
-            file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
-        )
-    except ConfigError as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 4
-
-    store_root = Path(str(settings["store"][0]))
-    timeout = settings["timeout"][0]
-    trust_scan = bool(settings["trust_scan"][0])
+    file_cfg = config.load()
+    settings = config.resolve_settings(
+        file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
+    )
     # --offline / --force are explicit flags and win over the resolved mode.
     if args.offline:
         cache_mode = CacheMode.OFFLINE
@@ -178,33 +177,71 @@ def _cmd_run(args: argparse.Namespace) -> int:
         cache_mode = CacheMode.REFRESH
     else:
         cache_mode = CacheMode(str(settings["mode"][0]))
-    persistence_depth = PersistenceDepth(str(settings["persist"][0]))
 
-    command = RunManagedLocalExecutionCommand(
-        client=args.client,
-        model=args.model,
-        effort=args.effort,
-        context=context,
-        prompt=prompt,
-        user_system_prompt=system_prompt,
-        input_file_paths=_resolve_input_file_paths(args.input_file),
-        allow_paths=_resolve_allow_paths(args.allow_path),
-        scan_trust=trust_scan,
-        client_args=list(getattr(args, "client_arg", None) or []),
-        grants=list(getattr(args, "grant", None) or []),
-        cache_mode=cache_mode,
-        persistence_depth=persistence_depth,
-        record_on_error=args.record_on_error,
-        tags=list(getattr(args, "tag", None) or []),
-        session_id=_resolve_session(args),
+    spec = {
+        "client": args.client,
+        "model": args.model,
+        "effort": args.effort,
+        "context": context,
+        "prompt": prompt,
+        "system_prompt": system_prompt,
+        "input_file_paths": _resolve_input_file_paths(args.input_file),
+        "allow_paths": _resolve_allow_paths(args.allow_path),
+        "trust_scan": bool(settings["trust_scan"][0]),
+        "client_args": list(getattr(args, "client_arg", None) or []),
+        "grants": list(getattr(args, "grant", None) or []),
+        "cache_mode": cache_mode.value,
+        "persistence_depth": str(settings["persist"][0]),
+        "record_on_error": bool(args.record_on_error),
+        "tags": list(getattr(args, "tag", None) or []),
+        "session_id": _resolve_session(args),
+        "executable": config.executable_for(file_cfg, args.client, flag=args.executable),
+        "timeout": settings["timeout"][0],
+    }
+    return spec, Path(str(settings["store"][0])), _resolve_token(args)
+
+
+def _command_from_spec(spec: dict) -> RunManagedLocalExecutionCommand:
+    return RunManagedLocalExecutionCommand(
+        client=spec["client"],
+        model=spec["model"],
+        effort=spec["effort"],
+        context=spec["context"],
+        prompt=spec["prompt"],
+        user_system_prompt=spec["system_prompt"],
+        input_file_paths=[Path(p) for p in spec["input_file_paths"]],
+        allow_paths=[Path(p) for p in spec["allow_paths"]],
+        scan_trust=spec["trust_scan"],
+        client_args=list(spec["client_args"]),
+        grants=list(spec["grants"]),
+        cache_mode=CacheMode(spec["cache_mode"]),
+        persistence_depth=PersistenceDepth(spec["persistence_depth"]),
+        record_on_error=spec["record_on_error"],
+        tags=list(spec["tags"]),
+        session_id=spec["session_id"],
     )
 
-    def executable_override(client: str):
-        return config.executable_for(file_cfg, client, flag=args.executable)
 
-    token = _resolve_token(args)
+def _spec_executable_override(spec: dict):
+    executable = spec.get("executable")
+    return lambda client: executable
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
     try:
-        wired = build_use_cases(store_root, executable_override, timeout, encryption_token=token)
+        spec, store_root, token = _resolve_managed_run(args)
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    if getattr(args, "detach", False):
+        return _submit_detached(spec, store_root, token)
+
+    command = _command_from_spec(spec)
+    try:
+        wired = build_use_cases(
+            store_root, _spec_executable_override(spec), spec["timeout"], encryption_token=token
+        )
         execution = wired.run_managed.execute(command)
     except RunInterrupted as exc:
         # A requested stop, not a failure: nothing was recorded. Exit 130 is the
@@ -240,6 +277,64 @@ def _cmd_run(args: argparse.Namespace) -> int:
     sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
     sys.stderr.flush()
     return _run_exit_code(execution)
+
+
+def _submit_detached(spec: dict, store_root: Path, token) -> int:
+    """`run --detach`: write the job spec, spawn a detached worker, print the job id."""
+    if token is not None:
+        print("gmlc: --detach is not yet supported on an encrypted store", file=sys.stderr)
+        return 4
+    import secrets
+
+    job_id = secrets.token_hex(8)
+    store = async_jobs.JobStore(store_root)
+    store.write_spec(job_id, spec)
+    store.update_status(
+        job_id,
+        state=async_jobs.SUBMITTED,
+        submitted_at=async_jobs.now(),
+        client=spec["client"],
+        model=spec["model"],
+    )
+    async_jobs.spawn_worker(store_root, job_id)
+    print(job_id)
+    return 0
+
+
+def _cmd_worker(args: argparse.Namespace) -> int:
+    """Hidden: the detached worker. Run the job's managed execution while holding its
+    liveness lock, recording the outcome to status.json. Never writes to the cwd."""
+    store_root = Path(args.store_root)
+    store = async_jobs.JobStore(store_root)
+    job_id = args.job_id
+    try:
+        spec = store.read_spec(job_id)
+    except (OSError, ValueError):
+        return 1
+    command = _command_from_spec(spec)
+    try:
+        with async_jobs.hold_job_lock(store.lock_path(job_id)):
+            store.update_status(job_id, state=async_jobs.RUNNING, started_at=async_jobs.now())
+            try:
+                wired = build_use_cases(
+                    store_root, _spec_executable_override(spec), spec["timeout"]
+                )
+                execution = wired.run_managed.execute(command)
+            except Exception as exc:
+                store.update_status(
+                    job_id, state=async_jobs.FAILED, ended_at=async_jobs.now(), error=str(exc)
+                )
+                return 1
+            store.update_status(
+                job_id,
+                state=async_jobs.SUCCEEDED,
+                ended_at=async_jobs.now(),
+                execution_key=execution.call_identity.generate_key(),
+                exit_code=_run_exit_code(execution),
+            )
+            return 0
+    except StoreLocked:
+        return 1
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
@@ -1219,7 +1314,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print cache diagnostics to stderr (breaks exact fidelity)",
     )
+    run.add_argument(
+        "--detach",
+        action="store_true",
+        help=(
+            "submit the run as a detached background job: print an execution id and return "
+            "immediately; the work continues, queryable with `gmlcache execution ...`"
+        ),
+    )
     run.set_defaults(func=_cmd_run)
+
+    worker = sub.add_parser("__worker", help=argparse.SUPPRESS)
+    worker.add_argument("store_root")
+    worker.add_argument("job_id")
+    worker.set_defaults(func=_cmd_worker)
 
     inspect = sub.add_parser("inspect", help="show a stored execution by its (short) key")
     inspect.add_argument("execution", help="an execution key, or a short prefix as shown by `list`")
