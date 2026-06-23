@@ -1,6 +1,6 @@
 <div align="center">
 
-# Data handling — persistence, tagging, scopes, and encryption
+# Data handling — persistence, tagging, and encryption
 
 <sub>Design intent</sub>
 
@@ -13,8 +13,7 @@
 ---
 
 **Status: partially implemented.** Persistence depth (meter/cache/dataset), tagging and tag
-query, and dataset export have landed; scope tokens and at-rest encryption are still design
-intent. This records the model and the sharp edges; the [roadmap](../ROADMAP.md) sequences the
+query, and dataset export have landed; at-rest encryption is still design intent. This records the model and the sharp edges; the [roadmap](../ROADMAP.md) sequences the
 work. Nothing not yet shipped is a commitment.
 
 ## The model: a persistence ladder plus orthogonal toggles
@@ -70,11 +69,11 @@ rule the roadmap already states for `session_id`.
   on — and an output can contain personal data present in the input. So "only fingerprints
   are stored" describes the **input** side; the **output** side is covered by encryption,
   not by omission.
-- **Client-held key / zero-knowledge at rest.** The app stores only `hash(token)` for
-  identity and **never stores the key**. The key exists only in memory during a call the
-  user authorized with the token. This protects data **at rest** (disk theft, backups, a
-  curious admin); it does **not** protect a compromised running process mid-call.
-  **Lost token = unrecoverable** — which is also the erasure property.
+- **Client-held key / zero-knowledge at rest.** The app **never stores the encryption secret
+  or the key it derives**; the secret is supplied at runtime (env var, file, or command) and
+  the key exists only in memory during the call. This protects data **at rest** (disk theft,
+  backups, a curious admin); it does **not** protect a compromised running process mid-call.
+  **Lost secret = unrecoverable** — which is also the erasure property.
 - **Disclosure, not enforcement.** Persisting without encryption = plaintext on local disk.
   For a local, privacy-indifferent user that is a valid choice; the docs must state the
   trade-off so it is informed, but the system does not forbid it.
@@ -83,22 +82,24 @@ rule the roadmap already states for `session_id`.
 
 These separate a safe scheme from a footgun. The scheme should get a real cryptographic
 review and lean on a **vetted library** (libsodium/PyNaCl, `cryptography`'s `AESGCM`, or an
-age-style envelope) rather than hand-assembled primitives.
+age-style envelope) rather than hand-assembled primitives. It ships behind an optional
+`[encryption]` extra — permissively licensed, `pip`-only, no OS-level software — so the base
+install carries no crypto dependency.
 
-1. **Domain-separate the token's two roles.** Identity and key must come from *different*
-   KDFs (e.g. HKDF with distinct `info` labels). Do **not** use the token directly as the
-   key — then the stored identity would relate to the key.
-2. **Token entropy is security-critical.** The stored `hash(token)` is offline
-   brute-forceable; defend it with gmlcache-generated **high-entropy** tokens. Never accept
-   a weak user passphrase as the raw token (route those through Argon2id if ever needed).
-3. **Key the lookup index, not just the blobs.** For a private scope the input fingerprint
-   must be `HMAC(scope_key, canonical_input)`, or the index leaks across scopes and
-   low-entropy inputs are brute-forceable. Encrypt the values **and** scope the index.
-4. **AEAD bound to context.** Use authenticated encryption (AES-GCM / XChaCha20-Poly1305)
-   with `scope_id + fingerprint` as associated data, so a tampered or *swapped* blob fails
-   to decrypt.
-5. **Per-scope keys break cross-scope dedup** — which is a privacy *gain* (no cross-scope
-   blob sharing). The public scope (no token) stays plaintext, content-addressed, shared.
+1. **Derive the key; never use the secret raw.** Run the secret through a vetted KDF; if
+   anything is stored to verify it, derive that with a *separate* HKDF label so the verifier
+   can never relate to the key.
+2. **Secret entropy is security-critical.** Prefer a gmlcache-generated **high-entropy**
+   token; if the secret is a human passphrase, route it through **Argon2id**.
+3. **Key the lookup index, not just the blobs.** With encryption on, derive the input
+   fingerprint as `HMAC(key, canonical_input)` — otherwise the index leaks *which* (possibly
+   low-entropy) inputs were cached even though the values are encrypted. Encrypt the values
+   **and** key the index.
+4. **AEAD bound to context.** Use authenticated encryption (AES-GCM / XChaCha20-Poly1305) with
+   the fingerprint as associated data, so a tampered or *swapped* blob fails to decrypt.
+5. **Encryption is store-wide, not per-entry.** It is on or off for the whole local store —
+   there is no public/private split (that was the scope idea). Off: blobs stay
+   content-addressed and deduplicated. On: everything persisted is encrypted under the one key.
 
 ## Dataset caveat
 
