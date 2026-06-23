@@ -156,7 +156,8 @@ Sessions group the executions of one workflow — single-user, no namespace abov
 - `execution watch` replays and follows the durable event log.
 - `execution result` fetches the final output; `execution materialize` writes generated files
   explicitly — a detached run never writes them into the caller's folder (the launch has exited).
-- Managed-only; encryption + detach is a later step (the token must not land on disk).
+- Managed-only. On an encrypted store the token is handed to the worker through its
+  environment (never written to disk), so detached runs encrypt their results too.
 
 ### 0.9.0 — Alias mode
 

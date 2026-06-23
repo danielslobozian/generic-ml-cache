@@ -162,16 +162,30 @@ def derived_state(status: Optional[dict], lock_held: bool) -> str:
 # -- detached spawn -----------------------------------------------------------
 
 
-def spawn_worker(store_root: Path, job_id: str) -> None:
+def spawn_worker(store_root: Path, job_id: str, token: Optional[str] = None) -> None:
     """Launch a detached ``gmlcache`` worker for ``job_id``. The child is fully
     detached (new session / process group, no console, I/O to devnull), so it
-    outlives this command. Cross-platform (POSIX setsid; Windows DETACHED_PROCESS)."""
+    outlives this command. Cross-platform (POSIX setsid; Windows DETACHED_PROCESS).
+
+    If ``token`` is given, it is handed to the worker through its **environment**
+    (``GMLCACHE_TOKEN``) so a detached run can write to an encrypted store — never on
+    disk. The worker holds it in memory for the run, exactly as a sync call would."""
     argv = [sys.executable, "-m", "generic_ml_cache_cli", "__worker", str(store_root), job_id]
+    env = None
+    if token is not None:
+        env = dict(os.environ)
+        env["GMLCACHE_TOKEN"] = token
     devnull = subprocess.DEVNULL
     if os.name == "nt":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
         subprocess.Popen(
-            argv, stdin=devnull, stdout=devnull, stderr=devnull, creationflags=flags, close_fds=True
+            argv,
+            stdin=devnull,
+            stdout=devnull,
+            stderr=devnull,
+            creationflags=flags,
+            close_fds=True,
+            env=env,
         )
     else:
         subprocess.Popen(
@@ -181,6 +195,7 @@ def spawn_worker(store_root: Path, job_id: str) -> None:
             stderr=devnull,
             start_new_session=True,
             close_fds=True,
+            env=env,
         )
 
 

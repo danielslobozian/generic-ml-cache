@@ -250,7 +250,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 4
 
     if getattr(args, "detach", False):
-        return _submit_detached(spec, store_root)
+        return _submit_detached(spec, store_root, token)
 
     command = _command_from_spec(spec)
     try:
@@ -294,13 +294,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return _run_exit_code(execution)
 
 
-def _submit_detached(spec: dict, store_root: Path) -> int:
+def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
     """`run --detach`: write the job spec, spawn a detached worker, print the job id."""
-    # Detach + encryption is not supported yet: the worker is a separate process and the token
-    # must never be written to disk (it would sit next to the encrypted data). Gate on the
-    # store's actual encryption state, not on whether a token happened to be passed.
-    if FilesystemEncryptionManifestStore(store_root).state() is EncryptionState.ENCRYPTED:
-        print("gmlc: --detach is not yet supported on an encrypted store", file=sys.stderr)
+    # On an encrypted store the worker needs the token to write its result. It is passed to the
+    # worker through its environment (never to disk), the same exposure as a sync call holding
+    # the token for the run's duration. So require it here, and gate on the store's actual
+    # encryption state — not on whether a token happened to be passed.
+    encrypted = FilesystemEncryptionManifestStore(store_root).state() is EncryptionState.ENCRYPTED
+    if encrypted and token is None:
+        print(
+            "gmlc: the store is encrypted — provide the token to detach (--token or GMLCACHE_TOKEN)",
+            file=sys.stderr,
+        )
         return 4
     import secrets
 
@@ -317,7 +322,7 @@ def _submit_detached(spec: dict, store_root: Path) -> int:
     async_jobs.append_event(
         store.events_path(job_id), "submitted", client=spec["client"], model=spec["model"]
     )
-    async_jobs.spawn_worker(store_root, job_id)
+    async_jobs.spawn_worker(store_root, job_id, token=token if encrypted else None)
     print(job_id)
     return 0
 
@@ -339,8 +344,14 @@ def _cmd_worker(args: argparse.Namespace) -> int:
             store.update_status(job_id, state=async_jobs.RUNNING, started_at=async_jobs.now())
             async_jobs.append_event(events, "running", client=spec["client"], model=spec["model"])
             try:
+                # On an encrypted store the token arrives via the environment (set by the
+                # spawner), never from disk; a public store ignores it.
+                token = os.environ.get("GMLCACHE_TOKEN") or None
                 wired = build_use_cases(
-                    store_root, _spec_executable_override(spec), spec["timeout"]
+                    store_root,
+                    _spec_executable_override(spec),
+                    spec["timeout"],
+                    encryption_token=token,
                 )
                 execution = wired.run_managed.execute(command)
             except Exception as exc:
@@ -453,16 +464,27 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
         return 1
 
     key = status.get("execution_key")
-    wired = build_use_cases(store_root) if key else None
-    execution = wired.repository.find_current(key) if wired else None
-    if execution is None:
-        print(
-            f"gmlc: job {args.job_id} has no stored result (was the cache pruned?)", file=sys.stderr
-        )
+    if not key:
+        print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
         return 4
-    sys.stdout.write(_stored_artifact_text(execution, wired.blob_store, ArtifactType.STDOUT))
+    token = _resolve_token(args)
+    try:
+        wired = build_use_cases(store_root, encryption_token=token)
+        execution = wired.repository.find_current(key)
+        if execution is None:
+            print(
+                f"gmlc: job {args.job_id} has no stored result (was the cache pruned?)",
+                file=sys.stderr,
+            )
+            return 4
+        out = _stored_artifact_text(execution, wired.blob_store, ArtifactType.STDOUT)
+        err = _stored_artifact_text(execution, wired.blob_store, ArtifactType.STDERR)
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
+    sys.stdout.write(out)
     sys.stdout.flush()
-    sys.stderr.write(_stored_artifact_text(execution, wired.blob_store, ArtifactType.STDERR))
+    sys.stderr.write(err)
     sys.stderr.flush()
     return int(status.get("exit_code") or 0)
 
@@ -600,13 +622,21 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
         print(f"gmlc: job {args.job_id} is {state}; nothing to materialize", file=sys.stderr)
         return 4
     key = status.get("execution_key")
-    wired = build_use_cases(store_root) if key else None
-    execution = wired.repository.find_current(key) if wired else None
-    if execution is None:
+    if not key:
         print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
         return 4
+    token = _resolve_token(args)
     output_dir = Path(args.output_dir)
-    count = _materialize_output_files(execution, wired.blob_store, output_dir)
+    try:
+        wired = build_use_cases(store_root, encryption_token=token)
+        execution = wired.repository.find_current(key)
+        if execution is None:
+            print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
+            return 4
+        count = _materialize_output_files(execution, wired.blob_store, output_dir)
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
     print(f"wrote {count} file(s) to {output_dir}")
     return 0
 
@@ -1805,6 +1835,9 @@ def build_parser() -> argparse.ArgumentParser:
     exec_status.set_defaults(func=_cmd_execution_status)
     exec_result = execution_sub.add_parser("result", help="print a finished job's output")
     exec_result.add_argument("job_id", help="the execution id")
+    exec_result.add_argument(
+        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
+    )
     exec_result.set_defaults(func=_cmd_execution_result)
     exec_watch = execution_sub.add_parser(
         "watch", help="replay a job's event log, following it live if still running"
@@ -1817,6 +1850,9 @@ def build_parser() -> argparse.ArgumentParser:
     exec_mat.add_argument("job_id", help="the execution id")
     exec_mat.add_argument(
         "--output-dir", required=True, help="directory to write the generated files into"
+    )
+    exec_mat.add_argument(
+        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
     )
     exec_mat.set_defaults(func=_cmd_execution_materialize)
     exec_list = execution_sub.add_parser("list", help="list detached jobs and their states")

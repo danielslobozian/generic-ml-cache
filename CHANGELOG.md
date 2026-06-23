@@ -25,8 +25,9 @@ the single changelog for both; entries note which package(s) a change touches.
   **interrupted**, never a hang. `watch` replays the durable, ordered event log from the start
   (a late watcher still sees every event) and follows it live. A detached run never writes
   generated files to the caller's cwd (the launch has returned) — `execution materialize <id>
-  --output-dir <path>` writes them on demand. Detach is managed-only and not yet supported on
-  encrypted stores.
+  --output-dir <path>` writes them on demand. Detach is managed-only; on an **encrypted** store
+  pass `--token` / `GMLCACHE_TOKEN` — it is handed to the worker through its environment (never
+  written to disk), and `result` / `materialize` take `--token` to decrypt.
 
 ## [0.7.0] - 2026-06-24
 

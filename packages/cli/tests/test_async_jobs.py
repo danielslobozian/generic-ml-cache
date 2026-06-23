@@ -17,6 +17,8 @@ from generic_ml_cache_cli.async_jobs import (
 )
 from generic_ml_cache_cli.cli import _cmd_worker, main
 
+_RUN_BASE = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+
 
 def _spec():
     return {
@@ -91,7 +93,9 @@ def test_derived_state_flags_a_vanished_worker_as_interrupted():
 
 def test_run_detach_submits_a_job_and_prints_the_id(capsys, monkeypatch):
     spawned = []
-    monkeypatch.setattr(async_jobs, "spawn_worker", lambda root, jid: spawned.append((root, jid)))
+    monkeypatch.setattr(
+        async_jobs, "spawn_worker", lambda root, jid, token=None: spawned.append((root, jid))
+    )
     rc = main(
         [
             "run",
@@ -122,7 +126,9 @@ def test_run_detach_submits_a_job_and_prints_the_id(capsys, monkeypatch):
 def _submit_via_run(monkeypatch, prompt="STDOUT hi"):
     captured = {}
     monkeypatch.setattr(
-        async_jobs, "spawn_worker", lambda root, jid: captured.update(root=root, jid=jid)
+        async_jobs,
+        "spawn_worker",
+        lambda root, jid, token=None: captured.update(root=root, jid=jid),
     )
     main(
         [
@@ -242,26 +248,50 @@ def test_materialize_refuses_an_unfinished_job(tmp_path, monkeypatch):
 # --- detach is refused on an encrypted store (the gate is the state, not the token) --
 
 
-def test_detach_is_refused_on_an_encrypted_store(capsys, monkeypatch):
+def _encrypt_and_get_token(capsys):
+    assert main(["encrypt"]) == 0  # encrypt the (empty) isolated store
+    out = capsys.readouterr().out
+    tokens = [w for w in out.split() if len(w) == 64 and all(c in "0123456789abcdef" for c in w)]
+    assert tokens, "encrypt should print a hex token"
+    return tokens[0]
+
+
+def test_detach_without_a_token_is_refused_on_an_encrypted_store(capsys, monkeypatch):
     pytest.importorskip("cryptography")
     spawned = []
-    monkeypatch.setattr(async_jobs, "spawn_worker", lambda root, jid: spawned.append(jid))
-    assert main(["encrypt"]) == 0  # encrypt the (empty) isolated store
-    capsys.readouterr()
-    rc = main(
-        [
-            "run",
-            "--client",
-            "fake",
-            "--model",
-            "m1",
-            "--effort",
-            "high",
-            "--prompt",
-            "STDOUT hi",
-            "--detach",
-        ]
-    )
+    monkeypatch.setattr(async_jobs, "spawn_worker", lambda *a, **k: spawned.append(a))
+    _encrypt_and_get_token(capsys)
+    rc = main(_RUN_BASE + ["--prompt", "STDOUT hi", "--detach"])
     assert rc == 4
     assert "encrypted" in capsys.readouterr().err
-    assert spawned == []  # refused upfront: no worker spawned, nothing written
+    assert spawned == []  # refused upfront: no worker, nothing written
+
+
+def test_detached_run_round_trips_on_an_encrypted_store(capsys, monkeypatch):
+    pytest.importorskip("cryptography")
+    token = _encrypt_and_get_token(capsys)
+    captured = {}
+    monkeypatch.setattr(
+        async_jobs,
+        "spawn_worker",
+        lambda root, jid, token=None: captured.update(root=root, jid=jid, token=token),
+    )
+    # submit with the token; it is handed to the worker (via env in real life), never to disk
+    assert main(_RUN_BASE + ["--prompt", "STDOUT secret-hi", "--detach", "--token", token]) == 0
+    capsys.readouterr()
+    assert captured["token"] == token
+    assert "token" not in async_jobs.JobStore(captured["root"]).read_spec(captured["jid"])
+
+    # run the worker with the token in its environment, as the spawner would have set it
+    monkeypatch.setenv("GMLCACHE_TOKEN", token)
+    assert (
+        _cmd_worker(argparse.Namespace(store_root=str(captured["root"]), job_id=captured["jid"]))
+        == 0
+    )
+    monkeypatch.delenv("GMLCACHE_TOKEN", raising=False)
+
+    # readable with the token; refused without it (the blob is genuinely encrypted)
+    capsys.readouterr()
+    assert main(["execution", "result", captured["jid"], "--token", token]) == 0
+    assert "secret-hi" in capsys.readouterr().out
+    assert main(["execution", "result", captured["jid"]]) == 4
