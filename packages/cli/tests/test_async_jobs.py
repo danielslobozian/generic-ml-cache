@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import argparse
 
+import pytest
+
 from generic_ml_cache_cli import async_jobs
 from generic_ml_cache_cli.async_jobs import (
     JobStore,
@@ -235,3 +237,31 @@ def test_materialize_refuses_an_unfinished_job(tmp_path, monkeypatch):
     with async_jobs.hold_job_lock(store.lock_path(jid)):  # a live running job
         rc = main(["execution", "materialize", jid, "--output-dir", str(tmp_path / "out")])
     assert rc == 4  # not succeeded -> nothing to materialize
+
+
+# --- detach is refused on an encrypted store (the gate is the state, not the token) --
+
+
+def test_detach_is_refused_on_an_encrypted_store(capsys, monkeypatch):
+    pytest.importorskip("cryptography")
+    spawned = []
+    monkeypatch.setattr(async_jobs, "spawn_worker", lambda root, jid: spawned.append(jid))
+    assert main(["encrypt"]) == 0  # encrypt the (empty) isolated store
+    capsys.readouterr()
+    rc = main(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT hi",
+            "--detach",
+        ]
+    )
+    assert rc == 4
+    assert "encrypted" in capsys.readouterr().err
+    assert spawned == []  # refused upfront: no worker spawned, nothing written

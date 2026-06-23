@@ -36,6 +36,9 @@ from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_sto
 )
 from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
 from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
+from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
+    EncryptionState,
+)
 from generic_ml_cache_core.adapter.out.client.registry import registered_names
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -247,7 +250,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 4
 
     if getattr(args, "detach", False):
-        return _submit_detached(spec, store_root, token)
+        return _submit_detached(spec, store_root)
 
     command = _command_from_spec(spec)
     try:
@@ -291,9 +294,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return _run_exit_code(execution)
 
 
-def _submit_detached(spec: dict, store_root: Path, token) -> int:
+def _submit_detached(spec: dict, store_root: Path) -> int:
     """`run --detach`: write the job spec, spawn a detached worker, print the job id."""
-    if token is not None:
+    # Detach + encryption is not supported yet: the worker is a separate process and the token
+    # must never be written to disk (it would sit next to the encrypted data). Gate on the
+    # store's actual encryption state, not on whether a token happened to be passed.
+    if FilesystemEncryptionManifestStore(store_root).state() is EncryptionState.ENCRYPTED:
         print("gmlc: --detach is not yet supported on an encrypted store", file=sys.stderr)
         return 4
     import secrets
