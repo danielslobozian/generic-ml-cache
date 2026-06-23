@@ -50,6 +50,10 @@ gmlcache status
 gmlcache init
 ```
 
+<div align="center">
+<img src="../images/gmlcache-help.gif" alt="gmlcache --help: the banner and the full command overview" width="760">
+</div>
+
 ## Current command options
 
 The two core commands are `run` (execute or replay a call) and `check` (forecast
@@ -134,6 +138,10 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 
 At-rest encryption is **store-wide** and optional. gmlcache generates the token (no outside
 passwords); keep it safe — it is shown once and is unrecoverable if lost.
+
+<div align="center">
+<img src="../images/gmlcache-encrypt.gif" alt="gmlcache encrypt: record into a public store, encrypt it (token shown once), then the store is locked without the token" width="760">
+</div>
 
 | Command | Options |
 |---|---|

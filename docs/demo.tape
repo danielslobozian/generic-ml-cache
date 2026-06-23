@@ -1,8 +1,6 @@
 # gmlcache demo — help, then the same command twice: first calls the client, then hits cache.
 #
-# Render:   vhs docs/demo.tape
-#   -> docs/images/gmlcache-demo.mp4   (crisp; use this on GitHub via <video>)
-#   -> docs/images/gmlcache-demo.gif   (universal fallback; e.g. PyPI README <img>)
+# Render:   vhs docs/demo.tape   ->   docs/images/gmlcache-demo.gif
 #
 # Requires: vhs + the `gmlcache` command on PATH, with a real client (claude here)
 #           installed and authenticated.
@@ -10,8 +8,7 @@
 # IMPORTANT: start from a COLD cache so the first run is a real miss. Clear the store
 #   (its path is shown by `gmlcache status`) then run `vhs docs/demo.tape`.
 #
-# Crispness: GIF dithers anti-aliased text (256-colour) — prefer the MP4 for the
-# GitHub hero. The asset is rendered large; display it at ~50% width so it stays
+# Crispness: the asset is rendered large; display it at ~50% width so it stays
 # sharp (a downsampled "retina" asset).
 #
 # Tune: swap CLIENT/MODEL/PROMPT to a client you have; adjust the `Sleep 9s` after
@@ -21,7 +18,6 @@
 # `time`, never by gmlcache (the cache stays a transparent drop-in). The prompt is
 # forced to a neutral `gmlcache ❯`, so no username/hostname appears.
 
-Output docs/images/gmlcache-demo.mp4
 Output docs/images/gmlcache-demo.gif
 
 Require gmlcache
