@@ -89,9 +89,11 @@ class FakeBlobStore(BlobStorePort):
 class FakeMetrics(MetricsPort):
     def __init__(self) -> None:
         self.events: List[str] = []
+        self.session_ids: List[Optional[str]] = []
 
-    def record_event(self, event, *, execution_key, client, model, effort) -> None:
+    def record_event(self, event, *, execution_key, client, model, effort, session_id=None) -> None:
         self.events.append(event)
+        self.session_ids.append(session_id)
 
     def hit_counts_by_key(self) -> Dict[str, int]:
         return {}
@@ -523,3 +525,22 @@ def test_a_hit_accumulates_new_tags_onto_the_entry():
     assert len(harness.runner.calls) == 1
     assert harness.metrics.events == ["record", "hit"]
     assert harness.repository.tags_for(key) == ["scan", "ticket"]
+
+
+# --- sessions (journal metadata) ---------------------------------------------
+
+
+def test_session_id_is_threaded_into_the_journal_event():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    harness.use_case.execute(_command(session_id="workflow-7"))
+    assert harness.metrics.session_ids == ["workflow-7"]  # the RECORD event carried it
+
+
+def test_session_id_is_not_part_of_the_key():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    harness.use_case.execute(_command(session_id="A"))
+    # the same input under a different session is the SAME entry -> a hit, not a new run
+    harness.use_case.execute(_command(session_id="B"))
+    assert len(harness.runner.calls) == 1
+    assert harness.metrics.events == ["record", "hit"]
+    assert harness.metrics.session_ids == ["A", "B"]  # both invocations journaled, per session

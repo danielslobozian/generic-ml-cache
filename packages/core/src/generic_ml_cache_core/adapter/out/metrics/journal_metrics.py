@@ -30,9 +30,15 @@ class JournalMetrics(MetricsPort):
         client: str,
         model: str,
         effort: str,
+        session_id: Optional[str] = None,
     ) -> None:
         self._registry.record(
-            event, match_key=execution_key, client=client, model=model, effort=effort
+            event,
+            match_key=execution_key,
+            client=client,
+            model=model,
+            effort=effort,
+            session_id=session_id,
         )
 
     def hit_counts_by_key(self) -> Dict[str, int]:

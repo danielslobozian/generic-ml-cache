@@ -74,7 +74,7 @@ class FakeMetrics(MetricsPort):
     def __init__(self) -> None:
         self.events: List[dict] = []
 
-    def record_event(self, event, *, execution_key, client, model, effort) -> None:
+    def record_event(self, event, *, execution_key, client, model, effort, session_id=None) -> None:
         self.events.append({"event": event, "client": client, "model": model, "effort": effort})
 
     def hit_counts_by_key(self) -> Dict[str, int]:

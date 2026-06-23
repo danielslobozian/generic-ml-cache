@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
@@ -26,6 +26,7 @@ class RunPassthroughExecutionCommand:
     cache_mode: CacheMode = CacheMode.CACHE
     persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
     record_on_error: bool = False
+    session_id: Optional[str] = None
 
     def should_persist(self, succeeded: bool) -> bool:
         """Whether this command's policy stores the output for a run that ended

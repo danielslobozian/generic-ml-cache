@@ -26,6 +26,7 @@ class InMemoryMetrics(MetricsPort):
         client: str,
         model: str,
         effort: str,
+        session_id: Optional[str] = None,
     ) -> None:
         self._events.append(
             {

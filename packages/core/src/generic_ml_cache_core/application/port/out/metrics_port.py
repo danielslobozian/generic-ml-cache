@@ -28,8 +28,10 @@ class MetricsPort(ABC):
         client: str,
         model: str,
         effort: str,
+        session_id: Optional[str] = None,
     ) -> None:
-        """Append one journal event. Must never raise."""
+        """Append one journal event. Must never raise. ``session_id`` groups events
+        into a workflow session; it is journal metadata only, never part of the key."""
 
     @abstractmethod
     def hit_counts_by_key(self) -> Dict[str, int]:
