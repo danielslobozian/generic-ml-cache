@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Iterator, List, Optional
 
 from generic_ml_cache_core.common.errors import StoreLocked
+from generic_ml_cache_core.stream import StreamWriter
 
 # Stored lifecycle states.
 SUBMITTED = "submitted"
@@ -181,6 +182,16 @@ def spawn_worker(store_root: Path, job_id: str) -> None:
             start_new_session=True,
             close_fds=True,
         )
+
+
+def append_event(events_path: Path, kind: str, **fields: object) -> None:
+    """Append one NDJSON progress event to the job's durable event log (best-effort).
+    Same format as the run stream, so ``watch`` reads one log whatever wrote it."""
+    writer = StreamWriter(events_path)
+    try:
+        writer.event(kind, **fields)
+    finally:
+        writer.close()
 
 
 def now() -> str:

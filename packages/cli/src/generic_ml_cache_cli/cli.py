@@ -308,6 +308,9 @@ def _submit_detached(spec: dict, store_root: Path, token) -> int:
         client=spec["client"],
         model=spec["model"],
     )
+    async_jobs.append_event(
+        store.events_path(job_id), "submitted", client=spec["client"], model=spec["model"]
+    )
     async_jobs.spawn_worker(store_root, job_id)
     print(job_id)
     return 0
@@ -326,7 +329,9 @@ def _cmd_worker(args: argparse.Namespace) -> int:
     command = _command_from_spec(spec)
     try:
         with async_jobs.hold_job_lock(store.lock_path(job_id)):
+            events = store.events_path(job_id)
             store.update_status(job_id, state=async_jobs.RUNNING, started_at=async_jobs.now())
+            async_jobs.append_event(events, "running", client=spec["client"], model=spec["model"])
             try:
                 wired = build_use_cases(
                     store_root, _spec_executable_override(spec), spec["timeout"]
@@ -336,14 +341,18 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                 store.update_status(
                     job_id, state=async_jobs.FAILED, ended_at=async_jobs.now(), error=str(exc)
                 )
+                async_jobs.append_event(events, "failed", error=str(exc))
                 return 1
+            key = execution.call_identity.generate_key()
+            exit_code = _run_exit_code(execution)
             store.update_status(
                 job_id,
                 state=async_jobs.SUCCEEDED,
                 ended_at=async_jobs.now(),
-                execution_key=execution.call_identity.generate_key(),
-                exit_code=_run_exit_code(execution),
+                execution_key=key,
+                exit_code=exit_code,
             )
+            async_jobs.append_event(events, "succeeded", execution_key=key, exit_code=exit_code)
             return 0
     except StoreLocked:
         return 1
@@ -493,9 +502,113 @@ def _cmd_execution_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_event(line: str) -> None:
+    import json
+    from datetime import datetime, timezone
+
+    try:
+        event = json.loads(line)
+    except ValueError:
+        return
+    kind = event.get("kind", "?")
+    ts = event.get("ts")
+    when = ""
+    if isinstance(ts, (int, float)):
+        when = datetime.fromtimestamp(ts, timezone.utc).strftime("%H:%M:%S") + "  "
+    extra = "  ".join(f"{k}={v}" for k, v in event.items() if k not in ("ts", "kind"))
+    print(f"{when}{_paint(kind, *_state_style(kind))}  {extra}".rstrip())
+
+
+def _cmd_execution_watch(args: argparse.Namespace) -> int:
+    import time
+
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    events_path = store.events_path(args.job_id)
+    seen = 0
+
+    def drain() -> int:
+        nonlocal seen
+        if not events_path.exists():
+            return seen
+        lines = events_path.read_text(encoding="utf-8").splitlines()
+        for line in lines[seen:]:
+            _print_event(line)
+        seen = len(lines)
+        return seen
+
+    while True:
+        drain()
+        _, state = _job_state(store, args.job_id)
+        if state in (async_jobs.SUCCEEDED, async_jobs.FAILED):
+            time.sleep(0.05)  # let the terminal event (written just after status) land
+            drain()
+            return 0
+        if state == async_jobs.INTERRUPTED:
+            drain()
+            print(
+                f"gmlc: job {args.job_id} was interrupted — the worker vanished before finishing",
+                file=sys.stderr,
+            )
+            return 1
+        time.sleep(0.2)
+
+
+def _materialize_output_files(execution: MlExecution, blob_store, output_dir: Path) -> int:
+    """Write a stored execution's OUTPUT_FILE artifacts into ``output_dir`` (hydrating
+    content from the blob store). Returns the number of files written."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base = output_dir.resolve()
+    count = 0
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is not ArtifactType.OUTPUT_FILE or artifact.name is None:
+            continue
+        target = (output_dir / Path(artifact.name)).resolve()
+        if base != target and base not in target.parents:
+            raise ValueError(f"refusing to write outside output dir: {artifact.name!r}")
+        content = artifact.content
+        if content is None:
+            content = blob_store.get(artifact.blob_key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content or b"")
+        count += 1
+    return count
+
+
+def _cmd_execution_materialize(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    status, state = _job_state(store, args.job_id)
+    status = status or {}
+    if state != async_jobs.SUCCEEDED:
+        print(f"gmlc: job {args.job_id} is {state}; nothing to materialize", file=sys.stderr)
+        return 4
+    key = status.get("execution_key")
+    wired = build_use_cases(store_root) if key else None
+    execution = wired.repository.find_current(key) if wired else None
+    if execution is None:
+        print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
+        return 4
+    output_dir = Path(args.output_dir)
+    count = _materialize_output_files(execution, wired.blob_store, output_dir)
+    print(f"wrote {count} file(s) to {output_dir}")
+    return 0
+
+
 def _cmd_execution(args: argparse.Namespace) -> int:
     print(
-        "usage: gmlcache execution status <id> | result <id> | list",
+        "usage: gmlcache execution status <id> | result <id> | watch <id> | "
+        "materialize <id> --output-dir <path> | list",
         file=sys.stderr,
     )
     return 2
@@ -1687,6 +1800,19 @@ def build_parser() -> argparse.ArgumentParser:
     exec_result = execution_sub.add_parser("result", help="print a finished job's output")
     exec_result.add_argument("job_id", help="the execution id")
     exec_result.set_defaults(func=_cmd_execution_result)
+    exec_watch = execution_sub.add_parser(
+        "watch", help="replay a job's event log, following it live if still running"
+    )
+    exec_watch.add_argument("job_id", help="the execution id")
+    exec_watch.set_defaults(func=_cmd_execution_watch)
+    exec_mat = execution_sub.add_parser(
+        "materialize", help="write a finished job's generated files to a directory"
+    )
+    exec_mat.add_argument("job_id", help="the execution id")
+    exec_mat.add_argument(
+        "--output-dir", required=True, help="directory to write the generated files into"
+    )
+    exec_mat.set_defaults(func=_cmd_execution_materialize)
     exec_list = execution_sub.add_parser("list", help="list detached jobs and their states")
     exec_list.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     exec_list.set_defaults(func=_cmd_execution_list)

@@ -193,3 +193,45 @@ def test_execution_list_unknown_and_usage(capsys, monkeypatch):
     capsys.readouterr()
     assert main(["execution"]) == 2  # bare -> usage
     assert "execution status" in capsys.readouterr().err
+
+
+# --- watch + materialize (Slice 3) -------------------------------------------
+
+
+def _write_directive(relpath, content):
+    import base64
+
+    return f"WRITE {relpath} {base64.b64encode(content.encode()).decode()}"
+
+
+def test_execution_watch_replays_a_finished_job(capsys, monkeypatch):
+    jid, _ = _submit_and_run(monkeypatch)
+    capsys.readouterr()
+    assert main(["execution", "watch", jid]) == 0
+    out = capsys.readouterr().out
+    assert "submitted" in out and "running" in out and "succeeded" in out
+
+
+def test_execution_watch_reports_interrupted(capsys, monkeypatch):
+    jid, root = _submit_via_run(monkeypatch)
+    async_jobs.JobStore(root).update_status(jid, state="running", started_at=async_jobs.now())
+    capsys.readouterr()
+    assert main(["execution", "watch", jid]) == 1
+    assert "interrupted" in capsys.readouterr().err
+
+
+def test_execution_materialize_writes_generated_files(tmp_path, capsys, monkeypatch):
+    jid, _ = _submit_and_run(monkeypatch, prompt=_write_directive("out.txt", "hello-async"))
+    capsys.readouterr()
+    outdir = tmp_path / "materialized"
+    assert main(["execution", "materialize", jid, "--output-dir", str(outdir)]) == 0
+    assert (outdir / "out.txt").read_text() == "hello-async"
+
+
+def test_materialize_refuses_an_unfinished_job(tmp_path, monkeypatch):
+    jid, root = _submit_via_run(monkeypatch)
+    store = async_jobs.JobStore(root)
+    store.update_status(jid, state="running")
+    with async_jobs.hold_job_lock(store.lock_path(jid)):  # a live running job
+        rc = main(["execution", "materialize", jid, "--output-dir", str(tmp_path / "out")])
+    assert rc == 4  # not succeeded -> nothing to materialize
