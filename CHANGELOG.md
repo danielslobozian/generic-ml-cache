@@ -14,6 +14,20 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+### Added
+
+- **Asynchronous executions** (cli): `gmlcache run --detach` submits a managed run as a detached
+  background job and prints an execution id immediately; the work continues in a separate,
+  OS-detached worker process and is recorded into the normal cache. Manage it with `gmlcache
+  execution status | result | watch | materialize | list <id>`. Job state lives under
+  `<store>/jobs/`; a per-job liveness lock (SQLite `BEGIN EXCLUSIVE`, released by the OS when the
+  worker dies) lets a reader tell a live worker from one that vanished mid-run — reported as
+  **interrupted**, never a hang. `watch` replays the durable, ordered event log from the start
+  (a late watcher still sees every event) and follows it live. A detached run never writes
+  generated files to the caller's cwd (the launch has returned) — `execution materialize <id>
+  --output-dir <path>` writes them on demand. Detach is managed-only and not yet supported on
+  encrypted stores.
+
 ## [0.7.0] - 2026-06-24
 
 ### Added
