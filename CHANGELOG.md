@@ -14,6 +14,17 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+### Added
+
+- **Session reporting** (core + cli): `gmlcache session report <id>` now aggregates token usage
+  and activity for a session. Tokens are grouped **by provider/model** — spent (input/output)
+  and **saved** by cache hits — never summed across models; activity is broken down **by day**
+  (a session can span days) with a small bar; the header shows the day span. `--json` emits the
+  structured report. There are **no dollar figures** (a cost estimate is a client-specific
+  advisory number), and executions that reported no usage are counted as *unknown*, never folded
+  in as zero. The aggregation is a pure, unit-tested function over the journal events joined to
+  each execution's usage.
+
 ## [0.6.0] - 2026-06-23
 
 ### Added

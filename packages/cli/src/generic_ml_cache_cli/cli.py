@@ -45,6 +45,7 @@ from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheM
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.usecase.session_report import build_session_report
 from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
@@ -896,45 +897,115 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
     return 0
 
 
-#: events where a real client call ran (vs. HIT, which replayed, or an offline MISS).
-_EXECUTED_EVENTS = {"record", "run", "would_hit", "would_miss"}
+_TOKEN_BLOCKS = " ▏▎▍▌▋▊▉█"
+
+
+def _activity_bar(value: int, maxval: int, width: int = 10) -> str:
+    if maxval <= 0:
+        return " " * width
+    filled = value / maxval * width
+    full = int(filled)
+    bar = "█" * full + (_TOKEN_BLOCKS[int((filled - full) * 8)] if full < width else "")
+    return (bar + " " * width)[:width]
+
+
+def _comma(n: int) -> str:
+    return f"{n:,}"
+
+
+def _render_session_report(report) -> str:
+    lines = [f"session     : {report.session_id}"]
+    if report.span_start:
+        span = (
+            report.span_start
+            if report.day_count == 1
+            else f"{report.span_start} → {report.span_end}"
+        )
+        plural = "" if report.day_count == 1 else "s"
+        lines.append(f"span        : {span}  ({report.day_count} day{plural})")
+    lines.append(
+        f"invocations : {report.invocations}   "
+        f"executions : {report.executions}   hits : {report.hits}"
+    )
+    if report.unknown_usage:
+        lines.append(f"unknown     : {report.unknown_usage} execution(s) reported no usage")
+    if report.by_model:
+        lines.append("")
+        lines.append("by provider / model:")
+        for m in report.by_model:
+            lines.append(
+                f"  {m.client + ' / ' + m.model:<16} spent {_comma(m.spent_tokens):>9} tok"
+                f" (in {_comma(m.spent_input):>8} · out {_comma(m.spent_output):>7})"
+                f"   saved {_comma(m.saved_tokens):>9} tok   {m.executions} exec · {m.hits} hit"
+            )
+    if report.by_day:
+        lines.append("")
+        lines.append("by day (activity):")
+        maxinv = max(d.invocations for d in report.by_day)
+        for d in report.by_day:
+            lines.append(
+                f"  {d.day}  {_activity_bar(d.invocations, maxinv)}  {d.invocations:>3} calls"
+                f"   ({d.executions} exec · {d.hits} hit)"
+            )
+    return "\n".join(lines)
+
+
+def _session_report_json(report) -> dict:
+    return {
+        "session": report.session_id,
+        "invocations": report.invocations,
+        "executions": report.executions,
+        "hits": report.hits,
+        "unknown_usage": report.unknown_usage,
+        "span": {"start": report.span_start, "end": report.span_end, "days": report.day_count},
+        "by_model": [
+            {
+                "client": m.client,
+                "model": m.model,
+                "spent_input": m.spent_input,
+                "spent_output": m.spent_output,
+                "spent_tokens": m.spent_tokens,
+                "saved_tokens": m.saved_tokens,
+                "executions": m.executions,
+                "hits": m.hits,
+            }
+            for m in report.by_model
+        ],
+        "by_day": [
+            {
+                "day": d.day,
+                "invocations": d.invocations,
+                "executions": d.executions,
+                "hits": d.hits,
+            }
+            for d in report.by_day
+        ],
+    }
 
 
 def _cmd_session_report(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    counts = build_use_cases(store_root).metrics.session_event_counts(args.session_id)
-    invocations = sum(counts.values())
-    executions = sum(n for event, n in counts.items() if event in _EXECUTED_EVENTS)
-    hits = counts.get("hit", 0)
+    wired = build_use_cases(store_root)
+    events = wired.metrics.session_events(args.session_id)
+    # Join each event's execution to its token usage (the current execution per key).
+    usage_by_key = {}
+    for key in {e.execution_key for e in events if e.execution_key}:
+        execution = wired.repository.find_current(key)
+        if execution is not None:
+            usage_by_key[key] = execution.token_usage
+    report = build_session_report(args.session_id, events, usage_by_key)
 
     if args.json:
         import json
 
-        print(
-            json.dumps(
-                {
-                    "session": args.session_id,
-                    "invocations": invocations,
-                    "executions": executions,
-                    "hits": hits,
-                    "events": counts,
-                },
-                indent=2,
-            )
-        )
+        print(json.dumps(_session_report_json(report), indent=2))
         return 0
-
-    if invocations == 0:
+    if report.invocations == 0:
         print(f"no events recorded for session {args.session_id!r}")
         return 0
-    print(f"session     : {args.session_id}")
-    print(f"invocations : {invocations}")
-    print(f"executions  : {executions}  (real client calls)")
-    print(f"hits        : {hits}  (served from cache)")
-    breakdown = ", ".join(f"{event}={counts[event]}" for event in sorted(counts))
-    print(f"events      : {breakdown}")
+    print(_render_session_report(report))
     return 0
 
 

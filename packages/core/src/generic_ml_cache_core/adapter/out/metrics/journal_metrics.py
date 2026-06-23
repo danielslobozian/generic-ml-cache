@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from generic_ml_cache_core.adapter.out.metrics.access_registry import AccessRegistry
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
 
 
 class JournalMetrics(MetricsPort):
@@ -49,6 +49,12 @@ class JournalMetrics(MetricsPort):
 
     def session_event_counts(self, session_id: str) -> Dict[str, int]:
         return self._registry.session_event_counts(session_id)
+
+    def session_events(self, session_id: str) -> List[SessionEventRow]:
+        return [
+            SessionEventRow(ts=ts, event=event, client=client, model=model, execution_key=key)
+            for (ts, event, client, model, key) in self._registry.session_events(session_id)
+        ]
 
     def last_access(self) -> Dict[str, float]:
         return self._registry.last_access()

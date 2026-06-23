@@ -26,9 +26,9 @@ Type "clear"  Enter
 Show
 Sleep 600ms
 
-# 1) Record a call into a public store.
+# 1) Record a call into a public store (a real client call -- sleep for its latency).
 Type "gmlcache run --client claude --model sonnet --prompt 'Write a haiku about caching.'"  Enter
-Sleep 2000ms
+Sleep 7s
 Type "gmlcache status | grep encryption"  Enter
 Sleep 1600ms
 

@@ -164,7 +164,7 @@ single-user and need only a generated id — no token.
 | Command | Options |
 |---|---|
 | `session start` | Generate a new session id and print it (scriptable: `SESSION=$(gmlcache session start)`). |
-| `session report <id>` | Roll up the session's journal — invocations, executions (real calls), hits (served from cache), and the per-event breakdown. `--json` for machine output. |
+| `session report <id>` | Roll up the session: headline counts + day span, token usage **by provider/model** (spent + saved-by-hit), and **per-day** activity. Tokens stay next to their model; no dollar figures. `--json` for the structured report. |
 
 Attach a run to a session with `run --session <id>` or `GMLCACHE_SESSION`. The session id is
 journal metadata, never part of the cache key, and sessions span every run kind. Reporting is

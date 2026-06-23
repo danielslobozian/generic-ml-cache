@@ -34,13 +34,14 @@ Sleep 500ms
 Type "echo $GMLCACHE_SESSION"  Enter
 Sleep 1600ms
 
-# 2) Run calls in the session. First is a real call; the identical repeat is a hit.
+# 2) Run calls in the session. The misses are real calls; the identical repeat is a hit.
+# Sleeps are tuned for real-client latency (a miss takes seconds; a hit is instant).
 Type "gmlcache run --client claude --model sonnet --prompt 'Write a haiku about caching.'"  Enter
-Sleep 2200ms
+Sleep 7s
 Type "gmlcache run --client claude --model sonnet --prompt 'Write a haiku about caching.'"  Enter
-Sleep 2200ms
+Sleep 2500ms
 Type "gmlcache run --client claude --model sonnet --prompt 'Explain LRU in one line.'"  Enter
-Sleep 2200ms
+Sleep 7s
 
 # 3) Report the session — invocations, executions (real calls), hits (served from cache).
 Type "gmlcache session report $GMLCACHE_SESSION"  Enter
