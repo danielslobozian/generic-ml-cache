@@ -14,6 +14,8 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-23
+
 ### Added
 
 - **Sessions** (core + cli): group one workflow's runs under a session id so they can be
@@ -26,6 +28,11 @@ the single changelog for both; entries note which package(s) a change touches.
   of the cache key (the same input under different sessions is one entry), and sessions span
   every run kind (managed, passthrough, API). Reporting is metadata-only, so it works on an
   encrypted store without the token. Per-session token usage and cost is a later, richer report.
+
+### Changed
+
+- The CLI banner now renders the gmlcache mark, and its tagline reflects the shipped features
+  (`record · replay · check · sessions · encryption`).
 
 ## [0.5.0] - 2026-06-23
 
