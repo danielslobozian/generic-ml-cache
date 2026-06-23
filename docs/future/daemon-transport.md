@@ -27,7 +27,7 @@ The daemon can add:
 - easier integration for multiple callers.
 
 The underlying execution concepts remain execution request, adapter, execution record,
-scope, session, and report.
+session, and report.
 
 ---
 

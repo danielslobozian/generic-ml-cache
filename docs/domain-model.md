@@ -45,7 +45,7 @@ MlExecution
   input_persisted  : bool                -- fact: was the input stored too (DATASET depth)?
   superseded_at    : timestamp?          -- cache currency: null = current; set = stale
   -- future --
-  trace            : ...                 -- journal link, session, scope
+  trace            : ...                 -- journal link, session
 ```
 
 The output is a **list of `Artifact`s** (§3), not a separate `ExecutionOutput`
@@ -278,7 +278,7 @@ only opaque bytes.**
 - `output_persisted` flag
 - token usage / cost
 - call journal / event log (§6)
-- session and scope links (future)
+- session links (future)
 - hit-counts and stats — as **projections** over the journal, not stored truths
 
 **Blob store** — opaque artifact bytes only:
@@ -342,7 +342,7 @@ token_usage                 -- normalized accounting, 1:1 with execution
 events                      -- the call journal (today's access_registry, folded in later)
   id PK; ts; event; execution_key NULL; client; model; effort; session_id NULL
 
-scopes / sessions           -- future (roadmap 0.3 / 0.4)
+sessions                    -- future
 ```
 
 **Hydrate / dehydrate.** The repository stores and returns a *dehydrated*
@@ -761,7 +761,7 @@ execution aggregate; an earlier draft wrongly listed it for retirement).
 
 - Async execution mode and its command. Constraint already recorded: async
   requires at least `CACHE` depth (it must store its output).
-- Scope and session objects and their port contracts (roadmap 0.5 / 0.7).
+- Session objects and their port contracts (future).
 - The exact event vocabulary of `MetricsPort.record_event`.
 - Whether `deep_fingerprint_paths` (recursive folder checksum) becomes a
   supported field on `RunManagedLocalExecutionCommand`.

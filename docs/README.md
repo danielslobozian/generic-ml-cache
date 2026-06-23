@@ -24,7 +24,7 @@ A guided entry point for the design, specification, usage, architecture, referen
 
 ## Overview
 
-This documentation describes gmlcache as a Detached ML Execution Platform: an exact record/replay cache with adapter-based execution, inspectable execution records, usage reporting, and planned scope/session/async features.
+This documentation describes gmlcache as a Detached ML Execution Platform: an exact record/replay cache with adapter-based execution, inspectable execution records, usage reporting, and planned session/async features.
 
 <br>
 
@@ -33,6 +33,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 | Document | Purpose |
 |---|---|
 | [Design](design.md) | Project identity, principles, and design constraints |
+| [Positioning](design/positioning.md) | What gmlcache is and is not — the single-user intent |
 | [Specification](SPEC.md) | Current conceptual specification and terminology |
 | [Usage](usage.md) | Current CLI behavior at a conceptual level |
 | [Storage](storage.md) | The execution store (SQLite) and content-addressed blob store |
@@ -58,7 +59,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 
 - [Cost and usage](concepts/cost-and-usage.md)
 - [Alias mode](concepts/alias-mode.md)
-- [Scopes and sessions](concepts/scopes-and-sessions.md)
+- [Sessions](concepts/sessions.md)
 - [Asynchronous executions](concepts/asynchronous-executions.md)
 
 </td>

@@ -38,7 +38,7 @@ Full execution mode uses gmlcache’s execution request contract:
 - grants,
 - generated artifact capture,
 - usage reporting,
-- future scopes and sessions.
+- future sessions.
 
 This mode is appropriate when the caller wants reliable artifact capture and
 replay.

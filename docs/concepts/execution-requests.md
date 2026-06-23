@@ -49,7 +49,7 @@ A full execution request can include:
 - grants,
 - passthrough client arguments,
 - record/cache/refresh/offline mode,
-- future scope/session/detach metadata.
+- future session/detach metadata.
 
 Only fields that can affect execution semantics belong to execution identity.
 Observability metadata, such as future session IDs, must not change cache

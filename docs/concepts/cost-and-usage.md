@@ -18,7 +18,7 @@
 - [Token categories](#token-categories)
 - [Cost categories](#cost-categories)
 - [Sanitized example](#sanitized-example)
-- [Future session and scope reports](#future-session-and-scope-reports)
+- [Future session reports](#future-session-reports)
 
 ---
 
@@ -113,9 +113,9 @@ saved: from 7 replay(s) — input 111777, output 24078, cache-read 480730 tokens
 These numbers are illustrative. Documentation should not include machine paths,
 real cache keys, or personal prompts.
 
-## Future session and scope reports
+## Future session reports
 
-Future reports can aggregate the same usage data by session and scope:
+Future reports can aggregate the same usage data by session:
 
 ```text
 Session report

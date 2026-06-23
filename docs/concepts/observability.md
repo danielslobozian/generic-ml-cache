@@ -42,21 +42,8 @@ Today, observability appears through:
 
 ## Future observability
 
-Future scopes and sessions extend the same model:
-
-```text
-Scope
-  owns Sessions
-
-Session
-  observes Executions
-
-Execution
-  records or reuses Executions
-```
-
-A session report can show workflow-level usage and cache effectiveness. A scope
-report can aggregate many sessions.
+Future sessions extend the same model: a session observes the executions of one workflow,
+and a session report shows that workflow's usage and cache effectiveness — for a single user.
 
 ## Rule
 

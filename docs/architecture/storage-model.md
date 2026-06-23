@@ -20,7 +20,7 @@ Storage separates structure from bytes:
 3. The **access registry** (SQLite) — access events and hit counts, non-load-bearing.
 
 The execution repository preserves what was recorded; the registry records access and
-future scope/session/reporting relationships.
+future session/reporting relationships.
 
 Bytes are addressed by content; folders are representation. The database is authority.
 

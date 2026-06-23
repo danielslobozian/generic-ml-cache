@@ -20,8 +20,8 @@ Cost analysis is useful even when replay is rare.
 gmlcache can show which adapters and models were used, what usage was reported,
 what estimated cost was recorded, and how much usage was saved by replay.
 
-Future scope and session reports can aggregate this information by workflow,
-project, experiment, or namespace.
+Future session reports can aggregate this information by workflow,
+project, or experiment.
 
 The tool should be transparent about unknowns. If an adapter does not report cost,
 the report should say unknown rather than inventing a number.
