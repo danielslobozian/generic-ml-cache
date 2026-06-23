@@ -970,34 +970,48 @@ def _paint(text: str, *codes: str) -> str:
 
 
 def render_banner(color: bool = False) -> str:
-    """The boxed gmlcache banner. Width is derived from the content, so any version
-    string or tagline stays aligned. ``color`` adds teal ANSI; off yields plain text."""
+    """The boxed gmlcache banner: the cache mark (four hollow bars; the top one is
+    the accent 'hit') beside the title, version, and tagline. Width is derived from
+    the content so everything stays aligned. ``color`` adds ANSI; off yields plain."""
     title = "gmlcache"
     ver = __version__
-    tag = "record · replay · check · tokens"
+    tag = "record · replay · check · sessions · encryption"
+
+    # The mark: four hollow bars -- thin walls (▏ ▕) around a double-line body (═),
+    # widths echoing the logo. The first bar is the accent ("hit"); the rest are dim.
+    bars = ["▏" + "═" * n + "▕" for n in (11, 7, 10, 5)]
+    bar_w = max(len(b) for b in bars)
 
     if color:
-        rule = _TEAL  # teal box
-        name = _BOLD  # bold title
-        vers = _TEAL_BRIGHT  # bright-teal version
-        sub = _GREY  # dim-grey tagline
-        off = _RESET
+        rule, name, vers, sub, off = _TEAL, _BOLD, _TEAL_BRIGHT, _GREY, _RESET
+        bar_colors = [_GREEN, _GREY, _GREY, _GREY]
     else:
         rule = name = vers = sub = off = ""
+        bar_colors = ["", "", "", ""]
 
+    left_pad, gap = "  ", "  "
+    texts = ["", tag, "", ""]  # the tagline sits on the second bar row
+
+    body_w = max(len(left_pad) + bar_w + len(gap) + len(t) for t in texts)
     left_top = f"─ {title} "
     right_top = f" {ver} ─"
-    inner = max(len(left_top) + 6 + len(right_top), len(tag) + 4)
+    inner = max(len(left_top) + 6 + len(right_top), body_w + 1)
     top_dashes = inner - len(left_top) - len(right_top)
-    pad_right = inner - 2 - len(tag)
 
     top = (
         f"{rule}┌─ {off}{name}{title}{off}"
         f"{rule} {'─' * top_dashes} {off}{vers}{ver}{off}{rule} ─┐{off}"
     )
-    mid = f"{rule}│{off}  {sub}{tag}{off}{' ' * pad_right}{rule}│{off}"
+    rows = []
+    for bar, bar_color, text in zip(bars, bar_colors, texts):
+        bar_cell = f"{bar_color}{bar}{off}" + " " * (bar_w - len(bar))
+        used = len(left_pad) + bar_w + len(gap) + len(text)
+        rows.append(
+            f"{rule}│{off}{left_pad}{bar_cell}{gap}{sub}{text}{off}"
+            f"{' ' * (inner - used)}{rule}│{off}"
+        )
     bot = f"{rule}└{'─' * inner}┘{off}"
-    return "\n".join([top, mid, bot])
+    return "\n".join([top, *rows, bot])
 
 
 class _BannerParser(argparse.ArgumentParser):

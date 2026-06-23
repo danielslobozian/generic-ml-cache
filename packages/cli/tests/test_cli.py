@@ -134,8 +134,11 @@ def test_run_rejects_retired_location_flags(tmp_path):
 def test_render_banner_lines_align():
     from generic_ml_cache_cli.cli import render_banner
 
-    widths = {len(line) for line in render_banner(color=False).splitlines()}
-    assert len(widths) == 1  # all three box lines are the same width
+    lines = render_banner(color=False).splitlines()
+    widths = {len(line) for line in lines}
+    assert len(widths) == 1  # every box line (top, four mark rows, bottom) is one width
+    assert len(lines) == 6  # the mark adds four bar rows inside the box
+    assert "═" in render_banner(color=False)  # the hollow mark renders
 
 
 def test_render_banner_color_is_opt_in():
@@ -162,7 +165,7 @@ def test_bare_invocation_prints_help_not_an_error(capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "gmlcache" in out
-    assert "record · replay · check · tokens" in out
+    assert "record · replay · check · sessions · encryption" in out
     assert "usage:" in out
 
 
@@ -176,7 +179,7 @@ def test_help_flag_shows_the_banner(capsys):
     with pytest.raises(SystemExit) as excinfo:
         main(["-h"])
     assert excinfo.value.code == 0
-    assert "record · replay · check · tokens" in capsys.readouterr().out
+    assert "record · replay · check · sessions · encryption" in capsys.readouterr().out
 
 
 # --- list (grouped by client/model) ---------------------------------------

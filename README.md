@@ -2,7 +2,10 @@
 
 <br>
 
-# gmlcache
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/gmlcache-lockup-dark.svg">
+  <img src="docs/images/gmlcache-lockup.svg" alt="gmlcache" width="320">
+</picture>
 
 #### Detached ML Execution Cache
 
@@ -45,7 +48,7 @@ gmlcache doctor | models | status | init                     # environment & con
 
 <img src="docs/images/gmlcache-demo.gif" alt="gmlcache: check (miss) → run (records the real call) → check (hit) → run (instant cache replay)" width="900">
 
-<sub>Same command twice: the first call runs the real client and records it; the second is served from cache, instantly and byte-identical.<br>▶ <a href="docs/images/gmlcache-demo.mp4">Watch in higher quality (MP4)</a></sub>
+<sub>Same command twice: the first call runs the real client and records it; the second is served from cache, instantly and byte-identical.</sub>
 
 </div>
 

@@ -59,6 +59,10 @@ gmlcache session report "$SESSION"       # roll up the session
 Sessions span every run kind (managed, passthrough, API). `--session` (or `GMLCACHE_SESSION`)
 attaches the run to the session id; nothing else changes — the cache key is untouched.
 
+<div align="center">
+<img src="../images/gmlcache-sessions.gif" alt="gmlcache sessions: start a session, run three calls under it, then session report rolls up 3 invocations, 2 executions, 1 hit" width="760">
+</div>
+
 ## Boundaries
 
 Typical session boundaries:

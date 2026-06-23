@@ -1,4 +1,9 @@
-# gmlcache
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-lockup-dark.png">
+  <img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-lockup.png" alt="gmlcache" width="300">
+</picture>
+</p>
 
 #### Detached ML Execution Cache — the terminal client
 
@@ -7,6 +12,11 @@
 
 `gmlcache` runs, records, and replays detached ML workloads — record a real client (or
 API) call once, replay it forever by its content key, offline and byte-for-byte.
+
+> **Single-user, local — not a gateway.** gmlcache runs on your machine, as you, across the
+> subscriptions and APIs you already hold. It is **not** a multi-user router and **not** a way
+> to share one subscription — see
+> [Positioning](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/design/positioning.md).
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-demo.gif" alt="gmlcache: a miss records the real client call; the same command again is served instantly from cache, byte-identical" width="760">
