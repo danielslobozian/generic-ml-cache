@@ -35,6 +35,8 @@ gmlcache run ...
 gmlcache check ...
 gmlcache list
 gmlcache inspect <key-or-prefix>
+gmlcache tags
+gmlcache export
 gmlcache stats
 gmlcache doctor
 gmlcache models <client>
@@ -67,6 +69,7 @@ Input:
 | `--system-prompt` / `--system-prompt-file` | System prompt, inline or from a file. |
 | `--input-file` | A file the client reads in place; its content is fingerprinted into the key and the client is granted read access. Repeatable, any type. The key watches content, not the name. |
 | `--allow-path` | A folder the client may scan/read but whose contents the cache cannot fingerprint. Declaring any allow-path makes the call run fresh and store nothing (non-cacheable). Repeatable. |
+| `--tag` | Label this execution for grouping and later queries (`list --tag`, `export --tag`, `tags`). Metadata only — never part of the cache key; relabeling an already-cached input accumulates tags. Repeatable. |
 
 Capability and passthrough:
 
@@ -83,6 +86,7 @@ Mode:
 | `--mode` | Resolution mode: `cache` (default — hit replays, miss records), `offline` (replay only; a miss is an error), or `refresh` (always call and overwrite). Falls back to config/environment. |
 | `--offline` | Shortcut for `--mode offline`. |
 | `--force` | Shortcut for `--mode refresh`. |
+| `--persist` | How much to keep on disk: `meter` (usage/metadata only — every call runs, never replays), `cache` (default — also stores the output and replays on a hit), or `dataset` (also stores the input, to build an exportable `(input, output)` corpus). Falls back to config (`persist`) / environment (`GMLCACHE_PERSIST`). |
 | `--record-on-error` | Also cache a call that fails (non-zero exit); the default stores only successes. |
 
 Output and control:
@@ -108,8 +112,10 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 
 | Command | Options |
 |---|---|
-| `inspect <key-or-path>` | `--raw` also prints the client's verbatim usage block. Accepts a short key as shown by `list` as shown by `list`. |
-| `list` | `--client`, `--model` filter the listing; `--json` for machine output. |
+| `inspect <key-or-path>` | `--raw` also prints the client's verbatim usage block. Accepts a short key as shown by `list`. Shows whether the entry's input was stored (`dataset` depth). |
+| `list` | `--client`, `--model` filter the listing; `--tag` / `--exclude-tag` filter by tag (match-any include / exclude, with exclude winning); `--json` for machine output. |
+| `tags` | List the distinct tags in use across current executions, with counts. `--json` for machine output. |
+| `export` | Export the `dataset`-depth `(input, output)` corpus as JSONL. `--tag` / `--exclude-tag` filter by tag (match-any; exclude wins); `-o` / `--output FILE` writes to a file instead of stdout (a per-record summary still goes to stderr). Entries stored below `dataset` depth carry no input and are skipped (and reported). |
 | `models <client>` | `--executable` overrides the client executable; `--timeout`; `--json`. Omit `<client>` to query every registered client. |
 | `doctor` | `--timeout` (default 10s); `--json`. |
 | `stats` | `--json`. |

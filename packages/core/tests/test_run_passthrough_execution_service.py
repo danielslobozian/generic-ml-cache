@@ -235,4 +235,24 @@ def test_meter_depth_stores_nothing():
     assert _stdout(execution) == b"secret\n"
     assert harness.repository.find_current(key) is None
     assert harness.blob.puts == []
-    assert harness.metrics.event_names() == ["run"]
+    assert harness.metrics.event_names() == ["would_miss"]  # nothing cached -> would-be miss
+
+
+def test_dataset_depth_stores_the_native_args_as_input():
+    import json
+
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.service.execute(
+        _command(native_args=["--print", "hello"], persistence_depth=PersistenceDepth.DATASET)
+    )
+    assert execution.input_persisted is True
+    args = [a for a in execution.artifacts if a.artifact_type is ArtifactType.INPUT_ARGS]
+    assert len(args) == 1  # the opaque native-arg vector, kept as one JSON artifact
+    assert json.loads(args[0].content.decode("utf-8")) == ["--print", "hello"]
+
+
+def test_cache_depth_stores_no_input():
+    harness = _Harness(ClientRunResult(exit_code=0, stdout="answer\n"))
+    execution = harness.service.execute(_command(persistence_depth=PersistenceDepth.CACHE))
+    assert execution.input_persisted is False
+    assert not any(a.artifact_type is ArtifactType.INPUT_ARGS for a in execution.artifacts)

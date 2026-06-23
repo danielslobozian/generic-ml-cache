@@ -110,8 +110,9 @@ the last, so the degenerate "input without output" state cannot be expressed. Se
   cost/usage analytics and can report *would-be* hit/miss without storing anything.
 - **cache** *(default)*: + output — replay on hit (today's behavior).
 - **dataset**: + input — replay **and** a queryable, labeled `(input, output)` corpus,
-  exportable (e.g. JSONL) for distillation/evaluation. Export yields a **raw** corpus; an
-  optional user-supplied quality flag (never inferred) lets export filter it.
+  exportable as JSONL for distillation/evaluation. Export yields a **raw** corpus; curation
+  stays the user's, via tags (`export --tag` / `--exclude-tag`) — the cache never judges
+  output quality, so there is no built-in quality flag.
 
 ### 0.5.0 — Scope tokens
 

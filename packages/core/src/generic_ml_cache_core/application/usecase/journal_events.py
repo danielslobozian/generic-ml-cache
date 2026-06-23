@@ -17,3 +17,7 @@ RECORD = "record"
 MISS = "miss"
 #: a fresh real call ran but was not stored (uncacheable, or a non-persisted/failed run)
 RUN = "run"
+#: a METER call ran (never replays) and a stored entry existed — it *would* have hit
+WOULD_HIT = "would_hit"
+#: a METER call ran (never replays) and no stored entry existed — it *would* have missed
+WOULD_MISS = "would_miss"

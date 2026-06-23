@@ -38,10 +38,11 @@ MlExecution
   call_identity    : CallIdentity        -- the value object that determines the key
   execution_state  : ExecutionState      -- IN_PROGRESS | SUCCESS | FAILED (the run)
   execution_kind   : ExecutionKind       -- LOCAL_MANAGED | LOCAL_PASSTHROUGH | API
-  artifacts        : List[Artifact]      -- the output, unified (stdout/stderr/files)
+  artifacts        : List[Artifact]      -- output (stdout/stderr/files); + input at DATASET
   token_usage      : TokenUsage?         -- accounting; absent if not captured
   failure          : ExecutionFailure?   -- the cause; present only when FAILED
   output_persisted : bool                -- fact: was the output stored to the blob store?
+  input_persisted  : bool                -- fact: was the input stored too (DATASET depth)?
   superseded_at    : timestamp?          -- cache currency: null = current; set = stale
   -- future --
   trace            : ...                 -- journal link, session, scope
@@ -71,7 +72,18 @@ lifecycle as any other; what differs is how much gmlcache manages (see §8).
 **`output_persisted`** is a fact about this execution, not a policy. The policy
 (`persistence_depth`) lives on the execution command (§8). An execution can
 succeed but not persist its output — at `METER` depth, by explicit user choice —
-and it is still a fully valid, journalled `MlExecution`.
+and it is still a fully valid, journalled `MlExecution`. A `METER` call also never
+replays: it always runs and journals whether it *would* have hit a stored entry
+(`would_hit` / `would_miss`), so usage analytics can report saved runs without the
+cache ever serving or storing anything.
+
+**`input_persisted`** is the matching fact for the input. At `DATASET` depth the
+input is kept as well — the prompt, context, and system prompt become `INPUT_*`
+artifacts beside the output — so this execution carries the input side of an
+`(input, output)` corpus. It is **derived** from the presence of `INPUT_*`
+artifacts, not a stored column; input always rides on a stored output (`DATASET`
+is a superset of `CACHE`), so the degenerate "input without output" state cannot
+arise.
 
 **Executions are append-only; refresh never destroys.** A `call_identity` (one
 key) has **many** executions over time — each row is one real client call.

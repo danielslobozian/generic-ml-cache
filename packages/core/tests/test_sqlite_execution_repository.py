@@ -113,6 +113,67 @@ def test_reconstructed_artifacts_are_dehydrated(tmp_path):
     assert artifact.size_bytes == len(b"answer")
 
 
+def test_input_artifacts_round_trip_and_set_input_persisted(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    stdout = Artifact(
+        artifact_type=ArtifactType.STDOUT, blob_key="blob_out", size_bytes=3, content=b"out"
+    )
+    prompt = Artifact(
+        artifact_type=ArtifactType.INPUT_PROMPT, blob_key="blob_in", size_bytes=5, content=b"do it"
+    )
+    repository.save(
+        MlExecution(
+            call_identity=identity,
+            execution_state=ExecutionState.SUCCESS,
+            execution_kind=ExecutionKind.LOCAL_MANAGED,
+            output_persisted=True,
+            input_persisted=True,
+            artifacts=[stdout, prompt],
+        )
+    )
+    found = repository.find_current(identity.generate_key())
+    # input_persisted is derived on load from the presence of INPUT_* artifacts
+    assert found.input_persisted is True
+    assert ArtifactType.INPUT_PROMPT in {a.artifact_type for a in found.artifacts}
+
+
+def test_output_only_execution_has_input_persisted_false(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    assert repository.find_current(identity.generate_key()).input_persisted is False
+
+
+def test_add_input_artifacts_backfills_and_is_idempotent(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))  # output-only entry
+    key = identity.generate_key()
+    assert repository.find_current(key).input_persisted is False
+
+    prompt = Artifact(
+        artifact_type=ArtifactType.INPUT_PROMPT, blob_key="blob_in", size_bytes=5, content=b"do it"
+    )
+    repository.add_input_artifacts(key, [prompt])
+    found = repository.find_current(key)
+    assert found.input_persisted is True
+    assert sum(1 for a in found.artifacts if a.artifact_type is ArtifactType.INPUT_PROMPT) == 1
+
+    # a second back-fill is a no-op -- no duplicate input rows
+    repository.add_input_artifacts(key, [prompt])
+    found = repository.find_current(key)
+    assert sum(1 for a in found.artifacts if a.artifact_type is ArtifactType.INPUT_PROMPT) == 1
+
+
+def test_add_input_artifacts_without_a_current_execution_is_a_no_op(tmp_path):
+    repository = _repository(tmp_path)
+    prompt = Artifact(
+        artifact_type=ArtifactType.INPUT_PROMPT, blob_key="b", size_bytes=1, content=b"x"
+    )
+    repository.add_input_artifacts("nope", [prompt])  # must not raise
+
+
 def test_failed_execution_is_not_current(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()

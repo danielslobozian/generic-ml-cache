@@ -369,3 +369,238 @@ def test_list_filters_by_tag_and_shows_tags(capsys):
     listed = json.loads(capsys.readouterr().out)["executions"]
     assert len(listed) == 1  # match-any filter keeps only the alpha-tagged entry
     assert listed[0]["tags"] == ["alpha"]
+
+
+def test_list_excludes_by_tag(capsys):
+    import json
+
+    base = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(base + ["--prompt", "STDOUT a", "--tag", "alpha"])
+    run_cli(base + ["--prompt", "STDOUT b", "--tag", "beta"])
+    capsys.readouterr()
+
+    rc = main(["list", "--exclude-tag", "beta", "--json"])
+    assert rc == 0
+    listed = json.loads(capsys.readouterr().out)["executions"]
+    assert len(listed) == 1  # the beta-tagged entry is dropped
+    assert listed[0]["tags"] == ["alpha"]
+
+
+def test_list_exclude_tag_overrides_include(capsys):
+    import json
+
+    base = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    # one entry carrying both tags
+    run_cli(base + ["--prompt", "STDOUT a", "--tag", "alpha", "--tag", "beta"])
+    capsys.readouterr()
+
+    rc = main(["list", "--tag", "alpha", "--exclude-tag", "beta", "--json"])
+    assert rc == 0
+    listed = json.loads(capsys.readouterr().out)["executions"]
+    assert listed == []  # exclude wins when a tag is both included and excluded
+
+
+def test_tags_lists_distinct_tags_with_counts(capsys):
+    import json
+
+    base = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(base + ["--prompt", "STDOUT a", "--tag", "alpha", "--tag", "shared"])
+    run_cli(base + ["--prompt", "STDOUT b", "--tag", "beta", "--tag", "shared"])
+    capsys.readouterr()
+
+    rc = main(["tags", "--json"])
+    assert rc == 0
+    tags = json.loads(capsys.readouterr().out)["tags"]
+    assert tags == [
+        {"tag": "alpha", "count": 1},
+        {"tag": "beta", "count": 1},
+        {"tag": "shared", "count": 2},
+    ]
+
+
+def test_tags_empty_when_no_tags(capsys):
+    base = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(base + ["--prompt", "STDOUT a"])
+    capsys.readouterr()
+
+    rc = main(["tags"])
+    assert rc == 0
+    assert "no tags" in capsys.readouterr().out
+
+
+def test_persist_meter_stores_no_output_so_offline_misses(capsys):
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    # meter records the run but keeps no output ...
+    rc = run_cli(common + ["--prompt", "STDOUT hello", "--persist", "meter"])
+    assert rc == 0
+    assert "hello" in capsys.readouterr().out
+
+    # ... so there is nothing servable: a later offline call misses (exit 3).
+    rc = run_cli(common + ["--prompt", "STDOUT hello", "--offline"])
+    assert rc == 3
+    assert "offline miss" in capsys.readouterr().err
+
+
+def test_persist_default_cache_replays_offline(capsys):
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    # default depth is cache: output is stored ...
+    run_cli(common + ["--prompt", "STDOUT hello", "--persist", "cache"])
+    capsys.readouterr()
+    # ... so a later offline call replays from cache.
+    rc = run_cli(common + ["--prompt", "STDOUT hello", "--offline"])
+    assert rc == 0
+
+
+def _only_key(capsys):
+    import json
+
+    main(["list", "--json"])
+    return json.loads(capsys.readouterr().out)["executions"][0]["key"]
+
+
+def test_persist_dataset_stores_input_visible_in_inspect(capsys):
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(common + ["--prompt", "STDOUT hi", "--context", "some context", "--persist", "dataset"])
+    capsys.readouterr()
+
+    # dataset still replays output normally ...
+    rc = run_cli(common + ["--prompt", "STDOUT hi", "--context", "some context", "--offline"])
+    assert rc == 0
+    capsys.readouterr()
+
+    # ... and inspect shows the input was stored (prompt + context parts).
+    rc = main(["inspect", _only_key(capsys)[:12]])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "input  : stored" in out
+    assert "prompt" in out and "context" in out
+
+
+def test_persist_cache_does_not_store_input_in_inspect(capsys):
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(common + ["--prompt", "STDOUT hi", "--persist", "cache"])
+    capsys.readouterr()
+
+    rc = main(["inspect", _only_key(capsys)[:12]])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "input  : not stored" in out
+
+
+def test_export_emits_jsonl_for_dataset_entries_and_skips_others(capsys):
+    import json
+
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(
+        common
+        + [
+            "--prompt",
+            "STDOUT theanswer",
+            "--context",
+            "ctx",
+            "--system-prompt",
+            "terse",
+            "--persist",
+            "dataset",
+        ]
+    )
+    run_cli(common + ["--prompt", "STDOUT other", "--persist", "cache"])  # no input stored
+    capsys.readouterr()
+
+    rc = main(["export"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    lines = [line for line in captured.out.splitlines() if line.strip()]
+    assert len(lines) == 1  # only the dataset entry carries an input
+    record = json.loads(lines[0])
+    assert record["input"] == {"context": "ctx", "prompt": "STDOUT theanswer", "system": "terse"}
+    assert "theanswer" in record["output"]["stdout"]
+    assert record["client"] == "fake" and record["model"] == "m1"
+    # the cache-only entry is reported as skipped, never silently dropped
+    assert "skipped 1" in captured.err
+
+
+def test_export_filters_by_include_and_exclude_tags(capsys):
+    import json
+
+    common = [
+        "run",
+        "--client",
+        "fake",
+        "--model",
+        "m1",
+        "--effort",
+        "high",
+        "--persist",
+        "dataset",
+    ]
+    run_cli(common + ["--prompt", "STDOUT a", "--tag", "keep"])
+    run_cli(common + ["--prompt", "STDOUT b", "--tag", "drop"])
+    capsys.readouterr()
+
+    main(["export", "--tag", "keep"])
+    recs = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(recs) == 1 and recs[0]["tags"] == ["keep"]
+
+    main(["export", "--exclude-tag", "drop"])
+    recs = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(recs) == 1 and recs[0]["tags"] == ["keep"]
+
+
+def test_export_writes_to_output_file(tmp_path, capsys):
+    import json
+
+    common = [
+        "run",
+        "--client",
+        "fake",
+        "--model",
+        "m1",
+        "--effort",
+        "high",
+        "--persist",
+        "dataset",
+    ]
+    run_cli(common + ["--prompt", "STDOUT a"])
+    capsys.readouterr()
+
+    out_file = tmp_path / "corpus.jsonl"
+    rc = main(["export", "--output", str(out_file)])
+    captured = capsys.readouterr()
+    assert rc == 0
+    records = [
+        json.loads(line)
+        for line in out_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(records) == 1
+    assert captured.out == ""  # nothing on stdout when writing a file
+    assert f"exported 1 record(s) to {out_file}" in captured.err
+
+
+def test_dataset_hit_backfills_input_then_exports(capsys):
+    import json
+
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(common + ["--prompt", "STDOUT hi", "--context", "ctx"])  # cache: output only
+    # same input at dataset depth: a hit that back-fills the input onto the entry
+    run_cli(common + ["--prompt", "STDOUT hi", "--context", "ctx", "--persist", "dataset"])
+    capsys.readouterr()
+
+    main(["export"])
+    recs = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(recs) == 1  # the (now-)dataset entry is exportable
+    assert recs[0]["input"] == {"context": "ctx", "prompt": "STDOUT hi"}
+
+
+def test_export_empty_when_no_dataset_entries(capsys):
+    common = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
+    run_cli(common + ["--prompt", "STDOUT a", "--persist", "cache"])
+    capsys.readouterr()
+
+    rc = main(["export"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert captured.out.strip() == ""
+    assert "exported 0 record(s)" in captured.err
+    assert "skipped 1" in captured.err

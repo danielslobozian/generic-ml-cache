@@ -7,6 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
+from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 
 
@@ -50,3 +51,11 @@ class ExecutionRepositoryPort(ABC):
     def tags_for(self, execution_key: str) -> List[str]:
         """Return the tags on the current execution for ``execution_key``, sorted;
         empty if none (or no current execution)."""
+
+    @abstractmethod
+    def add_input_artifacts(self, execution_key: str, artifacts: List[Artifact]) -> None:
+        """Attach input ``artifacts`` to the current execution for ``execution_key``,
+        back-filling the input side of the corpus when a DATASET-depth call hits an
+        entry that has none yet. Idempotent — a no-op if the current execution
+        already carries input, or if there is no current execution. Like tags, this
+        enriches an existing entry without rewriting its output."""

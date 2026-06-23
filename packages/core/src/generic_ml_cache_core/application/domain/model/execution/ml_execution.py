@@ -29,12 +29,17 @@ class MlExecution:
     cache-currency axis (None = current, set = stale); executions are append-only
     per call identity. ``artifacts`` may be dehydrated (refs only) or hydrated
     (bytes materialised).
+
+    ``output_persisted`` is set whenever caching is on (CACHE/DATASET);
+    ``input_persisted`` is set only at DATASET depth, when the input is also kept
+    (as ``INPUT_*`` artifacts) to form a ``(input, output)`` corpus.
     """
 
     call_identity: CallIdentity
     execution_state: ExecutionState
     execution_kind: ExecutionKind
     output_persisted: bool
+    input_persisted: bool = False
     artifacts: List[Artifact] = field(default_factory=list)
     token_usage: Optional[TokenUsage] = None
     failure: Optional[ExecutionFailure] = None

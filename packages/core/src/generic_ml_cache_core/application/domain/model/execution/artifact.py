@@ -13,7 +13,15 @@ _BINARY = "binary"
 
 
 class ArtifactType(enum.Enum):
-    """The kind of generated output an Artifact holds.
+    """The kind of document an Artifact holds.
+
+    The ``STDOUT``/``STDERR``/``OUTPUT_FILE`` types are an execution's *output*,
+    stored whenever caching is on. The ``INPUT_*`` types are the *input* sent to
+    the client — and are stored only at ``DATASET`` persistence depth, to build a
+    queryable ``(input, output)`` corpus. Each execution kind keeps its own input
+    shape: managed-local uses ``INPUT_CONTEXT``/``INPUT_PROMPT``/``INPUT_SYSTEM``,
+    the API kind a single ``INPUT_MESSAGES`` (the JSON message list), and
+    passthrough a single ``INPUT_ARGS`` (the JSON native-argument list).
 
     RAW_USAGE is reserved for a later step (the raw client usage block stored as
     its own artifact); today raw usage still rides on TokenUsage.
@@ -22,6 +30,11 @@ class ArtifactType(enum.Enum):
     STDOUT = "stdout"
     STDERR = "stderr"
     OUTPUT_FILE = "output_file"
+    INPUT_CONTEXT = "input_context"
+    INPUT_PROMPT = "input_prompt"
+    INPUT_SYSTEM = "input_system"
+    INPUT_MESSAGES = "input_messages"
+    INPUT_ARGS = "input_args"
 
 
 @dataclass(frozen=True)
@@ -76,3 +89,17 @@ class Artifact:
     def is_hydrated(self) -> bool:
         """True when the artifact's bytes are materialised in memory."""
         return self.content is not None
+
+
+#: The artifact types that make up an execution's persisted *input* (DATASET
+#: depth). A single place so consumers can tell input apart from output without
+#: re-listing the members.
+INPUT_ARTIFACT_TYPES = frozenset(
+    {
+        ArtifactType.INPUT_CONTEXT,
+        ArtifactType.INPUT_PROMPT,
+        ArtifactType.INPUT_SYSTEM,
+        ArtifactType.INPUT_MESSAGES,
+        ArtifactType.INPUT_ARGS,
+    }
+)

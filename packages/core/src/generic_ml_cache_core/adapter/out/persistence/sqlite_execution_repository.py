@@ -16,7 +16,11 @@ from generic_ml_cache_core.adapter.out.persistence.call_identity_serialization i
     deserialize_identity,
     serialize_identity,
 )
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    INPUT_ARTIFACT_TYPES,
+    Artifact,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
@@ -32,6 +36,9 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
 )
 
 _DB_NAME = "executions.sqlite3"
+
+#: stored string values of the input artifact types, for the idempotency check.
+_INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
 
 
 @dataclass(frozen=True)
@@ -335,6 +342,28 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
+    def add_input_artifacts(self, execution_key: str, artifacts: List[Artifact]) -> None:
+        if not artifacts:
+            return
+        connection = self._connect()
+        try:
+            execution_id = self._current_execution_id(connection, execution_key)
+            if execution_id is None:
+                return
+            # Idempotent: skip if this execution already carries input artifacts.
+            placeholders = ",".join("?" * len(_INPUT_TYPE_VALUES))
+            already = connection.execute(
+                f"SELECT 1 FROM artifacts WHERE execution_id = ? "
+                f"AND artifact_type IN ({placeholders}) LIMIT 1",
+                (execution_id, *_INPUT_TYPE_VALUES),
+            ).fetchone()
+            if already is not None:
+                return
+            self._insert_artifacts(connection, execution_id, artifacts)
+            connection.commit()
+        finally:
+            connection.close()
+
     # -- reconstruction ---------------------------------------------------
 
     def _load_execution(self, connection: sqlite3.Connection, row: tuple) -> MlExecution:
@@ -349,12 +378,15 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             failure_message,
             failure_exit_code,
         ) = row
+        artifacts = self._load_artifacts(connection, execution_id)
         return MlExecution(
             call_identity=self._load_identity(connection, execution_key),
             execution_state=ExecutionState(state),
             execution_kind=ExecutionKind(kind),
             output_persisted=bool(output_persisted),
-            artifacts=self._load_artifacts(connection, execution_id),
+            # Derived, not a column: input is persisted iff INPUT_* artifacts exist.
+            input_persisted=any(a.artifact_type in INPUT_ARTIFACT_TYPES for a in artifacts),
+            artifacts=artifacts,
             token_usage=self._load_token_usage(connection, execution_id),
             failure=(
                 ExecutionFailure(

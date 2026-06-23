@@ -4,8 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Tuple
+import json
+from typing import List, Optional, Tuple
 
+from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
     ApiCallIdentity,
 )
@@ -67,3 +69,11 @@ class RunApiExecutionService(CachedMlExecutionService, RunApiExecutionUseCase):
     def _journal_fields(self, command: RunApiExecutionCommand) -> Tuple[str, str, str]:
         # The provider plays the role of "client" in the journal; no effort concept.
         return command.provider, command.model, ""
+
+    def _input_parts(
+        self, command: RunApiExecutionCommand
+    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+        # The API call's input is its message list; keep it as one JSON artifact so
+        # the (role, content) structure survives into the exported corpus.
+        payload = json.dumps([{"role": m.role, "content": m.content} for m in command.messages])
+        return [(ArtifactType.INPUT_MESSAGES, None, payload.encode("utf-8"))]

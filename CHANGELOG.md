@@ -14,6 +14,34 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+### Added
+
+- **Persistence depth** (core + cli): a single ordered `--persist` choice over what each
+  call keeps on disk — `meter` (usage/metadata only, never replays), `cache` (+ output, the
+  default — today's replay behaviour), or `dataset` (+ input). Each level is a superset of the
+  last, so the degenerate "input stored without output" state is unrepresentable. Set it per
+  call (`gmlcache run --persist <depth>`) or as a default via the `persist` config key or
+  `GMLCACHE_PERSIST` (precedence: flag > env > config > built-in `cache`); `gmlcache status`
+  shows the resolved value. Replaces the former internal `persist_output` boolean. `meter`
+  **never replays** — it always runs and stores nothing, but journals whether the call *would*
+  have hit a stored entry (`would_hit` / `would_miss`, visible in `gmlcache stats`), so you can
+  measure "you'd have saved N runs" without a cache.
+- **Dataset corpus and export** (core + cli): at `dataset` depth a call's input is kept beside
+  the output as content-addressed `INPUT_*` artifacts, forming a labelled `(input, output)`
+  corpus; persistence depth behaves the same for every execution kind — managed-local stores
+  context/prompt/system, the API kind stores its message list, and passthrough its native-arg
+  vector. `gmlcache inspect` shows whether an entry's input was stored. `gmlcache export` emits
+  the corpus as JSONL (to stdout or `--output FILE`). Export yields a **raw** corpus — entries
+  stored below `dataset` depth carry no input and are skipped and reported, never silently
+  dropped. Input **accumulates on a hit**, like tags: re-running an already-cached call at
+  `dataset` depth back-fills the input onto the existing entry (no re-run needed), so you can
+  upgrade a plain cache entry into a dataset entry by changing your mind.
+- **Tag discovery and exclusion** (cli): `gmlcache tags` lists the distinct tags in use across
+  current executions, with counts; `gmlcache list --exclude-tag` and `gmlcache export
+  --tag`/`--exclude-tag` filter by tag (match-any include and exclude, with exclude winning).
+  This is how a dataset is curated — the cache never judges output quality; there is
+  deliberately no built-in quality flag (quality is just a user-chosen tag).
+
 ## [0.3.0] - 2026-06-22
 
 ### Added
