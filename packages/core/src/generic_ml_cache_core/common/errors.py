@@ -86,6 +86,12 @@ class EncryptionTokenRequired(CacheError):
     """
 
 
+class EncryptionStateError(CacheError):
+    """Raised when an encryption operation does not match the store's state —
+    enabling an already-encrypted store, or disabling/rotating a public one.
+    """
+
+
 class StoreLocked(CacheError):
     """Raised when an exclusive store operation cannot start because another
     process already holds the store lock.

@@ -35,6 +35,8 @@ from generic_ml_cache_core.adapter.out.crypto.encrypting_blob_store import (
 from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
 )
+from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
+from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
@@ -67,6 +69,17 @@ class WiredUseCases:
     blob_store: BlobStorePort
     repository: SqliteExecutionRepository
     metrics: JournalMetrics
+
+
+def _recover_store(store_root: Path) -> None:
+    """Finish or roll back any interrupted encryption migration before the store is
+    opened, so a crashed enable/disable self-heals and never leaves a half-state.
+    Cipher-free and a cheap no-op when nothing is pending."""
+    StoreEncryptor(
+        store_root,
+        FilesystemEncryptionManifestStore(store_root),
+        SqliteStoreLock(store_root),
+    ).recover()
 
 
 def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> BlobStorePort:
@@ -106,6 +119,7 @@ def build_use_cases(
     :func:`_resolve_blob_store`).
     """
     store_root = Path(store_root)
+    _recover_store(store_root)
     clock = SystemClock()
     blob_store = _resolve_blob_store(store_root, encryption_token)
     repository = SqliteExecutionRepository(store_root / _EXECUTIONS_DB, clock)
