@@ -76,6 +76,16 @@ class WrongEncryptionToken(CacheError):
     """
 
 
+class EncryptionTokenRequired(CacheError):
+    """Raised when an operation needs to read or write encrypted content but no
+    token was supplied.
+
+    The store is globally encrypted, so there is no plaintext fallback: reading a
+    hit or recording a new entry needs the token. Metadata-only operations (list,
+    stats, tags, status) do not touch content and still work without it.
+    """
+
+
 class StoreLocked(CacheError):
     """Raised when an exclusive store operation cannot start because another
     process already holds the store lock.
