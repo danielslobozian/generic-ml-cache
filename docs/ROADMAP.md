@@ -141,10 +141,12 @@ Sessions group the executions of one workflow — single-user, no namespace abov
 
 ### 0.7.0 — Session reporting
 
-- Aggregate executions by session.
-- Report hits, misses, records, usage, and client-reported cost.
-- Distinguish reported, estimated, and unknown values.
-- Keep reports observational only.
+- Aggregate a session's usage **by provider/model** (a token means nothing without them) and
+  its activity **by day** (sessions can cross days).
+- Report invocations / executions / hits, and tokens **spent** vs **saved** by cache hits.
+- Tokens are the unit; **no dollar figures** (a cost estimate is client-specific and advisory).
+  Usage a call did not report is **unknown**, never zero.
+- Observational only.
 
 ### 0.8.0 — Asynchronous executions
 

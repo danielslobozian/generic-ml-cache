@@ -75,10 +75,19 @@ Typical session boundaries:
 
 ## Reports
 
-`gmlcache session report <id>` rolls up a session's journal: **invocations** (every call),
-**executions** (the calls that ran), **hits** (served from cache), and the per-event breakdown
-(`--json` for machine output). Aggregating token usage and client-reported cost *per session*
-is the next step — a richer report; the rollup above is what ships first.
+`gmlcache session report <id>` rolls up a session's journal:
+
+- **headline** — invocations (every call), executions (the calls that ran), hits (served from
+  cache), and the **day span** (a session can cross days).
+- **by provider / model** — tokens **spent** (input/output) and **saved** by cache hits. Tokens
+  are only ever shown next to their `(provider, model)` — a token means nothing without them —
+  and never summed across models.
+- **by day** — activity counts (calls, executions, hits) with a small bar, so you can see when a
+  multi-day session did its work.
+
+`--json` emits the structured report. There are **no dollar figures**: a cost estimate is a
+client-specific advisory number (only some clients report one), so the report stays in tokens.
+Executions that reported no usage are counted as *unknown*, never folded in as zero.
 
 ---
 
