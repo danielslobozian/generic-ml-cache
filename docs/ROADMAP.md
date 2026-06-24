@@ -16,7 +16,7 @@
 
 - [Current alpha capability](#current-alpha-capability)
 - [Road to 1.0.0: a stable, feature-complete cache](#road-to-100-a-stable-feature-complete-cache)
-- [After 1.0.0: dedicated releases](#after-100-dedicated-releases)
+- [After 1.0.0](#after-100)
 - [Out of scope unless explicitly revisited](#out-of-scope-unless-explicitly-revisited)
 
 ---
@@ -30,14 +30,10 @@ The current ruling for versioning is:
 - The `0.x` line builds toward a **stable, feature-complete `1.0.0`** — not a thin
   "current capability" release. Each `0.x` minor lands a feature milestone; `y` covers
   fixes and small corrections.
-- `1.0.0` is the **stable, feature-rich** release: tagging, persistence depth, at-rest
-  encryption, sessions, reporting, asynchronous executions, alias mode, API adapters, and
-  retention have all landed, and the CLI surface, execution-record schema, and adapter
-  contract are locked under a compatibility policy.
-- After `1.0.0`, the **daemon transport ships as a dedicated, independently-versioned
-  package**: core and cli stay lockstep, but the daemon versions on its own cadence
-  against a `generic-ml-cache-core>=X` compatibility range, so a daemon-only change
-  never bumps core or cli.
+- `1.0.0` is the **stable, feature-rich** release — the point at which every planned
+  feature has landed (gateway, daemon, and SDK adapters included), the **alpha tag is
+  removed**, and the CLI surface, execution-record schema, and adapter contract are locked
+  under a compatibility policy.
 
 Schema-shaping features (persistence, sessions) deliberately land **before** `1.0.0`,
 while `0.x` still permits the record schema to change — so `1.0.0` can lock a schema that
@@ -190,36 +186,87 @@ same execution request model, caching engine, and persistence layer.
 
 - Size quotas.
 - Explicit invalidation commands.
-- Time-based stale-entry cleanup (with the daemon).
 - Metadata-driven cleanup. Single-user; no per-scope policy.
+- Time-based cleanup is deferred to the daemon milestone (requires a resident process).
+
+### 0.12.0 — Session tags
+
+Sessions carry tags — the same concept as execution tags, applied one level up. A session
+may have zero, one, or many tags; none are required.
+
+- `session start --tag <tag>` attaches tags at creation (repeatable).
+- `session tag <id> --add <tag>` adds tags to an existing session after the fact.
+- `session report --tag <tag>` aggregates all sessions sharing that tag.
+- `list` gains `--session-tag` for cross-level queries: combine `--tag` (execution tag)
+  and `--session-tag` (session tag) to express queries like "executions tagged
+  `code-analysis` within sessions tagged `feature`."
+- Session tags are **metadata only**: a session without tags behaves exactly as today and
+  session tags never enter execution identity.
+
+### 0.13.0 — Daemon transport
+
+A resident local process that exposes the same execution engine through a local HTTP
+interface — another *interface* over the same engine, never another engine and never a
+multi-user service. See the [daemon transport design note](future/daemon-transport.md).
+
+- **Local pass-through proxy**: point your own ML client at the daemon by setting
+  `ANTHROPIC_BASE_URL=http://localhost:<port>` (or the equivalent for other providers).
+  Every underlying API call the client makes is intercepted, cached, and traced — whether
+  you drive the cache explicitly via `gmlcache run` or let the client call the API
+  naturally, all calls land in the same store.
+- **Session binding**: start the daemon with a session id
+  (`gmlcache daemon start --session <id>`) and every intercepted call records under that
+  session. Composing with session tags enables a clean shell alias — create the session,
+  start the daemon bound to it, set the base URL, then launch the client; all in one
+  command.
+- Transport-level live status and events.
+- Ships as a **dedicated, independently-versioned package** (`generic-ml-cache-daemon`),
+  versioned against a `generic-ml-cache-core>=X` range.
+- Strictly local and single-user — see [Positioning](design/positioning.md).
+
+### 0.14.0 — Scheduled eviction
+
+Time-based cache maintenance, enabled by the resident daemon from 0.13.0.
+
+- TTL-based and stale-entry cleanup configured in the store settings.
+- Complements the size-based eviction introduced in 0.11.0.
+- Eviction events surfaced through the daemon's live status reporting.
+
+### 0.15.0 — SDK adapters and dynamic adapter loading
+
+Replace the stdlib `urllib`-based API adapters and CLI subprocess wrappers with official
+provider SDKs; split adapters out of `core` into dedicated optional packages. Use Python
+entry points for automatic discovery.
+
+- **SDK adapters** (3 CLI agent SDKs + 3 provider API SDKs) become the canonical
+  implementations. `core` ships no concrete adapters — only the ports and the entry-point
+  discovery loop.
+- **Adapter packages** (`generic-ml-cache-adapters-cli`,
+  `generic-ml-cache-adapters-anthropic`, etc.) declare `gmlcache.adapters` entry points.
+  Installing a package makes its adapter available; not installing it leaves 0 adapters for
+  that provider.
+- **Unified registry**: the current `client/registry` and `api/api_registry` are merged
+  into a single registry keyed on `MlRunnerPort.name`, populated at startup by scanning
+  entry points.
+- `ModelListingPort` stays as an opt-in interface (`isinstance` check); no separate
+  registry needed.
 
 ### 1.0.0 — Stable, feature-rich cache
 
-- Everything above, productionized.
+- Everything above shipped and productionised.
+- Alpha tag removed.
 - Stable CLI surface under a compatibility policy.
-- Stable execution-record schema (tag- and session-aware) and compatibility policy.
-- Stable adapter contract for the CLI and API adapters — including verifying the
-  per-client read-permission mechanism currently confirmed only for Claude.
+- Stable execution-record schema and compatibility policy.
+- Stable adapter contract — including verifying the per-client read-permission mechanism
+  currently confirmed only for Claude.
 - Public documentation aligned with actual behavior.
 
-## After 1.0.0: dedicated releases
+## After 1.0.0
 
-These land after the stable release. The daemon is a separate, independently-versioned
-package; scheduled eviction depends on it.
-
-### Daemon transport — *dedicated package*
-
-- Expose the same execution engine through a resident local service.
-- Provide transport-level live status/events.
-- Keep daemon mode as another interface, not another engine.
-- Ships as its own package (`generic-ml-cache-daemon`), versioned independently against a
-  `generic-ml-cache-core` compatibility range rather than in lockstep with core and cli.
-
-### Scheduled stale-entry eviction
-
-- Time-based eviction for entries stale beyond a configured age.
-- Requires a resident process or explicit maintenance command (pairs with the daemon).
-- Complements, but does not replace, the size-based eviction introduced with retention.
+The dedicated adapter packages (`generic-ml-cache-adapters-*`) and the daemon package
+(`generic-ml-cache-daemon`) will version independently against a
+`generic-ml-cache-core>=X` compatibility range once 1.0.0 has locked the core contract.
+Core and cli remain lockstep; the surrounding ecosystem can evolve at its own cadence.
 
 ## Out of scope unless explicitly revisited
 
