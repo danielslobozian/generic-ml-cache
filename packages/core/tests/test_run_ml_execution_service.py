@@ -9,7 +9,6 @@ from typing import Dict, List, Optional
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
@@ -278,7 +277,7 @@ def test_api_miss_runs_and_records():
 def test_api_second_call_is_a_cache_hit():
     harness = _Harness()
     harness.service.execute(_api_command())
-    second = harness.service.execute(_api_command())
+    harness.service.execute(_api_command())
     assert len(harness.api.calls) == 1
     assert harness.metrics.event_names() == ["record", "hit"]
 
@@ -332,7 +331,6 @@ def test_in_progress_recorded_before_final_failure():
 
 
 def test_uncacheable_run_does_not_record_in_progress():
-    from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
     harness = _Harness()
     cmd = _managed_command(allow_paths=["/workspace"])
     execution = harness.service.execute(cmd)

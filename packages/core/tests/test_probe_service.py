@@ -19,7 +19,6 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
 from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
 from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )

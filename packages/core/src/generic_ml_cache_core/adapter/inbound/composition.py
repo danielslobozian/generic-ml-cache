@@ -10,8 +10,6 @@ from typing import Callable, Dict, Optional
 
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
-from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
