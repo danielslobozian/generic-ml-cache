@@ -14,6 +14,21 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-24
+
+### Added
+
+- **Alias mode** (cli): `gmlcache alias <client> -- <native args...>` — a thin native-client
+  wrapper. Everything after the client is an opaque tail, forwarded to the client verbatim and
+  keyed (by fingerprint) as the cache identity; gmlcache models or auto-completes nothing. Its
+  own options (`--mode` / `--offline` / `--force`, `--persist`, `--record-on-error`,
+  `--executable`, `--token`, `--session`, `--timeout`) come **before** the client; an optional
+  `--` separator keeps a dash-leading tail from fighting the parser. A replay reproduces the
+  native call's stdout, stderr and exit code — but, unlike a managed `run`, alias mode does no
+  isolation and no file capture, so generated files are written by the live call only and a
+  recorded failure is never served as a hit. Reuses core's existing passthrough engine; for
+  input fingerprinting, generated-file replay, grants, or detached execution, use `run`.
+
 ## [0.8.0] - 2026-06-24
 
 ### Added
