@@ -17,12 +17,16 @@ from typing import List
 import pytest
 
 from generic_ml_cache_core import register
-from generic_ml_cache_core.application.port.out.base import ClientAdapter
+from generic_ml_cache_core.adapter.out.api import register_api_adapter
+from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
+from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+    AbstractManagedLocalAdapter,
+)
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
 
-class FakeAdapter(ClientAdapter):
+class FakeAdapter(AbstractManagedLocalAdapter):
     name = "fake"
     # An absolute path with a separator -> resolve_executable uses it verbatim.
     default_executable = sys.executable
@@ -64,9 +68,10 @@ class FakeAdapter(ClientAdapter):
 def _register_fake_adapter():
     register(FakeAdapter())
     register(FakeStdinAdapter())
+    register_api_adapter("fake-api", lambda _: StubApiClientAdapter())
 
 
-class FakeStdinAdapter(ClientAdapter):
+class FakeStdinAdapter(AbstractManagedLocalAdapter):
     """Like FakeAdapter, but delivers the prompt on stdin (as the real adapters
     now do) so the launcher's stdin path can be exercised end-to-end -- including
     a prompt far larger than any OS argv-size limit."""

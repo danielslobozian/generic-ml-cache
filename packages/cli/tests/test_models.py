@@ -94,3 +94,70 @@ def test_models_cli_json_is_valid_even_when_unsupported(capsys):
     assert payload[0]["name"] == "fake"
     assert payload[0]["supported"] is False
     assert payload[0]["models"] is None
+
+
+# ---------------------------------------------------------------------------
+# API provider path (gemini, anthropic, …)
+# ---------------------------------------------------------------------------
+
+
+def test_models_cli_routes_unknown_client_to_api_registry(capsys, monkeypatch):
+    """A name not in the CLI registry falls through to the API provider registry."""
+    from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
+    from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
+
+    fake_listing = ModelListing(
+        name="gemini",
+        present=True,
+        supported=True,
+        models=[
+            ModelInfo(id="gemini-2.5-flash", name="Gemini 2.5 Flash"),
+            ModelInfo(id="gemini-3.5-flash", name="Gemini 3.5 Flash"),
+        ],
+    )
+    monkeypatch.setattr(
+        "generic_ml_cache_core.adapter.out.api.api_discover.list_api_models",
+        lambda provider, **kw: fake_listing,
+    )
+    rc = main(["models", "gemini"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "gemini-2.5-flash" in out
+    assert "gemini-3.5-flash" in out
+
+
+def test_models_cli_api_provider_json_output(capsys, monkeypatch):
+    from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
+    from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
+
+    fake_listing = ModelListing(
+        name="gemini",
+        present=True,
+        supported=True,
+        models=[ModelInfo(id="gemini-2.5-flash", name="Gemini 2.5 Flash")],
+    )
+    monkeypatch.setattr(
+        "generic_ml_cache_core.adapter.out.api.api_discover.list_api_models",
+        lambda provider, **kw: fake_listing,
+    )
+    rc = main(["models", "gemini", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload[0]["name"] == "gemini"
+    assert payload[0]["supported"] is True
+    assert payload[0]["models"][0]["id"] == "gemini-2.5-flash"
+
+
+def test_models_cli_unknown_api_provider_still_returns_zero(capsys, monkeypatch):
+    from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
+
+    monkeypatch.setattr(
+        "generic_ml_cache_core.adapter.out.api.api_discover.list_api_models",
+        lambda provider, **kw: ModelListing(
+            name=provider, present=False, supported=False, reason="unknown API provider"
+        ),
+    )
+    rc = main(["models", "unknownprovider"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "absent" in out

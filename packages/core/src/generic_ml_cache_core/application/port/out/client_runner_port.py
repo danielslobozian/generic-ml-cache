@@ -4,23 +4,17 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-
-from generic_ml_cache_core.application.domain.model.run.client_run_request import ClientRunRequest
-from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 
 
-class ClientRunnerPort(ABC):
-    """Outbound port for launching a local ML client and capturing its output.
+class ClientRunnerPort(MlRunnerPort):
+    """Outbound port for launching a local ML client in isolation.
 
-    The adapter is the only place that knows a specific client's CLI flags,
-    isolation mechanism, and output format. The core names only this contract.
-    The runner returns a raw ``ClientRunResult`` — it never hashes, never
-    computes a key, never stores; turning the result into stored artifacts is
-    the use case's job.
+    Provides ``execution_kind = LOCAL_MANAGED`` for all managed local adapters.
+    Concrete subclasses must still implement ``name`` and ``run``.
     """
 
-    @abstractmethod
-    def run(self, client_run_request: ClientRunRequest) -> ClientRunResult:
-        """Launch the client described by ``client_run_request`` and return its
-        raw captured result. Raises on unrecoverable launch failure."""
+    @property
+    def execution_kind(self) -> ExecutionKind:
+        return ExecutionKind.LOCAL_MANAGED

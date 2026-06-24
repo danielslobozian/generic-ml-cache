@@ -73,7 +73,13 @@ def test_passthrough_denormalized_columns():
 
 
 def test_api_round_trip():
-    identity = ApiCallIdentity(provider="openai", model="gpt-x", messages_fingerprint="mf")
+    identity = ApiCallIdentity(
+        provider="openai",
+        model="gpt-x",
+        context_fingerprint="cf",
+        prompt_fingerprint="pf",
+        effort="high",
+    )
     restored = _round_trip(identity)
     assert restored == identity
     assert restored.generate_key() == identity.generate_key()
@@ -81,7 +87,12 @@ def test_api_round_trip():
 
 def test_api_provider_lands_in_the_client_column():
     serialized = serialize_identity(
-        ApiCallIdentity(provider="openai", model="gpt-x", messages_fingerprint="mf")
+        ApiCallIdentity(
+            provider="openai",
+            model="gpt-x",
+            context_fingerprint="cf",
+            prompt_fingerprint="pf",
+        )
     )
     assert serialized.kind == "api"
     assert serialized.client == "openai"  # provider is denormalized into client

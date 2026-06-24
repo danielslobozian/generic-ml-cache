@@ -67,8 +67,14 @@ def serialize_identity(identity: CallIdentity) -> SerializedIdentity:
             kind=ExecutionKind.API.value,
             client=identity.provider,
             model=identity.model,
-            effort="",
-            identity_json=json.dumps({"messages_fingerprint": identity.messages_fingerprint}),
+            effort=identity.effort,
+            identity_json=json.dumps(
+                {
+                    "context_fingerprint": identity.context_fingerprint,
+                    "prompt_fingerprint": identity.prompt_fingerprint,
+                    "system_fingerprint": identity.system_fingerprint,
+                }
+            ),
         )
     raise ValueError(f"cannot serialize unknown call identity type: {type(identity).__name__}")
 
@@ -95,6 +101,9 @@ def deserialize_identity(serialized: SerializedIdentity) -> CallIdentity:
         return ApiCallIdentity(
             provider=serialized.client,
             model=serialized.model,
-            messages_fingerprint=fields["messages_fingerprint"],
+            context_fingerprint=fields["context_fingerprint"],
+            prompt_fingerprint=fields["prompt_fingerprint"],
+            system_fingerprint=fields.get("system_fingerprint"),
+            effort=serialized.effort,
         )
     raise ValueError(f"cannot deserialize unknown identity kind: {serialized.kind!r}")

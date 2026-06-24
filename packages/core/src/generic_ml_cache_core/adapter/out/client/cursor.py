@@ -11,17 +11,19 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
+from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+    AbstractManagedLocalAdapter,
+)
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
 from generic_ml_cache_core.application.port.out.base import (
-    ClientAdapter,
     ModelInfo,
     ensure_trailing_newline,
     final_result_object,
 )
 
 
-class CursorAdapter(ClientAdapter):
+class CursorAdapter(AbstractManagedLocalAdapter):
     name = "cursor"
     default_executable = "cursor-agent"
 

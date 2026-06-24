@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from generic_ml_cache_core.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
-from generic_ml_cache_core.application.domain.model.run.message import Message
+from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 
 # ---------------------------------------------------------------------------
@@ -81,8 +81,20 @@ def _patch_post(adapter: GeminiDirectAdapter, response: Dict[str, Any]):
     adapter._post = lambda url, body: response  # type: ignore[assignment]
 
 
-def _messages(*pairs) -> List[Message]:
-    return [Message(role=r, content=c) for r, c in pairs]
+def _request(
+    prompt: str = "hi",
+    context: str = "",
+    model: str = "gemini-3.5-flash",
+    effort: str = "",
+    user_system_prompt=None,
+) -> MlRequest:
+    return MlRequest(
+        model=model,
+        effort=effort,
+        context=context,
+        prompt=prompt,
+        user_system_prompt=user_system_prompt,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -99,37 +111,27 @@ def test_is_an_api_client_port():
 # ---------------------------------------------------------------------------
 
 
-def test_user_message_maps_to_contents_with_user_role():
-    body = _adapter()._build_body(_messages(("user", "hello")))
+def test_prompt_maps_to_user_content():
+    body = _adapter()._build_body(_request(prompt="hello"))
     assert body["contents"] == [{"role": "user", "parts": [{"text": "hello"}]}]
 
 
-def test_assistant_message_maps_to_model_role():
-    body = _adapter()._build_body(_messages(("assistant", "reply")))
-    assert body["contents"][0]["role"] == "model"
-
-
-def test_model_role_also_maps_to_model():
-    body = _adapter()._build_body(_messages(("model", "reply")))
-    assert body["contents"][0]["role"] == "model"
-
-
-def test_system_message_becomes_system_instruction():
-    body = _adapter()._build_body(_messages(("system", "be terse"), ("user", "hi")))
+def test_context_becomes_system_instruction():
+    body = _adapter()._build_body(_request(context="be terse", prompt="hi"))
     assert "systemInstruction" in body
     assert body["systemInstruction"] == {"parts": [{"text": "be terse"}]}
     assert len(body["contents"]) == 1
     assert body["contents"][0]["role"] == "user"
 
 
-def test_no_system_message_omits_system_instruction():
-    body = _adapter()._build_body(_messages(("user", "hi")))
+def test_empty_context_omits_system_instruction():
+    body = _adapter()._build_body(_request(context="", prompt="hi"))
     assert "systemInstruction" not in body
 
 
-def test_multiple_system_messages_all_go_to_system_instruction():
+def test_context_and_system_prompt_both_become_system_instruction():
     body = _adapter()._build_body(
-        _messages(("system", "be terse"), ("system", "be helpful"), ("user", "go"))
+        _request(context="be terse", prompt="go", user_system_prompt="be helpful")
     )
     parts = body["systemInstruction"]["parts"]
     assert len(parts) == 2
@@ -138,12 +140,9 @@ def test_multiple_system_messages_all_go_to_system_instruction():
     assert len(body["contents"]) == 1
 
 
-def test_multi_turn_conversation_preserves_order():
-    body = _adapter()._build_body(
-        _messages(("user", "q1"), ("assistant", "a1"), ("user", "q2"))
-    )
-    roles = [c["role"] for c in body["contents"]]
-    assert roles == ["user", "model", "user"]
+def test_none_user_system_prompt_omits_from_system_instruction():
+    body = _adapter()._build_body(_request(context="ctx", prompt="hi", user_system_prompt=None))
+    assert body["systemInstruction"] == {"parts": [{"text": "ctx"}]}
 
 
 # ---------------------------------------------------------------------------
@@ -287,7 +286,7 @@ def test_usage_missing_usage_metadata_returns_all_none():
 def test_run_returns_client_run_result_with_text():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
-    result = adapter.run("google", "gemini-3.5-flash", _messages(("user", "hi")), effort="")
+    result = adapter.run(_request())
     assert result.exit_code == 0
     assert "AI analyzes" in result.stdout
 
@@ -295,7 +294,7 @@ def test_run_returns_client_run_result_with_text():
 def test_run_token_usage_flows_through():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
-    result = adapter.run("google", "gemini-3.5-flash", _messages(("user", "hi")), effort="")
+    result = adapter.run(_request())
     assert result.token_usage is not None
     assert result.token_usage.input_tokens == 8
     assert result.token_usage.reasoning_tokens == 367
@@ -304,7 +303,7 @@ def test_run_token_usage_flows_through():
 def test_run_files_is_empty():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
-    result = adapter.run("google", "gemini-3.5-flash", _messages(("user", "hi")), effort="")
+    result = adapter.run(_request())
     assert result.files == []
 
 
@@ -314,22 +313,22 @@ def test_run_files_is_empty():
 
 
 def test_effort_set_adds_generation_config():
-    body = _adapter()._build_body(_messages(("user", "hi")), effort="high")
+    body = _adapter()._build_body(_request(effort="high"))
     assert body["generationConfig"]["thinkingConfig"]["thinkingLevel"] == "high"
 
 
 def test_effort_low_maps_correctly():
-    body = _adapter()._build_body(_messages(("user", "hi")), effort="low")
+    body = _adapter()._build_body(_request(effort="low"))
     assert body["generationConfig"]["thinkingConfig"]["thinkingLevel"] == "low"
 
 
 def test_effort_medium_maps_correctly():
-    body = _adapter()._build_body(_messages(("user", "hi")), effort="medium")
+    body = _adapter()._build_body(_request(effort="medium"))
     assert body["generationConfig"]["thinkingConfig"]["thinkingLevel"] == "medium"
 
 
 def test_empty_effort_omits_generation_config():
-    body = _adapter()._build_body(_messages(("user", "hi")), effort="")
+    body = _adapter()._build_body(_request(effort=""))
     assert "generationConfig" not in body
 
 
@@ -342,7 +341,7 @@ def test_run_passes_effort_to_body():
         return _FIXTURE_RESPONSE
 
     adapter._post = fake_post  # type: ignore[assignment]
-    adapter.run("google", "gemini-3.5-flash", _messages(("user", "hi")), effort="high")
+    adapter.run(_request(effort="high"))
     assert captured["body"]["generationConfig"]["thinkingConfig"]["thinkingLevel"] == "high"
 
 
@@ -355,7 +354,7 @@ def test_missing_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     adapter = GeminiDirectAdapter()  # no api_key=
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
-        adapter.run("google", "gemini-3.5-flash", _messages(("user", "hi")))
+        adapter.run(_request())
 
 
 def test_api_key_from_env_is_used(monkeypatch):
@@ -382,4 +381,78 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
     with patch("urllib.request.urlopen", side_effect=http_error):
         adapter = _adapter()
         with pytest.raises(RuntimeError, match="403"):
-            adapter.run("google", "gemini-3.5-flash", _messages(("user", "hi")))
+            adapter.run(_request())
+
+
+# ---------------------------------------------------------------------------
+# list_models()
+# ---------------------------------------------------------------------------
+
+_MODELS_RESPONSE: Dict[str, Any] = {
+    "models": [
+        {
+            "name": "models/gemini-2.5-flash",
+            "displayName": "Gemini 2.5 Flash",
+            "supportedGenerationMethods": ["generateContent", "countTokens"],
+        },
+        {
+            "name": "models/gemini-3.5-flash",
+            "displayName": "Gemini 3.5 Flash",
+            "supportedGenerationMethods": ["generateContent", "countTokens"],
+        },
+        {
+            "name": "models/text-embedding-004",
+            "displayName": "Text Embedding 004",
+            "supportedGenerationMethods": ["embedContent"],
+        },
+        {
+            "name": "models/gemini-2.5-flash-tts",
+            "displayName": "Gemini 2.5 Flash TTS",
+            "supportedGenerationMethods": ["generateContent"],
+        },
+    ]
+}
+
+
+def test_list_models_filters_to_generate_content_only():
+    adapter = _adapter()
+    adapter._get = lambda url: _MODELS_RESPONSE
+    models = adapter.list_models()
+    ids = [m.id for m in models]
+    assert "text-embedding-004" not in ids
+    assert "gemini-2.5-flash" in ids
+    assert "gemini-3.5-flash" in ids
+    assert "gemini-2.5-flash-tts" in ids
+
+
+def test_list_models_strips_models_prefix():
+    adapter = _adapter()
+    adapter._get = lambda url: _MODELS_RESPONSE
+    models = adapter.list_models()
+    assert all(not m.id.startswith("models/") for m in models)
+
+
+def test_list_models_uses_display_name():
+    adapter = _adapter()
+    adapter._get = lambda url: _MODELS_RESPONSE
+    by_id = {m.id: m for m in adapter.list_models()}
+    assert by_id["gemini-2.5-flash"].name == "Gemini 2.5 Flash"
+    assert by_id["gemini-3.5-flash"].name == "Gemini 3.5 Flash"
+
+
+def test_list_models_empty_response_returns_empty_list():
+    adapter = _adapter()
+    adapter._get = lambda url: {"models": []}
+    assert adapter.list_models() == []
+
+
+def test_list_models_http_error_raises_runtime_error():
+    import io
+    error_body = b'{"error": {"code": 401, "message": "Unauthorized"}}'
+    http_error = urllib.error.HTTPError(
+        url="https://example.com", code=401, msg="Unauthorized",
+        hdrs=MagicMock(), fp=io.BytesIO(error_body),
+    )
+    with patch("urllib.request.urlopen", side_effect=http_error):
+        with pytest.raises(RuntimeError, match="401"):
+            _adapter().list_models()

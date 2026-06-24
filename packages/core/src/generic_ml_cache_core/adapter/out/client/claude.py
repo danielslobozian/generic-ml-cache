@@ -13,6 +13,9 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+    AbstractManagedLocalAdapter,
+)
 from generic_ml_cache_core.adapter.out.client.registry import register
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
 from generic_ml_cache_core.application.domain.model.usage.usage import (
@@ -21,13 +24,12 @@ from generic_ml_cache_core.application.domain.model.usage.usage import (
     int_or_none,
 )
 from generic_ml_cache_core.application.port.out.base import (
-    ClientAdapter,
     ensure_trailing_newline,
     final_result_object,
 )
 
 
-class ClaudeAdapter(ClientAdapter):
+class ClaudeAdapter(AbstractManagedLocalAdapter):
     name = "claude"
     default_executable = "claude"
 

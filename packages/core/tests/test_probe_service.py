@@ -19,8 +19,9 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
 from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
 from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
-from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
-    RunManagedLocalExecutionCommand,
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+    RunMlExecutionCommand,
 )
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
@@ -133,7 +134,8 @@ def test_probe_records_nothing_in_the_repository():
 
 def test_probe_key_matches_a_run_key_for_the_same_inputs():
     probe_command = _command(input_file_paths=["/a"], client_args=["--flag"], grants=["net"])
-    run_command = RunManagedLocalExecutionCommand(
+    run_command = RunMlExecutionCommand(
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
         client="claude",
         model="sonnet",
         effort="high",

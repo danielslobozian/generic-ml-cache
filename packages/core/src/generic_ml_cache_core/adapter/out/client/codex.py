@@ -14,15 +14,15 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+    AbstractManagedLocalAdapter,
+)
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
-from generic_ml_cache_core.application.port.out.base import (
-    ClientAdapter,
-    ensure_trailing_newline,
-)
+from generic_ml_cache_core.application.port.out.base import ensure_trailing_newline
 
 
-class CodexAdapter(ClientAdapter):
+class CodexAdapter(AbstractManagedLocalAdapter):
     name = "codex"
     default_executable = "codex"
 

@@ -30,7 +30,7 @@ try:
 except ImportError:  # completion is a convenience; never let its absence break the CLI
     argcomplete = None
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_core.adapter.inbound.composition import build_use_cases, resolve_execution_kind
 from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
 )
@@ -39,6 +39,7 @@ from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import Sqli
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
+from generic_ml_cache_core.adapter.out.api.api_registry import registered_api_names
 from generic_ml_cache_core.adapter.out.client.registry import registered_names
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -50,11 +51,9 @@ from generic_ml_cache_core.application.domain.model.execution.execution_state im
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
 from generic_ml_cache_cli import async_jobs
-from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
-    RunManagedLocalExecutionCommand,
-)
-from generic_ml_cache_core.application.port.inbound.run_passthrough_execution_command import (
-    RunPassthroughExecutionCommand,
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+    RunMlExecutionCommand,
 )
 from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.common.errors import (
@@ -147,7 +146,7 @@ def _apply_output_files(execution: MlExecution, output_dir: Path) -> None:
         target.write_bytes(artifact.content or b"")
 
 
-def _print_run_json(execution: MlExecution, command: RunManagedLocalExecutionCommand) -> int:
+def _print_run_json(execution: MlExecution, command: RunMlExecutionCommand) -> int:
     import json
 
     usage = execution.token_usage
@@ -213,8 +212,9 @@ def _resolve_managed_run(args: argparse.Namespace):
     return spec, Path(str(settings["store"][0])), _resolve_token(args)
 
 
-def _command_from_spec(spec: dict) -> RunManagedLocalExecutionCommand:
-    return RunManagedLocalExecutionCommand(
+def _command_from_spec(spec: dict) -> RunMlExecutionCommand:
+    return RunMlExecutionCommand(
+        execution_kind=resolve_execution_kind(spec["client"]),
         client=spec["client"],
         model=spec["model"],
         effort=spec["effort"],
@@ -309,7 +309,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
             spec["timeout"],
             encryption_token=token,
             stream_path=getattr(args, "stream", None),
-        ).run_managed.execute(command)
+            client=spec["client"],
+        ).run_ml.execute(command)
     )
     if error is not None:
         return error
@@ -345,8 +346,10 @@ def _cmd_alias(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    command = RunPassthroughExecutionCommand(
+    command = RunMlExecutionCommand(
+        execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
         client=args.client,
+        model="",
         native_args=native_args,
         cache_mode=_resolve_cache_mode(args, settings),
         persistence_depth=PersistenceDepth(str(settings["persist"][0])),
@@ -360,7 +363,8 @@ def _cmd_alias(args: argparse.Namespace) -> int:
             lambda _client: executable,
             settings["timeout"][0],
             encryption_token=_resolve_token(args),
-        ).run_passthrough.execute(command)
+            client=args.client,
+        ).run_ml.execute(command)
     )
     if error is not None:
         return error
@@ -410,13 +414,13 @@ def _cmd_worker(args: argparse.Namespace) -> int:
         spec = store.read_spec(job_id)
     except (OSError, ValueError):
         return 1
-    command = _command_from_spec(spec)
     try:
         with async_jobs.hold_job_lock(store.lock_path(job_id)):
             events = store.events_path(job_id)
             store.update_status(job_id, state=async_jobs.RUNNING, started_at=async_jobs.now())
             async_jobs.append_event(events, "running", client=spec["client"], model=spec["model"])
             try:
+                command = _command_from_spec(spec)
                 # On an encrypted store the token arrives via the environment (set by the
                 # spawner), never from disk; a public store ignores it.
                 token = os.environ.get("GMLCACHE_TOKEN") or None
@@ -426,8 +430,9 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                     spec["timeout"],
                     encryption_token=token,
                     stream_path=str(events),  # client live events land in the job's log
+                    client=spec["client"],
                 )
-                execution = wired.run_managed.execute(command)
+                execution = wired.run_ml.execute(command)
             except Exception as exc:
                 store.update_status(
                     job_id, state=async_jobs.FAILED, ended_at=async_jobs.now(), error=str(exc)
@@ -880,7 +885,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
+    from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models
     from generic_ml_cache_core.adapter.out.client.discover import list_models, list_models_all
+    from generic_ml_cache_core.common.errors import UnknownClient
 
     try:
         file_cfg = config.load()
@@ -890,7 +897,11 @@ def _cmd_models(args: argparse.Namespace) -> int:
 
     if args.client:
         executable = config.executable_for(file_cfg, args.client, flag=args.executable)
-        listings = [list_models(args.client, executable=executable, timeout=args.timeout)]
+        try:
+            listings = [list_models(args.client, executable=executable, timeout=args.timeout)]
+        except UnknownClient:
+            # Not a CLI client — try the API provider registry (gemini, anthropic, …).
+            listings = [list_api_models(args.client)]
     else:
         listings = list_models_all(timeout=args.timeout, executables=file_cfg.executables)
 
@@ -1624,7 +1635,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=False, metavar="<command>")
 
     run = sub.add_parser("run", help="resolve a request (record on miss, replay on hit)")
-    run.add_argument("--client", required=True, choices=registered_names())
+    run.add_argument("--client", required=True, choices=registered_names() + registered_api_names())
     run.add_argument("--model", required=True)
     run.add_argument(
         "--effort",
@@ -1830,8 +1841,7 @@ def build_parser() -> argparse.ArgumentParser:
     models.add_argument(
         "client",
         nargs="?",
-        choices=registered_names(),
-        help="one client; omit to query every registered client",
+        help="client or API provider name (e.g. claude, gemini); omit to query every registered client",
     )
     models.add_argument("--executable", help="override the client executable (the seam)")
     models.add_argument(
