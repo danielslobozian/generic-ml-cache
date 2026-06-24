@@ -22,6 +22,12 @@ API) call once, replay it forever by its content key, offline and byte-for-byte.
 <img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-demo.gif" alt="gmlcache: a miss records the real client call; the same command again is served instantly from cache, byte-identical" width="760">
 </p>
 
+<p align="center"><sub><b>Detached + live streaming</b> — <code>run --detach</code> returns an id; <code>execution watch</code> follows the client's live progress to the result</sub></p>
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-async.gif" alt="gmlcache run --detach, then execution watch streaming the client's live thinking and tool calls to the result" width="760">
+</p>
+
 ## Install
 
 ```bash

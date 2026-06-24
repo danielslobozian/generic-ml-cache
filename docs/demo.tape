@@ -1,4 +1,5 @@
-# gmlcache demo — help, then the same command twice: first calls the client, then hits cache.
+# gmlcache demo (hero) — the same command twice: first calls the real client, then hits cache.
+# The banner + command menu live in their own cassette (help.tape); this one is the value demo.
 #
 # Render:   vhs docs/demo.tape   ->   docs/images/gmlcache-demo.gif
 #
@@ -25,7 +26,7 @@ Require gmlcache
 Set Shell bash
 Set FontSize 28
 Set Width 1920
-Set Height 1200
+Set Height 1120
 Set Padding 40
 Set Theme "Dracula"
 Set Framerate 24
@@ -38,16 +39,6 @@ Type "export TIMEFORMAT='   ⏱  %Rs'"  Enter
 Type "clear"  Enter
 Show
 Sleep 600ms
-
-# 0) What can it do? — the help menu, briefly, then clear for the value demo.
-Type "gmlcache --help"
-Sleep 600ms
-Enter
-Sleep 3500ms
-Hide
-Type "clear"  Enter
-Show
-Sleep 400ms
 
 # 1) Not cached yet — `check` reports a miss without calling anything.
 Type "gmlcache check --client claude --model sonnet --prompt 'Write a haiku about caching.'"

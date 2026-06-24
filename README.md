@@ -50,6 +50,18 @@ gmlcache doctor | models | status | init                     # environment & con
 
 <sub>Same command twice: the first call runs the real client and records it; the second is served from cache, instantly and byte-identical.</sub>
 
+<br><br>
+
+<sub>**The command menu** — <code>gmlcache --help</code></sub>
+
+<img src="docs/images/gmlcache-help.gif" alt="the gmlcache banner and the full command menu" width="620">
+
+<br><br>
+
+<sub>**Detached + live streaming** — <code>run --detach</code> returns an execution id; <code>execution watch</code> follows the client's own live progress (thinking, tool calls) to the recorded result</sub>
+
+<img src="docs/images/gmlcache-async.gif" alt="gmlcache run --detach, then execution watch streaming the client's live thinking and tool calls to the result" width="820">
+
 </div>
 
 <br>

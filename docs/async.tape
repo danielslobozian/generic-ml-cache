@@ -13,9 +13,9 @@ Output docs/images/gmlcache-async.gif
 Require gmlcache
 
 Set Shell bash
-Set FontSize 26
+Set FontSize 24
 Set Width 1900
-Set Height 1040
+Set Height 1280
 Set Padding 40
 Set Theme "Dracula"
 Set Framerate 24
@@ -28,7 +28,7 @@ Show
 Sleep 600ms
 
 # 1) Submit a detached run — it returns an execution id immediately.
-Type "JID=$(gmlcache run --client claude --model sonnet --prompt 'Write a haiku about caching.' --detach)"  Enter
+Type "JID=$(gmlcache run --client claude --model sonnet --grant web-search --prompt 'Search the web for the capital of France, then write a haiku about it.' --detach)"  Enter
 Sleep 700ms
 Type "echo $JID"  Enter
 Sleep 1300ms
@@ -37,9 +37,9 @@ Sleep 1300ms
 Type "gmlcache execution status $JID"  Enter
 Sleep 1800ms
 
-# 3) Follow the event log until it finishes.
+# 3) Follow the event log live — the client's own progress (thinking, tool calls) streams in.
 Type "gmlcache execution watch $JID"  Enter
-Sleep 7s
+Sleep 16s
 
 # 4) Fetch the recorded result.
 Type "gmlcache execution result $JID"  Enter
