@@ -43,6 +43,7 @@ This installs the `gmlcache` command and pulls in the engine,
 gmlcache run    --client claude --model sonnet --prompt "…"            # record on a miss, replay on a hit
 gmlcache check  --client claude --model sonnet --prompt "…"            # forecast: is this exact call cached?
 gmlcache run    --client claude --model sonnet --prompt "…" --detach   # run detached → prints an execution id
+gmlcache alias  claude -- -p "…" --model sonnet                        # thin wrapper: cache a raw native call
 gmlcache execution watch <id>                                         # follow a detached run's live progress
 gmlcache session report <id>                                          # token usage by provider/model for a workflow
 gmlcache encrypt                                                      # encrypt the whole store at rest

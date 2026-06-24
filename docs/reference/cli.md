@@ -21,7 +21,7 @@
 - [Current command options](#current-command-options)
 - [Future scope/session commands](#future-scopesession-commands)
 - [Detached executions](#detached-executions)
-- [Future alias mode](#future-alias-mode)
+- [Alias mode](#alias-mode)
 
 ---
 
@@ -32,6 +32,7 @@ release; use `gmlcache --help` for the installed version.
 
 ```text
 gmlcache run ...
+gmlcache alias <client> -- <native args...>
 gmlcache check ...
 gmlcache list
 gmlcache inspect <key-or-prefix>
@@ -212,14 +213,38 @@ then follows it live — the worker's lifecycle interleaved with the client's ow
 worker through its environment (never written to disk), and `result` / `materialize` take
 `--token` to decrypt — `status` / `watch` / `list` need none (job metadata is plaintext).
 
-## Future alias mode
+## Alias mode
+
+A thin native-client wrapper: run a client through the cache while writing its
+command line yourself. gmlcache models nothing — everything after the client is an
+**opaque tail**, forwarded to the client verbatim and keyed (by fingerprint) as the
+cache identity.
 
 ```text
-gmlcache alias <adapter> <native adapter arguments...>
+gmlcache alias <client> -- <native args...>
+gmlcache alias claude -- -p "hello" --model opus    # caches a raw claude call
+alias claude='gmlcache alias claude'                # drop-in: claude -p "hi" is now cached
 ```
 
-Everything after `<adapter>` is native adapter input and is included in cache
-identity as an opaque tail.
+gmlcache's own options come **before** the client; everything after the client is
+native. A leading `--` separator is optional — it keeps a dash-leading tail from
+fighting the parser, and is stripped before forwarding.
+
+| Option (before the client) | Meaning |
+| --- | --- |
+| `--mode` / `--offline` / `--force` | resolution mode (default `cache`; shortcuts for `offline` / `refresh`). |
+| `--persist` | `meter` / `cache` (default) / `dataset`. At `dataset` the native arg vector is the stored input. |
+| `--record-on-error` | keep a failed call as history (a failure is **never** served as a hit). |
+| `--executable` | override the client executable (the seam). |
+| `--token` | encryption token for an encrypted store (or `GMLCACHE_TOKEN`). |
+| `--session` | group this run under a session id (or `GMLCACHE_SESSION`). |
+| `--timeout` | seconds before the real call is killed. |
+
+A replay reproduces the native call's stdout, stderr and exit code. Unlike a managed
+`run`, alias mode does **no** isolation and **no** file capture: generated files are
+written by the live call only — there is nothing to materialize on a hit. Alias mode is
+for users who want native client behavior plus basic caching; reach for `run` when you
+want input fingerprinting, generated-file replay, grants, or detached execution.
 
 ---
 

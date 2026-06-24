@@ -39,6 +39,7 @@ pip install generic-ml-cache-cli      # installs the `gmlcache` command (and the
 gmlcache run    --client claude --model sonnet --prompt "…"            # record on a miss, replay on a hit
 gmlcache check  --client claude --model sonnet --prompt "…"            # forecast: is this exact call cached?
 gmlcache run    --client claude --model sonnet --prompt "…" --detach   # run detached → prints an execution id
+gmlcache alias  claude -- -p "…" --model sonnet                        # thin wrapper: cache a raw native call
 gmlcache execution watch <id>                                         # follow a detached run's live progress
 gmlcache session report <id>                                          # token usage by provider/model for a workflow
 gmlcache encrypt                                                      # encrypt the whole store at rest
@@ -161,10 +162,10 @@ Sessions build on that same metadata: `session report` rolls up a workflow's run
 | **Sessions** | Groups a workflow's runs; `session report` rolls up usage by provider/model + cache savings |
 | **Detached** | `run --detach` returns an id; query / watch / fetch / materialize the result later |
 | **Live streaming** | `run --stream` (and `execution watch`) emit the client's live progress as NDJSON |
+| **Alias** | `alias <client> -- <native args>` — a thin wrapper that caches a raw native call (stdout/stderr/exit) |
 
 > [!NOTE]
-> Size-based eviction and an alias (stdout-only) mode are **planned, not yet implemented**
-> — see the [roadmap](docs/ROADMAP.md).
+> Size-based eviction is **planned, not yet implemented** — see the [roadmap](docs/ROADMAP.md).
 
 <br>
 
@@ -193,7 +194,8 @@ For that reason, a stored execution records:
 - the execution request identity that produced the result.
 
 > [!TIP]
-> If a caller only needs stdout and never wants generated artifacts, a simpler alias-style wrapper may eventually be sufficient.
+> If a caller only needs stdout and never wants generated artifacts, the simpler
+> [alias mode](docs/reference/cli.md#alias-mode) (`gmlcache alias <client> -- …`) is enough.
 >
 > The full execution model exists for the richer case where files matter.
 

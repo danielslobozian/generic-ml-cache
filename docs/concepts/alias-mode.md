@@ -21,10 +21,12 @@
 
 ---
 
-Alias mode is a future thin-wrapper mode.
+Alias mode is a thin-wrapper mode.
 
 It exists because not every caller needs the full execution model. Some callers
 only want native client behavior with basic caching.
+
+See the [CLI reference](../reference/cli.md#alias-mode) for the exact options.
 
 ## Full execution mode
 
@@ -38,7 +40,7 @@ Full execution mode uses gmlcache’s execution request contract:
 - grants,
 - generated artifact capture,
 - usage reporting,
-- future sessions.
+- sessions.
 
 This mode is appropriate when the caller wants reliable artifact capture and
 replay.
@@ -50,10 +52,12 @@ Alias mode treats everything after the selected adapter as native adapter input.
 gmlcache does not try to understand every native option. The raw native argument
 tail is passed through to the adapter and included in cache identity.
 
-Conceptually:
+gmlcache's own options come before the client; everything after the client is the
+native tail. An optional `--` separator keeps a dash-leading tail from fighting the
+parser:
 
 ```text
-gmlcache alias <adapter> <native adapter arguments...>
+gmlcache alias <client> -- <native adapter arguments...>
 ```
 
 The native client remains responsible for errors, validation, and option parsing.
@@ -66,8 +70,10 @@ the native tail as opaque keeps the mode simple and honest.
 
 ## Output model
 
-Alias mode may initially focus on stdout, stderr, and exit status. If generated
-files matter, callers should prefer full execution mode.
+Alias mode caches stdout, stderr, and exit status — a replay reproduces those. It
+does no isolation and no file capture: generated files are written by the live call
+only, so there is nothing to replay on a hit. If generated files matter, callers
+should prefer full execution mode.
 
 ---
 
