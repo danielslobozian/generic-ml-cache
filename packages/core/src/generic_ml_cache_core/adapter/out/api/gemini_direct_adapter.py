@@ -54,8 +54,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
         key = self._api_key or os.environ.get("GEMINI_API_KEY", "")
         if not key:
             raise RuntimeError(
-                "GEMINI_API_KEY is not set. "
-                "Export it or pass api_key= to GeminiDirectAdapter."
+                "GEMINI_API_KEY is not set. Export it or pass api_key= to GeminiDirectAdapter."
             )
         return key
 

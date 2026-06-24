@@ -71,12 +71,15 @@ def test_different_efforts_differ():
 
 
 def test_empty_effort_and_absent_effort_are_equal():
-    assert _identity(effort="").generate_key() == ApiCallIdentity(
-        provider="openai",
-        model="gpt-x",
-        context_fingerprint="cfp",
-        prompt_fingerprint="pfp",
-    ).generate_key()
+    assert (
+        _identity(effort="").generate_key()
+        == ApiCallIdentity(
+            provider="openai",
+            model="gpt-x",
+            context_fingerprint="cfp",
+            prompt_fingerprint="pfp",
+        ).generate_key()
+    )
 
 
 def test_never_collides_with_a_passthrough_key():

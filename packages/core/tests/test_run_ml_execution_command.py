@@ -17,7 +17,11 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 def _managed(**overrides) -> RunMlExecutionCommand:
     base = dict(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
-        client="claude", model="sonnet", effort="high", context="ctx", prompt="do it",
+        client="claude",
+        model="sonnet",
+        effort="high",
+        context="ctx",
+        prompt="do it",
     )
     base.update(overrides)
     return RunMlExecutionCommand(**base)

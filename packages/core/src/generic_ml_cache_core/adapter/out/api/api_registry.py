@@ -17,9 +17,7 @@ from generic_ml_cache_core.common.errors import UnknownClient
 _REGISTRY: Dict[str, Callable[[Optional[str]], ApiClientPort]] = {}
 
 
-def register_api_adapter(
-    name: str, factory: Callable[[Optional[str]], ApiClientPort]
-) -> None:
+def register_api_adapter(name: str, factory: Callable[[Optional[str]], ApiClientPort]) -> None:
     """Register ``name`` → ``factory(api_key)`` in the API adapter registry."""
     _REGISTRY[name] = factory
 

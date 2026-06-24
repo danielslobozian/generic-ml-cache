@@ -18,40 +18,49 @@ from generic_ml_cache_core.adapter.out.api._gemini_thinking import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("model", [
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash-preview",
-    "gemini-2.5-flash-image",
-    "gemini-2.5-computer-use-preview",
-    "gemini-robotics-er-1.5-preview",
-    "gemini-robotics-er-1.6-preview",
-])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash-preview",
+        "gemini-2.5-flash-image",
+        "gemini-2.5-computer-use-preview",
+        "gemini-robotics-er-1.5-preview",
+        "gemini-robotics-er-1.6-preview",
+    ],
+)
 def test_budget_models_return_budget_type(model):
     assert _effort_type_for_model(model) is GeminiEffortType.BUDGET
 
 
-@pytest.mark.parametrize("model", [
-    "gemini-2.5-pro-001",
-    "gemini-2.5-flash-001",
-    "gemini-2.5-flash-lite-001",
-    "gemini-2.5-computer-use-preview-10-2025",
-    "gemini-robotics-er-1.6-preview-v2",
-])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-2.5-pro-001",
+        "gemini-2.5-flash-001",
+        "gemini-2.5-flash-lite-001",
+        "gemini-2.5-computer-use-preview-10-2025",
+        "gemini-robotics-er-1.6-preview-v2",
+    ],
+)
 def test_versioned_budget_models_return_budget_type(model):
     assert _effort_type_for_model(model) is GeminiEffortType.BUDGET
 
 
-@pytest.mark.parametrize("model", [
-    "gemini-3.5-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-flash-preview",
-    "gemini-3-pro-preview",
-    "gemini-3.1-flash-lite",
-    "gemini-flash-latest",
-    "gemini-pro-latest",
-])
+@pytest.mark.parametrize(
+    "model",
+    [
+        "gemini-3.5-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-3-pro-preview",
+        "gemini-3.1-flash-lite",
+        "gemini-flash-latest",
+        "gemini-pro-latest",
+    ],
+)
 def test_level_models_return_level_type(model):
     assert _effort_type_for_model(model) is GeminiEffortType.LEVEL
 
@@ -160,7 +169,9 @@ def test_adapter_build_body_uses_thinking_level_for_3x(monkeypatch):
     from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 
     adapter = GeminiDirectAdapter(api_key="test")
-    body = adapter._build_body(MlRequest(model="gemini-3.5-flash", effort="high", context="", prompt="hi"))
+    body = adapter._build_body(
+        MlRequest(model="gemini-3.5-flash", effort="high", context="", prompt="hi")
+    )
     assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "high"}
 
 
@@ -169,7 +180,9 @@ def test_adapter_build_body_uses_thinking_budget_for_25(monkeypatch):
     from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 
     adapter = GeminiDirectAdapter(api_key="test")
-    body = adapter._build_body(MlRequest(model="gemini-2.5-flash", effort="low", context="", prompt="hi"))
+    body = adapter._build_body(
+        MlRequest(model="gemini-2.5-flash", effort="low", context="", prompt="hi")
+    )
     assert body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 1024}
 
 
@@ -178,5 +191,7 @@ def test_adapter_build_body_no_effort_omits_generation_config():
     from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 
     adapter = GeminiDirectAdapter(api_key="test")
-    body = adapter._build_body(MlRequest(model="gemini-3.5-flash", effort="", context="", prompt="hi"))
+    body = adapter._build_body(
+        MlRequest(model="gemini-3.5-flash", effort="", context="", prompt="hi")
+    )
     assert "generationConfig" not in body

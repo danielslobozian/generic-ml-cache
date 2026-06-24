@@ -18,9 +18,7 @@ from generic_ml_cache_core.application.port.out.model_listing_port import ModelL
 from generic_ml_cache_core.common.errors import UnknownClient
 
 
-def list_api_models(
-    provider: str, api_key: Optional[str] = None
-) -> ModelListing:
+def list_api_models(provider: str, api_key: Optional[str] = None) -> ModelListing:
     """List models for a registered API provider.
 
     Returns a :class:`ModelListing` in all cases — never raises for an absent or

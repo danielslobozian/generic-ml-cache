@@ -395,8 +395,12 @@ _MODELS_RESPONSE: Dict[str, Any] = {
         {"id": "gpt-4.1", "object": "model", "created": 1744143600, "owned_by": "openai"},
         {"id": "gpt-4.1-mini", "object": "model", "created": 1744144600, "owned_by": "openai"},
         {"id": "o3", "object": "model", "created": 1744145600, "owned_by": "openai"},
-        {"id": "ft:gpt-4o:acme:custom-1", "object": "model", "created": 1700000000,
-         "owned_by": "acme-org"},
+        {
+            "id": "ft:gpt-4o:acme:custom-1",
+            "object": "model",
+            "created": 1700000000,
+            "owned_by": "acme-org",
+        },
     ],
 }
 

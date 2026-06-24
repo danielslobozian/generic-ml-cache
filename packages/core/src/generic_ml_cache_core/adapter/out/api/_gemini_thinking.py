@@ -28,8 +28,8 @@ from typing import Any, Dict
 class GeminiEffortType(Enum):
     """Which thinkingConfig field a model generation uses."""
 
-    LEVEL = "level"   # thinkingLevel: str  — Gemini 3.x+
-    BUDGET = "budget" # thinkingBudget: int — Gemini 2.5
+    LEVEL = "level"  # thinkingLevel: str  — Gemini 3.x+
+    BUDGET = "budget"  # thinkingBudget: int — Gemini 2.5
 
 
 # Effort strings our system understands → thinkingBudget token counts for

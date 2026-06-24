@@ -81,9 +81,7 @@ def resolve_execution_kind(client: str) -> ExecutionKind:
     if client in registered_api_names():
         return ExecutionKind.API
     known = sorted(set(registered_names()) | set(registered_api_names()))
-    raise UnknownClient(
-        f"unknown client {client!r}; registered: {', '.join(known) or '(none)'}"
-    )
+    raise UnknownClient(f"unknown client {client!r}; registered: {', '.join(known) or '(none)'}")
 
 
 def _build_runners(
@@ -99,6 +97,7 @@ def _build_runners(
         from generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter import (
             AbstractPassthroughLocalAdapter,
         )
+
         registered = get_adapter(client)
         cls = type(registered)
         exe_override = executable_override(client) if executable_override else None
@@ -110,10 +109,12 @@ def _build_runners(
         }
     if kind is ExecutionKind.API:
         from generic_ml_cache_core.adapter.out.api import get_api_adapter
+
         return {ExecutionKind.API: get_api_adapter(client)}
     # client=None: provide a stub API runner so cache-replay and management commands
     # can still serve API-kind executions from the store without a real provider.
     from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
+
     return {ExecutionKind.API: StubApiClientAdapter()}
 
 

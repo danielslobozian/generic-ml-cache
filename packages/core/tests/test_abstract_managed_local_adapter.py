@@ -21,6 +21,7 @@ def _request(prompt: str) -> MlRequest:
 def _fake_adapter():
     """Return a fresh FakeAdapter instance (registered in conftest)."""
     from generic_ml_cache_core.adapter.out.client.registry import get_adapter
+
     cls = type(get_adapter("fake"))
     return cls()
 

@@ -139,7 +139,11 @@ class FakeMetrics(MetricsPort):
 def _managed_command(**overrides) -> RunMlExecutionCommand:
     base = dict(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
-        client="claude", model="sonnet", effort="", context="", prompt="hello",
+        client="claude",
+        model="sonnet",
+        effort="",
+        context="",
+        prompt="hello",
     )
     base.update(overrides)
     return RunMlExecutionCommand(**base)
@@ -148,7 +152,10 @@ def _managed_command(**overrides) -> RunMlExecutionCommand:
 def _api_command(**overrides) -> RunMlExecutionCommand:
     base = dict(
         execution_kind=ExecutionKind.API,
-        client="openai", model="gpt-x", context="", prompt="hi",
+        client="openai",
+        model="gpt-x",
+        context="",
+        prompt="hi",
     )
     base.update(overrides)
     return RunMlExecutionCommand(**base)
@@ -157,7 +164,9 @@ def _api_command(**overrides) -> RunMlExecutionCommand:
 def _passthrough_command(**overrides) -> RunMlExecutionCommand:
     base = dict(
         execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
-        client="claude", model="", native_args=["--print", "hello"],
+        client="claude",
+        model="",
+        native_args=["--print", "hello"],
     )
     base.update(overrides)
     return RunMlExecutionCommand(**base)

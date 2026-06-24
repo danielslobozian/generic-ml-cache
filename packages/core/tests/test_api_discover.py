@@ -83,6 +83,7 @@ def test_registered_api_names_includes_registered():
 def test_gemini_is_registered_by_default():
     # The api package __init__ eagerly registers "gemini".
     import generic_ml_cache_core.adapter.out.api  # noqa: F401 — triggers registration
+
     assert "gemini" in registered_api_names()
 
 

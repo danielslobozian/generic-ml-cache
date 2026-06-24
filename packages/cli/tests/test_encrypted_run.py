@@ -41,7 +41,11 @@ def _encrypt_store(store_root, token):
 def _command():
     return RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
-        client="fake", model="m1", effort="high", context="", prompt=f"STDOUT {_MARKER}"
+        client="fake",
+        model="m1",
+        effort="high",
+        context="",
+        prompt=f"STDOUT {_MARKER}",
     )
 
 
@@ -54,21 +58,27 @@ def test_encrypted_run_stores_ciphertext_and_replays_with_token(tmp_path):
     token = AesGcmCipher().generate_token()
     _encrypt_store(store, token)
 
-    execution = build_use_cases(store, encryption_token=token, client="fake").run_ml.execute(_command())
+    execution = build_use_cases(store, encryption_token=token, client="fake").run_ml.execute(
+        _command()
+    )
     assert execution.execution_state is ExecutionState.SUCCESS
 
     # the marker must NOT appear in the persisted blobs — they are ciphertext
     assert _MARKER.encode() not in _blob_bytes(store)
 
     # replay (a cache hit) with the token decrypts the output correctly
-    served = build_use_cases(store, encryption_token=token, client="fake").run_ml.execute(_command())
+    served = build_use_cases(store, encryption_token=token, client="fake").run_ml.execute(
+        _command()
+    )
     stdout = next(a.content for a in served.artifacts if a.artifact_type is ArtifactType.STDOUT)
     assert _MARKER.encode() in stdout
 
 
 def test_public_store_keeps_plaintext_and_ignores_a_token(tmp_path):
     store = tmp_path / "store"  # no manifest -> public
-    execution = build_use_cases(store, encryption_token="ignored", client="fake").run_ml.execute(_command())
+    execution = build_use_cases(store, encryption_token="ignored", client="fake").run_ml.execute(
+        _command()
+    )
     assert execution.execution_state is ExecutionState.SUCCESS
     assert _MARKER.encode() in _blob_bytes(store)  # plaintext on disk
 
@@ -77,7 +87,9 @@ def test_encrypted_store_without_token_blocks_content_but_not_metadata(tmp_path)
     store = tmp_path / "store"
     token = AesGcmCipher().generate_token()
     _encrypt_store(store, token)
-    recorded = build_use_cases(store, encryption_token=token, client="fake").run_ml.execute(_command())
+    recorded = build_use_cases(store, encryption_token=token, client="fake").run_ml.execute(
+        _command()
+    )
     key = recorded.call_identity.generate_key()
 
     wired = build_use_cases(store)  # no token — metadata-only, no client needed

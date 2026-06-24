@@ -54,8 +54,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
         key = self._api_key or os.environ.get("OPENAI_API_KEY", "")
         if not key:
             raise RuntimeError(
-                "OPENAI_API_KEY is not set. "
-                "Export it or pass api_key= to OpenAIDirectAdapter."
+                "OPENAI_API_KEY is not set. Export it or pass api_key= to OpenAIDirectAdapter."
             )
         return key
 

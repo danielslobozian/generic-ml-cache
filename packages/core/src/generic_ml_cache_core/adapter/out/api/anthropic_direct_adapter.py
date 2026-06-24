@@ -140,6 +140,6 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
             cache_read_tokens=int_or_none(u.get("cache_read_input_tokens")),
             cache_write_tokens=int_or_none(u.get("cache_creation_input_tokens")),
             reasoning_tokens=None,  # Anthropic folds thinking into output_tokens
-            cost_usd=None,          # Anthropic API does not report cost per call
+            cost_usd=None,  # Anthropic API does not report cost per call
             raw=dict(u),
         )

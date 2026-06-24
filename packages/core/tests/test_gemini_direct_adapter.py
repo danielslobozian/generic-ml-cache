@@ -162,20 +162,12 @@ def test_extract_text_ignores_thought_signature():
 
 
 def test_extract_text_ensures_trailing_newline():
-    response = {
-        "candidates": [
-            {"content": {"parts": [{"text": "no newline"}], "role": "model"}}
-        ]
-    }
+    response = {"candidates": [{"content": {"parts": [{"text": "no newline"}], "role": "model"}}]}
     assert _adapter()._extract_text(response).endswith("\n")
 
 
 def test_extract_text_does_not_double_newline():
-    response = {
-        "candidates": [
-            {"content": {"parts": [{"text": "already\n"}], "role": "model"}}
-        ]
-    }
+    response = {"candidates": [{"content": {"parts": [{"text": "already\n"}], "role": "model"}}]}
     text = _adapter()._extract_text(response)
     assert text == "already\n"
 
@@ -263,9 +255,7 @@ def test_usage_raw_preserves_full_metadata_block():
 
 
 def test_usage_absent_thoughts_token_count_is_none():
-    response = {
-        "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 3}
-    }
+    response = {"usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 3}}
     usage = _adapter()._extract_usage(response)
     assert usage.reasoning_tokens is None
 
@@ -447,10 +437,14 @@ def test_list_models_empty_response_returns_empty_list():
 
 def test_list_models_http_error_raises_runtime_error():
     import io
+
     error_body = b'{"error": {"code": 401, "message": "Unauthorized"}}'
     http_error = urllib.error.HTTPError(
-        url="https://example.com", code=401, msg="Unauthorized",
-        hdrs=MagicMock(), fp=io.BytesIO(error_body),
+        url="https://example.com",
+        code=401,
+        msg="Unauthorized",
+        hdrs=MagicMock(),
+        fp=io.BytesIO(error_body),
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
         with pytest.raises(RuntimeError, match="401"):

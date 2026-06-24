@@ -23,24 +23,56 @@ def test_is_an_ml_runner_port():
 
 
 def test_forwards_native_args_and_captures_stdout():
-    result = _runner().run(MlRequest(model="", effort="", context="", prompt="", native_args=["-c", "print('passthrough out')"]))
+    result = _runner().run(
+        MlRequest(
+            model="",
+            effort="",
+            context="",
+            prompt="",
+            native_args=["-c", "print('passthrough out')"],
+        )
+    )
     assert isinstance(result, ClientRunResult)
     assert result.stdout.strip() == "passthrough out"
     assert result.exit_code == 0
 
 
 def test_captures_stderr():
-    result = _runner().run(MlRequest(model="", effort="", context="", prompt="", native_args=["-c", "import sys; sys.stderr.write('warn')"]))
+    result = _runner().run(
+        MlRequest(
+            model="",
+            effort="",
+            context="",
+            prompt="",
+            native_args=["-c", "import sys; sys.stderr.write('warn')"],
+        )
+    )
     assert result.stderr == "warn"
 
 
 def test_captures_a_nonzero_exit():
-    result = _runner().run(MlRequest(model="", effort="", context="", prompt="", native_args=["-c", "import sys; sys.exit(2)"]))
+    result = _runner().run(
+        MlRequest(
+            model="",
+            effort="",
+            context="",
+            prompt="",
+            native_args=["-c", "import sys; sys.exit(2)"],
+        )
+    )
     assert result.exit_code == 2
 
 
 def test_never_captures_files(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    result = _runner().run(MlRequest(model="", effort="", context="", prompt="", native_args=["-c", "open('x.txt','w').write('y')"]))
+    result = _runner().run(
+        MlRequest(
+            model="",
+            effort="",
+            context="",
+            prompt="",
+            native_args=["-c", "open('x.txt','w').write('y')"],
+        )
+    )
     assert result.files == []
     assert (tmp_path / "x.txt").read_text() == "y"

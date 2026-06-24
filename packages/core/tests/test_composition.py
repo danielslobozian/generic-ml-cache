@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases, resolve_execution_kind
+from generic_ml_cache_core.adapter.inbound.composition import (
+    build_use_cases,
+    resolve_execution_kind,
+)
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -30,7 +33,11 @@ def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
     wired = build_use_cases(tmp_path, client="fake")
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
-        client="fake", model="m", effort="", context="", prompt="STDOUT hello-world"
+        client="fake",
+        model="m",
+        effort="",
+        context="",
+        prompt="STDOUT hello-world",
     )
 
     first = wired.run_ml.execute(command)
@@ -50,7 +57,11 @@ def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
 def test_managed_durable_across_a_fresh_wiring(tmp_path):
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
-        client="fake", model="m", effort="", context="", prompt="STDOUT durable"
+        client="fake",
+        model="m",
+        effort="",
+        context="",
+        prompt="STDOUT durable",
     )
     build_use_cases(tmp_path, client="fake").run_ml.execute(command)
     # A brand-new wiring on the same store serves the prior run from disk.
@@ -78,8 +89,7 @@ def test_passthrough_records_then_replays(tmp_path):
 def test_api_records_then_replays_with_the_stub(tmp_path):
     wired = build_use_cases(tmp_path)
     command = RunMlExecutionCommand(
-        execution_kind=ExecutionKind.API,
-        client="openai", model="gpt-x", context="", prompt="hi"
+        execution_kind=ExecutionKind.API, client="openai", model="gpt-x", context="", prompt="hi"
     )
     first = wired.run_ml.execute(command)
     assert first.execution_kind is ExecutionKind.API
@@ -93,7 +103,10 @@ def test_api_client_routes_to_api_adapter(tmp_path):
     wired = build_use_cases(tmp_path, client="fake-api")
     command = RunMlExecutionCommand(
         execution_kind=resolve_execution_kind("fake-api"),
-        client="fake-api", model="m", context="", prompt="hello"
+        client="fake-api",
+        model="m",
+        context="",
+        prompt="hello",
     )
     first = wired.run_ml.execute(command)
     assert first.execution_kind is ExecutionKind.API

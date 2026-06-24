@@ -296,7 +296,9 @@ def test_passthrough_identity_round_trips_through_the_store(tmp_path):
 
 def test_api_identity_round_trips_through_the_store(tmp_path):
     repository = _repository(tmp_path)
-    identity = ApiCallIdentity(provider="openai", model="gpt-x", context_fingerprint="cf", prompt_fingerprint="pf")
+    identity = ApiCallIdentity(
+        provider="openai", model="gpt-x", context_fingerprint="cf", prompt_fingerprint="pf"
+    )
     repository.save(_execution(identity, kind=ExecutionKind.API))
     found = repository.find_current(identity.generate_key())
     assert isinstance(found.call_identity, ApiCallIdentity)

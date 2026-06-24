@@ -30,7 +30,10 @@ try:
 except ImportError:  # completion is a convenience; never let its absence break the CLI
     argcomplete = None
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases, resolve_execution_kind
+from generic_ml_cache_core.adapter.inbound.composition import (
+    build_use_cases,
+    resolve_execution_kind,
+)
 from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
 )
