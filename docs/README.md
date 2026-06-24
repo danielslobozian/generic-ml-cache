@@ -24,7 +24,7 @@ A guided entry point for the design, specification, usage, architecture, referen
 
 ## Overview
 
-This documentation describes gmlcache as a Detached ML Execution Platform: an exact record/replay cache with adapter-based execution, inspectable execution records, usage reporting, and planned session/async features.
+This documentation describes gmlcache as a Detached ML Execution Platform: an exact record/replay cache with adapter-based execution, inspectable execution records, usage reporting, sessions with per-model reporting, at-rest encryption, and detached (asynchronous) execution with live progress streaming.
 
 <br>
 

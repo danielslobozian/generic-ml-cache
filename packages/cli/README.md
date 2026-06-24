@@ -40,12 +40,15 @@ This installs the `gmlcache` command and pulls in the engine,
 ## Use
 
 ```bash
-gmlcache run    --client claude --model sonnet --prompt "…"   # record on a miss, replay on a hit
-gmlcache check  --client claude --model sonnet --prompt "…"   # is this exact call already cached?
-gmlcache list                                                 # stored executions, grouped by client/model
-gmlcache stats                                                # totals, hit counts, token usage & cost
-gmlcache inspect <key>                                        # pretty-print one stored execution
-gmlcache doctor | models | status | init                     # environment & configuration helpers
+gmlcache run    --client claude --model sonnet --prompt "…"            # record on a miss, replay on a hit
+gmlcache check  --client claude --model sonnet --prompt "…"            # forecast: is this exact call cached?
+gmlcache run    --client claude --model sonnet --prompt "…" --detach   # run detached → prints an execution id
+gmlcache execution watch <id>                                         # follow a detached run's live progress
+gmlcache session report <id>                                          # token usage by provider/model for a workflow
+gmlcache encrypt                                                      # encrypt the whole store at rest
+gmlcache export --tag eval -o data.jsonl                              # export the (input, output) dataset corpus
+gmlcache list | tags | stats | inspect <key>                          # browse stored executions
+gmlcache doctor | models | status | init                             # environment & configuration helpers
 ```
 
 ## What it does
@@ -55,6 +58,9 @@ gmlcache doctor | models | status | init                     # environment & con
 - **Replays** an identical request instantly and offline, **byte-for-byte** — gmlcache
   adds nothing to the client's output, so it is a transparent drop-in.
 - **Reports** — list, group, inspect, and measure stored executions and their savings.
+- **And more** — group a workflow's runs into **sessions** with per-provider/model usage
+  reports, **encrypt** the whole store at rest, run **detached** (`--detach`) with a live
+  progress stream, and **export** an `(input, output)` dataset.
 
 ## Built on a reusable engine
 

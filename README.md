@@ -36,12 +36,15 @@ pip install generic-ml-cache-cli      # installs the `gmlcache` command (and the
 ## Usage
 
 ```bash
-gmlcache run    --client claude --model sonnet --prompt "…"   # record on a miss, replay on a hit
-gmlcache check  --client claude --model sonnet --prompt "…"   # is this exact call already cached?
-gmlcache list                                                 # stored executions, grouped by client/model
-gmlcache stats                                                # totals, hit counts, token usage and cost
-gmlcache inspect <key>                                        # pretty-print one stored execution
-gmlcache doctor | models | status | init                     # environment & configuration helpers
+gmlcache run    --client claude --model sonnet --prompt "…"            # record on a miss, replay on a hit
+gmlcache check  --client claude --model sonnet --prompt "…"            # forecast: is this exact call cached?
+gmlcache run    --client claude --model sonnet --prompt "…" --detach   # run detached → prints an execution id
+gmlcache execution watch <id>                                         # follow a detached run's live progress
+gmlcache session report <id>                                          # token usage by provider/model for a workflow
+gmlcache encrypt                                                      # encrypt the whole store at rest
+gmlcache export --tag eval -o data.jsonl                              # export the (input, output) dataset corpus
+gmlcache list | tags | stats | inspect <key>                          # browse stored executions
+gmlcache doctor | models | status | init                             # environment & configuration helpers
 ```
 
 <div align="center">
@@ -72,7 +75,7 @@ gmlcache doctor | models | status | init                     # environment & con
 
 gmlcache executes detached ML workloads through adapters, records the observable result of those executions, and replays them when the same execution request is seen again.
 
-Its core cache is **exact and content-addressed**. The surrounding model gives callers inspection, usage reporting, cost visibility, and a path toward sessional and asynchronous execution.
+Its core cache is **exact and content-addressed**. Around it: inspection, per-session usage reporting, at-rest encryption, and detached (asynchronous) execution with a live progress stream.
 
 > [!NOTE]
 > **gmlcache is not an interactive ML client.**
@@ -131,7 +134,7 @@ When an execution request is **identical** to one already recorded, gmlcache rep
 
 Even on a **cache miss**, executions can still be inspected, listed, grouped, and measured. Usage and cost information are recorded when clients provide it.
 
-Future scope and session features build on that same metadata to report cost and cache performance across a workflow.
+Sessions build on that same metadata: `session report` rolls up a workflow's runs by provider/model — tokens spent and saved by cache hits, per day.
 
 </td>
 </tr>
@@ -152,10 +155,16 @@ Future scope and session features build on that same metadata to report cost and
 | **Grants** | Grants declared capabilities such as network, shell, read, and write where adapters support them |
 | **Reporting** | Reports cache statistics, hits, records, usage, and saved client-reported cost |
 | **Inspection** | Inspects and lists stored executions |
+| **Persistence depth** | `meter` (usage only) · `cache` (+ output) · `dataset` (+ input), per run |
+| **Tags & export** | Tags executions, queries by tag, and exports the `(input, output)` dataset as JSONL |
+| **Encryption** | Optional at-rest encryption of the whole store — token-keyed, all-or-nothing |
+| **Sessions** | Groups a workflow's runs; `session report` rolls up usage by provider/model + cache savings |
+| **Detached** | `run --detach` returns an id; query / watch / fetch / materialize the result later |
+| **Live streaming** | `run --stream` (and `execution watch`) emit the client's live progress as NDJSON |
 
 > [!NOTE]
-> Size-based eviction, an alias (stdout-only) mode, scopes/sessions, and asynchronous
-> execution are **planned, not yet implemented** — see the [roadmap](docs/ROADMAP.md).
+> Size-based eviction and an alias (stdout-only) mode are **planned, not yet implemented**
+> — see the [roadmap](docs/ROADMAP.md).
 
 <br>
 

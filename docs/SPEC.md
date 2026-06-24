@@ -60,8 +60,8 @@ raw prompt or context.
 
 ### Session
 
-A future workflow boundary. A session groups executions for usage, cost, and
-cache-effectiveness reporting; it needs only a generated session id, never an account.
+A workflow boundary. A session groups executions for usage and cache-effectiveness
+reporting; it needs only a generated session id, never an account.
 
 ## Execution request identity
 
@@ -96,7 +96,7 @@ recording is allowed.
 Call the adapter and record a fresh result even if a matching execution already
 exists (the prior one is superseded on success).
 
-Future asynchronous execution adds another delivery mode, not a different cache
+Detached (asynchronous) execution is another delivery mode, not a different cache
 identity model.
 
 ## Cacheability
