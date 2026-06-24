@@ -14,8 +14,16 @@
 
 Adapters translate gmlcache execution requests into concrete backend calls.
 
-Today the supported backends are detached CLI clients. Future adapters may target
-provider APIs. The execution engine should treat both as adapters.
+Two families of adapter are available:
+
+**CLI adapters** — launch a locally installed client binary in a sandboxed subprocess,
+capture its output, and replay it on a cache hit. Supported: `claude`, `codex`, `cursor`.
+
+**API adapters** — call a provider's HTTP API directly. No local binary is needed; only an
+API key in the environment. Supported: `anthropic` (`ANTHROPIC_API_KEY`), `openai`
+(`OPENAI_API_KEY`), `gemini` (`GEMINI_API_KEY`).
+
+Both families share the same execution engine and cache semantics.
 
 ## Adapter responsibilities
 
