@@ -1512,7 +1512,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Content-addressed cache/proxy for agentic CLI calls.",
     )
     parser.add_argument("--version", action="version", version=f"gmlcache {__version__}")
-    sub = parser.add_subparsers(dest="command", required=False)
+    # metavar curates the usage/positional display (and hides internal commands like
+    # __worker, which argparse's help=SUPPRESS does not reliably hide for subparsers).
+    sub = parser.add_subparsers(dest="command", required=False, metavar="<command>")
 
     run = sub.add_parser("run", help="resolve a request (record on miss, replay on hit)")
     run.add_argument("--client", required=True, choices=registered_names())
@@ -1654,7 +1656,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.set_defaults(func=_cmd_run)
 
-    worker = sub.add_parser("__worker", help=argparse.SUPPRESS)
+    # Internal: no help= so it never appears as a help row; metavar hides it from the list.
+    worker = sub.add_parser("__worker")
     worker.add_argument("store_root")
     worker.add_argument("job_id")
     worker.set_defaults(func=_cmd_worker)
