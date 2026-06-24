@@ -352,6 +352,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                     _spec_executable_override(spec),
                     spec["timeout"],
                     encryption_token=token,
+                    stream_path=str(events),  # client live events land in the job's log
                 )
                 execution = wired.run_managed.execute(command)
             except Exception as exc:

@@ -212,6 +212,15 @@ def _write_directive(relpath, content):
     return f"WRITE {relpath} {base64.b64encode(content.encode()).decode()}"
 
 
+def test_worker_streams_client_events_into_the_job_log(monkeypatch):
+    jid, root = _submit_and_run(monkeypatch)
+    events = async_jobs.JobStore(root).events_path(jid).read_text()
+    # the managed run is streamed into the job's log, bracketed by run.start / run.end
+    # (a real client interleaves its own start / thinking / tool / result events here too)
+    assert '"kind": "run.start"' in events
+    assert '"kind": "run.end"' in events
+
+
 def test_execution_watch_replays_a_finished_job(capsys, monkeypatch):
     jid, _ = _submit_and_run(monkeypatch)
     capsys.readouterr()
