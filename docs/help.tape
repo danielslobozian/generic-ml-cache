@@ -10,7 +10,7 @@ Require gmlcache
 Set Shell bash
 Set FontSize 22
 Set Width 1680
-Set Height 1720
+Set Height 1440
 Set Padding 40
 Set Theme "Dracula"
 Set Framerate 24

@@ -21,6 +21,7 @@
 - [Current command options](#current-command-options)
 - [Future scope/session commands](#future-scopesession-commands)
 - [Detached executions](#detached-executions)
+- [API adapters](#api-adapters)
 - [Alias mode](#alias-mode)
 
 ---
@@ -68,7 +69,7 @@ Selection:
 
 | Option | Meaning |
 |---|---|
-| `--client` | Client to launch: `claude`, `codex`, or `cursor`. Required. |
+| `--client` | Adapter to use. CLI adapters (`claude`, `codex`, `cursor`) launch a local binary. API adapters (`anthropic`, `openai`, `gemini`) call the provider's REST API directly — set the corresponding `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`. Required. |
 | `--model` | Model identifier, passed or translated by the adapter. |
 | `--effort` | Reasoning effort (optional); omit for the client's default. For Cursor, leave this off when the model id already encodes effort. |
 
@@ -212,6 +213,33 @@ then follows it live — the worker's lifecycle interleaved with the client's ow
 **encrypted** store, pass `--token` / `GMLCACHE_TOKEN` to `run --detach`: it is handed to the
 worker through its environment (never written to disk), and `result` / `materialize` take
 `--token` to decrypt — `status` / `watch` / `list` need none (job metadata is plaintext).
+
+## API adapters
+
+The `anthropic`, `openai`, and `gemini` clients call the provider's HTTP API directly —
+no local binary needed. Set the appropriate key in the environment, then use `run` as normal:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+gmlcache run --client anthropic --model claude-haiku-4-5-20251001 --prompt "..."
+
+export OPENAI_API_KEY=sk-...
+gmlcache run --client openai --model gpt-4.1-mini --prompt "..."
+
+export GEMINI_API_KEY=AIza...
+gmlcache run --client gemini --model gemini-2.0-flash --prompt "..."
+```
+
+The same prompt sent to different providers produces separate cache entries (the client name
+is part of the key). Repeating the same call to the same provider is an instant replay.
+
+<div align="center">
+<img src="../images/gmlcache-api.gif" alt="gmlcache run --client anthropic/openai/gemini: three providers, one prompt — first call is a live REST request, repeat is an instant cache hit" width="860">
+</div>
+
+API adapters support `--model`, `--effort`, `--tag`, `--session`, `--mode`, `--persist`,
+and `--json`. They do not support `--grant`, `--client-arg`, or `--input-file` (no subprocess
+sandbox). `gmlcache models <client>` queries the provider's model list live.
 
 ## Alias mode
 
