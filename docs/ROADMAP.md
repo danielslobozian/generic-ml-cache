@@ -164,7 +164,7 @@ Alias mode is a thin native-client wrapper mode.
 - No attempt is made to auto-complete or model every native client option.
 - Alias mode is for users who want native client behavior plus basic caching.
 
-### 0.10.0 — API adapters
+### 0.10.0 — API adapters *(released 2026-06-25)*
 
 Direct REST adapters for provider APIs — peers to the existing CLI adapters, using the
 same execution request model, caching engine, and persistence layer.
