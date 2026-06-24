@@ -34,6 +34,49 @@ def test_cli_records_then_replays_offline(tmp_path, capsys):
     assert rc == 0
 
 
+def test_run_stream_writes_a_live_progress_file(tmp_path):
+    stream = tmp_path / "stream.jsonl"
+    rc = run_cli(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT hi",
+            "--stream",
+            str(stream),
+        ]
+    )
+    assert rc == 0
+    events = stream.read_text()
+    # the run is bracketed by run.start / run.end (a real client adds its own events between)
+    assert '"kind": "run.start"' in events and '"kind": "run.end"' in events
+
+
+def test_run_stream_alone_defaults_to_a_cwd_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    rc = run_cli(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT hi",
+            "--stream",
+        ]
+    )
+    assert rc == 0
+    assert '"kind": "run.start"' in (tmp_path / "gmlc-stream.jsonl").read_text()
+
+
 def test_cli_offline_miss_exits_3(tmp_path, capsys):
     rc = run_cli(
         [

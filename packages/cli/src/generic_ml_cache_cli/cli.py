@@ -255,7 +255,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     command = _command_from_spec(spec)
     try:
         wired = build_use_cases(
-            store_root, _spec_executable_override(spec), spec["timeout"], encryption_token=token
+            store_root,
+            _spec_executable_override(spec),
+            spec["timeout"],
+            encryption_token=token,
+            stream_path=getattr(args, "stream", None),
         )
         execution = wired.run_managed.execute(command)
     except RunInterrupted as exc:
@@ -1627,6 +1631,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--verbose",
         action="store_true",
         help="print cache diagnostics to stderr (breaks exact fidelity)",
+    )
+    run.add_argument(
+        "--stream",
+        nargs="?",
+        const="./gmlc-stream.jsonl",
+        default=None,
+        metavar="PATH",
+        help=(
+            "write a live NDJSON progress stream as the call runs (run.start, the client's "
+            "thinking/tool events, run.end) -- display-only, never changes what is recorded. "
+            "Give a path, or pass --stream alone to write ./gmlc-stream.jsonl"
+        ),
     )
     run.add_argument(
         "--detach",
