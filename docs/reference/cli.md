@@ -205,7 +205,9 @@ State lives under `<store>/jobs/`. A per-job **liveness lock** (SQLite, released
 the worker's process dies) lets a reader tell a *live* worker from one that *vanished* mid-run —
 the latter reads as **interrupted**, so `status` / `watch` never hang on a dead worker. `watch`
 replays the durable event log from the start (a late watcher still sees every event in order),
-then follows it live. `--json` is on `status` and `list`. Detach is **managed-only**. On an
+then follows it live — the worker's lifecycle interleaved with the client's own live progress
+(`run.start`, `thinking`, `tool`, `result`, `run.end`), the same stream `run --stream` produces.
+`--json` is on `status` and `list`. Detach is **managed-only**. On an
 **encrypted** store, pass `--token` / `GMLCACHE_TOKEN` to `run --detach`: it is handed to the
 worker through its environment (never written to disk), and `result` / `materialize` take
 `--token` to decrypt — `status` / `watch` / `list` need none (job metadata is plaintext).

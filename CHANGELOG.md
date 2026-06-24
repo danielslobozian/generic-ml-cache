@@ -28,6 +28,13 @@ the single changelog for both; entries note which package(s) a change touches.
   --output-dir <path>` writes them on demand. Detach is managed-only; on an **encrypted** store
   pass `--token` / `GMLCACHE_TOKEN` — it is handed to the worker through its environment (never
   written to disk), and `result` / `materialize` take `--token` to decrypt.
+- **Live progress streaming** (core + cli): `run --stream [PATH]` writes a live NDJSON event
+  stream as a call runs — `run.start`, the client's own `start` / `thinking` / `tool` / `result`
+  events (claude, codex, and cursor are all normalized), and `run.end` — that a human or a
+  parent process can `tail -f`. Display-only: it never changes what is recorded or the cache
+  key (give a path, or `--stream` alone writes `./gmlc-stream.jsonl`). The same sink backs
+  detached jobs, so `execution watch` now shows the client's real live progress interleaved with
+  the job lifecycle, not just state transitions.
 
 ## [0.7.0] - 2026-06-24
 
