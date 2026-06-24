@@ -22,7 +22,9 @@ class StubApiClientAdapter(ApiClientPort):
     when one exists; the port contract is identical.
     """
 
-    def run(self, provider: str, model: str, messages: List[Message]) -> ClientRunResult:
+    def run(
+        self, provider: str, model: str, messages: List[Message], effort: str = ""
+    ) -> ClientRunResult:
         last_content = messages[-1].content if messages else ""
         reply = f"[stub:{provider}:{model}] {last_content}"
         input_tokens = sum(len(message.content) for message in messages)

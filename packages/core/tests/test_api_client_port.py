@@ -50,3 +50,8 @@ def test_stub_reports_token_usage():
     result = StubApiClientAdapter().run("openai", "gpt-x", _messages())
     assert result.token_usage is not None
     assert result.token_usage.input_tokens == len("summarise this")
+
+
+def test_stub_accepts_effort_without_error():
+    result = StubApiClientAdapter().run("openai", "gpt-x", _messages(), effort="high")
+    assert result.exit_code == 0

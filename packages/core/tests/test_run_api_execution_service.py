@@ -47,8 +47,10 @@ class FakeApiClient(ApiClientPort):
         self._results = list(results) or [ClientRunResult(exit_code=0, stdout="reply\n")]
         self.calls: List[tuple] = []
 
-    def run(self, provider: str, model: str, messages: List[Message]) -> ClientRunResult:
-        self.calls.append((provider, model, list(messages)))
+    def run(
+        self, provider: str, model: str, messages: List[Message], effort: str = ""
+    ) -> ClientRunResult:
+        self.calls.append((provider, model, list(messages), effort))
         if len(self._results) > 1:
             return self._results.pop(0)
         return self._results[0]
@@ -97,7 +99,12 @@ class FakeMetrics(MetricsPort):
 
 
 def _command(**overrides) -> RunApiExecutionCommand:
-    base = dict(provider="openai", model="gpt-x", messages=[Message(role="user", content="hi")])
+    base = dict(
+        provider="openai",
+        model="gpt-x",
+        messages=[Message(role="user", content="hi")],
+        effort="",
+    )
     base.update(overrides)
     return RunApiExecutionCommand(**base)
 
@@ -259,6 +266,60 @@ def test_cache_depth_stores_no_input():
     execution = harness.service.execute(_command(persistence_depth=PersistenceDepth.CACHE))
     assert execution.input_persisted is False
     assert not any(a.artifact_type is ArtifactType.INPUT_MESSAGES for a in execution.artifacts)
+
+
+# --- effort ------------------------------------------------------------------
+
+
+def test_effort_is_forwarded_to_the_api_client():
+    harness = _Harness()
+    harness.service.execute(_command(effort="high"))
+    assert harness.api_client.calls[0][3] == "high"
+
+
+def test_effort_is_recorded_in_the_journal():
+    harness = _Harness()
+    harness.service.execute(_command(effort="low"))
+    assert harness.metrics.events[0]["effort"] == "low"
+
+
+def test_different_efforts_produce_different_cache_keys():
+    harness = _Harness()
+    harness.service.execute(_command(effort="low"))
+    harness.service.execute(_command(effort="high"))
+    assert len(harness.api_client.calls) == 2
+
+
+def test_same_effort_hits_cache():
+    harness = _Harness()
+    harness.service.execute(_command(effort="high"))
+    harness.service.execute(_command(effort="high"))
+    assert len(harness.api_client.calls) == 1
+    assert harness.metrics.event_names() == ["record", "hit"]
+
+
+def test_empty_effort_and_no_effort_share_the_same_cache_entry():
+    harness = _Harness()
+    harness.service.execute(_command(effort=""))
+    harness.service.execute(_command())
+    assert len(harness.api_client.calls) == 1
+
+
+# --- tags --------------------------------------------------------------------
+
+
+def test_tags_are_stored_in_the_repository():
+    harness = _Harness(FakeApiClient(ClientRunResult(exit_code=0, stdout="ok\n")))
+    execution = harness.service.execute(_command(tags=["eval", "v1"]))
+    key = execution.call_identity.generate_key()
+    assert harness.repository.tags_for(key) == ["eval", "v1"]
+
+
+def test_empty_tags_produce_no_tags():
+    harness = _Harness()
+    execution = harness.service.execute(_command(tags=[]))
+    key = execution.call_identity.generate_key()
+    assert harness.repository.tags_for(key) == []
 
 
 # --- end-to-end with the real stub adapter -----------------------------------

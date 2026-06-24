@@ -21,6 +21,10 @@ class ApiClientPort(ABC):
     """
 
     @abstractmethod
-    def run(self, provider: str, model: str, messages: List[Message]) -> ClientRunResult:
+    def run(
+        self, provider: str, model: str, messages: List[Message], effort: str = ""
+    ) -> ClientRunResult:
         """Call ``provider``'s ``model`` with ``messages`` and return the raw
-        result. Raises on an unrecoverable transport failure."""
+        result. ``effort`` maps to the provider's reasoning-depth control when
+        non-empty (e.g. Gemini thinkingLevel, Anthropic thinking budget).
+        Raises on an unrecoverable transport failure."""

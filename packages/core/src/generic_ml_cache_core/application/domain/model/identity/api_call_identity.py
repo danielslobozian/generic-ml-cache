@@ -24,6 +24,7 @@ class ApiCallIdentity(CallIdentity):
     provider: str
     model: str
     messages_fingerprint: str
+    effort: str = ""
 
     def generate_key(self) -> str:
         return checksum_input_data(
@@ -32,5 +33,6 @@ class ApiCallIdentity(CallIdentity):
                 "provider": self.provider,
                 "model": self.model,
                 "messages": self.messages_fingerprint,
+                "effort": self.effort,
             }
         )

@@ -14,6 +14,7 @@ from generic_ml_cache_core.application.domain.model.identity.api_call_identity i
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import normalize_tags
 from generic_ml_cache_core.application.domain.service.message_fingerprinting import (
     fingerprint_messages,
 )
@@ -58,17 +59,22 @@ class RunApiExecutionService(CachedMlExecutionService, RunApiExecutionUseCase):
             provider=command.provider,
             model=command.model,
             messages_fingerprint=fingerprint_messages(command.messages),
+            effort=command.effort,
         )
 
     def _run_client(self, command: RunApiExecutionCommand) -> ClientRunResult:
-        return self._api_client.run(command.provider, command.model, command.messages)
+        return self._api_client.run(
+            command.provider, command.model, command.messages, command.effort
+        )
 
     def _execution_kind(self) -> ExecutionKind:
         return ExecutionKind.API
 
     def _journal_fields(self, command: RunApiExecutionCommand) -> Tuple[str, str, str]:
-        # The provider plays the role of "client" in the journal; no effort concept.
-        return command.provider, command.model, ""
+        return command.provider, command.model, command.effort
+
+    def _execution_tags(self, command: RunApiExecutionCommand) -> List[str]:
+        return normalize_tags(command.tags)
 
     def _input_parts(
         self, command: RunApiExecutionCommand

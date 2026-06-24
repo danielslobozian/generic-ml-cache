@@ -28,6 +28,8 @@ class RunApiExecutionCommand:
     provider: str
     model: str
     messages: List[Message] = field(default_factory=list)
+    effort: str = ""
+    tags: List[str] = field(default_factory=list)
     cache_mode: CacheMode = CacheMode.CACHE
     persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
     record_on_error: bool = False
