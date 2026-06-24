@@ -188,13 +188,7 @@ def _resolve_managed_run(args: argparse.Namespace):
     settings = config.resolve_settings(
         file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
     )
-    # --offline / --force are explicit flags and win over the resolved mode.
-    if args.offline:
-        cache_mode = CacheMode.OFFLINE
-    elif args.force:
-        cache_mode = CacheMode.REFRESH
-    else:
-        cache_mode = CacheMode(str(settings["mode"][0]))
+    cache_mode = _resolve_cache_mode(args, settings)
 
     spec = {
         "client": args.client,
@@ -245,6 +239,58 @@ def _spec_executable_override(spec: dict):
     return lambda client: executable
 
 
+def _resolve_cache_mode(args: argparse.Namespace, settings: dict) -> CacheMode:
+    """The cache mode for a run: --offline / --force are explicit flags and win over
+    the resolved (config/env/default) mode. Shared by managed `run` and `alias`."""
+    if args.offline:
+        return CacheMode.OFFLINE
+    if args.force:
+        return CacheMode.REFRESH
+    return CacheMode(str(settings["mode"][0]))
+
+
+def _run_cached_execution(execute):
+    """Run a wired ``execute()`` call, translating the failure modes shared by every
+    cached command into ``(None, exit_code)``; on success returns ``(execution, None)``.
+
+    Centralising the ladder keeps `run` and `alias` byte-identical on errors and means
+    the rarely-hit branches (interrupt, timeout) are covered once, by the `run` tests."""
+    try:
+        return execute(), None
+    except RunInterrupted as exc:
+        # A requested stop, not a failure: nothing was recorded. Exit 130 is the
+        # conventional "terminated by Ctrl-C".
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return None, 130
+    except subprocess.TimeoutExpired as exc:
+        # The real call ran past --timeout and was killed before any record. Exit
+        # 124 is the timeout(1) convention, distinct from miss (3) and error (4).
+        print(
+            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
+            file=sys.stderr,
+        )
+        return None, 124
+    except CacheMiss as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return None, 3
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return None, 4
+    except CacheError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return None, 4
+
+
+def _relay_execution(execution: MlExecution) -> int:
+    """Reproduce a (live or replayed) call's stdout, stderr and exit code exactly --
+    the quiet-mode fidelity contract shared by `run` and `alias`."""
+    sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
+    sys.stdout.flush()
+    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
+    sys.stderr.flush()
+    return _run_exit_code(execution)
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     try:
         spec, store_root, token = _resolve_managed_run(args)
@@ -256,37 +302,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return _submit_detached(spec, store_root, token)
 
     command = _command_from_spec(spec)
-    try:
-        wired = build_use_cases(
+    execution, error = _run_cached_execution(
+        lambda: build_use_cases(
             store_root,
             _spec_executable_override(spec),
             spec["timeout"],
             encryption_token=token,
             stream_path=getattr(args, "stream", None),
-        )
-        execution = wired.run_managed.execute(command)
-    except RunInterrupted as exc:
-        # A requested stop, not a failure: nothing was recorded. Exit 130 is the
-        # conventional "terminated by Ctrl-C".
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 130
-    except subprocess.TimeoutExpired as exc:
-        # The real call ran past --timeout and was killed before any record. Exit
-        # 124 is the timeout(1) convention, distinct from miss (3) and error (4).
-        print(
-            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
-            file=sys.stderr,
-        )
-        return 124
-    except CacheMiss as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 3
-    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
-        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
-        return 4
-    except CacheError as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 4
+        ).run_managed.execute(command)
+    )
+    if error is not None:
+        return error
 
     # Materialise captured files into the cwd, exactly as the real client would.
     _apply_output_files(execution, Path.cwd())
@@ -294,11 +320,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "json", False):
         return _print_run_json(execution, command)
 
-    sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
-    sys.stdout.flush()
-    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
-    sys.stderr.flush()
-    return _run_exit_code(execution)
+    return _relay_execution(execution)
 
 
 def _cmd_alias(args: argparse.Namespace) -> int:
@@ -323,55 +345,26 @@ def _cmd_alias(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    # --offline / --force are explicit flags and win over the resolved mode.
-    if args.offline:
-        cache_mode = CacheMode.OFFLINE
-    elif args.force:
-        cache_mode = CacheMode.REFRESH
-    else:
-        cache_mode = CacheMode(str(settings["mode"][0]))
-
     command = RunPassthroughExecutionCommand(
         client=args.client,
         native_args=native_args,
-        cache_mode=cache_mode,
+        cache_mode=_resolve_cache_mode(args, settings),
         persistence_depth=PersistenceDepth(str(settings["persist"][0])),
         record_on_error=bool(args.record_on_error),
         session_id=_resolve_session(args),
     )
     store_root = Path(str(settings["store"][0]))
-    try:
-        wired = build_use_cases(
+    execution, error = _run_cached_execution(
+        lambda: build_use_cases(
             store_root,
             lambda _client: executable,
             settings["timeout"][0],
             encryption_token=_resolve_token(args),
-        )
-        execution = wired.run_passthrough.execute(command)
-    except RunInterrupted as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 130
-    except subprocess.TimeoutExpired as exc:
-        print(
-            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
-            file=sys.stderr,
-        )
-        return 124
-    except CacheMiss as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 3
-    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
-        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
-        return 4
-    except CacheError as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 4
-
-    sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
-    sys.stdout.flush()
-    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
-    sys.stderr.flush()
-    return _run_exit_code(execution)
+        ).run_passthrough.execute(command)
+    )
+    if error is not None:
+        return error
+    return _relay_execution(execution)
 
 
 def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
@@ -1582,6 +1575,44 @@ class _BannerParser(argparse.ArgumentParser):
         return render_banner(_use_color()) + "\n\n" + super().format_help()
 
 
+def _add_shared_run_options(parser: argparse.ArgumentParser) -> None:
+    """Add the run-resolution options shared by `run` and `alias` (mode, persistence,
+    record policy, the executable seam, encryption token, session, timeout). Both
+    commands resolve a cached call the same way, so they share this surface verbatim."""
+    parser.add_argument(
+        "--mode",
+        choices=[m.value for m in CacheMode],
+        default=None,
+        help="resolution mode (default: cache, or config/env)",
+    )
+    parser.add_argument(
+        "--persist",
+        choices=[d.value for d in PersistenceDepth],
+        default=None,
+        help=(
+            "how much to keep: meter (usage only, never replays), cache (+output, "
+            "the default), or dataset (+input) (default: cache, or config/env)"
+        ),
+    )
+    parser.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
+    parser.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
+    parser.add_argument(
+        "--record-on-error",
+        action="store_true",
+        help="also cache a call that fails (non-zero exit); default is to store only successes",
+    )
+    parser.add_argument("--executable", help="override the client executable (the seam)")
+    parser.add_argument(
+        "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
+    )
+    parser.add_argument(
+        "--session", help="group this run under a session id (or set GMLCACHE_SESSION)"
+    )
+    parser.add_argument(
+        "--timeout", type=float, default=None, help="seconds before the real call is killed"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _BannerParser(
         prog="gmlcache",
@@ -1672,38 +1703,7 @@ def build_parser() -> argparse.ArgumentParser:
             "as the workflow engine reading usage. Files are still written to the cwd."
         ),
     )
-    run.add_argument(
-        "--mode",
-        choices=[m.value for m in CacheMode],
-        default=None,
-        help="resolution mode (default: cache, or config/env)",
-    )
-    run.add_argument(
-        "--persist",
-        choices=[d.value for d in PersistenceDepth],
-        default=None,
-        help=(
-            "how much to keep: meter (usage only, never replays), cache (+output, "
-            "the default), or dataset (+input) (default: cache, or config/env)"
-        ),
-    )
-    run.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
-    run.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
-    run.add_argument(
-        "--record-on-error",
-        action="store_true",
-        help="also cache a call that fails (non-zero exit); default is to store only successes",
-    )
-    run.add_argument("--executable", help="override the client executable (the seam)")
-    run.add_argument(
-        "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
-    )
-    run.add_argument(
-        "--session", help="group this run under a session id (or set GMLCACHE_SESSION)"
-    )
-    run.add_argument(
-        "--timeout", type=float, default=None, help="seconds before the real call is killed"
-    )
+    _add_shared_run_options(run)
     run.add_argument(
         "-v",
         "--verbose",
@@ -1747,35 +1747,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Drop-in: alias claude='gmlcache alias claude'."
         ),
     )
-    aliasp.add_argument(
-        "--mode",
-        choices=[m.value for m in CacheMode],
-        default=None,
-        help="resolution mode (default: cache, or config/env)",
-    )
-    aliasp.add_argument(
-        "--persist",
-        choices=[d.value for d in PersistenceDepth],
-        default=None,
-        help="how much to keep: meter / cache (default) / dataset (or config/env)",
-    )
-    aliasp.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
-    aliasp.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
-    aliasp.add_argument(
-        "--record-on-error",
-        action="store_true",
-        help="also cache a call that fails (non-zero exit); default is to store only successes",
-    )
-    aliasp.add_argument("--executable", help="override the client executable (the seam)")
-    aliasp.add_argument(
-        "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
-    )
-    aliasp.add_argument(
-        "--session", help="group this run under a session id (or set GMLCACHE_SESSION)"
-    )
-    aliasp.add_argument(
-        "--timeout", type=float, default=None, help="seconds before the real call is killed"
-    )
+    _add_shared_run_options(aliasp)
     aliasp.add_argument("client", choices=registered_names(), help="the native client to wrap")
     aliasp.add_argument(
         "native_args",
