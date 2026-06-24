@@ -53,6 +53,9 @@ from generic_ml_cache_cli import async_jobs
 from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
+from generic_ml_cache_core.application.port.inbound.run_passthrough_execution_command import (
+    RunPassthroughExecutionCommand,
+)
 from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.common.errors import (
     CacheError,
@@ -290,6 +293,79 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     if getattr(args, "json", False):
         return _print_run_json(execution, command)
+
+    sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
+    sys.stdout.flush()
+    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
+    sys.stderr.flush()
+    return _run_exit_code(execution)
+
+
+def _cmd_alias(args: argparse.Namespace) -> int:
+    """`alias`: the thin native-client wrapper. Everything after the client is an
+    opaque native-argument tail, forwarded verbatim and keyed (by fingerprint) as
+    the cache identity. No isolation and no file capture -- a replay reproduces the
+    native call's stdout/stderr/exit, exactly as the default `run` does in quiet mode.
+    gmlcache's own options precede the client; the tail belongs to the native client."""
+    native_args = list(getattr(args, "native_args", None) or [])
+    # Accept an explicit `--` before the tail (`alias claude -- -p hi`) so a tail
+    # that opens with a dash never has to fight argparse; it is not a native arg.
+    if native_args and native_args[0] == "--":
+        native_args = native_args[1:]
+
+    try:
+        file_cfg = config.load()
+        settings = config.resolve_settings(
+            file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
+        )
+        executable = config.executable_for(file_cfg, args.client, flag=args.executable)
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    # --offline / --force are explicit flags and win over the resolved mode.
+    if args.offline:
+        cache_mode = CacheMode.OFFLINE
+    elif args.force:
+        cache_mode = CacheMode.REFRESH
+    else:
+        cache_mode = CacheMode(str(settings["mode"][0]))
+
+    command = RunPassthroughExecutionCommand(
+        client=args.client,
+        native_args=native_args,
+        cache_mode=cache_mode,
+        persistence_depth=PersistenceDepth(str(settings["persist"][0])),
+        record_on_error=bool(args.record_on_error),
+        session_id=_resolve_session(args),
+    )
+    store_root = Path(str(settings["store"][0]))
+    try:
+        wired = build_use_cases(
+            store_root,
+            lambda _client: executable,
+            settings["timeout"][0],
+            encryption_token=_resolve_token(args),
+        )
+        execution = wired.run_passthrough.execute(command)
+    except RunInterrupted as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 130
+    except subprocess.TimeoutExpired as exc:
+        print(
+            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
+            file=sys.stderr,
+        )
+        return 124
+    except CacheMiss as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 3
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
+    except CacheError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
 
     sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
     sys.stdout.flush()
@@ -1655,6 +1731,59 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run.set_defaults(func=_cmd_run)
+
+    aliasp = sub.add_parser(
+        "alias",
+        help=(
+            "thin native-client wrapper: cache a raw native invocation -- everything "
+            "after the client is passed to it verbatim and is the cache identity"
+        ),
+        description=(
+            "Run a client through the cache as a thin wrapper. gmlcache's own options "
+            "(below) come BEFORE the client; everything after the client is forwarded to "
+            "it verbatim and keyed (by fingerprint) as the cache identity. No options are "
+            "modelled or auto-completed. A replay reproduces the native call's stdout, "
+            "stderr and exit; generated files are written by the live call only (no capture). "
+            "Drop-in: alias claude='gmlcache alias claude'."
+        ),
+    )
+    aliasp.add_argument(
+        "--mode",
+        choices=[m.value for m in CacheMode],
+        default=None,
+        help="resolution mode (default: cache, or config/env)",
+    )
+    aliasp.add_argument(
+        "--persist",
+        choices=[d.value for d in PersistenceDepth],
+        default=None,
+        help="how much to keep: meter / cache (default) / dataset (or config/env)",
+    )
+    aliasp.add_argument("--offline", action="store_true", help="shortcut for --mode offline")
+    aliasp.add_argument("--force", action="store_true", help="shortcut for --mode refresh")
+    aliasp.add_argument(
+        "--record-on-error",
+        action="store_true",
+        help="also cache a call that fails (non-zero exit); default is to store only successes",
+    )
+    aliasp.add_argument("--executable", help="override the client executable (the seam)")
+    aliasp.add_argument(
+        "--token", help="encryption token for an encrypted store (or set GMLCACHE_TOKEN)"
+    )
+    aliasp.add_argument(
+        "--session", help="group this run under a session id (or set GMLCACHE_SESSION)"
+    )
+    aliasp.add_argument(
+        "--timeout", type=float, default=None, help="seconds before the real call is killed"
+    )
+    aliasp.add_argument("client", choices=registered_names(), help="the native client to wrap")
+    aliasp.add_argument(
+        "native_args",
+        nargs=argparse.REMAINDER,
+        metavar="-- NATIVE_ARGS",
+        help="the native client arguments, forwarded verbatim (this is the cache identity)",
+    )
+    aliasp.set_defaults(func=_cmd_alias)
 
     # Internal: no help= so it never appears as a help row; metavar hides it from the list.
     worker = sub.add_parser("__worker")
