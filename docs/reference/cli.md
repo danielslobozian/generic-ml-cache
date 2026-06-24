@@ -20,7 +20,7 @@
 - [Current commands](#current-commands)
 - [Current command options](#current-command-options)
 - [Future scope/session commands](#future-scopesession-commands)
-- [Future async commands](#future-async-commands)
+- [Detached executions](#detached-executions)
 - [Future alias mode](#future-alias-mode)
 
 ---
@@ -43,6 +43,7 @@ gmlcache rotate
 gmlcache invalidate
 gmlcache session start
 gmlcache session report <id>
+gmlcache execution status <id>
 gmlcache stats
 gmlcache doctor
 gmlcache models <client>
@@ -90,6 +91,7 @@ Capability and passthrough:
 | `--executable` | Override the client executable (the seam). |
 | `--token` | Encryption token for an encrypted store (or set `GMLCACHE_TOKEN`). Needed to read or record when encryption is on; ignored on a public store. |
 | `--session` | Group this run under a session id (or set `GMLCACHE_SESSION`); see [Sessions](#sessions). Journal metadata, never part of the key. |
+| `--detach` | Submit the run as a background job: print an execution id and return immediately. See [Detached executions](#detached-executions). Managed-only. |
 
 Mode:
 
@@ -179,15 +181,36 @@ gmlcache session watch <session-id>
 `session watch` (a live tail of a running session) is not yet built; `session start` and
 `session report` have shipped — see [Sessions](#sessions) above.
 
-## Future async commands
+## Detached executions
+
+A managed run can be **detached**: `gmlcache run --detach` submits it as a background job,
+prints an **execution id**, and returns immediately. The work continues in a separate,
+OS-detached worker process and is recorded into the normal cache; a detached run **never**
+writes generated files to your cwd (the launch has already returned).
 
 ```text
-gmlcache run --detach ...
-gmlcache execution status <execution-id>
-gmlcache execution watch <execution-id>
-gmlcache execution result <execution-id>
-gmlcache execution materialize <execution-id> --output-dir <path>
+gmlcache run --detach ...                                  # submit; prints an execution id
+gmlcache execution status <id>                             # state, timings, exit, result key
+gmlcache execution watch <id>                              # replay the event log; follow if live
+gmlcache execution result <id>                             # the finished job's output
+gmlcache execution materialize <id> --output-dir <path>    # write its generated files on demand
+gmlcache execution list                                    # all jobs and their states
 ```
+
+<div align="center">
+<img src="../images/gmlcache-async.gif" alt="gmlcache run --detach returns an execution id immediately; execution status / watch / result follow the background job to its recorded result" width="820">
+</div>
+
+State lives under `<store>/jobs/`. A per-job **liveness lock** (SQLite, released by the OS when
+the worker's process dies) lets a reader tell a *live* worker from one that *vanished* mid-run —
+the latter reads as **interrupted**, so `status` / `watch` never hang on a dead worker. `watch`
+replays the durable event log from the start (a late watcher still sees every event in order),
+then follows it live — the worker's lifecycle interleaved with the client's own live progress
+(`run.start`, `thinking`, `tool`, `result`, `run.end`), the same stream `run --stream` produces.
+`--json` is on `status` and `list`. Detach is **managed-only**. On an
+**encrypted** store, pass `--token` / `GMLCACHE_TOKEN` to `run --detach`: it is handed to the
+worker through its environment (never written to disk), and `result` / `materialize` take
+`--token` to decrypt — `status` / `watch` / `list` need none (job metadata is plaintext).
 
 ## Future alias mode
 

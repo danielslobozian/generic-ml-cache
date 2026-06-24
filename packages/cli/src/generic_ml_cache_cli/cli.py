@@ -36,6 +36,9 @@ from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_sto
 )
 from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
 from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
+from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
+    EncryptionState,
+)
 from generic_ml_cache_core.adapter.out.client.registry import registered_names
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -46,6 +49,7 @@ from generic_ml_cache_core.application.domain.model.run.persistence_depth import
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
+from generic_ml_cache_cli import async_jobs
 from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
     RunManagedLocalExecutionCommand,
 )
@@ -107,6 +111,18 @@ def _artifact_text(execution: MlExecution, artifact_type: ArtifactType) -> str:
     return ""
 
 
+def _stored_artifact_text(execution: MlExecution, blob_store, artifact_type: ArtifactType) -> str:
+    """Like ``_artifact_text``, but hydrates the bytes from the blob store when a
+    stored execution carries only artifact metadata (``content is None``)."""
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is artifact_type:
+            content = artifact.content
+            if content is None:
+                content = blob_store.get(artifact.blob_key)
+            return (content or b"").decode("utf-8", errors="replace")
+    return ""
+
+
 def _run_exit_code(execution: MlExecution) -> int:
     if execution.failure is not None and execution.failure.exit_code is not None:
         return execution.failure.exit_code
@@ -150,7 +166,13 @@ def _print_run_json(execution: MlExecution, command: RunManagedLocalExecutionCom
     return _run_exit_code(execution)
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
+def _resolve_managed_run(args: argparse.Namespace):
+    """Resolve a managed run into a JSON-serializable spec plus its run context.
+
+    Returns ``(spec, store_root, token)``. The spec is the run fully resolved (prompt /
+    context / system text, absolute paths, resolved mode / persist / timeout / executable),
+    so it can drive a sync run *or* be written to a detached job's spec.json and replayed by
+    the worker. Raises ConfigError."""
     context = _read_text_arg(args.context, args.context_file, "context")
     prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
     if not prompt:
@@ -159,18 +181,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
     )
 
-    try:
-        file_cfg = config.load()
-        settings = config.resolve_settings(
-            file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
-        )
-    except ConfigError as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 4
-
-    store_root = Path(str(settings["store"][0]))
-    timeout = settings["timeout"][0]
-    trust_scan = bool(settings["trust_scan"][0])
+    file_cfg = config.load()
+    settings = config.resolve_settings(
+        file_cfg, mode_flag=args.mode, persist_flag=args.persist, timeout_flag=args.timeout
+    )
     # --offline / --force are explicit flags and win over the resolved mode.
     if args.offline:
         cache_mode = CacheMode.OFFLINE
@@ -178,33 +192,75 @@ def _cmd_run(args: argparse.Namespace) -> int:
         cache_mode = CacheMode.REFRESH
     else:
         cache_mode = CacheMode(str(settings["mode"][0]))
-    persistence_depth = PersistenceDepth(str(settings["persist"][0]))
 
-    command = RunManagedLocalExecutionCommand(
-        client=args.client,
-        model=args.model,
-        effort=args.effort,
-        context=context,
-        prompt=prompt,
-        user_system_prompt=system_prompt,
-        input_file_paths=_resolve_input_file_paths(args.input_file),
-        allow_paths=_resolve_allow_paths(args.allow_path),
-        scan_trust=trust_scan,
-        client_args=list(getattr(args, "client_arg", None) or []),
-        grants=list(getattr(args, "grant", None) or []),
-        cache_mode=cache_mode,
-        persistence_depth=persistence_depth,
-        record_on_error=args.record_on_error,
-        tags=list(getattr(args, "tag", None) or []),
-        session_id=_resolve_session(args),
+    spec = {
+        "client": args.client,
+        "model": args.model,
+        "effort": args.effort,
+        "context": context,
+        "prompt": prompt,
+        "system_prompt": system_prompt,
+        "input_file_paths": _resolve_input_file_paths(args.input_file),
+        "allow_paths": _resolve_allow_paths(args.allow_path),
+        "trust_scan": bool(settings["trust_scan"][0]),
+        "client_args": list(getattr(args, "client_arg", None) or []),
+        "grants": list(getattr(args, "grant", None) or []),
+        "cache_mode": cache_mode.value,
+        "persistence_depth": str(settings["persist"][0]),
+        "record_on_error": bool(args.record_on_error),
+        "tags": list(getattr(args, "tag", None) or []),
+        "session_id": _resolve_session(args),
+        "executable": config.executable_for(file_cfg, args.client, flag=args.executable),
+        "timeout": settings["timeout"][0],
+    }
+    return spec, Path(str(settings["store"][0])), _resolve_token(args)
+
+
+def _command_from_spec(spec: dict) -> RunManagedLocalExecutionCommand:
+    return RunManagedLocalExecutionCommand(
+        client=spec["client"],
+        model=spec["model"],
+        effort=spec["effort"],
+        context=spec["context"],
+        prompt=spec["prompt"],
+        user_system_prompt=spec["system_prompt"],
+        input_file_paths=[Path(p) for p in spec["input_file_paths"]],
+        allow_paths=[Path(p) for p in spec["allow_paths"]],
+        scan_trust=spec["trust_scan"],
+        client_args=list(spec["client_args"]),
+        grants=list(spec["grants"]),
+        cache_mode=CacheMode(spec["cache_mode"]),
+        persistence_depth=PersistenceDepth(spec["persistence_depth"]),
+        record_on_error=spec["record_on_error"],
+        tags=list(spec["tags"]),
+        session_id=spec["session_id"],
     )
 
-    def executable_override(client: str):
-        return config.executable_for(file_cfg, client, flag=args.executable)
 
-    token = _resolve_token(args)
+def _spec_executable_override(spec: dict):
+    executable = spec.get("executable")
+    return lambda client: executable
+
+
+def _cmd_run(args: argparse.Namespace) -> int:
     try:
-        wired = build_use_cases(store_root, executable_override, timeout, encryption_token=token)
+        spec, store_root, token = _resolve_managed_run(args)
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    if getattr(args, "detach", False):
+        return _submit_detached(spec, store_root, token)
+
+    command = _command_from_spec(spec)
+    try:
+        wired = build_use_cases(
+            store_root,
+            _spec_executable_override(spec),
+            spec["timeout"],
+            encryption_token=token,
+            stream_path=getattr(args, "stream", None),
+        )
         execution = wired.run_managed.execute(command)
     except RunInterrupted as exc:
         # A requested stop, not a failure: nothing was recorded. Exit 130 is the
@@ -240,6 +296,363 @@ def _cmd_run(args: argparse.Namespace) -> int:
     sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
     sys.stderr.flush()
     return _run_exit_code(execution)
+
+
+def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
+    """`run --detach`: write the job spec, spawn a detached worker, print the job id."""
+    # On an encrypted store the worker needs the token to write its result. It is passed to the
+    # worker through its environment (never to disk), the same exposure as a sync call holding
+    # the token for the run's duration. So require it here, and gate on the store's actual
+    # encryption state — not on whether a token happened to be passed.
+    encrypted = FilesystemEncryptionManifestStore(store_root).state() is EncryptionState.ENCRYPTED
+    if encrypted and token is None:
+        print(
+            "gmlc: the store is encrypted — provide the token to detach (--token or GMLCACHE_TOKEN)",
+            file=sys.stderr,
+        )
+        return 4
+    import secrets
+
+    job_id = secrets.token_hex(8)
+    store = async_jobs.JobStore(store_root)
+    store.write_spec(job_id, spec)
+    store.update_status(
+        job_id,
+        state=async_jobs.SUBMITTED,
+        submitted_at=async_jobs.now(),
+        client=spec["client"],
+        model=spec["model"],
+    )
+    async_jobs.append_event(
+        store.events_path(job_id), "submitted", client=spec["client"], model=spec["model"]
+    )
+    async_jobs.spawn_worker(store_root, job_id, token=token if encrypted else None)
+    print(job_id)
+    return 0
+
+
+def _cmd_worker(args: argparse.Namespace) -> int:
+    """Hidden: the detached worker. Run the job's managed execution while holding its
+    liveness lock, recording the outcome to status.json. Never writes to the cwd."""
+    store_root = Path(args.store_root)
+    store = async_jobs.JobStore(store_root)
+    job_id = args.job_id
+    try:
+        spec = store.read_spec(job_id)
+    except (OSError, ValueError):
+        return 1
+    command = _command_from_spec(spec)
+    try:
+        with async_jobs.hold_job_lock(store.lock_path(job_id)):
+            events = store.events_path(job_id)
+            store.update_status(job_id, state=async_jobs.RUNNING, started_at=async_jobs.now())
+            async_jobs.append_event(events, "running", client=spec["client"], model=spec["model"])
+            try:
+                # On an encrypted store the token arrives via the environment (set by the
+                # spawner), never from disk; a public store ignores it.
+                token = os.environ.get("GMLCACHE_TOKEN") or None
+                wired = build_use_cases(
+                    store_root,
+                    _spec_executable_override(spec),
+                    spec["timeout"],
+                    encryption_token=token,
+                    stream_path=str(events),  # client live events land in the job's log
+                )
+                execution = wired.run_managed.execute(command)
+            except Exception as exc:
+                store.update_status(
+                    job_id, state=async_jobs.FAILED, ended_at=async_jobs.now(), error=str(exc)
+                )
+                async_jobs.append_event(events, "failed", error=str(exc))
+                return 1
+            key = execution.call_identity.generate_key()
+            exit_code = _run_exit_code(execution)
+            store.update_status(
+                job_id,
+                state=async_jobs.SUCCEEDED,
+                ended_at=async_jobs.now(),
+                execution_key=key,
+                exit_code=exit_code,
+            )
+            async_jobs.append_event(events, "succeeded", execution_key=key, exit_code=exit_code)
+            return 0
+    except StoreLocked:
+        return 1
+
+
+# -- execution (detached job) readers -----------------------------------------
+
+
+def _state_style(state: str):
+    # Built at call time: the ANSI palette constants are defined later in the module.
+    return {
+        async_jobs.RUNNING: (_TEAL,),
+        async_jobs.SUBMITTED: (_GREY,),
+        async_jobs.SUCCEEDED: (_GREEN,),
+        async_jobs.FAILED: (_AMBER,),
+        async_jobs.INTERRUPTED: (_AMBER,),
+    }.get(state, ())
+
+
+def _job_state(store: "async_jobs.JobStore", job_id: str):
+    """(status dict or None, derived state) for a job, applying the liveness probe."""
+    status = store.read_status(job_id)
+    held = async_jobs.job_lock_held(store.lock_path(job_id))
+    return status, async_jobs.derived_state(status, held)
+
+
+def _cmd_execution_status(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    status, state = _job_state(store, args.job_id)
+    status = status or {}
+
+    if args.json:
+        import json
+
+        print(json.dumps({**status, "state": state}, indent=2))
+        return 0
+
+    print(f"job        : {args.job_id}")
+    print(f"state      : {_paint(state, *_state_style(state))}")
+    if status.get("client"):
+        print(f"client     : {status['client']} / {status.get('model', '')}")
+    for label, field in (
+        ("submitted", "submitted_at"),
+        ("started", "started_at"),
+        ("ended", "ended_at"),
+    ):
+        if status.get(field):
+            print(f"{label:<10} : {status[field]}")
+    if status.get("exit_code") is not None:
+        print(f"exit       : {status['exit_code']}")
+    if state == async_jobs.SUCCEEDED and status.get("execution_key"):
+        print(
+            f"result     : {status['execution_key'][:12]}  (gmlcache execution result {args.job_id})"
+        )
+    if state == async_jobs.INTERRUPTED:
+        print("note       : the worker vanished before finishing (lock released, no result)")
+    elif state == async_jobs.FAILED and status.get("error"):
+        print(f"error      : {status['error']}")
+    return 0
+
+
+def _cmd_execution_result(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    status, state = _job_state(store, args.job_id)
+    status = status or {}
+
+    if state in (async_jobs.SUBMITTED, async_jobs.RUNNING):
+        print(f"gmlc: job {args.job_id} is still {state}; not finished yet", file=sys.stderr)
+        return 75  # EX_TEMPFAIL: "try again later"
+    if state == async_jobs.INTERRUPTED:
+        print(
+            f"gmlc: job {args.job_id} was interrupted — the worker vanished before finishing",
+            file=sys.stderr,
+        )
+        return 1
+    if state != async_jobs.SUCCEEDED:
+        print(
+            f"gmlc: job {args.job_id} failed: {status.get('error', '(no detail)')}", file=sys.stderr
+        )
+        return 1
+
+    key = status.get("execution_key")
+    if not key:
+        print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
+        return 4
+    token = _resolve_token(args)
+    try:
+        wired = build_use_cases(store_root, encryption_token=token)
+        execution = wired.repository.find_current(key)
+        if execution is None:
+            print(
+                f"gmlc: job {args.job_id} has no stored result (was the cache pruned?)",
+                file=sys.stderr,
+            )
+            return 4
+        out = _stored_artifact_text(execution, wired.blob_store, ArtifactType.STDOUT)
+        err = _stored_artifact_text(execution, wired.blob_store, ArtifactType.STDERR)
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
+    sys.stdout.write(out)
+    sys.stdout.flush()
+    sys.stderr.write(err)
+    sys.stderr.flush()
+    return int(status.get("exit_code") or 0)
+
+
+def _cmd_execution_list(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    rows = []
+    for job_id in store.list_ids():
+        status, state = _job_state(store, job_id)
+        status = status or {}
+        rows.append(
+            (
+                job_id,
+                state,
+                status.get("client", ""),
+                status.get("model", ""),
+                status.get("submitted_at", ""),
+            )
+        )
+
+    if args.json:
+        import json
+
+        print(
+            json.dumps(
+                [
+                    {"job": j, "state": s, "client": c, "model": m, "submitted_at": t}
+                    for j, s, c, m, t in rows
+                ],
+                indent=2,
+            )
+        )
+        return 0
+    if not rows:
+        print("no detached jobs")
+        return 0
+    for job_id, state, client, model, submitted in rows:
+        painted = _paint(f"{state:<11}", *_state_style(state))
+        print(f"{job_id}  {painted} {client}/{model}  {submitted}")
+    return 0
+
+
+def _print_event(line: str) -> None:
+    import json
+    from datetime import datetime, timezone
+
+    try:
+        event = json.loads(line)
+    except ValueError:
+        return
+    kind = event.get("kind", "?")
+    ts = event.get("ts")
+    when = ""
+    if isinstance(ts, (int, float)):
+        when = datetime.fromtimestamp(ts, timezone.utc).strftime("%H:%M:%S") + "  "
+    extra = "  ".join(f"{k}={v}" for k, v in event.items() if k not in ("ts", "kind"))
+    print(f"{when}{_paint(kind, *_state_style(kind))}  {extra}".rstrip())
+
+
+def _cmd_execution_watch(args: argparse.Namespace) -> int:
+    import time
+
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    events_path = store.events_path(args.job_id)
+    seen = 0
+
+    def drain() -> int:
+        nonlocal seen
+        if not events_path.exists():
+            return seen
+        lines = events_path.read_text(encoding="utf-8").splitlines()
+        for line in lines[seen:]:
+            _print_event(line)
+        seen = len(lines)
+        return seen
+
+    while True:
+        drain()
+        _, state = _job_state(store, args.job_id)
+        if state in (async_jobs.SUCCEEDED, async_jobs.FAILED):
+            time.sleep(0.05)  # let the terminal event (written just after status) land
+            drain()
+            return 0
+        if state == async_jobs.INTERRUPTED:
+            drain()
+            print(
+                f"gmlc: job {args.job_id} was interrupted — the worker vanished before finishing",
+                file=sys.stderr,
+            )
+            return 1
+        time.sleep(0.2)
+
+
+def _materialize_output_files(execution: MlExecution, blob_store, output_dir: Path) -> int:
+    """Write a stored execution's OUTPUT_FILE artifacts into ``output_dir`` (hydrating
+    content from the blob store). Returns the number of files written."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base = output_dir.resolve()
+    count = 0
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is not ArtifactType.OUTPUT_FILE or artifact.name is None:
+            continue
+        target = (output_dir / Path(artifact.name)).resolve()
+        if base != target and base not in target.parents:
+            raise ValueError(f"refusing to write outside output dir: {artifact.name!r}")
+        content = artifact.content
+        if content is None:
+            content = blob_store.get(artifact.blob_key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content or b"")
+        count += 1
+    return count
+
+
+def _cmd_execution_materialize(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    store = async_jobs.JobStore(store_root)
+    if not store.exists(args.job_id):
+        print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
+        return 4
+    status, state = _job_state(store, args.job_id)
+    status = status or {}
+    if state != async_jobs.SUCCEEDED:
+        print(f"gmlc: job {args.job_id} is {state}; nothing to materialize", file=sys.stderr)
+        return 4
+    key = status.get("execution_key")
+    if not key:
+        print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
+        return 4
+    token = _resolve_token(args)
+    output_dir = Path(args.output_dir)
+    try:
+        wired = build_use_cases(store_root, encryption_token=token)
+        execution = wired.repository.find_current(key)
+        if execution is None:
+            print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
+            return 4
+        count = _materialize_output_files(execution, wired.blob_store, output_dir)
+    except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
+        print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
+        return 4
+    print(f"wrote {count} file(s) to {output_dir}")
+    return 0
+
+
+def _cmd_execution(args: argparse.Namespace) -> int:
+    print(
+        "usage: gmlcache execution status <id> | result <id> | watch <id> | "
+        "materialize <id> --output-dir <path> | list",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
@@ -1099,7 +1512,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Content-addressed cache/proxy for agentic CLI calls.",
     )
     parser.add_argument("--version", action="version", version=f"gmlcache {__version__}")
-    sub = parser.add_subparsers(dest="command", required=False)
+    # metavar curates the usage/positional display (and hides internal commands like
+    # __worker, which argparse's help=SUPPRESS does not reliably hide for subparsers).
+    sub = parser.add_subparsers(dest="command", required=False, metavar="<command>")
 
     run = sub.add_parser("run", help="resolve a request (record on miss, replay on hit)")
     run.add_argument("--client", required=True, choices=registered_names())
@@ -1219,7 +1634,33 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print cache diagnostics to stderr (breaks exact fidelity)",
     )
+    run.add_argument(
+        "--stream",
+        nargs="?",
+        const="./gmlc-stream.jsonl",
+        default=None,
+        metavar="PATH",
+        help=(
+            "write a live NDJSON progress stream as the call runs (run.start, the client's "
+            "thinking/tool events, run.end) -- display-only, never changes what is recorded. "
+            "Give a path, or pass --stream alone to write ./gmlc-stream.jsonl"
+        ),
+    )
+    run.add_argument(
+        "--detach",
+        action="store_true",
+        help=(
+            "submit the run as a detached background job: print an execution id and return "
+            "immediately; the work continues, queryable with `gmlcache execution ...`"
+        ),
+    )
     run.set_defaults(func=_cmd_run)
+
+    # Internal: no help= so it never appears as a help row; metavar hides it from the list.
+    worker = sub.add_parser("__worker")
+    worker.add_argument("store_root")
+    worker.add_argument("job_id")
+    worker.set_defaults(func=_cmd_worker)
 
     inspect = sub.add_parser("inspect", help="show a stored execution by its (short) key")
     inspect.add_argument("execution", help="an execution key, or a short prefix as shown by `list`")
@@ -1405,6 +1846,39 @@ def build_parser() -> argparse.ArgumentParser:
     session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_report.set_defaults(func=_cmd_session_report)
     session.set_defaults(func=_cmd_session)
+
+    execution = sub.add_parser("execution", help="inspect detached (--detach) execution jobs")
+    execution_sub = execution.add_subparsers(dest="execution_command")
+    exec_status = execution_sub.add_parser("status", help="show a detached job's state")
+    exec_status.add_argument("job_id", help="the execution id printed by `run --detach`")
+    exec_status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    exec_status.set_defaults(func=_cmd_execution_status)
+    exec_result = execution_sub.add_parser("result", help="print a finished job's output")
+    exec_result.add_argument("job_id", help="the execution id")
+    exec_result.add_argument(
+        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
+    )
+    exec_result.set_defaults(func=_cmd_execution_result)
+    exec_watch = execution_sub.add_parser(
+        "watch", help="replay a job's event log, following it live if still running"
+    )
+    exec_watch.add_argument("job_id", help="the execution id")
+    exec_watch.set_defaults(func=_cmd_execution_watch)
+    exec_mat = execution_sub.add_parser(
+        "materialize", help="write a finished job's generated files to a directory"
+    )
+    exec_mat.add_argument("job_id", help="the execution id")
+    exec_mat.add_argument(
+        "--output-dir", required=True, help="directory to write the generated files into"
+    )
+    exec_mat.add_argument(
+        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
+    )
+    exec_mat.set_defaults(func=_cmd_execution_materialize)
+    exec_list = execution_sub.add_parser("list", help="list detached jobs and their states")
+    exec_list.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    exec_list.set_defaults(func=_cmd_execution_list)
+    execution.set_defaults(func=_cmd_execution)
 
     init = sub.add_parser(
         "init",

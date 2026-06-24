@@ -27,9 +27,13 @@ class LocalClientRunner(ClientRunnerPort):
         self,
         executable_override: Optional[Callable[[str], Optional[str]]] = None,
         timeout: Optional[float] = None,
+        stream_path: Optional[str] = None,
     ) -> None:
         self._executable_override = executable_override or (lambda _client: None)
         self._timeout = timeout
+        #: Opt-in live-progress sink: an NDJSON file the run streams events to as it
+        #: happens (display-only; never affects what is recorded or the cache key).
+        self._stream_path = stream_path
 
     def run(self, client_run_request: ClientRunRequest) -> ClientRunResult:
         adapter = get_adapter(client_run_request.client)
@@ -51,4 +55,5 @@ class LocalClientRunner(ClientRunnerPort):
             add_dir_paths=sorted(client_run_request.allow_paths),
             client_args=list(client_run_request.client_args),
             grants=list(client_run_request.grants),
+            stream_path=self._stream_path,
         )

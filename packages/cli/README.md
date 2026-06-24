@@ -22,6 +22,12 @@ API) call once, replay it forever by its content key, offline and byte-for-byte.
 <img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-demo.gif" alt="gmlcache: a miss records the real client call; the same command again is served instantly from cache, byte-identical" width="760">
 </p>
 
+<p align="center"><sub><b>Detached + live streaming</b> — <code>run --detach</code> returns an id; <code>execution watch</code> follows the client's live progress to the result</sub></p>
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/danielslobozian/generic-ml-cache/main/docs/images/gmlcache-async.gif" alt="gmlcache run --detach, then execution watch streaming the client's live thinking and tool calls to the result" width="760">
+</p>
+
 ## Install
 
 ```bash
@@ -34,12 +40,15 @@ This installs the `gmlcache` command and pulls in the engine,
 ## Use
 
 ```bash
-gmlcache run    --client claude --model sonnet --prompt "…"   # record on a miss, replay on a hit
-gmlcache check  --client claude --model sonnet --prompt "…"   # is this exact call already cached?
-gmlcache list                                                 # stored executions, grouped by client/model
-gmlcache stats                                                # totals, hit counts, token usage & cost
-gmlcache inspect <key>                                        # pretty-print one stored execution
-gmlcache doctor | models | status | init                     # environment & configuration helpers
+gmlcache run    --client claude --model sonnet --prompt "…"            # record on a miss, replay on a hit
+gmlcache check  --client claude --model sonnet --prompt "…"            # forecast: is this exact call cached?
+gmlcache run    --client claude --model sonnet --prompt "…" --detach   # run detached → prints an execution id
+gmlcache execution watch <id>                                         # follow a detached run's live progress
+gmlcache session report <id>                                          # token usage by provider/model for a workflow
+gmlcache encrypt                                                      # encrypt the whole store at rest
+gmlcache export --tag eval -o data.jsonl                              # export the (input, output) dataset corpus
+gmlcache list | tags | stats | inspect <key>                          # browse stored executions
+gmlcache doctor | models | status | init                             # environment & configuration helpers
 ```
 
 ## What it does
@@ -49,6 +58,9 @@ gmlcache doctor | models | status | init                     # environment & con
 - **Replays** an identical request instantly and offline, **byte-for-byte** — gmlcache
   adds nothing to the client's output, so it is a transparent drop-in.
 - **Reports** — list, group, inspect, and measure stored executions and their savings.
+- **And more** — group a workflow's runs into **sessions** with per-provider/model usage
+  reports, **encrypt** the whole store at rest, run **detached** (`--detach`) with a live
+  progress stream, and **export** an `(input, output)` dataset.
 
 ## Built on a reusable engine
 

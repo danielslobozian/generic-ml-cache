@@ -110,6 +110,7 @@ def build_use_cases(
     executable_override: Optional[ExecutableOverride] = None,
     timeout: Optional[float] = None,
     encryption_token: Optional[str] = None,
+    stream_path: Optional[str] = None,
 ) -> WiredUseCases:
     """Construct the outbound adapters under ``store_root`` and wire the services.
 
@@ -125,7 +126,7 @@ def build_use_cases(
     repository = SqliteExecutionRepository(store_root / _EXECUTIONS_DB, clock)
     metrics = JournalMetrics(AccessRegistry(store_root))
     file_fingerprint = FilesystemFileFingerprint()
-    local_runner = LocalClientRunner(executable_override, timeout)
+    local_runner = LocalClientRunner(executable_override, timeout, stream_path)
     passthrough_runner = PassthroughClientRunner(executable_override, timeout)
     api_client = StubApiClientAdapter()
 

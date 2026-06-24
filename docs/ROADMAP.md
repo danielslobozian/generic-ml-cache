@@ -150,13 +150,14 @@ Sessions group the executions of one workflow — single-user, no namespace abov
 
 ### 0.8.0 — Asynchronous executions
 
-- Submit an execution and receive an execution ID.
-- Query status.
-- Watch or replay event logs.
-- Fetch final result.
-- Materialize generated files explicitly.
-- Avoid writing generated files into the caller's folder after the launch command
-  has already exited.
+- `run --detach` submits a managed run as a detached worker process and returns an execution id.
+- `execution status` / `list` query state; a per-job liveness lock distinguishes a live worker
+  from one that vanished mid-run (**interrupted**).
+- `execution watch` replays and follows the durable event log.
+- `execution result` fetches the final output; `execution materialize` writes generated files
+  explicitly — a detached run never writes them into the caller's folder (the launch has exited).
+- Managed-only. On an encrypted store the token is handed to the worker through its
+  environment (never written to disk), so detached runs encrypt their results too.
 
 ### 0.9.0 — Alias mode
 
