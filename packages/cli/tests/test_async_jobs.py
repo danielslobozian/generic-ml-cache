@@ -304,3 +304,20 @@ def test_detached_run_round_trips_on_an_encrypted_store(capsys, monkeypatch):
     assert main(["execution", "result", captured["jid"], "--token", token]) == 0
     assert "secret-hi" in capsys.readouterr().out
     assert main(["execution", "result", captured["jid"]]) == 4
+
+
+# --- a user-supplied execution id never builds a path that escapes the jobs dir -----
+
+
+def test_safe_job_id_rejects_anything_path_like():
+    assert async_jobs._safe_job_id("abc123") == "abc123"
+    for bad in ("../x", "a/b", "..", "x.y", "A", "", "a b"):
+        with pytest.raises(ValueError):
+            async_jobs._safe_job_id(bad)
+
+
+def test_execution_commands_reject_a_traversal_id():
+    # `execution <id>` takes the id from argv; a crafted id must be refused, not traversed.
+    for bad in ("../../etc", "a/b", "..", "x.y"):
+        assert main(["execution", "status", bad]) == 4
+        assert main(["execution", "result", bad]) == 4
