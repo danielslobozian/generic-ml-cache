@@ -14,6 +14,35 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-06-25
+
+### Added
+
+- **API adapters** (core + cli): three direct REST adapters — `--client anthropic`,
+  `--client openai`, `--client gemini` — call provider APIs without a local binary.
+  All use stdlib `urllib`; no new runtime dependencies. Each adapter maps the
+  provider's token fields into the common usage envelope:
+  - **Anthropic**: Messages API; maps all four token fields including
+    `cache_write_tokens` (the only provider that reports it).
+  - **OpenAI**: Responses API; maps `cache_read_tokens` (automatic, read-only cache)
+    and `reasoning_tokens`.
+  - **Gemini**: generateContent REST API; maps `reasoning_tokens` from
+    `thoughtsTokenCount`. Extended thinking is supported via the `thinking` config.
+  - `cost_usd` is always `None` — none of the three providers return a dollar figure
+    per call; tokens are the unit, no pricing table is bundled.
+  - `gmlcache models <client>` queries the provider's live model list for all three.
+  - Auth via environment variable: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+    `GEMINI_API_KEY`.
+
+### Changed
+
+- **Unified runner port** (core): the three separate execution paths (managed local,
+  passthrough local, API) are collapsed into a single `MlRunnerPort` / `MlRequest`
+  model. All six adapters (three CLI, three API) implement the same port; the
+  composition root selects the adapter by `--client` name. `ModelListingPort` is a
+  separate, optional interface — an adapter that supports model listing implements it;
+  discovery uses `isinstance`, no separate registry.
+
 ## [0.9.0] - 2026-06-24
 
 ### Added
