@@ -189,43 +189,48 @@ same execution request model, caching engine, and persistence layer.
 - Metadata-driven cleanup. Single-user; no per-scope policy.
 - Time-based cleanup is deferred to the daemon milestone (requires a resident process).
 
-### 0.12.0 — Session labels
+### 0.12.0 — Session tags
 
-A session can carry a user-supplied label at creation time. Multiple sessions may share
-the same label, enabling grouping across the entire history.
+Sessions carry tags — the same concept as execution tags, applied one level up. A session
+may have zero, one, or many tags; none are required.
 
-- `session start --label <label>` attaches a free-form label to the session at creation;
-  the label is stored in journal metadata and never part of execution identity.
-- `session report --label <label>` aggregates all sessions that share the label —
-  equivalent to running a single report across every matching session id.
-- Labels are **metadata only**: a session without a label behaves exactly as today.
-- Use case: attach a ticket id (`"ticket-001"`) across multiple work sessions and query
-  all their activity in one report.
+- `session start --tag <tag>` attaches tags at creation (repeatable).
+- `session tag <id> --add <tag>` adds tags to an existing session after the fact.
+- `session report --tag <tag>` aggregates all sessions sharing that tag.
+- `list` gains `--session-tag` for cross-level queries: combine `--tag` (execution tag)
+  and `--session-tag` (session tag) to express queries like "executions tagged
+  `code-analysis` within sessions tagged `feature`."
+- Session tags are **metadata only**: a session without tags behaves exactly as today and
+  session tags never enter execution identity.
 
-### 0.13.0 — Gateway transport
+### 0.13.0 — Daemon transport
 
-A resident local service that exposes the same execution engine over an HTTP or IPC
-transport — so any process that can make an HTTP call can use the cache, without embedding
-the Python library.
+A resident local process that exposes the same execution engine through a local HTTP
+interface — another *interface* over the same engine, never another engine and never a
+multi-user service. See the [daemon transport design note](future/daemon-transport.md).
 
-- Same engine, different interface: the gateway is a thin inbound adapter over the
-  existing use cases.
+- **Local pass-through proxy**: point your own ML client at the daemon by setting
+  `ANTHROPIC_BASE_URL=http://localhost:<port>` (or the equivalent for other providers).
+  Every underlying API call the client makes is intercepted, cached, and traced — whether
+  you drive the cache explicitly via `gmlcache run` or let the client call the API
+  naturally, all calls land in the same store.
+- **Session binding**: start the daemon with a session id
+  (`gmlcache daemon start --session <id>`) and every intercepted call records under that
+  session. Composing with session tags enables a clean shell alias — create the session,
+  start the daemon bound to it, set the base URL, then launch the client; all in one
+  command.
 - Transport-level live status and events.
-- Ships as a **dedicated, independently-versioned package** (`generic-ml-cache-gateway`),
-  versioned against a `generic-ml-cache-core>=X` range so a gateway-only change never
-  bumps core or cli.
-- Open question: linking gateway calls to a cache session (no design yet — see 0.12.0 for
-  the session label mechanism that may help).
+- Ships as a **dedicated, independently-versioned package** (`generic-ml-cache-daemon`),
+  versioned against a `generic-ml-cache-core>=X` range.
+- Strictly local and single-user — see [Positioning](design/positioning.md).
 
-### 0.14.0 — Daemon and scheduled eviction
+### 0.14.0 — Scheduled eviction
 
-A long-running background process that owns time-based cache maintenance.
+Time-based cache maintenance, enabled by the resident daemon from 0.13.0.
 
-- Runs the resident eviction loop: TTL-based and stale-entry cleanup configured in the
-  store settings.
+- TTL-based and stale-entry cleanup configured in the store settings.
 - Complements the size-based eviction introduced in 0.11.0.
-- Exposes liveness and eviction-event reporting.
-- Ships alongside (or as part of) the gateway package; requires a resident process.
+- Eviction events surfaced through the daemon's live status reporting.
 
 ### 0.15.0 — SDK adapters and dynamic adapter loading
 
@@ -258,8 +263,8 @@ entry points for automatic discovery.
 
 ## After 1.0.0
 
-The dedicated adapter packages (`generic-ml-cache-adapters-*`) and the gateway package
-(`generic-ml-cache-gateway`) will version independently against a
+The dedicated adapter packages (`generic-ml-cache-adapters-*`) and the daemon package
+(`generic-ml-cache-daemon`) will version independently against a
 `generic-ml-cache-core>=X` compatibility range once 1.0.0 has locked the core contract.
 Core and cli remain lockstep; the surrounding ecosystem can evolve at its own cadence.
 
