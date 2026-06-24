@@ -1,25 +1,17 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""The composition root: build the real adapters and wire the use cases.
-
-This is the *only* place that names every concrete adapter. It reads where to
-store things, constructs the outbound adapters, and hands them to the use-case
-services through their constructors. A driving adapter (the CLI) asks for the
-wired use cases and depends only on the inbound ports.
-"""
+"""The composition root: build the real adapters and wire the use cases."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 
-from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache_core.adapter.out.client.local_client_runner import LocalClientRunner
-from generic_ml_cache_core.adapter.out.client.passthrough_client_runner import (
-    PassthroughClientRunner,
-)
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
 )
@@ -38,33 +30,19 @@ from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_sto
 from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
 from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
-from generic_ml_cache_core.application.usecase.run_api_execution_service import (
-    RunApiExecutionService,
-)
-from generic_ml_cache_core.application.usecase.run_managed_local_execution_service import (
-    RunManagedLocalExecutionService,
-)
-from generic_ml_cache_core.application.usecase.run_passthrough_execution_service import (
-    RunPassthroughExecutionService,
-)
+from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
+from generic_ml_cache_core.common.errors import UnknownClient
 
 _BLOBS_DIRNAME = "blobs"
 _EXECUTIONS_DB = "executions.sqlite3"
 
-#: given a client name, the executable override to use, or None for the default.
 ExecutableOverride = Callable[[str], Optional[str]]
 
 
 @dataclass(frozen=True)
 class WiredUseCases:
-    """The use cases a driving adapter needs, plus the stores the read-only CLI
-    views (inspect/stats/list) query directly."""
-
-    run_managed: RunManagedLocalExecutionService
-    run_passthrough: RunPassthroughExecutionService
-    run_api: RunApiExecutionService
+    run_ml: RunMlExecutionService
     probe: ProbeService
     blob_store: BlobStorePort
     repository: SqliteExecutionRepository
@@ -72,9 +50,6 @@ class WiredUseCases:
 
 
 def _recover_store(store_root: Path) -> None:
-    """Finish or roll back any interrupted encryption migration before the store is
-    opened, so a crashed enable/disable self-heals and never leaves a half-state.
-    Cipher-free and a cheap no-op when nothing is pending."""
     StoreEncryptor(
         store_root,
         FilesystemEncryptionManifestStore(store_root),
@@ -83,15 +58,6 @@ def _recover_store(store_root: Path) -> None:
 
 
 def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> BlobStorePort:
-    """The blob store, wrapped for at-rest encryption when the store is encrypted.
-
-    A store is encrypted iff its manifest is present. With the token, blobs are
-    transparently encrypted on write and decrypted on read; without it, content
-    operations fail with a clear error while metadata-only commands still work; a
-    public store ignores any token. The cipher — and its ``cryptography``
-    dependency — is imported only when an encrypted store is actually opened, so a
-    public store never needs the optional ``[encryption]`` extra.
-    """
     blob_store: BlobStorePort = FilesystemBlobStore(store_root / _BLOBS_DIRNAME)
     manifest = FilesystemEncryptionManifestStore(store_root).load()
     if manifest is None:
@@ -101,8 +67,55 @@ def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> Bl
     from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
 
     cipher = AesGcmCipher()
-    data_key = cipher.open_envelope(encryption_token, manifest)  # raises on a wrong token
+    data_key = cipher.open_envelope(encryption_token, manifest)
     return EncryptingBlobStore(blob_store, cipher, data_key)
+
+
+def resolve_execution_kind(client: str) -> ExecutionKind:
+    """Return the execution kind for ``client`` by checking both registries."""
+    from generic_ml_cache_core.adapter.out.client.registry import registered_names
+    from generic_ml_cache_core.adapter.out.api.api_registry import registered_api_names
+
+    if client in registered_names():
+        return ExecutionKind.LOCAL_MANAGED
+    if client in registered_api_names():
+        return ExecutionKind.API
+    known = sorted(set(registered_names()) | set(registered_api_names()))
+    raise UnknownClient(f"unknown client {client!r}; registered: {', '.join(known) or '(none)'}")
+
+
+def _build_runners(
+    client: Optional[str],
+    kind: Optional[ExecutionKind],
+    executable_override: Optional[ExecutableOverride],
+    timeout: Optional[float],
+    stream_path: Optional[str],
+) -> Dict[ExecutionKind, MlRunnerPort]:
+    """Build the runners dict for the given client and kind."""
+    if kind is ExecutionKind.LOCAL_MANAGED:
+        from generic_ml_cache_core.adapter.out.client.registry import get_adapter
+        from generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter import (
+            AbstractPassthroughLocalAdapter,
+        )
+
+        registered = get_adapter(client)
+        cls = type(registered)
+        exe_override = executable_override(client) if executable_override else None
+        managed = cls(executable_override=exe_override, timeout=timeout, stream_path=stream_path)
+        passthrough = AbstractPassthroughLocalAdapter(registered, exe_override, timeout)
+        return {
+            ExecutionKind.LOCAL_MANAGED: managed,
+            ExecutionKind.LOCAL_PASSTHROUGH: passthrough,
+        }
+    if kind is ExecutionKind.API:
+        from generic_ml_cache_core.adapter.out.api import get_api_adapter
+
+        return {ExecutionKind.API: get_api_adapter(client)}
+    # client=None: provide a stub API runner so cache-replay and management commands
+    # can still serve API-kind executions from the store without a real provider.
+    from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
+
+    return {ExecutionKind.API: StubApiClientAdapter()}
 
 
 def build_use_cases(
@@ -111,14 +124,8 @@ def build_use_cases(
     timeout: Optional[float] = None,
     encryption_token: Optional[str] = None,
     stream_path: Optional[str] = None,
+    client: Optional[str] = None,
 ) -> WiredUseCases:
-    """Construct the outbound adapters under ``store_root`` and wire the services.
-
-    Layout: ``store_root/blobs/`` for output bytes, ``store_root/executions.sqlite3``
-    for the structured records, and the access-event registry beside them. When the
-    store is encrypted, ``encryption_token`` unlocks the blob store at rest (see
-    :func:`_resolve_blob_store`).
-    """
     store_root = Path(store_root)
     _recover_store(store_root)
     clock = SystemClock()
@@ -126,18 +133,10 @@ def build_use_cases(
     repository = SqliteExecutionRepository(store_root / _EXECUTIONS_DB, clock)
     metrics = JournalMetrics(AccessRegistry(store_root))
     file_fingerprint = FilesystemFileFingerprint()
-    local_runner = LocalClientRunner(executable_override, timeout, stream_path)
-    passthrough_runner = PassthroughClientRunner(executable_override, timeout)
-    api_client = StubApiClientAdapter()
-
+    kind = resolve_execution_kind(client) if client is not None else None
+    runners = _build_runners(client, kind, executable_override, timeout, stream_path)
     return WiredUseCases(
-        run_managed=RunManagedLocalExecutionService(
-            file_fingerprint, local_runner, blob_store, repository, metrics
-        ),
-        run_passthrough=RunPassthroughExecutionService(
-            passthrough_runner, blob_store, repository, metrics
-        ),
-        run_api=RunApiExecutionService(api_client, blob_store, repository, metrics),
+        run_ml=RunMlExecutionService(file_fingerprint, runners, blob_store, repository, metrics),
         probe=ProbeService(file_fingerprint, repository),
         blob_store=blob_store,
         repository=repository,

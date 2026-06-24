@@ -159,7 +159,7 @@ Sessions group the executions of one workflow — single-user, no namespace abov
 - Managed-only. On an encrypted store the token is handed to the worker through its
   environment (never written to disk), so detached runs encrypt their results too.
 
-### 0.9.0 — Alias mode
+### 0.9.0 — Alias mode *(released 2026-06-24)*
 
 Alias mode is a thin native-client wrapper mode.
 
@@ -170,10 +170,21 @@ Alias mode is a thin native-client wrapper mode.
 
 ### 0.10.0 — API adapters
 
-- Add provider API adapters as peers to CLI adapters.
-- Preserve the execution request model.
-- Capture usage and cost metadata when providers expose it.
-- Keep provider-specific behavior inside adapters.
+Direct REST adapters for provider APIs — peers to the existing CLI adapters, using the
+same execution request model, caching engine, and persistence layer.
+
+- **Anthropic** (`--client anthropic`): Messages API via stdlib urllib; maps all four
+  token fields including `cache_write_tokens` (the only provider that reports it).
+- **Google Gemini** (`--client gemini`): generateContent REST API via stdlib urllib;
+  maps `reasoning_tokens` from `thoughtsTokenCount`.
+- **OpenAI** (`--client openai`): Responses API via stdlib urllib; maps
+  `cache_read_tokens` (automatic, read-only cache) and `reasoning_tokens`.
+- `cost_usd` is always `None` for API adapters — none of the three providers return a
+  dollar figure per call. Tokens are the unit; no pricing table is bundled.
+- Cursor has **no inference API** and stays as a CLI adapter only.
+- Provider names are resolved automatically from the `--client` value: no separate
+  `--provider` flag is needed.
+- No new runtime dependencies — all three adapters use stdlib `urllib`.
 
 ### 0.11.0 — Retention and invalidation
 

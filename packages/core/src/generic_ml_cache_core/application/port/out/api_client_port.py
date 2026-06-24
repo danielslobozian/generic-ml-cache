@@ -4,23 +4,17 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import List
-
-from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
-from generic_ml_cache_core.application.domain.model.run.message import Message
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 
 
-class ApiClientPort(ABC):
+class ApiClientPort(MlRunnerPort):
     """Outbound port for calling an ML provider API directly.
 
-    Distinct from the local runner ports: there is no subprocess, no filesystem,
-    and no grants — the caller has already built the full message list. The
-    adapter returns a raw ClientRunResult with the response text as stdout, an
-    empty file list, and the provider-reported token usage when available.
+    Provides ``execution_kind = API`` for all REST adapters. Concrete
+    subclasses must still implement ``name`` and ``run``.
     """
 
-    @abstractmethod
-    def run(self, provider: str, model: str, messages: List[Message]) -> ClientRunResult:
-        """Call ``provider``'s ``model`` with ``messages`` and return the raw
-        result. Raises on an unrecoverable transport failure."""
+    @property
+    def execution_kind(self) -> ExecutionKind:
+        return ExecutionKind.API

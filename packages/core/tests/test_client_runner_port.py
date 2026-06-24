@@ -6,14 +6,13 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_core.application.domain.model.run.client_run_request import ClientRunRequest
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 from generic_ml_cache_core.application.port.out.client_runner_port import ClientRunnerPort
 
 
-def _make_request() -> ClientRunRequest:
-    return ClientRunRequest(
-        client="claude",
+def _make_request() -> MlRequest:
+    return MlRequest(
         model="sonnet",
         effort="high",
         context="",
@@ -24,8 +23,10 @@ def _make_request() -> ClientRunRequest:
 class EchoClientRunner(ClientRunnerPort):
     """Minimal implementation that echoes the prompt as stdout."""
 
-    def run(self, client_run_request: ClientRunRequest) -> ClientRunResult:
-        return ClientRunResult(exit_code=0, stdout=client_run_request.prompt)
+    name = "echo"
+
+    def run(self, request: MlRequest) -> ClientRunResult:
+        return ClientRunResult(exit_code=0, stdout=request.prompt)
 
 
 def test_port_cannot_be_instantiated_directly():
@@ -46,10 +47,9 @@ def test_run_result_reflects_request():
     assert result.exit_code == 0
 
 
-def test_run_accepts_client_run_request():
+def test_run_accepts_ml_request():
     runner = EchoClientRunner()
-    request = ClientRunRequest(
-        client="codex",
+    request = MlRequest(
         model="o3",
         effort="medium",
         context="ctx",

@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from typing import List
 
-from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
-    RunManagedLocalExecutionCommand,
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+    RunMlExecutionCommand,
 )
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
@@ -23,10 +24,17 @@ class FakeFingerprint(FileFingerprintPort):
         return "fp_" + path
 
 
-def _command(**overrides) -> RunManagedLocalExecutionCommand:
-    base = dict(client="claude", model="sonnet", effort="high", context="ctx", prompt="do it")
+def _command(**overrides) -> RunMlExecutionCommand:
+    base = dict(
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        client="claude",
+        model="sonnet",
+        effort="high",
+        context="ctx",
+        prompt="do it",
+    )
     base.update(overrides)
-    return RunManagedLocalExecutionCommand(**base)
+    return RunMlExecutionCommand(**base)
 
 
 def test_copies_the_scalar_key_fields():

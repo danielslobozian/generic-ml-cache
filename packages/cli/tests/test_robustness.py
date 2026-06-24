@@ -18,7 +18,7 @@ def test_cli_maps_timeout_to_124(monkeypatch):
             raise subprocess.TimeoutExpired(cmd="client", timeout=0.5)
 
     class _Wired:
-        run_managed = _TimingOutService()
+        run_ml = _TimingOutService()
 
     monkeypatch.setattr(cli, "build_use_cases", lambda *args, **kwargs: _Wired())
     code = cli.main(

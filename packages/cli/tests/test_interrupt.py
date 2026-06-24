@@ -77,7 +77,7 @@ def test_cli_run_maps_interruption_to_a_distinct_exit_code(monkeypatch):
             raise RunInterrupted("client run was stopped before it completed")
 
     class _Wired:
-        run_managed = _RaisingService()
+        run_ml = _RaisingService()
 
     monkeypatch.setattr(cli, "build_use_cases", lambda *args, **kwargs: _Wired())
     code = cli.main(["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi"])

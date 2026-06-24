@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+import threading
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from dataclasses import replace
-from typing import List, Optional, Protocol, Tuple
+from typing import Dict, Generator, List, Optional, Protocol, Tuple
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
@@ -55,6 +58,8 @@ class CachedMlExecutionService(ABC):
         self._blob_store = blob_store
         self._repository = repository
         self._metrics = metrics
+        self._key_locks: Dict[str, threading.Lock] = {}
+        self._key_locks_guard = threading.Lock()
 
     def execute(self, command: CacheableExecutionCommand) -> MlExecution:
         call_identity = self._build_identity(command)
@@ -89,8 +94,8 @@ class CachedMlExecutionService(ABC):
         """Run the client for this command and return its raw result."""
 
     @abstractmethod
-    def _execution_kind(self) -> ExecutionKind:
-        """The kind every execution this service produces is tagged with."""
+    def _execution_kind(self, command: CacheableExecutionCommand) -> ExecutionKind:
+        """The execution kind to tag the result with for this command."""
 
     @abstractmethod
     def _journal_fields(self, command: CacheableExecutionCommand) -> Tuple[str, str, str]:
@@ -153,6 +158,16 @@ class CachedMlExecutionService(ABC):
             raise CacheMiss("offline: this call is not cacheable, so it cannot be served offline")
         return self._run_fresh(command, call_identity, execution_key, allow_store=False)
 
+    @contextmanager
+    def _acquire_key_lock(self, execution_key: str) -> Generator[None, None, None]:
+        """Yield with a per-key lock held, creating it on first use."""
+        with self._key_locks_guard:
+            if execution_key not in self._key_locks:
+                self._key_locks[execution_key] = threading.Lock()
+            lock = self._key_locks[execution_key]
+        with lock:
+            yield
+
     def _run_fresh(
         self,
         command: CacheableExecutionCommand,
@@ -160,30 +175,76 @@ class CachedMlExecutionService(ABC):
         execution_key: str,
         allow_store: bool,
     ) -> MlExecution:
+        if allow_store:
+            return self._run_fresh_locked(command, call_identity, execution_key)
+        # Uncacheable: no lock, no IN_PROGRESS, no repository write.
         client_run_result = self._run_client(command)
-        should_store = allow_store and command.should_persist(client_run_result.succeeded)
-        artifacts = self._build_artifacts(client_run_result, store=should_store)
-        # Input rides on a stored output (DATASET is a superset of CACHE): only
-        # capture it when the output is being stored and the depth keeps input.
-        store_input = should_store and command.persistence_depth.stores_input
-        input_artifacts = self._build_input_artifacts(command, store=store_input)
+        artifacts = self._build_artifacts(client_run_result, store=False)
         execution = MlExecution(
             call_identity=call_identity,
             execution_state=client_run_result.outcome(),
-            execution_kind=self._execution_kind(),
-            output_persisted=should_store,
-            input_persisted=bool(input_artifacts),
-            artifacts=artifacts + input_artifacts,
+            execution_kind=self._execution_kind(command),
+            output_persisted=False,
+            input_persisted=False,
+            artifacts=artifacts,
             token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
         )
-        if should_store:
-            self._repository.save(execution)
-            self._record_event(journal_events.RECORD, execution_key, command)
-            self._apply_tags(execution_key, command)
-        else:
-            self._record_event(journal_events.RUN, execution_key, command)
+        self._record_event(journal_events.RUN, execution_key, command)
         return execution
+
+    def _run_fresh_locked(
+        self,
+        command: CacheableExecutionCommand,
+        call_identity: CallIdentity,
+        execution_key: str,
+    ) -> MlExecution:
+        """Run the client under a per-key lock, bookending the call with
+        IN_PROGRESS and the final execution record in the repository."""
+        with self._acquire_key_lock(execution_key):
+            # Another thread holding this lock may have just completed this key.
+            if command.cache_mode is CacheMode.CACHE:
+                current = self._repository.find_current(execution_key)
+                if current is not None:
+                    return self._serve_hit(command, execution_key, current)
+
+            # Write the IN_PROGRESS marker before the client is called so that
+            # external observers (dashboard, probe, inspector) can see the run.
+            self._repository.save(
+                MlExecution(
+                    call_identity=call_identity,
+                    execution_state=ExecutionState.IN_PROGRESS,
+                    execution_kind=self._execution_kind(command),
+                    output_persisted=False,
+                    input_persisted=False,
+                    artifacts=[],
+                )
+            )
+
+            client_run_result = self._run_client(command)
+            should_store = command.should_persist(client_run_result.succeeded)
+            artifacts = self._build_artifacts(client_run_result, store=should_store)
+            # Input rides on a stored output (DATASET is a superset of CACHE).
+            store_input = should_store and command.persistence_depth.stores_input
+            input_artifacts = self._build_input_artifacts(command, store=store_input)
+            execution = MlExecution(
+                call_identity=call_identity,
+                execution_state=client_run_result.outcome(),
+                execution_kind=self._execution_kind(command),
+                output_persisted=should_store,
+                input_persisted=bool(input_artifacts),
+                artifacts=artifacts + input_artifacts,
+                token_usage=client_run_result.token_usage,
+                failure=client_run_result.failure(),
+            )
+            # Always resolve the IN_PROGRESS record with the final execution.
+            self._repository.save(execution)
+            if should_store:
+                self._record_event(journal_events.RECORD, execution_key, command)
+                self._apply_tags(execution_key, command)
+            else:
+                self._record_event(journal_events.RUN, execution_key, command)
+            return execution
 
     def _run_metered(
         self, command: CacheableExecutionCommand, call_identity: CallIdentity, execution_key: str
@@ -196,7 +257,7 @@ class CachedMlExecutionService(ABC):
         execution = MlExecution(
             call_identity=call_identity,
             execution_state=client_run_result.outcome(),
-            execution_kind=self._execution_kind(),
+            execution_kind=self._execution_kind(command),
             output_persisted=False,
             input_persisted=False,
             artifacts=self._build_artifacts(client_run_result, store=False),
