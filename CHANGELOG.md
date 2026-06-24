@@ -14,6 +14,8 @@ the single changelog for both; entries note which package(s) a change touches.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-24
+
 ### Added
 
 - **Asynchronous executions** (cli): `gmlcache run --detach` submits a managed run as a detached
