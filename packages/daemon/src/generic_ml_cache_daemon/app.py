@@ -44,14 +44,18 @@ def create_app(
     application.state.session_id = session_id
     application.state.enable_metrics = enable_metrics
 
+    from generic_ml_cache_daemon.jobs import JobRegistry
     from generic_ml_cache_daemon.routes.executions import router as executions_router
     from generic_ml_cache_daemon.routes.health import router as health_router
+    from generic_ml_cache_daemon.routes.jobs import router as jobs_router
     from generic_ml_cache_daemon.routes.run import router as run_router
     from generic_ml_cache_daemon.routes.sessions import router as sessions_router
 
+    application.state.job_registry = JobRegistry()
     application.include_router(health_router)
     application.include_router(sessions_router)
     application.include_router(executions_router)
     application.include_router(run_router)
+    application.include_router(jobs_router)
 
     return application
