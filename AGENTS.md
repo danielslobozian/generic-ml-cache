@@ -435,9 +435,16 @@ return blob_path.read_bytes()
   is demonstrated, never asserted — a grep that returns nothing, a green test run, a
   tool report. "I removed all of X" without the search that proves it is how a stray
   name from a deleted feature survives. Evidence first, claim second.
-- **Green means both linters.** A change is not green until `ruff check` **and**
-  `ruff format --check` both pass — formatting is part of the floor, and CI runs both.
-  Running only `ruff check` is a partial check, not a pass.
+- **Green means both linters and both coverage gates.** A change is not green until
+  all four checks pass:
+  1. `ruff check packages/`
+  2. `ruff format --check packages/`
+  3. `python -m pytest packages/core/tests --cov=generic_ml_cache_core --cov-fail-under=80 --cov-report=xml:packages/core/coverage.xml`
+  4. `python -m pytest packages/cli/tests  --cov=generic_ml_cache_cli  --cov-fail-under=80 --cov-report=xml:packages/cli/coverage.xml`
+
+  Running only the linters, or skipping coverage, is a partial check, not a pass.
+  The XMLs produced by (3) and (4) are the exact files Sonar ingests — running them
+  locally shows the number Sonar will report before any push.
 - This file evolves with the project. When a new structural decision is made, it is
   recorded here as an enforceable line with its failing case, so the standard and
   the code never drift.
