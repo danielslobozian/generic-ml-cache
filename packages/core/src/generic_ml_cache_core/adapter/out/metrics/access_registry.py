@@ -166,6 +166,41 @@ class AccessRegistry:
         except Exception:
             return []
 
+    def execution_keys_for_session(self, session_id: str) -> List[str]:
+        """Return the distinct execution keys (match_keys) recorded under
+        ``session_id`` ([] if unknown or unavailable). Used by the purge service
+        to collect every execution that belongs to a session."""
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT DISTINCT match_key FROM access_events "
+                    "WHERE session_id = ? AND match_key IS NOT NULL",
+                    (session_id,),
+                ).fetchall()
+                return [key for (key,) in rows]
+            finally:
+                conn.close()
+        except Exception:
+            return []
+
+    def delete_events_for_key(self, execution_key: str) -> None:
+        """Remove all access events for ``execution_key``. Called during a hard
+        delete to erase the key's history from the registry. Non-load-bearing:
+        failures are swallowed."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "DELETE FROM access_events WHERE match_key = ?",
+                    (execution_key,),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
     def last_access(self) -> Dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
         ({} if unavailable). An execution absent here has never been seen by the

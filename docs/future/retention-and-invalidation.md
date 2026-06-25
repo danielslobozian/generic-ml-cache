@@ -1,6 +1,6 @@
 <div align="center">
 
-# Future: Retention and Invalidation
+# Retention and invalidation
 
 <sub>Future direction</sub>
 
@@ -12,21 +12,11 @@
 
 ---
 
-> [!NOTE]
-> This document describes planned direction. It should be read as design intent, not as a guarantee that the feature already exists.
+Retention and invalidation shipped in **0.11.0**. This is no longer a future area.
 
-Future retention work extends current size-based eviction.
-
-Possible features:
-
-- size quotas,
-- explicit invalidation,
-- time-based stale-entry cleanup,
-- explicit prune commands,
-- daemon scheduled cleanup,
-- reports before deletion.
-
-Invalidation is cache cleanup. It is not authentication revocation.
+See [**Retention and quota**](../concepts/retention.md) for the full concept documentation,
+including soft purge vs hard delete, LRU eviction, the `gmlcache purge` command, and
+`max_size` quota configuration.
 
 ---
 

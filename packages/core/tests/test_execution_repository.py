@@ -247,3 +247,151 @@ def test_saved_execution_is_not_mutated_by_the_repository():
     repository.save(original)
     # The caller's object keeps its bytes; only the stored copy is dehydrated.
     assert original.artifacts[0].content == b"keepme"
+
+
+# --- retention and purge (in-memory) -----------------------------------------
+
+
+def test_blob_keys_for_execution_returns_stored_keys():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity, content=b"answer"))
+    keys = repository.blob_keys_for_execution(identity.generate_key())
+    assert keys == ["blob_" + b"answer".hex()]
+
+
+def test_blob_keys_for_execution_unknown_key_returns_empty():
+    assert _repository().blob_keys_for_execution("nope") == []
+
+
+def test_blob_reference_count_is_one_for_single_execution():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity, content=b"answer"))
+    assert repository.blob_reference_count("blob_" + b"answer".hex()) == 1
+
+
+def test_blob_reference_count_zero_for_unknown_blob():
+    assert _repository().blob_reference_count("nope") == 0
+
+
+def test_soft_purge_makes_execution_not_current():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.soft_purge_execution(key)
+    assert repository.find_current(key) is None
+
+
+def test_soft_purge_clears_artifacts():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity, content=b"answer"))
+    key = identity.generate_key()
+    repository.soft_purge_execution(key)
+    history = repository.find_all(key)
+    assert history[0].artifacts == []
+
+
+def test_soft_purge_reduces_blob_reference_count():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity, content=b"answer"))
+    blob_key = "blob_" + b"answer".hex()
+    repository.soft_purge_execution(identity.generate_key())
+    assert repository.blob_reference_count(blob_key) == 0
+
+
+def test_soft_purge_unknown_key_is_a_no_op():
+    _repository().soft_purge_execution("nope")  # must not raise
+
+
+def test_hard_delete_removes_all_history():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.hard_delete_execution(key)
+    assert repository.find_current(key) is None
+    assert repository.find_all(key) == []
+
+
+def test_hard_delete_unknown_key_is_a_no_op():
+    _repository().hard_delete_execution("nope")  # must not raise
+
+
+def test_total_stored_bytes_is_zero_for_empty_store():
+    assert _repository().total_stored_bytes() == 0
+
+
+def test_total_stored_bytes_sums_current_artifacts():
+    repository = _repository()
+    id_a = _identity("a")
+    id_b = _identity("b")
+    repository.save(_execution(id_a, content=b"abc"))   # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))    # 2 bytes
+    assert repository.total_stored_bytes() == 5
+
+
+def test_total_stored_bytes_drops_after_soft_purge():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity, content=b"answer"))
+    repository.soft_purge_execution(identity.generate_key())
+    assert repository.total_stored_bytes() == 0
+
+
+def test_current_executions_with_sizes_empty_store():
+    assert _repository().current_executions_with_sizes() == []
+
+
+def test_current_executions_with_sizes_correct_totals():
+    repository = _repository()
+    id_a = _identity("a")
+    id_b = _identity("b")
+    repository.save(_execution(id_a, content=b"abc"))   # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))    # 2 bytes
+    sizes = {e.execution_key: e.total_size_bytes
+             for e in repository.current_executions_with_sizes()}
+    assert sizes[id_a.generate_key()] == 3
+    assert sizes[id_b.generate_key()] == 2
+
+
+def test_executions_by_tag_returns_matching_keys():
+    repository = _repository()
+    id_a = _identity("a")
+    id_b = _identity("b")
+    repository.save(_execution(id_a))
+    repository.save(_execution(id_b))
+    repository.add_tags(id_a.generate_key(), ["important"])
+    repository.add_tags(id_b.generate_key(), ["other"])
+    assert repository.executions_by_tag("important") == [id_a.generate_key()]
+
+
+def test_executions_by_tag_no_match_returns_empty():
+    assert _repository().executions_by_tag("nope") == []
+
+
+def test_all_execution_keys_empty_store():
+    assert _repository().all_execution_keys() == []
+
+
+def test_all_execution_keys_returns_all_saved_keys():
+    repository = _repository()
+    id_a = _identity("a")
+    id_b = _identity("b")
+    repository.save(_execution(id_a))
+    repository.save(_execution(id_b))
+    keys = set(repository.all_execution_keys())
+    assert id_a.generate_key() in keys
+    assert id_b.generate_key() in keys
+
+
+def test_all_execution_keys_empty_after_hard_delete():
+    repository = _repository()
+    identity = _identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.hard_delete_execution(key)
+    assert repository.all_execution_keys() == []

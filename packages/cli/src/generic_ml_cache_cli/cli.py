@@ -211,6 +211,7 @@ def _resolve_managed_run(args: argparse.Namespace):
         "session_id": _resolve_session(args),
         "executable": config.executable_for(file_cfg, args.client, flag=args.executable),
         "timeout": settings["timeout"][0],
+        "max_size": settings["max_size"][0],
     }
     return spec, Path(str(settings["store"][0])), _resolve_token(args)
 
@@ -313,6 +314,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             encryption_token=token,
             stream_path=getattr(args, "stream", None),
             client=spec["client"],
+            max_size=spec.get("max_size"),
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -367,6 +369,7 @@ def _cmd_alias(args: argparse.Namespace) -> int:
             settings["timeout"][0],
             encryption_token=_resolve_token(args),
             client=args.client,
+            max_size=settings["max_size"][0],
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -434,6 +437,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                     encryption_token=token,
                     stream_path=str(events),  # client live events land in the job's log
                     client=spec["client"],
+                    max_size=spec.get("max_size"),
                 )
                 execution = wired.run_ml.execute(command)
             except Exception as exc:
@@ -1025,8 +1029,10 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
+    max_size_bytes = settings["max_size"][0]
     wired = build_use_cases(Path(str(settings["store"][0])))
     summaries = wired.repository.current_execution_summaries()
+    store_bytes = wired.repository.total_stored_bytes()
     access = wired.metrics.event_counts()
     by_client_model: Dict[tuple, int] = {}
     for summary in summaries:
@@ -1039,6 +1045,8 @@ def _cmd_stats(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "executions": len(summaries),
+                    "store_bytes": store_bytes,
+                    "max_size_bytes": max_size_bytes,
                     "by_client_model": [
                         {"client": client, "model": model, "executions": count}
                         for (client, model), count in sorted(by_client_model.items())
@@ -1051,6 +1059,13 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         return 0
 
     print(f"executions : {_paint(str(len(summaries)), _TEAL, _BOLD)}")
+    if max_size_bytes:
+        pct = int(store_bytes * 100 / max_size_bytes) if max_size_bytes > 0 else 0
+        size_color = _AMBER if store_bytes >= max_size_bytes * 0.8 else _TEAL
+        size_text = f"{_paint(_format_bytes(store_bytes), size_color)} / {_format_bytes(max_size_bytes)} ({pct}%)"
+    else:
+        size_text = _paint(_format_bytes(store_bytes), _TEAL)
+    print(f"store size : {size_text}")
     if by_client_model:
         print("by client / model:")
         for (client, model), count in sorted(by_client_model.items()):
@@ -1070,6 +1085,90 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"access     : {parts}")
     else:
         print("access     : (no events recorded yet)")
+    return 0
+
+
+_PURGE_ALL_PHRASE = "purge all"
+_HARD_DELETE_ALL_PHRASE = "hard delete all"
+
+
+def _cmd_purge(args: argparse.Namespace) -> int:
+    import json
+
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    key = getattr(args, "key", None)
+    tag = getattr(args, "tag", None)
+    session = getattr(args, "session", None)
+    purge_all = getattr(args, "all", False)
+    hard = getattr(args, "hard", False)
+    confirm = getattr(args, "confirm", None)
+
+    selectors = [bool(key), bool(tag), bool(session), bool(purge_all)]
+    if sum(selectors) == 0:
+        print(
+            "gmlc: provide a target: <key>, --tag <tag>, --session <id>, or --all",
+            file=sys.stderr,
+        )
+        return 1
+    if sum(selectors) > 1:
+        print(
+            "gmlc: only one of <key>, --tag, --session, --all may be given",
+            file=sys.stderr,
+        )
+        return 1
+
+    if purge_all:
+        required = _HARD_DELETE_ALL_PHRASE if hard else _PURGE_ALL_PHRASE
+        if confirm != required:
+            verb = "hard-delete" if hard else "purge"
+            print(
+                f'gmlc: this will {verb} every execution in the store. '
+                f'Add --confirm "{required}" to proceed.',
+                file=sys.stderr,
+            )
+            return 4
+
+    wired = build_use_cases(Path(str(settings["store"][0])))
+    svc = wired.purge
+
+    if key:
+        report = svc.hard_delete_one(key) if hard else svc.purge_one(key)
+    elif tag:
+        report = svc.hard_delete_by_tag(tag) if hard else svc.purge_by_tag(tag)
+    elif session:
+        report = svc.hard_delete_by_session(session) if hard else svc.purge_by_session(session)
+    else:
+        report = svc.hard_delete_all() if hard else svc.purge_all()
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "executions_removed": report.executions_removed,
+                    "bytes_freed": report.bytes_freed,
+                    "blobs_removed": report.blobs_removed,
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    if report.executions_removed == 0:
+        print("nothing to purge")
+        return 0
+
+    verb = "deleted" if hard else "purged"
+    print(
+        f"{verb:<8} : "
+        f"{_paint(str(report.executions_removed), _TEAL, _BOLD)} execution(s), "
+        f"{_paint(_format_bytes(report.bytes_freed), _TEAL)} freed, "
+        f"{report.blobs_removed} blob(s) removed"
+    )
     return 0
 
 
@@ -1536,6 +1635,14 @@ def _paint(text: str, *codes: str) -> str:
     return "".join(codes) + text + _RESET
 
 
+def _format_bytes(n: int) -> str:
+    """Human-readable byte count using 1024-based units."""
+    for unit, threshold in (("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
+        if n >= threshold:
+            return f"{n / threshold:.1f} {unit}"
+    return f"{n} B"
+
+
 def render_banner(color: bool = False) -> str:
     """The boxed gmlcache banner: the cache mark (four hollow bars; the top one is
     the accent 'hit') beside the title, version, and tagline. Width is derived from
@@ -1867,6 +1974,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stats.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     stats.set_defaults(func=_cmd_stats)
+
+    purgep = sub.add_parser(
+        "purge",
+        help="free stored blobs (soft purge) or erase all records (--hard)",
+    )
+    purgep.add_argument("key", nargs="?", help="execution key to purge")
+    purgep.add_argument("--tag", help="purge all executions carrying this tag")
+    purgep.add_argument("--session", help="purge all executions from this session")
+    purgep.add_argument(
+        "--all", action="store_true", help="purge every execution in the store"
+    )
+    purgep.add_argument(
+        "--hard",
+        action="store_true",
+        help='hard-delete: also remove DB records and access history '
+        '(default: soft purge keeps statistics)',
+    )
+    purgep.add_argument(
+        "--confirm",
+        help='confirmation phrase required for --all '
+        '(soft: "purge all"; hard: "hard delete all")',
+    )
+    purgep.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    purgep.set_defaults(func=_cmd_purge)
 
     listp = sub.add_parser(
         "list", help="list stored executions, grouped by client/model (read-only)"

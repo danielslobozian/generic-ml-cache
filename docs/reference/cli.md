@@ -45,6 +45,7 @@ gmlcache rotate
 gmlcache invalidate
 gmlcache session start
 gmlcache session report <id>
+gmlcache purge <key>
 gmlcache execution status <id>
 gmlcache stats
 gmlcache doctor
@@ -134,9 +135,14 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 | `export` | Export the `dataset`-depth `(input, output)` corpus as JSONL. `--tag` / `--exclude-tag` filter by tag (match-any; exclude wins); `-o` / `--output FILE` writes to a file instead of stdout (a per-record summary still goes to stderr). Entries stored below `dataset` depth carry no input and are skipped (and reported). On an encrypted store it needs `--token` / `GMLCACHE_TOKEN`. |
 | `models <client>` | `--executable` overrides the client executable; `--timeout`; `--json`. Omit `<client>` to query every registered client. |
 | `doctor` | `--timeout` (default 10s); `--json`. |
-| `stats` | `--json`. |
+| `stats` | Shows total store size and, when `max_size` is configured, quota fill level. `--json`. |
 | `status` | `--json`. Also shows the encryption state (public / encrypted). |
 | `init` | (no options) writes a starter config file on explicit request. |
+| `purge` | `<key>`, `--tag <tag>`, `--session <id>`, or `--all` selects the target (mutually exclusive). `--hard` hard-deletes (default: soft purge — frees blobs, keeps statistics). `--all` requires `--confirm "purge all"` (soft) or `--confirm "hard delete all"` (hard). `--json` for machine output. |
+
+<div align="center">
+<img src="../images/gmlcache-purge.gif" alt="gmlcache purge: stats shows store size; purge --tag frees blobs; purge --all with confirmation phrase empties the store" width="760">
+</div>
 
 ### Encryption
 

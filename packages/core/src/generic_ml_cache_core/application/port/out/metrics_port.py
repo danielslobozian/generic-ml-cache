@@ -80,3 +80,15 @@ class MetricsPort(ABC):
         Used for LRU eviction ordering. An empty dict is the correct response
         when no data is available.
         """
+
+    @abstractmethod
+    def execution_keys_for_session(self, session_id: str) -> List[str]:
+        """Return the distinct execution keys recorded under ``session_id``.
+        Used by the purge service to resolve session-scoped purge targets.
+        An empty list is the correct response for an unknown session.
+        """
+
+    @abstractmethod
+    def delete_events_for_key(self, execution_key: str) -> None:
+        """Remove all journal events for ``execution_key``. Called during a
+        hard delete to erase the key's access history. Must never raise."""

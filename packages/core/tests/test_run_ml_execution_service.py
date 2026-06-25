@@ -132,6 +132,12 @@ class FakeMetrics(MetricsPort):
     def last_access(self) -> Dict[str, float]:
         return {}
 
+    def execution_keys_for_session(self, session_id):
+        return []
+
+    def delete_events_for_key(self, execution_key) -> None:
+        pass
+
     def event_names(self) -> List[str]:
         return [r["event"] for r in self.events]
 
@@ -440,3 +446,82 @@ def test_passthrough_native_args_in_identity():
     exec_a = harness.service.execute(_passthrough_command(native_args=["--help"]))
     exec_b = harness.service.execute(_passthrough_command(native_args=["--version"]))
     assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
+
+
+# --- LRU auto-eviction hook --------------------------------------------------
+
+
+from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
+from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+
+
+class _SpyPurge:
+    """Minimal stub that records every evict_to_quota call."""
+
+    def __init__(self) -> None:
+        self.evict_calls: List[int] = []
+
+    def evict_to_quota(self, max_bytes: int) -> PurgeReport:
+        self.evict_calls.append(max_bytes)
+        return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
+
+    # PurgeService has other methods the hook doesn't call — not needed here.
+
+
+def _harness_with_quota(max_size: Optional[int]) -> tuple:
+    harness = _Harness()
+    spy = _SpyPurge()
+    service = RunMlExecutionService(
+        FakeFileFingerprint(),
+        {
+            ExecutionKind.LOCAL_MANAGED: harness.runner,
+            ExecutionKind.API: harness.api,
+            ExecutionKind.LOCAL_PASSTHROUGH: harness.passthrough,
+        },
+        harness.blob,
+        harness.repo,
+        harness.metrics,
+        purge_service=spy,
+        max_size=max_size,
+    )
+    return service, spy
+
+
+def test_eviction_triggered_after_successful_record():
+    service, spy = _harness_with_quota(max_size=1_000_000)
+    service.execute(_managed_command())
+    assert len(spy.evict_calls) == 1
+    assert spy.evict_calls[0] == 1_000_000
+
+
+def test_eviction_not_triggered_when_max_size_is_none():
+    service, spy = _harness_with_quota(max_size=None)
+    service.execute(_managed_command())
+    assert spy.evict_calls == []
+
+
+def test_eviction_not_triggered_on_cache_hit():
+    service, spy = _harness_with_quota(max_size=1_000_000)
+    service.execute(_managed_command())          # first run — record
+    assert len(spy.evict_calls) == 1
+    service.execute(_managed_command())          # second run — cache hit
+    assert len(spy.evict_calls) == 1             # eviction not called again
+
+
+def test_eviction_not_triggered_on_failed_run():
+    from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+    service, spy = _harness_with_quota(max_size=1_000_000)
+    failing_harness = _Harness(
+        client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stdout="", stderr="boom"))
+    )
+    failing_service = RunMlExecutionService(
+        FakeFileFingerprint(),
+        {ExecutionKind.LOCAL_MANAGED: failing_harness.runner},
+        failing_harness.blob,
+        failing_harness.repo,
+        failing_harness.metrics,
+        purge_service=spy,
+        max_size=1_000_000,
+    )
+    failing_service.execute(_managed_command())
+    assert spy.evict_calls == []

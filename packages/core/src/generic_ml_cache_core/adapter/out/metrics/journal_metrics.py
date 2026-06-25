@@ -58,3 +58,9 @@ class JournalMetrics(MetricsPort):
 
     def last_access(self) -> Dict[str, float]:
         return self._registry.last_access()
+
+    def execution_keys_for_session(self, session_id: str) -> List[str]:
+        return self._registry.execution_keys_for_session(session_id)
+
+    def delete_events_for_key(self, execution_key: str) -> None:
+        self._registry.delete_events_for_key(execution_key)

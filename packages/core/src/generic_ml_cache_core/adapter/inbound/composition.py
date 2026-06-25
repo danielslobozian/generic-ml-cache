@@ -31,6 +31,7 @@ from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryp
 from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
+from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import UnknownClient
 
@@ -44,6 +45,7 @@ ExecutableOverride = Callable[[str], Optional[str]]
 class WiredUseCases:
     run_ml: RunMlExecutionService
     probe: ProbeService
+    purge: PurgeService
     blob_store: BlobStorePort
     repository: SqliteExecutionRepository
     metrics: JournalMetrics
@@ -125,6 +127,7 @@ def build_use_cases(
     encryption_token: Optional[str] = None,
     stream_path: Optional[str] = None,
     client: Optional[str] = None,
+    max_size: Optional[int] = None,
 ) -> WiredUseCases:
     store_root = Path(store_root)
     _recover_store(store_root)
@@ -135,9 +138,14 @@ def build_use_cases(
     file_fingerprint = FilesystemFileFingerprint()
     kind = resolve_execution_kind(client) if client is not None else None
     runners = _build_runners(client, kind, executable_override, timeout, stream_path)
+    purge = PurgeService(repository, blob_store, metrics)
     return WiredUseCases(
-        run_ml=RunMlExecutionService(file_fingerprint, runners, blob_store, repository, metrics),
+        run_ml=RunMlExecutionService(
+            file_fingerprint, runners, blob_store, repository, metrics,
+            purge_service=purge, max_size=max_size,
+        ),
         probe=ProbeService(file_fingerprint, repository),
+        purge=purge,
         blob_store=blob_store,
         repository=repository,
         metrics=metrics,

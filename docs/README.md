@@ -61,6 +61,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 - [Alias mode](concepts/alias-mode.md)
 - [Sessions](concepts/sessions.md)
 - [Asynchronous executions](concepts/asynchronous-executions.md)
+- [Retention and quota](concepts/retention.md)
 
 </td>
 </tr>
@@ -105,7 +106,6 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 |---|---|
 | Provider/API execution | [API adapters](future/api-adapters.md) |
 | Long-running service mode | [Daemon transport](future/daemon-transport.md) |
-| Storage lifecycle | [Retention and invalidation](future/retention-and-invalidation.md) |
 
 ---
 
