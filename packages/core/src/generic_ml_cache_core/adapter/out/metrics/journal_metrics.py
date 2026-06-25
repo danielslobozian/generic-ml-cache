@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from generic_ml_cache_core.adapter.out.metrics.access_registry import AccessRegistry
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
 
 
@@ -76,3 +77,12 @@ class JournalMetrics(MetricsPort):
 
     def session_ids_for_tag(self, tag: str) -> List[str]:
         return self._registry.session_ids_for_tag(tag)
+
+    def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
+        self._registry.set_session_spec(session_id, spec)
+
+    def clear_session_spec(self, session_id: str) -> None:
+        self._registry.clear_session_spec(session_id)
+
+    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
+        return self._registry.session_spec_for_id(session_id)

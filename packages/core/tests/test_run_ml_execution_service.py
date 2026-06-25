@@ -30,6 +30,7 @@ from generic_ml_cache_core.application.port.out.blob_store_port import BlobStore
 from generic_ml_cache_core.application.port.out.client_runner_port import ClientRunnerPort
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
@@ -144,6 +145,15 @@ class FakeMetrics(MetricsPort):
 
     def remove_session_tag(self, session_id, tag) -> None:
         pass
+
+    def set_session_spec(self, session_id, spec: SessionSpec) -> None:
+        pass
+
+    def clear_session_spec(self, session_id) -> None:
+        pass
+
+    def session_spec(self, session_id) -> Optional[SessionSpec]:
+        return None
 
     def session_tags(self, session_id) -> List[str]:
         return []

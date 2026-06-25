@@ -7,6 +7,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Dict, List, NamedTuple, Optional
 
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+
 
 class SessionEventRow(NamedTuple):
     """One journal event in a session, with the fields a session report needs:
@@ -111,3 +113,15 @@ class MetricsPort(ABC):
     def session_ids_for_tag(self, tag: str) -> List[str]:
         """Return the distinct session ids carrying ``tag``.
         Empty list when no sessions have that tag."""
+
+    @abstractmethod
+    def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
+        """Attach (or replace) the execution spec for ``session_id``. Must never raise."""
+
+    @abstractmethod
+    def clear_session_spec(self, session_id: str) -> None:
+        """Remove the execution spec for ``session_id``. No-op if absent. Must never raise."""
+
+    @abstractmethod
+    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
+        """Return the execution spec for ``session_id``, or None if unset."""
