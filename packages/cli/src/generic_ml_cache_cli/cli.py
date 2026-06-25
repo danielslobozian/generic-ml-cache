@@ -1592,16 +1592,25 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
+    session_id = getattr(args, "session_id", None)
+    tag = getattr(args, "tag", None)
+    if not session_id and not tag:
+        print("gmlc: provide a session id or --tag <tag>", file=sys.stderr)
+        return 1
     wired = build_use_cases(store_root)
-    events = wired.metrics.session_events(args.session_id)
-    tags = wired.metrics.session_tags(args.session_id)
+
+    if tag:
+        return _cmd_session_report_by_tag(wired, tag, args.json)
+
+    events = wired.metrics.session_events(session_id)
+    tags = wired.metrics.session_tags(session_id)
     # Join each event's execution to its token usage (the current execution per key).
     usage_by_key = {}
     for key in {e.execution_key for e in events if e.execution_key}:
         execution = wired.repository.find_current(key)
         if execution is not None:
             usage_by_key[key] = execution.token_usage
-    report = build_session_report(args.session_id, events, usage_by_key)
+    report = build_session_report(session_id, events, usage_by_key)
 
     if args.json:
         import json
@@ -1609,9 +1618,40 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
         print(json.dumps(_session_report_json(report, tags), indent=2))
         return 0
     if report.invocations == 0 and not tags:
-        print(f"no events recorded for session {args.session_id!r}")
+        print(f"no events recorded for session {session_id!r}")
         return 0
     print(_render_session_report(report, tags))
+    return 0
+
+
+def _cmd_session_report_by_tag(wired, tag: str, as_json: bool) -> int:
+    session_ids = wired.metrics.session_ids_for_tag(tag)
+    if not session_ids:
+        print(f"no sessions tagged {tag!r}")
+        return 0
+    # Collect events from all matching sessions; build one merged report.
+    all_events = []
+    for session_id in session_ids:
+        all_events.extend(wired.metrics.session_events(session_id))
+    usage_by_key = {}
+    for key in {e.execution_key for e in all_events if e.execution_key}:
+        execution = wired.repository.find_current(key)
+        if execution is not None:
+            usage_by_key[key] = execution.token_usage
+    report = build_session_report(tag, all_events, usage_by_key)
+
+    if as_json:
+        import json
+
+        payload = _session_report_json(report, [tag])
+        payload["tag"] = tag
+        payload["session_count"] = len(session_ids)
+        del payload["session"]
+        print(json.dumps(payload, indent=2))
+        return 0
+    lines = [f"tag         : {tag}", f"sessions    : {len(session_ids)}"]
+    print("\n".join(lines))
+    print(_render_session_report(report))
     return 0
 
 
@@ -2133,7 +2173,16 @@ def build_parser() -> argparse.ArgumentParser:
     session_tag_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_tag_cmd.set_defaults(func=_cmd_session_tag)
     session_report = session_sub.add_parser("report", help="summarise a session's activity")
-    session_report.add_argument("session_id", help="the session id to report on")
+    session_report.add_argument(
+        "session_id",
+        nargs="?",
+        help="the session id to report on (omit when using --tag)",
+    )
+    session_report.add_argument(
+        "--tag",
+        metavar="TAG",
+        help="aggregate all sessions sharing this tag",
+    )
     session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_report.set_defaults(func=_cmd_session_report)
     session.set_defaults(func=_cmd_session)

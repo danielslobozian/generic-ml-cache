@@ -960,3 +960,55 @@ def test_session_tag_add_json_output(tmp_path, monkeypatch, capsys):
     data = json.loads(capsys.readouterr().out)
     assert data["session"] == session_id
     assert "proj" in data["tags"]
+
+
+def test_session_report_by_tag_aggregates_sessions(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    # Two sessions, same tag; one execution each.
+    for _ in range(2):
+        main(["session", "start", "--tag", "sprint-1"])
+        session_id = capsys.readouterr().out.strip()
+        main(
+            [
+                "run",
+                "--client",
+                "fake",
+                "--model",
+                "m1",
+                "--effort",
+                "high",
+                "--prompt",
+                f"STDOUT s{session_id}",
+                "--session",
+                session_id,
+            ]
+        )
+        capsys.readouterr()
+
+    rc = main(["session", "report", "--tag", "sprint-1", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["tag"] == "sprint-1"
+    assert data["session_count"] == 2
+    assert data["executions"] >= 2
+
+
+def test_session_report_by_tag_no_sessions(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    rc = main(["session", "report", "--tag", "ghost"])
+    assert rc == 0
+    assert "no sessions tagged" in capsys.readouterr().out
+
+
+def test_session_report_no_selector_exits_error(capsys):
+    rc = main(["session", "report"])
+    assert rc == 1
+    assert "provide" in capsys.readouterr().err
