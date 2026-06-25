@@ -93,7 +93,7 @@ async def _sse_generator(
     yield {"data": json.dumps({"type": "complete", **_to_dict(response)})}
 
 
-@router.post("/run")
+@router.post("/run", responses={400: {"description": "Unknown or unsupported client"}})
 async def run(body: RunBody, request: Request) -> Any:
     """Execute an ML call synchronously (JSON) or as a server-sent event stream (SSE).
 

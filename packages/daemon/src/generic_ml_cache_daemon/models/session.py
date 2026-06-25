@@ -23,13 +23,13 @@ class SessionCreateBody(BaseModel):
 class SessionResponse(BaseModel):
     session_id: str
     tags: List[str]
-    spec: Optional[SpecBody]
+    spec: Optional[SpecBody] = None
 
 
 class SessionStatsResponse(BaseModel):
     session_id: str
     tags: List[str]
-    spec: Optional[SpecBody]
+    spec: Optional[SpecBody] = None
     calls: int
     hits: int
     hit_rate: float

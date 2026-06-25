@@ -21,5 +21,5 @@ class ReadyResponse(BaseModel):
 class InfoResponse(BaseModel):
     version: str
     store_root: str
-    session_id: Optional[str]
+    session_id: Optional[str] = None
     adapters: List[str]

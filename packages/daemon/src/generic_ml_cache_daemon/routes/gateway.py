@@ -58,7 +58,14 @@ def _build_usage(execution: Any) -> dict:
     }
 
 
-@router.post("/v1/messages", response_model=MessagesResponse)
+@router.post(
+    "/v1/messages",
+    responses={
+        422: {"description": "Multi-turn request (only single-turn supported in 0.13.0)"},
+        502: {"description": "Upstream Anthropic call failed"},
+        503: {"description": "Anthropic adapter not available"},
+    },
+)
 async def proxy_messages(body: MessagesRequest, request: Request) -> MessagesResponse:
     """Cache-aware proxy for POST https://api.anthropic.com/v1/messages.
 

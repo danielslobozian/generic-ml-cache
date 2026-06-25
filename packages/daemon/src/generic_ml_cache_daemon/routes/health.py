@@ -19,7 +19,7 @@ from generic_ml_cache_daemon.models.health import HealthResponse, InfoResponse, 
 router = APIRouter()
 
 
-@router.get("/health", response_model=HealthResponse)
+@router.get("/health")
 def get_health() -> HealthResponse:
     """Liveness: confirm the daemon process is alive."""
     return HealthResponse(status="ok")

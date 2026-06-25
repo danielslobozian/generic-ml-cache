@@ -39,14 +39,14 @@ def _session_response(metrics, session_id: str) -> SessionResponse:
     )
 
 
-@router.get("", response_model=SessionListResponse)
+@router.get("")
 def list_sessions(request: Request) -> SessionListResponse:
     """Return all known session IDs."""
     metrics = request.app.state.wired.metrics
     return SessionListResponse(session_ids=metrics.list_session_ids())
 
 
-@router.post("", response_model=SessionResponse, status_code=201)
+@router.post("", status_code=201)
 def create_session(body: SessionCreateBody, request: Request) -> SessionResponse:
     """Create a new session, optionally seeding it with tags and/or a spec."""
     session_id = secrets.token_hex(8)
@@ -61,7 +61,7 @@ def create_session(body: SessionCreateBody, request: Request) -> SessionResponse
     return _session_response(metrics, session_id)
 
 
-@router.get("/{session_id}", response_model=SessionResponse)
+@router.get("/{session_id}", responses={404: {"description": "Session not found"}})
 def get_session(session_id: str, request: Request) -> SessionResponse:
     """Return tags and spec for a session."""
     metrics = request.app.state.wired.metrics
@@ -72,7 +72,7 @@ def get_session(session_id: str, request: Request) -> SessionResponse:
     return SessionResponse(session_id=session_id, tags=tags, spec=_spec_to_body(spec))
 
 
-@router.get("/{session_id}/stats", response_model=SessionStatsResponse)
+@router.get("/{session_id}/stats")
 def get_session_stats(session_id: str, request: Request) -> SessionStatsResponse:
     """Return call/hit statistics for a session."""
     metrics = request.app.state.wired.metrics
@@ -91,7 +91,7 @@ def get_session_stats(session_id: str, request: Request) -> SessionStatsResponse
     )
 
 
-@router.put("/{session_id}/spec", response_model=SessionResponse, status_code=200)
+@router.put("/{session_id}/spec", status_code=200)
 def set_session_spec(session_id: str, body: SpecBody, request: Request) -> SessionResponse:
     """Attach or replace the execution spec for a session."""
     metrics = request.app.state.wired.metrics
@@ -108,7 +108,7 @@ def clear_session_spec(session_id: str, request: Request) -> None:
     request.app.state.wired.metrics.clear_session_spec(session_id)
 
 
-@router.post("/{session_id}/tags", response_model=SessionResponse, status_code=201)
+@router.post("/{session_id}/tags", status_code=201)
 def add_session_tag(session_id: str, body: TagBody, request: Request) -> SessionResponse:
     """Add a tag to a session."""
     metrics = request.app.state.wired.metrics

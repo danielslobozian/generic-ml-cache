@@ -41,7 +41,7 @@ def _job_to_response(job: Job) -> JobResponse:
     )
 
 
-@router.post("", response_model=JobResponse, status_code=202)
+@router.post("", status_code=202)
 def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
     """Submit an execution to run in the background. Returns immediately with
     a job_id in 'pending' state."""
@@ -52,14 +52,14 @@ def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
     return _job_to_response(job)
 
 
-@router.get("", response_model=Dict[str, Any])
+@router.get("")
 def list_jobs(request: Request) -> Dict[str, Any]:
     """Return all known job IDs."""
     registry = request.app.state.job_registry
     return {"job_ids": registry.list_ids()}
 
 
-@router.get("/{job_id}", response_model=JobResponse)
+@router.get("/{job_id}", responses={404: {"description": "Job not found"}})
 def get_job(job_id: str, request: Request) -> JobResponse:
     """Return the current status of a job."""
     registry = request.app.state.job_registry
@@ -69,7 +69,7 @@ def get_job(job_id: str, request: Request) -> JobResponse:
     return _job_to_response(job)
 
 
-@router.get("/{job_id}/stream")
+@router.get("/{job_id}/stream", responses={404: {"description": "Job not found"}})
 async def stream_job(job_id: str, request: Request) -> Any:
     """SSE stream for a job. Emits a 'status' event every 100ms until the job
     completes, then a final 'complete' or 'error' event."""

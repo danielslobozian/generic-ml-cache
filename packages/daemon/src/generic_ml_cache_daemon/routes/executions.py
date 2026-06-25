@@ -24,7 +24,7 @@ from generic_ml_cache_daemon.models.execution import (
 router = APIRouter()
 
 
-@router.get("/executions", response_model=ExecutionListResponse)
+@router.get("/executions")
 def list_executions(request: Request) -> ExecutionListResponse:
     """Return all current (servable) executions."""
     summaries = request.app.state.wired.repository.current_execution_summaries()
@@ -37,7 +37,13 @@ def list_executions(request: Request) -> ExecutionListResponse:
     return ExecutionListResponse(executions=items, total=len(items))
 
 
-@router.get("/executions/{key}", response_model=ExecutionSummaryResponse)
+@router.get(
+    "/executions/{key}",
+    responses={
+        404: {"description": "Execution not found"},
+        409: {"description": "Ambiguous key prefix matches multiple executions"},
+    },
+)
 def get_execution(key: str, request: Request) -> ExecutionSummaryResponse:
     """Return the execution whose key equals or starts with ``key``."""
     summaries = request.app.state.wired.repository.current_execution_summaries()
@@ -62,7 +68,7 @@ def get_execution(key: str, request: Request) -> ExecutionSummaryResponse:
     )
 
 
-@router.get("/stats", response_model=GlobalStatsResponse)
+@router.get("/stats")
 def get_stats(request: Request) -> GlobalStatsResponse:
     """Return global store statistics."""
     wired = request.app.state.wired
@@ -73,7 +79,7 @@ def get_stats(request: Request) -> GlobalStatsResponse:
     )
 
 
-@router.post("/purge", response_model=PurgeResponse)
+@router.post("/purge", responses={422: {"description": "Unsupported purge scope"}})
 def purge(body: Annotated[PurgeBody, Body(discriminator="by")], request: Request) -> PurgeResponse:
     """Purge (soft-delete) executions by scope."""
     purge_service = request.app.state.wired.purge
