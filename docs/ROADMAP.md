@@ -235,7 +235,28 @@ multi-user service. See the [daemon transport design note](future/daemon-transpo
   arriving from one adapter can be transparently redirected to the adapter configured in
   the session, enabling subscription-aware routing without any change to the calling
   client.
-- Transport-level live status and events.
+- **HTTP API**: FastAPI (MIT) + Uvicorn (MIT) expose every cache operation as a REST
+  endpoint with auto-generated OpenAPI/Swagger UI at `/docs`. Synchronous and
+  SSE-streaming runs share the same `POST /run` endpoint via content negotiation
+  (`Accept: text/event-stream`). Detached jobs use a two-step model: `POST /jobs`
+  returns a `job_id`; `GET /jobs/{id}/stream` is the SSE event tail.
+- **Gateway endpoints**: `POST /gateway/claude/v1/messages` speaks the Anthropic
+  Messages API protocol. Each adapter that supports gateway mode gets its own mount
+  point (`/gateway/<client>/...`) so the client's existing base-URL setting points
+  straight at it. Starting with Claude only; further adapters added as the ecosystem
+  warrants.
+- **Session stats** (`GET /sessions/{id}/stats`): call count, hit count, hit rate,
+  per-client breakdown, and token sums (`input_tokens`, `output_tokens`,
+  `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens`) — each summed over
+  non-null reported values for the session. This is the endpoint the 0.14.0 status
+  bar polls.
+- **Observability**: `GET /health` (liveness), `GET /ready` (readiness),
+  `GET /info` (version, store path, active adapters), `GET /metrics`
+  (Prometheus, `prometheus-client` Apache 2.0, off by default).
+- **Testing**: `starlette.testclient.TestClient` (MIT) drives every endpoint in
+  unit tests without starting a server — the FastAPI community standard, analogous
+  to Spring MockMvc. Core use cases are injected as mocks; a small number of
+  integration tests run against a real in-memory store.
 - Ships as a **dedicated, independently-versioned package** (`generic-ml-cache-daemon`),
   versioned against a `generic-ml-cache-core>=X` range.
 - Strictly local and single-user — see [Positioning](design/positioning.md).

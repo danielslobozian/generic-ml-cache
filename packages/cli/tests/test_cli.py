@@ -962,6 +962,168 @@ def test_session_tag_add_json_output(tmp_path, monkeypatch, capsys):
     assert "proj" in data["tags"]
 
 
+def test_session_tag_remove_detaches_tag(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    main(["session", "tag", session_id, "--add", "keep", "--add", "drop"])
+    capsys.readouterr()
+
+    rc = main(["session", "tag", session_id, "--remove", "drop"])
+    assert rc == 0
+    capsys.readouterr()
+
+    main(["session", "report", session_id, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert "keep" in data.get("tags", [])
+    assert "drop" not in data.get("tags", [])
+
+
+def test_session_tag_remove_noop_when_tag_absent(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(["session", "tag", session_id, "--remove", "ghost"])
+    assert rc == 0
+
+
+def test_session_tag_no_flags_returns_error(capsys):
+    rc = main(["session", "tag", "some-id"])
+    assert rc == 2
+    assert "add" in capsys.readouterr().err
+
+
+# --- session spec (0.13.0) ---------------------------------------------------
+
+
+def test_session_start_with_spec_attaches_spec(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    rc = main(
+        ["session", "start", "--client", "claude", "--model", "claude-opus-4-8", "--effort", "high"]
+    )
+    assert rc == 0
+    session_id = capsys.readouterr().out.strip()
+    assert session_id  # non-empty hex id
+
+
+def test_session_start_partial_spec_returns_error(capsys):
+    rc = main(["session", "start", "--client", "claude"])
+    assert rc == 2
+    assert "effort" in capsys.readouterr().err or "model" in capsys.readouterr().err
+
+
+def test_session_update_sets_spec(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "gemini",
+            "--model",
+            "gemini-2.0-flash",
+            "--effort",
+            "",
+        ]
+    )
+    assert rc == 0
+
+
+def test_session_update_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "claude",
+            "--model",
+            "claude-sonnet-4-6",
+            "--effort",
+            "medium",
+            "--json",
+        ]
+    )
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["session"] == session_id
+    assert data["spec"]["client"] == "claude"
+    assert data["spec"]["model"] == "claude-sonnet-4-6"
+    assert data["spec"]["effort"] == "medium"
+
+
+def test_session_clear_spec_succeeds(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+    main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "claude",
+            "--model",
+            "m",
+            "--effort",
+            "low",
+        ]
+    )
+    capsys.readouterr()
+
+    rc = main(["session", "clear-spec", session_id])
+    assert rc == 0
+
+
+def test_session_clear_spec_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(["session", "clear-spec", session_id, "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["session"] == session_id
+    assert data["spec"] is None
+
+
 def test_session_report_by_tag_aggregates_sessions(tmp_path, monkeypatch, capsys):
     import json
 
@@ -1131,3 +1293,81 @@ def test_purge_session_tag_unknown_tag_is_noop(tmp_path, monkeypatch, capsys):
     rc = main(["purge", "--session-tag", "ghost"])
     assert rc == 0
     assert "nothing to purge" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# daemon subcommand
+# ---------------------------------------------------------------------------
+
+
+def test_daemon_no_subcommand_returns_1(capsys):
+    rc = main(["daemon"])
+    assert rc == 1
+
+
+def test_daemon_start_no_daemon_package(monkeypatch):
+    import sys
+
+    saved = sys.modules.get("generic_ml_cache_daemon")
+    sys.modules["generic_ml_cache_daemon"] = None  # block import
+    sys.modules["generic_ml_cache_daemon.app"] = None
+    try:
+        rc = main(["daemon", "start"])
+        assert rc == 1
+    finally:
+        if saved is None:
+            sys.modules.pop("generic_ml_cache_daemon", None)
+            sys.modules.pop("generic_ml_cache_daemon.app", None)
+        else:
+            sys.modules["generic_ml_cache_daemon"] = saved
+
+
+def test_daemon_status_not_running(capsys):
+    rc = main(["daemon", "status", "--host", "127.0.0.1", "--port", "19999"])
+    assert rc == 1
+    assert "not running" in capsys.readouterr().out
+
+
+def test_daemon_status_json_not_running(capsys):
+    import json
+
+    rc = main(["daemon", "status", "--host", "127.0.0.1", "--port", "19999", "--json"])
+    assert rc == 1
+    data = json.loads(capsys.readouterr().out)
+    assert data["status"] == "not running"
+
+
+def test_daemon_stop_not_running(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    rc = main(["daemon", "stop", "--host", "127.0.0.1", "--port", "19999"])
+    assert rc == 1
+
+
+def test_daemon_start_calls_uvicorn(tmp_path, monkeypatch, capsys):
+    from unittest.mock import MagicMock, patch
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    mock_app = MagicMock()
+    mock_create_app = MagicMock(return_value=mock_app)
+    mock_uvicorn = MagicMock()
+
+    with (
+        patch("generic_ml_cache_cli.cli._store_root", return_value=tmp_path),
+        patch.dict(
+            "sys.modules",
+            {
+                "generic_ml_cache_daemon": MagicMock(),
+                "generic_ml_cache_daemon.app": MagicMock(create_app=mock_create_app),
+                "uvicorn": mock_uvicorn,
+            },
+        ),
+    ):
+        rc = main(["daemon", "start"])
+
+    assert rc == 0
+    mock_uvicorn.run.assert_called_once()

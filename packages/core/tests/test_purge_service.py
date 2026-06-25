@@ -20,6 +20,7 @@ from generic_ml_cache_core.application.domain.model.identity.managed_call_identi
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
@@ -87,6 +88,21 @@ class FakeMetrics(MetricsPort):
 
     def add_session_tag(self, session_id: str, tag: str) -> None:
         pass
+
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        pass
+
+    def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
+        pass
+
+    def clear_session_spec(self, session_id: str) -> None:
+        pass
+
+    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
+        return None
+
+    def list_session_ids(self) -> List[str]:
+        return []
 
     def session_tags(self, session_id: str) -> List[str]:
         return []

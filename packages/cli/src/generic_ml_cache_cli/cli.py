@@ -50,6 +50,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
 )
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
@@ -984,6 +985,99 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_daemon(args: argparse.Namespace) -> int:
+    print("usage: gmlcache daemon {start,stop,status}", file=sys.stderr)
+    return 1
+
+
+def _cmd_daemon_start(args: argparse.Namespace) -> int:
+    try:
+        from generic_ml_cache_daemon.app import create_app  # noqa: PLC0415
+    except ImportError:
+        print(
+            "error: generic-ml-cache-daemon is not installed. "
+            "Install it with: pip install generic-ml-cache-daemon",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        import uvicorn  # noqa: PLC0415
+    except ImportError:
+        print("error: uvicorn is not installed (install generic-ml-cache-daemon)", file=sys.stderr)
+        return 1
+
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+
+    session_id: Optional[str] = getattr(args, "session", None) or None
+    enable_metrics: bool = getattr(args, "metrics", False)
+    host: str = args.host
+    port: int = args.port
+
+    application = create_app(store_root, session_id=session_id, enable_metrics=enable_metrics)
+    uvicorn.run(application, host=host, port=port)
+    return 0
+
+
+def _cmd_daemon_status(args: argparse.Namespace) -> int:
+    import json as _json  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    host: str = args.host
+    port: int = args.port
+    url = f"http://{host}:{port}/health"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+            status = data.get("status", "unknown")
+    except urllib.error.URLError:
+        status = "not running"
+        if not getattr(args, "json", False):
+            print(f"daemon: {status}")
+            return 1
+
+    if getattr(args, "json", False):
+        import json as _json2  # noqa: PLC0415
+
+        print(_json2.dumps({"status": status, "host": host, "port": port}))
+    else:
+        print(f"daemon: {status} (http://{host}:{port})")
+    return 0 if status == "ok" else 1
+
+
+def _cmd_daemon_stop(args: argparse.Namespace) -> int:
+    import signal  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    host: str = args.host
+    port: int = args.port
+    health_url = f"http://{host}:{port}/health"
+    try:
+        urllib.request.urlopen(health_url, timeout=3)  # noqa: S310
+    except urllib.error.URLError:
+        print("daemon: not running", file=sys.stderr)
+        return 1
+
+    store_root = _store_root()
+    pid_path = (store_root / ".daemon.pid") if store_root else None
+    if pid_path is None or not pid_path.exists():
+        print("daemon: running but no PID file found — send SIGTERM manually", file=sys.stderr)
+        return 1
+
+    try:
+        pid = int(pid_path.read_text().strip())
+        os.kill(pid, signal.SIGTERM)
+        pid_path.unlink(missing_ok=True)
+        print(f"daemon: sent SIGTERM to PID {pid}")
+        return 0
+    except (ValueError, OSError) as exc:
+        print(f"daemon: failed to stop — {exc}", file=sys.stderr)
+        return 1
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     try:
         path, created = config.write_default_config()
@@ -1498,6 +1592,21 @@ def _resolve_session(args: argparse.Namespace) -> Optional[str]:
     return flag if flag else (os.environ.get("GMLCACHE_SESSION") or None)
 
 
+def _parse_spec_args(args: argparse.Namespace) -> "Optional[SessionSpec]":
+    """Return a SessionSpec from --client/--model/--effort, or None if all are absent.
+    Raises ValueError on a partial spec (some but not all flags supplied).
+    """
+    client = getattr(args, "client", None)
+    model = getattr(args, "model", None)
+    effort = getattr(args, "effort", None)
+    provided = [x is not None for x in (client, model, effort)]
+    if not any(provided):
+        return None
+    if not all(provided):
+        raise ValueError("--client, --model, and --effort must all be supplied together")
+    return SessionSpec(client=client, model=model, effort=effort)
+
+
 def _cmd_session_start(args: argparse.Namespace) -> int:
     import secrets
 
@@ -1505,11 +1614,71 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
     # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
     print(session_id)
     tags = getattr(args, "tag", None) or []
-    if tags:
+    try:
+        spec = _parse_spec_args(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if tags or spec:
         settings = config.resolve_settings(config.load())
         wired = build_use_cases(Path(str(settings["store"][0])))
         for tag in tags:
             wired.metrics.add_session_tag(session_id, tag)
+        if spec is not None:
+            wired.metrics.set_session_spec(session_id, spec)
+    return 0
+
+
+def _cmd_session_update(args: argparse.Namespace) -> int:
+    try:
+        spec = _parse_spec_args(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if spec is None:
+        print(
+            "error: --client, --model, and --effort are all required for session update",
+            file=sys.stderr,
+        )
+        return 2
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    wired = build_use_cases(store_root)
+    wired.metrics.set_session_spec(args.session_id, spec)
+    if not args.json:
+        print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
+    else:
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "session": args.session_id,
+                    "spec": {
+                        "client": spec.client,
+                        "model": spec.model,
+                        "effort": spec.effort,
+                    },
+                },
+                indent=2,
+            )
+        )
+    return 0
+
+
+def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    wired = build_use_cases(store_root)
+    wired.metrics.clear_session_spec(args.session_id)
+    if not args.json:
+        print(f"spec cleared for session {args.session_id}")
+    else:
+        import json
+
+        print(json.dumps({"session": args.session_id, "spec": None}, indent=2))
     return 0
 
 
@@ -1670,12 +1839,17 @@ def _cmd_session_report_by_tag(wired, tag: str, as_json: bool) -> int:
 
 
 def _cmd_session_tag(args: argparse.Namespace) -> int:
+    if not args.add and not args.remove:
+        print("error: supply at least one --add or --remove flag", file=sys.stderr)
+        return 2
     store_root = _store_root()
     if store_root is None:
         return 4
     wired = build_use_cases(store_root)
     for tag in args.add:
         wired.metrics.add_session_tag(args.session_id, tag)
+    for tag in args.remove:
+        wired.metrics.remove_session_tag(args.session_id, tag)
     if not args.json:
         tags = wired.metrics.session_tags(args.session_id)
         print(f"tags : {', '.join(sorted(tags))}")
@@ -1689,7 +1863,7 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
 
 def _cmd_session(args: argparse.Namespace) -> int:
     print(
-        "usage: gmlcache session start | gmlcache session tag <id> | gmlcache session report <id>",
+        "usage: gmlcache session start | tag | update | clear-spec | report",
         file=sys.stderr,
     )
     return 2
@@ -2186,15 +2360,57 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAG",
         help="attach a tag to the session (repeatable)",
     )
+    session_start.add_argument("--client", metavar="CLIENT", help="adapter for the session spec")
+    session_start.add_argument("--model", metavar="MODEL", help="model for the session spec")
+    session_start.add_argument(
+        "--effort",
+        metavar="EFFORT",
+        help="effort for the session spec (empty string for Cursor)",
+    )
     session_start.set_defaults(func=_cmd_session_start)
-    session_tag_cmd = session_sub.add_parser("tag", help="add tags to an existing session")
+    session_update = session_sub.add_parser(
+        "update", help="replace the execution spec on an existing session"
+    )
+    session_update.add_argument("session_id", help="the session id to update")
+    session_update.add_argument(
+        "--client", required=True, metavar="CLIENT", help="adapter for the new spec"
+    )
+    session_update.add_argument(
+        "--model", required=True, metavar="MODEL", help="model for the new spec"
+    )
+    session_update.add_argument(
+        "--effort",
+        required=True,
+        metavar="EFFORT",
+        help="effort for the new spec (empty string for Cursor)",
+    )
+    session_update.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_update.set_defaults(func=_cmd_session_update)
+    session_clear_spec = session_sub.add_parser(
+        "clear-spec", help="remove the execution spec from an existing session"
+    )
+    session_clear_spec.add_argument("session_id", help="the session id to clear the spec from")
+    session_clear_spec.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON"
+    )
+    session_clear_spec.set_defaults(func=_cmd_session_clear_spec)
+    session_tag_cmd = session_sub.add_parser(
+        "tag", help="add or remove tags on an existing session"
+    )
     session_tag_cmd.add_argument("session_id", help="the session id to tag")
     session_tag_cmd.add_argument(
         "--add",
         action="append",
-        required=True,
+        default=[],
         metavar="TAG",
         help="tag to attach (repeatable)",
+    )
+    session_tag_cmd.add_argument(
+        "--remove",
+        action="append",
+        default=[],
+        metavar="TAG",
+        help="tag to detach (repeatable)",
     )
     session_tag_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_tag_cmd.set_defaults(func=_cmd_session_tag)
@@ -2251,6 +2467,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="create the config file in the default location (if absent), then show the store",
     )
     init.set_defaults(func=_cmd_init)
+
+    daemon = sub.add_parser("daemon", help="manage the generic-ml-cache HTTP daemon")
+    daemon_sub = daemon.add_subparsers(dest="daemon_command")
+
+    _daemon_host_port = {"host": "127.0.0.1", "port": 8765}
+
+    daemon_start = daemon_sub.add_parser("start", help="start the HTTP daemon (foreground)")
+    daemon_start.add_argument("--host", default=_daemon_host_port["host"], metavar="HOST")
+    daemon_start.add_argument("--port", type=int, default=_daemon_host_port["port"], metavar="PORT")
+    daemon_start.add_argument("--session", metavar="SESSION_ID", help="bind daemon to a session")
+    daemon_start.add_argument("--metrics", action="store_true", help="enable Prometheus /metrics")
+    daemon_start.set_defaults(func=_cmd_daemon_start)
+
+    daemon_status = daemon_sub.add_parser("status", help="check if the daemon is running")
+    daemon_status.add_argument("--host", default=_daemon_host_port["host"], metavar="HOST")
+    daemon_status.add_argument(
+        "--port", type=int, default=_daemon_host_port["port"], metavar="PORT"
+    )
+    daemon_status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    daemon_status.set_defaults(func=_cmd_daemon_status)
+
+    daemon_stop = daemon_sub.add_parser("stop", help="send SIGTERM to a running daemon")
+    daemon_stop.add_argument("--host", default=_daemon_host_port["host"], metavar="HOST")
+    daemon_stop.add_argument("--port", type=int, default=_daemon_host_port["port"], metavar="PORT")
+    daemon_stop.set_defaults(func=_cmd_daemon_stop)
+
+    daemon.set_defaults(func=_cmd_daemon)
 
     return parser
 

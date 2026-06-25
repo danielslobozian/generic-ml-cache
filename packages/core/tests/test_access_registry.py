@@ -11,6 +11,7 @@ from generic_ml_cache_core.adapter.out.metrics.access_registry import (
     _SCHEMA,
     AccessRegistry,
 )
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 
 
 class _BrokenRegistry(AccessRegistry):
@@ -110,3 +111,52 @@ def test_session_ids_for_tag_returns_empty_list_when_registry_unavailable(tmp_pa
 
 def test_last_access_returns_empty_dict_when_registry_unavailable(tmp_path):
     assert _BrokenRegistry(tmp_path).last_access() == {}
+
+
+# --- session spec -----------------------------------------------------------
+
+
+def test_set_and_retrieve_session_spec(tmp_path):
+    registry = AccessRegistry(tmp_path)
+    spec = SessionSpec(client="claude", model="claude-opus-4-8", effort="medium")
+    registry.set_session_spec("s1", spec)
+    assert registry.session_spec_for_id("s1") == spec
+
+
+def test_set_session_spec_replaces_existing(tmp_path):
+    registry = AccessRegistry(tmp_path)
+    registry.set_session_spec("s1", SessionSpec(client="claude", model="old", effort="low"))
+    new_spec = SessionSpec(client="claude", model="new", effort="high")
+    registry.set_session_spec("s1", new_spec)
+    assert registry.session_spec_for_id("s1") == new_spec
+
+
+def test_clear_session_spec_removes_it(tmp_path):
+    registry = AccessRegistry(tmp_path)
+    registry.set_session_spec("s1", SessionSpec(client="claude", model="m", effort=""))
+    registry.clear_session_spec("s1")
+    assert registry.session_spec_for_id("s1") is None
+
+
+def test_clear_session_spec_noop_when_absent(tmp_path):
+    registry = AccessRegistry(tmp_path)
+    registry.clear_session_spec("ghost")  # must not raise
+    assert registry.session_spec_for_id("ghost") is None
+
+
+def test_session_spec_for_id_returns_none_for_unknown(tmp_path):
+    assert AccessRegistry(tmp_path).session_spec_for_id("no-such-session") is None
+
+
+def test_set_session_spec_does_not_raise_when_unavailable(tmp_path):
+    _BrokenRegistry(tmp_path).set_session_spec(
+        "s1", SessionSpec(client="claude", model="m", effort="")
+    )
+
+
+def test_clear_session_spec_does_not_raise_when_unavailable(tmp_path):
+    _BrokenRegistry(tmp_path).clear_session_spec("s1")
+
+
+def test_session_spec_for_id_returns_none_when_unavailable(tmp_path):
+    assert _BrokenRegistry(tmp_path).session_spec_for_id("s1") is None

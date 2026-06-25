@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+
 # Every cache resolution appends one event; HIT is the one queried for hit-rate.
 HIT = "hit"
 MISS = "miss"
@@ -54,6 +56,7 @@ class AccessRegistry:
         conn.execute(_SCHEMA)
         self._ensure_session_column(conn)
         self._ensure_session_tags_table(conn)
+        self._ensure_session_specs_table(conn)
         return conn
 
     @staticmethod
@@ -73,6 +76,21 @@ class AccessRegistry:
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 session_id TEXT NOT NULL,
                 tag        TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+    @staticmethod
+    def _ensure_session_specs_table(conn: sqlite3.Connection) -> None:
+        # Additive migration for registries created before session specs existed.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_specs (
+                session_id TEXT PRIMARY KEY,
+                client     TEXT NOT NULL,
+                model      TEXT NOT NULL,
+                effort     TEXT NOT NULL
             )
             """
         )
@@ -232,6 +250,21 @@ class AccessRegistry:
         except Exception:
             pass
 
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        """Detach ``tag`` from ``session_id``. No-op when the tag is absent. Never raises."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "DELETE FROM session_tags WHERE session_id = ? AND tag = ?",
+                    (session_id, tag),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
     def session_tags_for_id(self, session_id: str) -> List[str]:
         """Return the distinct tags attached to ``session_id`` ([] if unknown or unavailable)."""
         try:
@@ -257,6 +290,69 @@ class AccessRegistry:
                     (tag,),
                 ).fetchall()
                 return [session_id for (session_id,) in rows]
+            finally:
+                conn.close()
+        except Exception:
+            return []
+
+    def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
+        """Upsert the execution spec for ``session_id``. Never raises."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "INSERT INTO session_specs (session_id, client, model, effort) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(session_id) DO UPDATE SET "
+                    "client=excluded.client, model=excluded.model, effort=excluded.effort",
+                    (session_id, spec.client, spec.model, spec.effort),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
+    def clear_session_spec(self, session_id: str) -> None:
+        """Remove the execution spec for ``session_id``. No-op if absent. Never raises."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute("DELETE FROM session_specs WHERE session_id = ?", (session_id,))
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
+    def session_spec_for_id(self, session_id: str) -> Optional[SessionSpec]:
+        """Return the execution spec for ``session_id``, or None if unset."""
+        try:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT client, model, effort FROM session_specs WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                return SessionSpec(client=row[0], model=row[1], effort=row[2]) if row else None
+            finally:
+                conn.close()
+        except Exception:
+            return None
+
+    def list_session_ids(self) -> List[str]:
+        """Return all known session IDs, unioned across events, tags, and specs tables."""
+        try:
+            conn = self._connect()
+            try:
+                self._ensure_session_tags_table(conn)
+                self._ensure_session_specs_table(conn)
+                rows = conn.execute(
+                    "SELECT DISTINCT session_id FROM access_events WHERE session_id IS NOT NULL "
+                    "UNION SELECT session_id FROM session_tags "
+                    "UNION SELECT session_id FROM session_specs"
+                ).fetchall()
+                return [row[0] for row in rows]
             finally:
                 conn.close()
         except Exception:

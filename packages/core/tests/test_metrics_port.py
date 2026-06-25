@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 
 import pytest
 
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
 
 
@@ -18,6 +19,7 @@ class InMemoryMetrics(MetricsPort):
     def __init__(self) -> None:
         self._events: list = []
         self._session_tags: Dict[str, List[str]] = {}
+        self._session_specs: Dict[str, SessionSpec] = {}
 
     def record_event(
         self,
@@ -91,11 +93,29 @@ class InMemoryMetrics(MetricsPort):
     def add_session_tag(self, session_id: str, tag: str) -> None:
         self._session_tags.setdefault(session_id, []).append(tag)
 
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        tags = self._session_tags.get(session_id, [])
+        if tag in tags:
+            tags.remove(tag)
+
     def session_tags(self, session_id: str) -> List[str]:
         return list(dict.fromkeys(self._session_tags.get(session_id, [])))
 
     def session_ids_for_tag(self, tag: str) -> List[str]:
         return list(dict.fromkeys(sid for sid, tags in self._session_tags.items() if tag in tags))
+
+    def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
+        self._session_specs[session_id] = spec
+
+    def clear_session_spec(self, session_id: str) -> None:
+        self._session_specs.pop(session_id, None)
+
+    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
+        return self._session_specs.get(session_id)
+
+    def list_session_ids(self) -> List[str]:
+        all_ids = set(self._tags.keys()) | set(self._session_specs.keys())
+        return sorted(all_ids)
 
 
 def test_port_cannot_be_instantiated_directly():
@@ -189,3 +209,48 @@ def test_session_tags_are_isolated_per_session():
     metrics.add_session_tag("s2", "y")
     assert metrics.session_tags("s1") == ["x"]
     assert metrics.session_tags("s2") == ["y"]
+
+
+# --- session spec -------------------------------------------------------------
+
+
+def test_session_spec_none_when_unset():
+    assert InMemoryMetrics().session_spec("no-such-session") is None
+
+
+def test_set_session_spec_and_retrieve():
+    metrics = InMemoryMetrics()
+    spec = SessionSpec(client="claude", model="claude-opus-4-8", effort="medium")
+    metrics.set_session_spec("s1", spec)
+    assert metrics.session_spec("s1") == spec
+
+
+def test_set_session_spec_replaces_previous():
+    metrics = InMemoryMetrics()
+    metrics.set_session_spec("s1", SessionSpec(client="claude", model="old", effort="low"))
+    new_spec = SessionSpec(client="claude", model="new", effort="high")
+    metrics.set_session_spec("s1", new_spec)
+    assert metrics.session_spec("s1") == new_spec
+
+
+def test_clear_session_spec_removes_it():
+    metrics = InMemoryMetrics()
+    metrics.set_session_spec("s1", SessionSpec(client="claude", model="m", effort=""))
+    metrics.clear_session_spec("s1")
+    assert metrics.session_spec("s1") is None
+
+
+def test_clear_session_spec_noop_when_absent():
+    metrics = InMemoryMetrics()
+    metrics.clear_session_spec("unknown")  # must not raise
+    assert metrics.session_spec("unknown") is None
+
+
+def test_session_specs_are_isolated_per_session():
+    metrics = InMemoryMetrics()
+    spec1 = SessionSpec(client="claude", model="m1", effort="low")
+    spec2 = SessionSpec(client="gemini", model="m2", effort="")
+    metrics.set_session_spec("s1", spec1)
+    metrics.set_session_spec("s2", spec2)
+    assert metrics.session_spec("s1") == spec1
+    assert metrics.session_spec("s2") == spec2
