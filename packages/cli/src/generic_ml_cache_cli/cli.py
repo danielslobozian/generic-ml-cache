@@ -1202,6 +1202,13 @@ def _cmd_list(args: argparse.Namespace) -> int:
     excluded_tags = set(getattr(args, "exclude_tag", None) or [])
     if excluded_tags:
         entries = [entry for entry in entries if not excluded_tags & set(entry["tags"])]
+    wanted_session_tags = list(getattr(args, "session_tag", None) or [])
+    if wanted_session_tags:
+        allowed_keys: set = set()
+        for session_tag in wanted_session_tags:
+            for session_id in wired.metrics.session_ids_for_tag(session_tag):
+                allowed_keys.update(wired.metrics.execution_keys_for_session(session_id))
+        entries = [entry for entry in entries if entry["key"] in allowed_keys]
 
     if args.json:
         print(json.dumps({"executions": entries}, indent=2))
@@ -2086,6 +2093,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="exclude_tag",
         metavar="TAG",
         help="drop executions carrying any of these tags (repeatable; match-any)",
+    )
+    listp.add_argument(
+        "--session-tag",
+        action="append",
+        dest="session_tag",
+        metavar="TAG",
+        help="only executions from sessions carrying this tag (repeatable; match-any)",
     )
     listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     listp.set_defaults(func=_cmd_list)

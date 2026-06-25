@@ -1012,3 +1012,73 @@ def test_session_report_no_selector_exits_error(capsys):
     rc = main(["session", "report"])
     assert rc == 1
     assert "provide" in capsys.readouterr().err
+
+
+def test_list_session_tag_filters_by_session_tag(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    # Session A tagged "feature", one execution.
+    main(["session", "start", "--tag", "feature"])
+    session_a = capsys.readouterr().out.strip()
+    main(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT in-feature",
+            "--session",
+            session_a,
+        ]
+    )
+    capsys.readouterr()
+
+    # Session B, no tag, one execution.
+    main(["session", "start"])
+    session_b = capsys.readouterr().out.strip()
+    main(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT not-in-feature",
+            "--session",
+            session_b,
+        ]
+    )
+    capsys.readouterr()
+
+    main(["list", "--session-tag", "feature", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    keys = [entry["key"] for entry in data["executions"]]
+    assert len(keys) == 1
+
+
+def test_list_session_tag_no_match_returns_empty(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    run_cli(
+        ["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT x"]
+    )
+    capsys.readouterr()
+
+    main(["list", "--session-tag", "ghost", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["executions"] == []
