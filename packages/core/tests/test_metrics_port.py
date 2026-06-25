@@ -113,6 +113,10 @@ class InMemoryMetrics(MetricsPort):
     def session_spec(self, session_id: str) -> Optional[SessionSpec]:
         return self._session_specs.get(session_id)
 
+    def list_session_ids(self) -> List[str]:
+        all_ids = set(self._tags.keys()) | set(self._session_specs.keys())
+        return sorted(all_ids)
+
 
 def test_port_cannot_be_instantiated_directly():
     with pytest.raises(TypeError):

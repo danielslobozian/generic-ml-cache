@@ -101,6 +101,9 @@ class FakeMetrics(MetricsPort):
     def session_spec(self, session_id: str) -> Optional[SessionSpec]:
         return None
 
+    def list_session_ids(self) -> List[str]:
+        return []
+
     def session_tags(self, session_id: str) -> List[str]:
         return []
 

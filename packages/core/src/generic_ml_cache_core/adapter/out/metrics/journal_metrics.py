@@ -86,3 +86,6 @@ class JournalMetrics(MetricsPort):
 
     def session_spec(self, session_id: str) -> Optional[SessionSpec]:
         return self._registry.session_spec_for_id(session_id)
+
+    def list_session_ids(self) -> List[str]:
+        return self._registry.list_session_ids()

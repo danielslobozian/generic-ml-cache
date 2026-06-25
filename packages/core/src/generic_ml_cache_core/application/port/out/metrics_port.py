@@ -125,3 +125,7 @@ class MetricsPort(ABC):
     @abstractmethod
     def session_spec(self, session_id: str) -> Optional[SessionSpec]:
         """Return the execution spec for ``session_id``, or None if unset."""
+
+    @abstractmethod
+    def list_session_ids(self) -> List[str]:
+        """Return all known session IDs (empty list if none or on error)."""

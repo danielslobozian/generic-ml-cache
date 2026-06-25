@@ -340,6 +340,24 @@ class AccessRegistry:
         except Exception:
             return None
 
+    def list_session_ids(self) -> List[str]:
+        """Return all known session IDs, unioned across events, tags, and specs tables."""
+        try:
+            conn = self._connect()
+            try:
+                self._ensure_session_tags_table(conn)
+                self._ensure_session_specs_table(conn)
+                rows = conn.execute(
+                    "SELECT DISTINCT session_id FROM access_events WHERE session_id IS NOT NULL "
+                    "UNION SELECT session_id FROM session_tags "
+                    "UNION SELECT session_id FROM session_specs"
+                ).fetchall()
+                return [row[0] for row in rows]
+            finally:
+                conn.close()
+        except Exception:
+            return []
+
     def last_access(self) -> Dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
         ({} if unavailable). An execution absent here has never been seen by the
