@@ -46,10 +46,12 @@ def create_app(
 
     from generic_ml_cache_daemon.routes.executions import router as executions_router
     from generic_ml_cache_daemon.routes.health import router as health_router
+    from generic_ml_cache_daemon.routes.run import router as run_router
     from generic_ml_cache_daemon.routes.sessions import router as sessions_router
 
     application.include_router(health_router)
     application.include_router(sessions_router)
     application.include_router(executions_router)
+    application.include_router(run_router)
 
     return application
