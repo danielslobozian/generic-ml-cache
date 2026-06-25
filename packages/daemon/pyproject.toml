@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "generic-ml-cache-daemon"
+version = "0.13.0"
+description = "Local HTTP daemon for generic-ml-cache: REST API, gateway proxy, and session transport. A thin inbound driver over generic-ml-cache-core."
+requires-python = ">=3.9"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Daniel Slobozian" }]
+keywords = ["cache", "llm", "ai", "daemon", "http", "fastapi", "gateway", "proxy"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "generic-ml-cache-core>=0.12.0",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "sse-starlette>=2.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/danielslobozian/generic-ml-cache"
+Repository = "https://github.com/danielslobozian/generic-ml-cache"
+Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
+Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Optional Prometheus /metrics endpoint. Off by default.
+metrics = ["prometheus-client>=0.20"]
+dev = [
+  "pytest>=7",
+  "pytest-cov",
+  "coverage>=7",
+  "ruff>=0.15",
+  "httpx2>=0.28",
+  "prometheus-client>=0.20",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/generic_ml_cache_daemon"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+omit = ["*/generic_ml_cache_daemon/__main__.py"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
