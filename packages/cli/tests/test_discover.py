@@ -2,10 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import subprocess
 import sys
 
 from generic_ml_cache_cli.cli import main
-from generic_ml_cache_core.adapter.out.client.discover import probe, probe_all
+from generic_ml_cache_core.adapter.out.client.discover import (
+    list_models,
+    list_models_all,
+    probe,
+    probe_all,
+)
 
 
 def test_probe_present_client_reports_version():
@@ -39,3 +45,58 @@ def test_doctor_cli_lists_clients(capsys):
     out = capsys.readouterr().out
     assert "fake" in out
     assert "present" in out
+
+
+# --- list_models --------------------------------------------------------------
+
+
+def test_list_models_returns_not_present_for_absent_executable():
+    result = list_models("cursor", executable="definitely-not-a-real-binary-xyz123")
+    assert result.present is False
+    assert result.supported is False
+
+
+def test_list_models_returns_reason_when_subprocess_raises(monkeypatch):
+    def _raise_oserror(*args, **kwargs):
+        raise OSError("cannot exec")
+
+    monkeypatch.setattr(subprocess, "run", _raise_oserror)
+    result = list_models("cursor", executable=sys.executable)
+    assert result.present is True
+    assert result.supported is True
+    assert result.models is None
+    assert "cannot exec" in (result.reason or "")
+
+
+def test_list_models_returns_reason_on_nonzero_exit(monkeypatch):
+    class _FailedProcess:
+        returncode = 1
+        stderr = "unknown flag: --list-models"
+        stdout = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _FailedProcess())
+    result = list_models("cursor", executable=sys.executable)
+    assert result.present is True
+    assert result.supported is True
+    assert result.models is None
+    assert result.reason is not None
+
+
+def test_list_models_all_returns_listing_for_every_registered_client():
+    results = list_models_all()
+    assert isinstance(results, list)
+    assert len(results) >= 1
+
+
+# --- _probe_version failure path via probe() ----------------------------------
+
+
+def test_probe_reports_version_check_failed_when_subprocess_raises(monkeypatch):
+    def _raise_oserror(*args, **kwargs):
+        raise OSError("no such binary")
+
+    monkeypatch.setattr(subprocess, "run", _raise_oserror)
+    status = probe("fake")
+    assert status.present is True
+    assert status.version is None
+    assert "version check failed" in (status.detail or "")
