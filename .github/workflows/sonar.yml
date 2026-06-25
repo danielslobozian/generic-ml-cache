@@ -23,17 +23,20 @@ jobs:
         with:
           python-version: "3.13"
 
-      # core is dependency-free; install it first, then the cli that depends on it.
+      # core is dependency-free; install it first so cli and daemon build against
+      # the in-repo version rather than a PyPI release.
       - name: Install packages (with dev extras)
         run: |
           python -m pip install --upgrade pip
           pip install -e "packages/core[dev]"
           pip install -e "packages/cli[dev]"
+          pip install -e "packages/daemon[dev]"
 
       - name: Run tests with coverage
         run: |
-          python -m pytest packages/core/tests --cov=generic_ml_cache_core --cov-report=xml:packages/core/coverage.xml
-          python -m pytest packages/cli/tests  --cov=generic_ml_cache_cli  --cov-report=xml:packages/cli/coverage.xml
+          python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-report=xml:packages/core/coverage.xml
+          python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-report=xml:packages/cli/coverage.xml
+          python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-report=xml:packages/daemon/coverage.xml
 
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@v5
