@@ -113,6 +113,71 @@ def test_get_stats_calls_zero_for_new_session(client: TestClient) -> None:
     assert stats["hit_rate"] == 0.0
 
 
+def test_get_stats_by_model_empty_for_new_session(client: TestClient) -> None:
+    session_id = client.post("/sessions", json={}).json()["session_id"]
+    stats = client.get(f"/sessions/{session_id}/stats").json()
+    assert stats["by_model"] == []
+
+
+def test_get_stats_by_model_present_after_events(app_and_client) -> None:
+    application, http_client = app_and_client
+    wired = application.state.wired
+    session_id = http_client.post("/sessions", json={}).json()["session_id"]
+
+    wired.metrics.record_event(
+        "record",
+        execution_key="k1",
+        client="claude",
+        model="sonnet",
+        effort="high",
+        session_id=session_id,
+    )
+    wired.metrics.record_event(
+        "hit",
+        execution_key="k1",
+        client="claude",
+        model="sonnet",
+        effort="high",
+        session_id=session_id,
+    )
+
+    stats = http_client.get(f"/sessions/{session_id}/stats").json()
+    assert stats["calls"] == 2
+    assert stats["hits"] == 1
+    assert len(stats["by_model"]) == 1
+    model_row = stats["by_model"][0]
+    assert model_row["client"] == "claude"
+    assert model_row["model"] == "sonnet"
+    assert model_row["executions"] == 1
+    assert model_row["hits"] == 1
+
+
+def test_get_stats_by_model_token_fields_present(app_and_client) -> None:
+    application, http_client = app_and_client
+    wired = application.state.wired
+    session_id = http_client.post("/sessions", json={}).json()["session_id"]
+    wired.metrics.record_event(
+        "record",
+        execution_key="k9",
+        client="openai",
+        model="gpt-4o",
+        effort="",
+        session_id=session_id,
+    )
+
+    stats = http_client.get(f"/sessions/{session_id}/stats").json()
+    model_row = stats["by_model"][0]
+    for token_field in (
+        "spent_input",
+        "spent_output",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "reasoning_tokens",
+        "saved_tokens",
+    ):
+        assert token_field in model_row, f"missing field: {token_field}"
+
+
 # ---------------------------------------------------------------------------
 # PUT /sessions/{id}/spec — set spec
 # ---------------------------------------------------------------------------

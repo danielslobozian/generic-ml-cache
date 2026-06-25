@@ -39,6 +39,9 @@ class ModelUsage:
     model: str
     spent_input: int
     spent_output: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    reasoning_tokens: int
     saved_tokens: int
     executions: int
     hits: int
@@ -105,7 +108,16 @@ def build_session_report(
         d["invocations"] += 1
         m = models.setdefault(
             (row.client, row.model),
-            {"in": 0, "out": 0, "saved": 0, "executions": 0, "hits": 0},
+            {
+                "in": 0,
+                "out": 0,
+                "cache_read": 0,
+                "cache_write": 0,
+                "reasoning": 0,
+                "saved": 0,
+                "executions": 0,
+                "hits": 0,
+            },
         )
         usage = usage_by_key.get(row.execution_key) if row.execution_key else None
 
@@ -123,6 +135,9 @@ def build_session_report(
             if usage is not None and _tokens(usage) is not None:
                 m["in"] += usage.input_tokens or 0
                 m["out"] += usage.output_tokens or 0
+                m["cache_read"] += usage.cache_read_tokens or 0
+                m["cache_write"] += usage.cache_write_tokens or 0
+                m["reasoning"] += usage.reasoning_tokens or 0
             else:
                 unknown += 1
 
@@ -132,6 +147,9 @@ def build_session_report(
             model=model,
             spent_input=v["in"],
             spent_output=v["out"],
+            cache_read_tokens=v["cache_read"],
+            cache_write_tokens=v["cache_write"],
+            reasoning_tokens=v["reasoning"],
             saved_tokens=v["saved"],
             executions=v["executions"],
             hits=v["hits"],

@@ -7,12 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the version is `0.x.y` the project is in **alpha** and anything may change
 between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.0`.
 
-Since `0.2.0` the project is a **monorepo of two lockstep-versioned packages** — the
-library [`generic-ml-cache-core`](packages/core) and the client
-[`generic-ml-cache-cli`](packages/cli). Both share the version below, and this file is
-the single changelog for both; entries note which package(s) a change touches.
+Since `0.2.0` the project is a **monorepo of three lockstep-versioned packages** — the
+library [`generic-ml-cache-core`](packages/core), the CLI
+[`generic-ml-cache-cli`](packages/cli), and (since 0.13.0) the optional daemon
+[`generic-ml-cache-daemon`](packages/daemon). All share the version below, and this file
+is the single changelog for all three; entries note which package(s) a change touches.
 
 ## [Unreleased]
+
+## [0.14.0] - 2026-06-25
+
+### Added
+
+- **`gmlcache status-line`** (cli): new top-level subcommand that fetches live session
+  stats from the daemon (`GET /sessions/{id}/stats`) and prints the raw JSON to stdout.
+  Reads the session from `GMLCACHE_SESSION` or `--session`; reads the daemon address from
+  `--host` / `--port` (defaults `127.0.0.1:8765`). Exits 0 silently when no session is
+  set or the daemon is not running — safe for repeated polling from a status bar.
+- **`scripts/format-status-line.py`** (scripts): user-owned formatter that assembles a
+  single status-bar line from four independent sources — git context (repo, branch, HEAD
+  hash, dirty-file count), abbreviated current working directory, gmlcache session stats
+  (calls, hits, hit rate, per-model token breakdown with cache-read / cache-write /
+  reasoning token counts), and the `ctt` Claude quota widget (`ctt prompt --no-cloud`).
+  Each section is silently skipped if its source is unavailable. Designed to be edited
+  freely; icons and field order are customisable.
+- **`scripts/launch-claude.sh`** (scripts): bash launcher that creates a new gmlcache
+  session (`gmlcache session start`), exports `GMLCACHE_SESSION`, starts the daemon in
+  the background if not already running, then `exec`s `claude` so signals and exit codes
+  propagate cleanly. Accepts `--tag TAG` (repeatable) for session tagging; all other
+  arguments are forwarded to `claude`.
+- **`scripts/launch-claude.ps1`** (scripts): PowerShell equivalent of the bash launcher
+  for Windows; same session/daemon lifecycle, same `--Tag` parameter for session tags.
+- **`.claude/settings.json`** (project): project-level Claude Code configuration that
+  wires `scripts/format-status-line.py` as the `statusLine` command, making live cache
+  stats visible in the Claude Code status bar for every developer who opens the project.
+- **Extended token fields in session stats** (core + daemon): `ModelUsage` (core) and
+  `ModelUsageBody` / `SessionStatsResponse` (daemon) now include `cache_read_tokens`,
+  `cache_write_tokens`, and `reasoning_tokens`. `GET /sessions/{id}/stats` returns these
+  fields per model alongside the existing `spent_input` / `spent_output` / `saved_tokens`.
+
+## [0.13.0] - 2026-06-25
+
+### Added
+
+- **Daemon transport** (daemon): `generic-ml-cache-daemon` — a new, independently
+  versioned package that wraps the core execution engine in a local FastAPI + Uvicorn HTTP
+  server. REST endpoints cover cache runs (sync and SSE streaming), detached jobs, session
+  CRUD, session stats, and a Claude pass-through gateway at
+  `/gateway/claude/v1/messages`. Auto-generated OpenAPI/Swagger UI at `/docs`.
+  `gmlcache daemon start | status | stop` drives the lifecycle from the CLI.
+- **Session execution spec** (core + cli + daemon): `session start` accepts
+  `--client / --model / --effort` to attach a complete execution spec to a session.
+  Runs within that session inherit the spec; partial specs are rejected at creation time.
+  `session update` replaces the spec atomically; `session clear-spec` removes it.
+  The spec is validated at runtime against the active adapter whitelist.
+- **Session tag removal** (cli): `session tag <id> --remove <tag>` — complement to
+  `--add` from 0.12.0.
+- **Session stats endpoint** (daemon): `GET /sessions/{id}/stats` returns call count,
+  hit count, hit rate, and per-model token sums (input, output, saved) for a session.
+- **Gateway routing** (daemon): the daemon uses the session spec as its routing
+  directive; calls arriving for one adapter can be transparently redirected to the adapter
+  configured in the session.
+
+## [0.12.0] - 2026-06-25
+
+### Added
+
+- **Session tags** (core + cli): sessions carry tags — the same concept as execution
+  tags, applied one level up. `session start --tag <tag>` attaches tags at creation;
+  `session tag <id> --add <tag>` adds tags after the fact. `session report --tag <tag>`
+  aggregates all sessions sharing that tag. `list --session-tag` supports cross-level
+  queries combining execution tags and session tags.
+
+## [0.11.0] - 2026-06-25
+
+### Added
+
+- **Retention and invalidation** (core + cli): size-based cache quotas and explicit
+  invalidation commands. `gmlcache purge --max-size` enforces a store-size ceiling;
+  `gmlcache invalidate` removes specific entries by key or tag. Metadata-driven cleanup
+  operates on the existing SQLite store with no schema changes.
 
 ## [0.10.0] - 2026-06-25
 

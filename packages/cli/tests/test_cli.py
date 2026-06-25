@@ -1371,3 +1371,73 @@ def test_daemon_start_calls_uvicorn(tmp_path, monkeypatch, capsys):
 
     assert rc == 0
     mock_uvicorn.run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# status-line
+# ---------------------------------------------------------------------------
+
+
+def test_status_line_no_session_is_silent(monkeypatch, capsys):
+    monkeypatch.delenv("GMLCACHE_SESSION", raising=False)
+    rc = main(["status-line", "--host", "127.0.0.1", "--port", "19999"])
+    assert rc == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_status_line_session_flag_overrides_env(monkeypatch, capsys):
+    monkeypatch.delenv("GMLCACHE_SESSION", raising=False)
+    # daemon not running on 19999 — but the important thing is it tries (no session → wouldn't)
+    rc = main(["status-line", "--host", "127.0.0.1", "--port", "19999", "--session", "abc"])
+    assert rc == 0  # silent even when daemon is absent
+
+
+def test_status_line_daemon_not_running_is_silent(monkeypatch, capsys):
+    monkeypatch.setenv("GMLCACHE_SESSION", "testsession42")
+    rc = main(["status-line", "--host", "127.0.0.1", "--port", "19999"])
+    assert rc == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_status_line_outputs_json_when_daemon_responds(monkeypatch, capsys):
+    import json
+    from unittest.mock import MagicMock, patch
+
+    monkeypatch.setenv("GMLCACHE_SESSION", "sess99")
+    fake_payload = {
+        "session_id": "sess99",
+        "tags": ["ci"],
+        "spec": None,
+        "calls": 7,
+        "hits": 4,
+        "hit_rate": 0.5714,
+        "by_model": [
+            {
+                "client": "claude",
+                "model": "sonnet",
+                "spent_input": 200,
+                "spent_output": 100,
+                "cache_read_tokens": 50,
+                "cache_write_tokens": 10,
+                "reasoning_tokens": 0,
+                "saved_tokens": 300,
+                "executions": 3,
+                "hits": 4,
+            }
+        ],
+    }
+    fake_response = MagicMock()
+    fake_response.__enter__ = lambda self: self
+    fake_response.__exit__ = MagicMock(return_value=False)
+    fake_response.read.return_value = json.dumps(fake_payload).encode()
+
+    with patch("urllib.request.urlopen", return_value=fake_response):
+        rc = main(["status-line", "--host", "127.0.0.1", "--port", "8765"])
+
+    assert rc == 0
+    parsed = json.loads(capsys.readouterr().out)
+    assert parsed["session_id"] == "sess99"
+    assert parsed["calls"] == 7
+    assert parsed["hits"] == 4
+    assert len(parsed["by_model"]) == 1
+    assert parsed["by_model"][0]["cache_read_tokens"] == 50

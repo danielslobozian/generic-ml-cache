@@ -15,11 +15,12 @@
 
 [![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=for-the-badge)](LICENSE)
 [![Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=for-the-badge)](docs/ROADMAP.md)
-[![Adapters](https://img.shields.io/badge/Adapters-claude%20%C2%B7%20codex%20%C2%B7%20cursor--agent-7c3aed?style=for-the-badge)](docs/concepts/adapters.md)
+[![CLI adapters](https://img.shields.io/badge/CLI%20adapters-claude%20%C2%B7%20codex%20%C2%B7%20cursor--agent-7c3aed?style=for-the-badge)](docs/concepts/adapters.md)
+[![API adapters](https://img.shields.io/badge/API%20adapters-anthropic%20%C2%B7%20openai%20%C2%B7%20gemini-0891b2?style=for-the-badge)](docs/concepts/adapters.md)
 
 <br>
 
-[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Usage](#usage)&nbsp;&nbsp;•&nbsp;&nbsp;[Three packages](#three-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
+[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Three packages](#three-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
 
 </div>
 
@@ -33,45 +34,6 @@
 pip install generic-ml-cache-cli      # gmlcache command + the engine (generic-ml-cache-core)
 pip install generic-ml-cache-daemon   # optional: local HTTP API (gmlcache daemon)
 ```
-
-## Usage
-
-```bash
-gmlcache run    --client claude --model sonnet --prompt "…"            # record on a miss, replay on a hit
-gmlcache check  --client claude --model sonnet --prompt "…"            # forecast: is this exact call cached?
-gmlcache run    --client claude --model sonnet --prompt "…" --detach   # run detached → prints an execution id
-gmlcache alias  claude -- -p "…" --model sonnet                        # thin wrapper: cache a raw native call
-gmlcache execution watch <id>                                         # follow a detached run's live progress
-gmlcache session report <id>                                          # token usage by provider/model for a workflow
-gmlcache encrypt                                                      # encrypt the whole store at rest
-gmlcache export --tag eval -o data.jsonl                              # export the (input, output) dataset corpus
-gmlcache list | tags | stats | inspect <key>                          # browse stored executions
-gmlcache doctor | models | status | init                             # environment & configuration helpers
-```
-
-<div align="center">
-
-<img src="docs/images/gmlcache-demo.gif" alt="gmlcache: check (miss) → run (records the real call) → check (hit) → run (instant cache replay)" width="900">
-
-<sub>Same command twice: the first call runs the real client and records it; the second is served from cache, instantly and byte-identical.</sub>
-
-<br><br>
-
-<sub>**The command menu** — <code>gmlcache --help</code></sub>
-
-<img src="docs/images/gmlcache-help.gif" alt="the gmlcache banner and the full command menu" width="620">
-
-<br><br>
-
-<sub>**Detached + live streaming** — <code>run --detach</code> returns an execution id; <code>execution watch</code> follows the client's own live progress (thinking, tool calls) to the recorded result</sub>
-
-<img src="docs/images/gmlcache-async.gif" alt="gmlcache run --detach, then execution watch streaming the client's live thinking and tool calls to the result" width="820">
-
-</div>
-
-<br>
-
----
 
 ## Overview
 

@@ -1078,6 +1078,31 @@ def _cmd_daemon_stop(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_status_line(args: argparse.Namespace) -> int:
+    """Emit live session stats as JSON for status-bar integrations.
+
+    Designed to be called repeatedly by a status-bar formatter script.  Exits 0
+    and prints nothing when no session is active or the daemon is not running —
+    the caller decides how to handle absence.
+    """
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    session_id: Optional[str] = getattr(args, "session", None) or os.environ.get("GMLCACHE_SESSION")
+    if not session_id:
+        return 0
+
+    host: str = args.host
+    port: int = args.port
+    stats_url = f"http://{host}:{port}/sessions/{session_id}/stats"
+    try:
+        with urllib.request.urlopen(stats_url, timeout=2) as response:  # noqa: S310
+            print(response.read().decode())
+    except (urllib.error.URLError, OSError):
+        pass
+    return 0
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     try:
         path, created = config.write_default_config()
@@ -2494,6 +2519,28 @@ def build_parser() -> argparse.ArgumentParser:
     daemon_stop.set_defaults(func=_cmd_daemon_stop)
 
     daemon.set_defaults(func=_cmd_daemon)
+
+    status_line = sub.add_parser(
+        "status-line",
+        help="emit session stats as JSON for status-bar integrations",
+    )
+    status_line.add_argument(
+        "--host", default=_daemon_host_port["host"], metavar="HOST", help="daemon host"
+    )
+    status_line.add_argument(
+        "--port",
+        type=int,
+        default=_daemon_host_port["port"],
+        metavar="PORT",
+        help="daemon port",
+    )
+    status_line.add_argument(
+        "--session",
+        metavar="SESSION_ID",
+        default=None,
+        help="session to query (default: $GMLCACHE_SESSION)",
+    )
+    status_line.set_defaults(func=_cmd_status_line)
 
     return parser
 
