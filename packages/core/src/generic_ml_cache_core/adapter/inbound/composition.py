@@ -141,8 +141,13 @@ def build_use_cases(
     purge = PurgeService(repository, blob_store, metrics)
     return WiredUseCases(
         run_ml=RunMlExecutionService(
-            file_fingerprint, runners, blob_store, repository, metrics,
-            purge_service=purge, max_size=max_size,
+            file_fingerprint,
+            runners,
+            blob_store,
+            repository,
+            metrics,
+            purge_service=purge,
+            max_size=max_size,
         ),
         probe=ProbeService(file_fingerprint, repository),
         purge=purge,

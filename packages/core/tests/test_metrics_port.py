@@ -76,11 +76,13 @@ class InMemoryMetrics(MetricsPort):
         return {}
 
     def execution_keys_for_session(self, session_id: str):
-        return list({
-            e["execution_key"]
-            for e in self._events
-            if e["session_id"] == session_id and e["execution_key"] is not None
-        })
+        return list(
+            {
+                e["execution_key"]
+                for e in self._events
+                if e["session_id"] == session_id and e["execution_key"] is not None
+            }
+        )
 
     def delete_events_for_key(self, execution_key: str) -> None:
         self._events = [e for e in self._events if e["execution_key"] != execution_key]

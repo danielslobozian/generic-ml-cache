@@ -369,6 +369,7 @@ def test_blob_reference_count_counts_all_referencing_rows(tmp_path):
     id_a = _managed_identity(prompt_fingerprint="a")
     id_b = _managed_identity(prompt_fingerprint="b")
     shared_blob = "blob_shared"
+
     # Two executions with identical content (same blob_key — content-addressed)
     def _shared_execution(identity):
         artifact = Artifact(
@@ -384,6 +385,7 @@ def test_blob_reference_count_counts_all_referencing_rows(tmp_path):
             output_persisted=True,
             artifacts=[artifact],
         )
+
     repository.save(_shared_execution(id_a))
     repository.save(_shared_execution(id_b))
     assert repository.blob_reference_count(shared_blob) == 2
@@ -439,6 +441,7 @@ def test_soft_purge_does_not_drop_shared_blob_reference(tmp_path):
     id_a = _managed_identity(prompt_fingerprint="a")
     id_b = _managed_identity(prompt_fingerprint="b")
     shared_blob = "blob_shared"
+
     def _shared(identity):
         artifact = Artifact(
             artifact_type=ArtifactType.STDOUT,
@@ -453,6 +456,7 @@ def test_soft_purge_does_not_drop_shared_blob_reference(tmp_path):
             output_persisted=True,
             artifacts=[artifact],
         )
+
     repository.save(_shared(id_a))
     repository.save(_shared(id_b))
     repository.soft_purge_execution(id_a.generate_key())
@@ -513,8 +517,8 @@ def test_total_stored_bytes_sums_current_executions(tmp_path):
     repository = _repository(tmp_path)
     id_a = _managed_identity(prompt_fingerprint="a")
     id_b = _managed_identity(prompt_fingerprint="b")
-    repository.save(_execution(id_a, content=b"abc"))   # 3 bytes
-    repository.save(_execution(id_b, content=b"de"))    # 2 bytes
+    repository.save(_execution(id_a, content=b"abc"))  # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))  # 2 bytes
     assert repository.total_stored_bytes() == 5
 
 
@@ -522,7 +526,7 @@ def test_total_stored_bytes_excludes_superseded_executions(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()
     repository.save(_execution(identity, content=b"old123"))  # superseded
-    repository.save(_execution(identity, content=b"new"))     # current: 3 bytes
+    repository.save(_execution(identity, content=b"new"))  # current: 3 bytes
     assert repository.total_stored_bytes() == 3
 
 
@@ -545,10 +549,11 @@ def test_current_executions_with_sizes_returns_correct_totals(tmp_path):
     repository = _repository(tmp_path)
     id_a = _managed_identity(prompt_fingerprint="a")
     id_b = _managed_identity(prompt_fingerprint="b")
-    repository.save(_execution(id_a, content=b"abc"))   # 3 bytes
-    repository.save(_execution(id_b, content=b"de"))    # 2 bytes
-    entries = {e.execution_key: e.total_size_bytes
-               for e in repository.current_executions_with_sizes()}
+    repository.save(_execution(id_a, content=b"abc"))  # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))  # 2 bytes
+    entries = {
+        e.execution_key: e.total_size_bytes for e in repository.current_executions_with_sizes()
+    }
     assert entries[id_a.generate_key()] == 3
     assert entries[id_b.generate_key()] == 2
 
@@ -557,7 +562,7 @@ def test_current_executions_with_sizes_excludes_superseded(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()
     repository.save(_execution(identity, content=b"old123"))  # superseded
-    repository.save(_execution(identity, content=b"new"))     # current: 3 bytes
+    repository.save(_execution(identity, content=b"new"))  # current: 3 bytes
     entries = repository.current_executions_with_sizes()
     assert len(entries) == 1
     assert entries[0].total_size_bytes == 3
@@ -612,16 +617,20 @@ def test_all_execution_keys_returns_all_keys(tmp_path):
 
 def test_all_execution_keys_includes_failed_only_keys(tmp_path):
     from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
-        ExecutionFailure, FailureReason,
+        ExecutionFailure,
+        FailureReason,
     )
+
     repository = _repository(tmp_path)
     identity = _managed_identity()
-    repository.save(_execution(
-        identity,
-        state=ExecutionState.FAILED,
-        output_persisted=False,
-        failure=ExecutionFailure(FailureReason.NONZERO_EXIT, "boom", exit_code=1),
-    ))
+    repository.save(
+        _execution(
+            identity,
+            state=ExecutionState.FAILED,
+            output_persisted=False,
+            failure=ExecutionFailure(FailureReason.NONZERO_EXIT, "boom", exit_code=1),
+        )
+    )
     assert identity.generate_key() in repository.all_execution_keys()
 
 

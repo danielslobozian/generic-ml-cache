@@ -85,11 +85,13 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
     # -- retention and purge --------------------------------------------------
 
     def blob_keys_for_execution(self, execution_key: str) -> List[str]:
-        return list({
-            a.blob_key
-            for execution in self._by_key.get(execution_key, [])
-            for a in execution.artifacts
-        })
+        return list(
+            {
+                a.blob_key
+                for execution in self._by_key.get(execution_key, [])
+                for a in execution.artifacts
+            }
+        )
 
     def blob_reference_count(self, blob_key: str) -> int:
         return sum(

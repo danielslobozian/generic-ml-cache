@@ -690,10 +690,13 @@ def test_export_empty_when_no_dataset_entries(capsys):
 
 def _run_and_get_key(capsys) -> str:
     """Run one execution and return its full key (extracted from `list --json`)."""
-    run_cli(["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT hi"])
+    run_cli(
+        ["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT hi"]
+    )
     capsys.readouterr()
     main(["list", "--json"])
     import json
+
     data = json.loads(capsys.readouterr().out)
     return data["executions"][0]["key"]
 
@@ -815,12 +818,22 @@ def test_purge_by_tag(tmp_path, monkeypatch, capsys):
     workdir.mkdir()
     monkeypatch.chdir(workdir)
     run_cli(
-        ["run", "--client", "fake", "--model", "m1", "--effort", "high",
-         "--prompt", "STDOUT hi", "--tag", "old"]
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT hi",
+            "--tag",
+            "old",
+        ]
     )
     run_cli(
-        ["run", "--client", "fake", "--model", "m1", "--effort", "high",
-         "--prompt", "STDOUT bye"]
+        ["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT bye"]
     )
     capsys.readouterr()
 

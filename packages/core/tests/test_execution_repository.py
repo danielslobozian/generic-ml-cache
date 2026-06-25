@@ -329,8 +329,8 @@ def test_total_stored_bytes_sums_current_artifacts():
     repository = _repository()
     id_a = _identity("a")
     id_b = _identity("b")
-    repository.save(_execution(id_a, content=b"abc"))   # 3 bytes
-    repository.save(_execution(id_b, content=b"de"))    # 2 bytes
+    repository.save(_execution(id_a, content=b"abc"))  # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))  # 2 bytes
     assert repository.total_stored_bytes() == 5
 
 
@@ -350,10 +350,11 @@ def test_current_executions_with_sizes_correct_totals():
     repository = _repository()
     id_a = _identity("a")
     id_b = _identity("b")
-    repository.save(_execution(id_a, content=b"abc"))   # 3 bytes
-    repository.save(_execution(id_b, content=b"de"))    # 2 bytes
-    sizes = {e.execution_key: e.total_size_bytes
-             for e in repository.current_executions_with_sizes()}
+    repository.save(_execution(id_a, content=b"abc"))  # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))  # 2 bytes
+    sizes = {
+        e.execution_key: e.total_size_bytes for e in repository.current_executions_with_sizes()
+    }
     assert sizes[id_a.generate_key()] == 3
     assert sizes[id_b.generate_key()] == 2
 

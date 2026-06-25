@@ -1127,7 +1127,7 @@ def _cmd_purge(args: argparse.Namespace) -> int:
         if confirm != required:
             verb = "hard-delete" if hard else "purge"
             print(
-                f'gmlc: this will {verb} every execution in the store. '
+                f"gmlc: this will {verb} every execution in the store. "
                 f'Add --confirm "{required}" to proceed.',
                 file=sys.stderr,
             )
@@ -1982,19 +1982,16 @@ def build_parser() -> argparse.ArgumentParser:
     purgep.add_argument("key", nargs="?", help="execution key to purge")
     purgep.add_argument("--tag", help="purge all executions carrying this tag")
     purgep.add_argument("--session", help="purge all executions from this session")
-    purgep.add_argument(
-        "--all", action="store_true", help="purge every execution in the store"
-    )
+    purgep.add_argument("--all", action="store_true", help="purge every execution in the store")
     purgep.add_argument(
         "--hard",
         action="store_true",
-        help='hard-delete: also remove DB records and access history '
-        '(default: soft purge keeps statistics)',
+        help="hard-delete: also remove DB records and access history "
+        "(default: soft purge keeps statistics)",
     )
     purgep.add_argument(
         "--confirm",
-        help='confirmation phrase required for --all '
-        '(soft: "purge all"; hard: "hard delete all")',
+        help='confirmation phrase required for --all (soft: "purge all"; hard: "hard delete all")',
     )
     purgep.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     purgep.set_defaults(func=_cmd_purge)

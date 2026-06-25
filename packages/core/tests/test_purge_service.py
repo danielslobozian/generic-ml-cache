@@ -87,8 +87,11 @@ class FakeMetrics(MetricsPort):
 
 def _identity(prompt: str = "p") -> ManagedCallIdentity:
     return ManagedCallIdentity(
-        client="claude", model="sonnet", effort="high",
-        context_fingerprint="c", prompt_fingerprint=prompt,
+        client="claude",
+        model="sonnet",
+        effort="high",
+        context_fingerprint="c",
+        prompt_fingerprint=prompt,
     )
 
 
@@ -208,9 +211,7 @@ def test_purge_by_session_purges_matching_executions():
     id_b = _identity("b")
     repo = InMemoryExecutionRepository(FixedClock())
     store = InMemoryBlobStore()
-    metrics = FakeMetrics(
-        session_keys={"sess-1": [id_a.generate_key()]}
-    )
+    metrics = FakeMetrics(session_keys={"sess-1": [id_a.generate_key()]})
     svc = PurgeService(repo, store, metrics)
 
     repo.save(_execution(id_a, content=b"aaa"))
@@ -341,13 +342,15 @@ def test_shared_blob_not_deleted_when_still_referenced():
             size_bytes=len(shared_content),
             content=shared_content,
         )
-        repo.save(MlExecution(
-            call_identity=identity,
-            execution_state=ExecutionState.SUCCESS,
-            execution_kind=ExecutionKind.LOCAL_MANAGED,
-            output_persisted=True,
-            artifacts=[artifact],
-        ))
+        repo.save(
+            MlExecution(
+                call_identity=identity,
+                execution_state=ExecutionState.SUCCESS,
+                execution_kind=ExecutionKind.LOCAL_MANAGED,
+                output_persisted=True,
+                artifacts=[artifact],
+            )
+        )
     store.put(shared_blob, shared_content)
 
     svc.purge_one(id_a.generate_key())
@@ -369,13 +372,15 @@ def test_shared_blob_deleted_after_both_purged():
             size_bytes=len(shared_content),
             content=shared_content,
         )
-        repo.save(MlExecution(
-            call_identity=identity,
-            execution_state=ExecutionState.SUCCESS,
-            execution_kind=ExecutionKind.LOCAL_MANAGED,
-            output_persisted=True,
-            artifacts=[artifact],
-        ))
+        repo.save(
+            MlExecution(
+                call_identity=identity,
+                execution_state=ExecutionState.SUCCESS,
+                execution_kind=ExecutionKind.LOCAL_MANAGED,
+                output_persisted=True,
+                artifacts=[artifact],
+            )
+        )
     store.put(shared_blob, shared_content)
 
     svc.purge_one(id_a.generate_key())
@@ -402,18 +407,20 @@ def test_evict_to_quota_evicts_least_recently_accessed():
     repo = InMemoryExecutionRepository(FixedClock())
     store = InMemoryBlobStore()
 
-    old_content = b"old_content"   # accessed long ago
-    new_content = b"new_content"   # accessed recently
+    old_content = b"old_content"  # accessed long ago
+    new_content = b"new_content"  # accessed recently
     repo.save(_execution(id_old, content=old_content))
     repo.save(_execution(id_new, content=new_content))
     store.put("blob_" + old_content.hex(), old_content)
     store.put("blob_" + new_content.hex(), new_content)
 
     # old was accessed at epoch 100, new at epoch 999
-    metrics = FakeMetrics(last_access={
-        id_old.generate_key(): 100.0,
-        id_new.generate_key(): 999.0,
-    })
+    metrics = FakeMetrics(
+        last_access={
+            id_old.generate_key(): 100.0,
+            id_new.generate_key(): 999.0,
+        }
+    )
     svc = PurgeService(repo, store, metrics)
 
     # quota is just under the total — need to evict one execution

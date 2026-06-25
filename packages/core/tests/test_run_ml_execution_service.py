@@ -499,14 +499,15 @@ def test_eviction_not_triggered_when_max_size_is_none():
 
 def test_eviction_not_triggered_on_cache_hit():
     service, spy = _harness_with_quota(max_size=1_000_000)
-    service.execute(_managed_command())          # first run — record
+    service.execute(_managed_command())  # first run — record
     assert len(spy.evict_calls) == 1
-    service.execute(_managed_command())          # second run — cache hit
-    assert len(spy.evict_calls) == 1             # eviction not called again
+    service.execute(_managed_command())  # second run — cache hit
+    assert len(spy.evict_calls) == 1  # eviction not called again
 
 
 def test_eviction_not_triggered_on_failed_run():
     from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+
     service, spy = _harness_with_quota(max_size=1_000_000)
     failing_harness = _Harness(
         client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stdout="", stderr="boom"))
