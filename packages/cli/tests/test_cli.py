@@ -1082,3 +1082,52 @@ def test_list_session_tag_no_match_returns_empty(tmp_path, monkeypatch, capsys):
     main(["list", "--session-tag", "ghost", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert data["executions"] == []
+
+
+# --- purge --session-tag (0.12.0) --------------------------------------------
+
+
+def test_purge_session_tag_removes_executions(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start", "--tag", "cleanup"])
+    session_id = capsys.readouterr().out.strip()
+    main(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT tagged-run",
+            "--session",
+            session_id,
+        ]
+    )
+    capsys.readouterr()
+
+    rc = main(["purge", "--session-tag", "cleanup"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "purged" in out
+
+    main(["list", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["executions"] == []
+
+
+def test_purge_session_tag_unknown_tag_is_noop(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    rc = main(["purge", "--session-tag", "ghost"])
+    assert rc == 0
+    assert "nothing to purge" in capsys.readouterr().out

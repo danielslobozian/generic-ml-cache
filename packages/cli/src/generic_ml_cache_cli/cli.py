@@ -1104,20 +1104,21 @@ def _cmd_purge(args: argparse.Namespace) -> int:
     key = getattr(args, "key", None)
     tag = getattr(args, "tag", None)
     session = getattr(args, "session", None)
+    session_tag = getattr(args, "session_tag", None)
     purge_all = getattr(args, "all", False)
     hard = getattr(args, "hard", False)
     confirm = getattr(args, "confirm", None)
 
-    selectors = [bool(key), bool(tag), bool(session), bool(purge_all)]
+    selectors = [bool(key), bool(tag), bool(session), bool(session_tag), bool(purge_all)]
     if sum(selectors) == 0:
         print(
-            "gmlc: provide a target: <key>, --tag <tag>, --session <id>, or --all",
+            "gmlc: provide a target: <key>, --tag, --session, --session-tag, or --all",
             file=sys.stderr,
         )
         return 1
     if sum(selectors) > 1:
         print(
-            "gmlc: only one of <key>, --tag, --session, --all may be given",
+            "gmlc: only one of <key>, --tag, --session, --session-tag, --all may be given",
             file=sys.stderr,
         )
         return 1
@@ -1142,6 +1143,12 @@ def _cmd_purge(args: argparse.Namespace) -> int:
         report = svc.hard_delete_by_tag(tag) if hard else svc.purge_by_tag(tag)
     elif session:
         report = svc.hard_delete_by_session(session) if hard else svc.purge_by_session(session)
+    elif session_tag:
+        report = (
+            svc.hard_delete_by_session_tag(session_tag)
+            if hard
+            else svc.purge_by_session_tag(session_tag)
+        )
     else:
         report = svc.hard_delete_all() if hard else svc.purge_all()
 
@@ -2061,6 +2068,11 @@ def build_parser() -> argparse.ArgumentParser:
     purgep.add_argument("key", nargs="?", help="execution key to purge")
     purgep.add_argument("--tag", help="purge all executions carrying this tag")
     purgep.add_argument("--session", help="purge all executions from this session")
+    purgep.add_argument(
+        "--session-tag",
+        dest="session_tag",
+        help="purge all executions from sessions carrying this tag",
+    )
     purgep.add_argument("--all", action="store_true", help="purge every execution in the store")
     purgep.add_argument(
         "--hard",

@@ -57,6 +57,10 @@ class PurgeService:
         """Soft-purge all executions recorded under ``session_id``."""
         return self._soft_purge_keys(self._metrics.execution_keys_for_session(session_id))
 
+    def purge_by_session_tag(self, tag: str) -> PurgeReport:
+        """Soft-purge all executions from every session carrying ``tag``."""
+        return self._soft_purge_keys(self._keys_for_session_tag(tag))
+
     def purge_all(self) -> PurgeReport:
         """Soft-purge every current execution in the store."""
         keys = [e.execution_key for e in self._repository.current_executions_with_sizes()]
@@ -78,6 +82,10 @@ class PurgeService:
     def hard_delete_by_session(self, session_id: str) -> PurgeReport:
         """Hard-delete all executions recorded under ``session_id``."""
         return self._hard_delete_keys(self._metrics.execution_keys_for_session(session_id))
+
+    def hard_delete_by_session_tag(self, tag: str) -> PurgeReport:
+        """Hard-delete all executions from every session carrying ``tag``."""
+        return self._hard_delete_keys(self._keys_for_session_tag(tag))
 
     def hard_delete_all(self) -> PurgeReport:
         """Hard-delete every execution in the store, including failed-only keys."""
@@ -140,6 +148,16 @@ class PurgeService:
             bytes_freed=max(0, before - after),
             blobs_removed=blobs_removed,
         )
+
+    def _keys_for_session_tag(self, tag: str) -> List[str]:
+        seen: set = set()
+        keys: List[str] = []
+        for session_id in self._metrics.session_ids_for_tag(tag):
+            for key in self._metrics.execution_keys_for_session(session_id):
+                if key not in seen:
+                    seen.add(key)
+                    keys.append(key)
+        return keys
 
     def _remove_orphaned_blobs(self, blob_keys: List[str]) -> int:
         removed = 0
