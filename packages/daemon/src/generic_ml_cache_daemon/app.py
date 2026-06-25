@@ -40,7 +40,12 @@ def create_app(
 
     wired_use_cases = build_use_cases(store_root)
     application.state.wired = wired_use_cases
+    application.state.store_root = store_root
     application.state.session_id = session_id
     application.state.enable_metrics = enable_metrics
+
+    from generic_ml_cache_daemon.routes.health import router as health_router
+
+    application.include_router(health_router)
 
     return application

@@ -39,3 +39,8 @@ def test_create_app_metrics_disabled_by_default(tmp_path: Path) -> None:
 def test_create_app_metrics_can_be_enabled(tmp_path: Path) -> None:
     application = create_app(tmp_path, enable_metrics=True)
     assert application.state.enable_metrics is True
+
+
+def test_create_app_stores_store_root(tmp_path: Path) -> None:
+    application = create_app(tmp_path)
+    assert application.state.store_root == tmp_path
