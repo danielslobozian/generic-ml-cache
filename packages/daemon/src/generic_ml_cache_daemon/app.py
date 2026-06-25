@@ -46,6 +46,7 @@ def create_app(
 
     from generic_ml_cache_daemon.jobs import JobRegistry
     from generic_ml_cache_daemon.routes.executions import router as executions_router
+    from generic_ml_cache_daemon.routes.gateway import router as gateway_router
     from generic_ml_cache_daemon.routes.health import router as health_router
     from generic_ml_cache_daemon.routes.jobs import router as jobs_router
     from generic_ml_cache_daemon.routes.run import router as run_router
@@ -57,5 +58,6 @@ def create_app(
     application.include_router(executions_router)
     application.include_router(run_router)
     application.include_router(jobs_router)
+    application.include_router(gateway_router)
 
     return application
