@@ -1,7 +1,8 @@
 # gmlcache demo (hero) — the same command twice: first calls the real client, then hits cache.
 # The banner + command menu live in their own cassette (help.tape); this one is the value demo.
 #
-# Render:   vhs docs/demo.tape   ->   docs/images/gmlcache-demo.gif
+# Render:   python3 docs/render-tape.py docs/demo.tape
+#        or: vhs docs/demo.tape   (if gmlcache is already on PATH with a cold store)
 #
 # Requires: vhs + the `gmlcache` command on PATH, with a real client (claude here)
 #           installed and authenticated.

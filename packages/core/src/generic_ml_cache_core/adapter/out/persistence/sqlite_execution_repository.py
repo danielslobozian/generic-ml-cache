@@ -33,6 +33,7 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
+    ExecutionSizeEntry,
 )
 
 _DB_NAME = "executions.sqlite3"
@@ -461,6 +462,136 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
             cost_usd=cost_usd,
             raw=json.loads(raw_json),
         )
+
+    # -- retention and purge --------------------------------------------------
+
+    def blob_keys_for_execution(self, execution_key: str) -> List[str]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT DISTINCT a.blob_key FROM artifacts a "
+                "JOIN executions e ON e.id = a.execution_id "
+                "WHERE e.execution_key = ?",
+                (execution_key,),
+            ).fetchall()
+            return [key for (key,) in rows]
+        finally:
+            connection.close()
+
+    def blob_reference_count(self, blob_key: str) -> int:
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                "SELECT COUNT(*) FROM artifacts WHERE blob_key = ?",
+                (blob_key,),
+            ).fetchone()
+            return int(row[0])
+        finally:
+            connection.close()
+
+    def soft_purge_execution(self, execution_key: str) -> None:
+        connection = self._connect()
+        try:
+            connection.execute(
+                "DELETE FROM artifacts WHERE execution_id IN "
+                "(SELECT id FROM executions WHERE execution_key = ?)",
+                (execution_key,),
+            )
+            connection.execute(
+                "UPDATE executions SET output_persisted = 0 WHERE execution_key = ?",
+                (execution_key,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def hard_delete_execution(self, execution_key: str) -> None:
+        connection = self._connect()
+        try:
+            connection.execute(
+                "DELETE FROM artifacts WHERE execution_id IN "
+                "(SELECT id FROM executions WHERE execution_key = ?)",
+                (execution_key,),
+            )
+            connection.execute(
+                "DELETE FROM execution_tags WHERE execution_id IN "
+                "(SELECT id FROM executions WHERE execution_key = ?)",
+                (execution_key,),
+            )
+            connection.execute(
+                "DELETE FROM token_usage WHERE execution_id IN "
+                "(SELECT id FROM executions WHERE execution_key = ?)",
+                (execution_key,),
+            )
+            connection.execute(
+                "DELETE FROM executions WHERE execution_key = ?",
+                (execution_key,),
+            )
+            connection.execute(
+                "DELETE FROM call_identities WHERE execution_key = ?",
+                (execution_key,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def total_stored_bytes(self) -> int:
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                "SELECT COALESCE(SUM(a.size_bytes), 0) FROM artifacts a "
+                "JOIN executions e ON e.id = a.execution_id "
+                "WHERE e.state = ? AND e.output_persisted = 1 AND e.superseded_at IS NULL",
+                (ExecutionState.SUCCESS.value,),
+            ).fetchone()
+            return int(row[0])
+        finally:
+            connection.close()
+
+    def current_executions_with_sizes(self) -> List[ExecutionSizeEntry]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT e.execution_key, COALESCE(SUM(a.size_bytes), 0), e.created_at "
+                "FROM executions e LEFT JOIN artifacts a ON a.execution_id = e.id "
+                "WHERE e.state = ? AND e.output_persisted = 1 AND e.superseded_at IS NULL "
+                "GROUP BY e.execution_key, e.created_at ORDER BY e.id",
+                (ExecutionState.SUCCESS.value,),
+            ).fetchall()
+            return [
+                ExecutionSizeEntry(
+                    execution_key=key,
+                    total_size_bytes=int(size),
+                    created_at=created_at,
+                )
+                for (key, size, created_at) in rows
+            ]
+        finally:
+            connection.close()
+
+    def executions_by_tag(self, tag: str) -> List[str]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT DISTINCT e.execution_key FROM executions e "
+                "JOIN execution_tags et ON et.execution_id = e.id "
+                "WHERE et.tag = ? "
+                "AND e.state = ? AND e.output_persisted = 1 AND e.superseded_at IS NULL",
+                (tag, ExecutionState.SUCCESS.value),
+            ).fetchall()
+            return [key for (key,) in rows]
+        finally:
+            connection.close()
+
+    def all_execution_keys(self) -> List[str]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT execution_key FROM call_identities ORDER BY execution_key"
+            ).fetchall()
+            return [key for (key,) in rows]
+        finally:
+            connection.close()
 
     @staticmethod
     def _is_servable(execution: MlExecution) -> bool:

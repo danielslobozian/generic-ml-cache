@@ -16,6 +16,7 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
+    ExecutionSizeEntry,
 )
 
 
@@ -80,6 +81,68 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
             execution.artifacts.extend(replace(a, content=None) for a in artifacts)
             execution.input_persisted = True
             return
+
+    # -- retention and purge --------------------------------------------------
+
+    def blob_keys_for_execution(self, execution_key: str) -> List[str]:
+        return list(
+            {
+                a.blob_key
+                for execution in self._by_key.get(execution_key, [])
+                for a in execution.artifacts
+            }
+        )
+
+    def blob_reference_count(self, blob_key: str) -> int:
+        return sum(
+            1
+            for executions in self._by_key.values()
+            for execution in executions
+            for a in execution.artifacts
+            if a.blob_key == blob_key
+        )
+
+    def soft_purge_execution(self, execution_key: str) -> None:
+        for execution in self._by_key.get(execution_key, []):
+            execution.artifacts.clear()
+            execution.output_persisted = False
+            execution.input_persisted = False
+
+    def hard_delete_execution(self, execution_key: str) -> None:
+        self._by_key.pop(execution_key, None)
+        self._tags_by_key.pop(execution_key, None)
+
+    def total_stored_bytes(self) -> int:
+        return sum(
+            a.size_bytes
+            for executions in self._by_key.values()
+            for execution in executions
+            if self._is_servable(execution)
+            for a in execution.artifacts
+        )
+
+    def current_executions_with_sizes(self) -> List[ExecutionSizeEntry]:
+        return [
+            ExecutionSizeEntry(
+                execution_key=key,
+                total_size_bytes=sum(a.size_bytes for a in execution.artifacts),
+                created_at="",
+            )
+            for key, executions in self._by_key.items()
+            for execution in executions
+            if self._is_servable(execution)
+        ]
+
+    def executions_by_tag(self, tag: str) -> List[str]:
+        return [
+            key
+            for key, executions in self._by_key.items()
+            if any(self._is_servable(e) for e in executions)
+            and tag in self._tags_by_key.get(key, set())
+        ]
+
+    def all_execution_keys(self) -> List[str]:
+        return list(self._by_key.keys())
 
     @staticmethod
     def _is_servable(execution: MlExecution) -> bool:

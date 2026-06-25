@@ -322,3 +322,324 @@ def test_different_kinds_do_not_collide_in_one_store(tmp_path):
         .artifacts[0]
         .blob_key.endswith(b"pass".hex())
     )
+
+
+# --- blob_keys_for_execution -------------------------------------------------
+
+
+def test_blob_keys_for_execution_returns_all_blob_keys(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"answer"))
+    keys = repository.blob_keys_for_execution(identity.generate_key())
+    assert keys == ["blob_" + b"answer".hex()]
+
+
+def test_blob_keys_for_execution_unknown_key_returns_empty(tmp_path):
+    assert _repository(tmp_path).blob_keys_for_execution("nope") == []
+
+
+def test_blob_keys_for_execution_includes_superseded_executions(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"old"))
+    repository.save(_execution(identity, content=b"new"))
+    keys = set(repository.blob_keys_for_execution(identity.generate_key()))
+    assert "blob_" + b"old".hex() in keys
+    assert "blob_" + b"new".hex() in keys
+
+
+# --- blob_reference_count ----------------------------------------------------
+
+
+def test_blob_reference_count_is_one_for_a_single_execution(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"answer"))
+    blob_key = "blob_" + b"answer".hex()
+    assert repository.blob_reference_count(blob_key) == 1
+
+
+def test_blob_reference_count_is_zero_for_unknown_blob(tmp_path):
+    assert _repository(tmp_path).blob_reference_count("nope") == 0
+
+
+def test_blob_reference_count_counts_all_referencing_rows(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    shared_blob = "blob_shared"
+
+    # Two executions with identical content (same blob_key — content-addressed)
+    def _shared_execution(identity):
+        artifact = Artifact(
+            artifact_type=ArtifactType.STDOUT,
+            blob_key=shared_blob,
+            size_bytes=6,
+            content=b"shared",
+        )
+        return MlExecution(
+            call_identity=identity,
+            execution_state=ExecutionState.SUCCESS,
+            execution_kind=ExecutionKind.LOCAL_MANAGED,
+            output_persisted=True,
+            artifacts=[artifact],
+        )
+
+    repository.save(_shared_execution(id_a))
+    repository.save(_shared_execution(id_b))
+    assert repository.blob_reference_count(shared_blob) == 2
+
+
+# --- soft_purge_execution ----------------------------------------------------
+
+
+def test_soft_purge_removes_artifacts(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"answer"))
+    key = identity.generate_key()
+    repository.soft_purge_execution(key)
+    history = repository.find_all(key)
+    assert len(history) == 1
+    assert history[0].artifacts == []
+
+
+def test_soft_purge_makes_execution_not_current(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.soft_purge_execution(key)
+    assert repository.find_current(key) is None
+
+
+def test_soft_purge_preserves_token_usage(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    usage = TokenUsage(input_tokens=10, output_tokens=5, raw={"x": 1})
+    repository.save(_execution(identity, token_usage=usage))
+    key = identity.generate_key()
+    repository.soft_purge_execution(key)
+    history = repository.find_all(key)
+    assert len(history) == 1
+    assert history[0].token_usage == usage
+
+
+def test_soft_purge_reduces_blob_reference_count_to_zero(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"answer"))
+    blob_key = "blob_" + b"answer".hex()
+    assert repository.blob_reference_count(blob_key) == 1
+    repository.soft_purge_execution(identity.generate_key())
+    assert repository.blob_reference_count(blob_key) == 0
+
+
+def test_soft_purge_does_not_drop_shared_blob_reference(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    shared_blob = "blob_shared"
+
+    def _shared(identity):
+        artifact = Artifact(
+            artifact_type=ArtifactType.STDOUT,
+            blob_key=shared_blob,
+            size_bytes=6,
+            content=b"shared",
+        )
+        return MlExecution(
+            call_identity=identity,
+            execution_state=ExecutionState.SUCCESS,
+            execution_kind=ExecutionKind.LOCAL_MANAGED,
+            output_persisted=True,
+            artifacts=[artifact],
+        )
+
+    repository.save(_shared(id_a))
+    repository.save(_shared(id_b))
+    repository.soft_purge_execution(id_a.generate_key())
+    # id_b still holds a reference — blob should not be deleted yet
+    assert repository.blob_reference_count(shared_blob) == 1
+
+
+def test_soft_purge_unknown_key_is_a_no_op(tmp_path):
+    _repository(tmp_path).soft_purge_execution("nope")  # must not raise
+
+
+# --- hard_delete_execution ---------------------------------------------------
+
+
+def test_hard_delete_execution_removes_all_history(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"v1"))
+    repository.save(_execution(identity, content=b"v2"))
+    key = identity.generate_key()
+    repository.hard_delete_execution(key)
+    assert repository.find_current(key) is None
+    assert repository.find_all(key) == []
+
+
+def test_hard_delete_execution_removes_blob_references(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"answer"))
+    blob_key = "blob_" + b"answer".hex()
+    repository.hard_delete_execution(identity.generate_key())
+    assert repository.blob_reference_count(blob_key) == 0
+
+
+def test_hard_delete_execution_allows_re_save_of_same_key(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"first"))
+    repository.hard_delete_execution(identity.generate_key())
+    repository.save(_execution(identity, content=b"second"))
+    found = repository.find_current(identity.generate_key())
+    assert found is not None
+    assert found.artifacts[0].blob_key == "blob_" + b"second".hex()
+
+
+def test_hard_delete_unknown_key_is_a_no_op(tmp_path):
+    _repository(tmp_path).hard_delete_execution("nope")  # must not raise
+
+
+# --- total_stored_bytes ------------------------------------------------------
+
+
+def test_total_stored_bytes_is_zero_for_empty_store(tmp_path):
+    assert _repository(tmp_path).total_stored_bytes() == 0
+
+
+def test_total_stored_bytes_sums_current_executions(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    repository.save(_execution(id_a, content=b"abc"))  # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))  # 2 bytes
+    assert repository.total_stored_bytes() == 5
+
+
+def test_total_stored_bytes_excludes_superseded_executions(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"old123"))  # superseded
+    repository.save(_execution(identity, content=b"new"))  # current: 3 bytes
+    assert repository.total_stored_bytes() == 3
+
+
+def test_total_stored_bytes_drops_to_zero_after_soft_purge(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"answer"))
+    repository.soft_purge_execution(identity.generate_key())
+    assert repository.total_stored_bytes() == 0
+
+
+# --- current_executions_with_sizes -------------------------------------------
+
+
+def test_current_executions_with_sizes_empty_store(tmp_path):
+    assert _repository(tmp_path).current_executions_with_sizes() == []
+
+
+def test_current_executions_with_sizes_returns_correct_totals(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    repository.save(_execution(id_a, content=b"abc"))  # 3 bytes
+    repository.save(_execution(id_b, content=b"de"))  # 2 bytes
+    entries = {
+        e.execution_key: e.total_size_bytes for e in repository.current_executions_with_sizes()
+    }
+    assert entries[id_a.generate_key()] == 3
+    assert entries[id_b.generate_key()] == 2
+
+
+def test_current_executions_with_sizes_excludes_superseded(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity, content=b"old123"))  # superseded
+    repository.save(_execution(identity, content=b"new"))  # current: 3 bytes
+    entries = repository.current_executions_with_sizes()
+    assert len(entries) == 1
+    assert entries[0].total_size_bytes == 3
+
+
+# --- executions_by_tag -------------------------------------------------------
+
+
+def test_executions_by_tag_returns_matching_keys(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    repository.save(_execution(id_a))
+    repository.save(_execution(id_b))
+    repository.add_tags(id_a.generate_key(), ["important"])
+    repository.add_tags(id_b.generate_key(), ["other"])
+    keys = repository.executions_by_tag("important")
+    assert keys == [id_a.generate_key()]
+
+
+def test_executions_by_tag_no_match_returns_empty(tmp_path):
+    assert _repository(tmp_path).executions_by_tag("nope") == []
+
+
+def test_executions_by_tag_excludes_purged_executions(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    key = identity.generate_key()
+    repository.add_tags(key, ["work"])
+    repository.soft_purge_execution(key)
+    assert repository.executions_by_tag("work") == []
+
+
+# --- all_execution_keys ------------------------------------------------------
+
+
+def test_all_execution_keys_empty_store(tmp_path):
+    assert _repository(tmp_path).all_execution_keys() == []
+
+
+def test_all_execution_keys_returns_all_keys(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    repository.save(_execution(id_a))
+    repository.save(_execution(id_b))
+    keys = set(repository.all_execution_keys())
+    assert id_a.generate_key() in keys
+    assert id_b.generate_key() in keys
+
+
+def test_all_execution_keys_includes_failed_only_keys(tmp_path):
+    from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
+        ExecutionFailure,
+        FailureReason,
+    )
+
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    repository.save(
+        _execution(
+            identity,
+            state=ExecutionState.FAILED,
+            output_persisted=False,
+            failure=ExecutionFailure(FailureReason.NONZERO_EXIT, "boom", exit_code=1),
+        )
+    )
+    assert identity.generate_key() in repository.all_execution_keys()
+
+
+def test_all_execution_keys_empty_after_hard_delete_all(tmp_path):
+    repository = _repository(tmp_path)
+    id_a = _managed_identity(prompt_fingerprint="a")
+    id_b = _managed_identity(prompt_fingerprint="b")
+    repository.save(_execution(id_a))
+    repository.save(_execution(id_b))
+    for key in list(repository.all_execution_keys()):
+        repository.hard_delete_execution(key)
+    assert repository.all_execution_keys() == []

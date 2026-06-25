@@ -35,6 +35,7 @@ from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPo
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )
+from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_checksum
 
@@ -56,10 +57,14 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
         blob_store: BlobStorePort,
         repository: ExecutionRepositoryPort,
         metrics: MetricsPort,
+        purge_service: Optional[PurgeService] = None,
+        max_size: Optional[int] = None,
     ) -> None:
         super().__init__(blob_store, repository, metrics)
         self._file_fingerprint = file_fingerprint
         self._runners = runners
+        self._purge = purge_service
+        self._max_size = max_size
 
     def _build_identity(self, command: RunMlExecutionCommand) -> CallIdentity:
         if command.execution_kind is ExecutionKind.LOCAL_MANAGED:
@@ -108,6 +113,10 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
                 grants=frozenset(command.grants),
             )
         return runner.run(request)
+
+    def _after_record(self, execution_key: str) -> None:
+        if self._purge is not None and self._max_size is not None:
+            self._purge.evict_to_quota(self._max_size)
 
     def _execution_kind(self, command: RunMlExecutionCommand) -> ExecutionKind:
         return command.execution_kind

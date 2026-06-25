@@ -5,10 +5,20 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+
+
+@dataclass(frozen=True)
+class ExecutionSizeEntry:
+    """A size-reporting row used by the retention service for LRU eviction ordering."""
+
+    execution_key: str
+    total_size_bytes: int
+    created_at: str  # ISO-format string; empty string when not tracked (in-memory)
 
 
 class ExecutionRepositoryPort(ABC):
@@ -59,3 +69,51 @@ class ExecutionRepositoryPort(ABC):
         entry that has none yet. Idempotent — a no-op if the current execution
         already carries input, or if there is no current execution. Like tags, this
         enriches an existing entry without rewriting its output."""
+
+    # -- retention and purge --------------------------------------------------
+
+    @abstractmethod
+    def blob_keys_for_execution(self, execution_key: str) -> List[str]:
+        """Return the distinct blob keys referenced by ALL stored executions for
+        ``execution_key`` (current and historical). Called before a soft purge so
+        the caller can check reference counts before removing blobs."""
+
+    @abstractmethod
+    def blob_reference_count(self, blob_key: str) -> int:
+        """Return the number of artifact rows across the entire store still
+        referencing ``blob_key``. After a soft purge drops an execution's artifact
+        rows, a count of zero means no other execution references the blob and the
+        caller may safely remove it from the blob store."""
+
+    @abstractmethod
+    def soft_purge_execution(self, execution_key: str) -> None:
+        """Remove all artifact rows for every execution under ``execution_key`` and
+        mark those executions as not output-persisted (no longer replayable). The
+        execution records, token_usage rows, tags, and access events are preserved —
+        statistics and audit trail survive; only the stored bytes are released."""
+
+    @abstractmethod
+    def hard_delete_execution(self, execution_key: str) -> None:
+        """Delete every DB row for ``execution_key``: all executions, their
+        artifacts, tags, token_usage, and the call identity. Nothing survives."""
+
+    @abstractmethod
+    def total_stored_bytes(self) -> int:
+        """Return the sum of size_bytes across all artifacts of all current
+        (servable, non-superseded) executions. Returns 0 when the store is empty."""
+
+    @abstractmethod
+    def current_executions_with_sizes(self) -> List[ExecutionSizeEntry]:
+        """Return one entry per current (servable) execution with its total
+        artifact size and creation timestamp, used by the retention service to
+        build LRU eviction order."""
+
+    @abstractmethod
+    def executions_by_tag(self, tag: str) -> List[str]:
+        """Return the execution keys whose current execution carries ``tag``."""
+
+    @abstractmethod
+    def all_execution_keys(self) -> List[str]:
+        """Return every distinct execution key in the store, regardless of state.
+        Used by hard_delete_all to ensure no key — including those with only
+        failed or superseded executions — is left behind."""

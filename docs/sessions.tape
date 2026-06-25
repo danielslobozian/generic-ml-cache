@@ -1,6 +1,7 @@
 # gmlcache demo — sessions: group a workflow's runs, then report on them.
 #
-# Render:   vhs docs/sessions.tape   ->   docs/images/gmlcache-sessions.gif
+# Render:   python3 docs/render-tape.py docs/sessions.tape
+#        or: vhs docs/sessions.tape   (if gmlcache is already on PATH with a cold store)
 #
 # Requires: vhs + the `gmlcache` command on PATH, and a client named `claude`
 #   on PATH (any executable that prints an answer). Start from a COLD store so

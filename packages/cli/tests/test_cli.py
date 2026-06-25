@@ -359,6 +359,39 @@ def test_stats_reports_executions_and_access(tmp_path, monkeypatch, capsys):
     assert "record" in out  # access events
 
 
+def test_stats_shows_store_size(tmp_path, monkeypatch, capsys):
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "store size" in out
+
+
+def test_stats_json_includes_store_and_max_size_bytes(tmp_path, monkeypatch, capsys):
+    import json
+
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    assert main(["stats", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert "store_bytes" in data
+    assert isinstance(data["store_bytes"], int)
+    assert data["store_bytes"] > 0
+    assert "max_size_bytes" in data
+    assert data["max_size_bytes"] is None  # no quota configured by default
+
+
+def test_stats_shows_quota_when_max_size_configured(tmp_path, monkeypatch, capsys):
+    _record_two_models(monkeypatch, tmp_path)
+    monkeypatch.setenv("GMLCACHE_MAX_SIZE", "5GB")
+    capsys.readouterr()
+    assert main(["stats"]) == 0
+    out = capsys.readouterr().out
+    assert "store size" in out
+    assert "5.0 GB" in out
+    assert "%" in out
+
+
 def test_check_reports_hit_after_a_run(tmp_path, monkeypatch, capsys):
     workdir = tmp_path / "work"
     workdir.mkdir()
@@ -650,3 +683,183 @@ def test_export_empty_when_no_dataset_entries(capsys):
     assert captured.out.strip() == ""
     assert "exported 0 record(s)" in captured.err
     assert "skipped 1" in captured.err
+
+
+# --- purge command ------------------------------------------------------------
+
+
+def _run_and_get_key(capsys) -> str:
+    """Run one execution and return its full key (extracted from `list --json`)."""
+    run_cli(
+        ["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT hi"]
+    )
+    capsys.readouterr()
+    main(["list", "--json"])
+    import json
+
+    data = json.loads(capsys.readouterr().out)
+    return data["executions"][0]["key"]
+
+
+def test_purge_no_selector_exits_error(capsys):
+    rc = main(["purge"])
+    assert rc == 1
+    assert "provide a target" in capsys.readouterr().err
+
+
+def test_purge_multiple_selectors_exits_error(capsys):
+    rc = main(["purge", "somekey", "--all"])
+    assert rc == 1
+    assert "only one" in capsys.readouterr().err
+
+
+def test_purge_key_soft_frees_blobs(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    key = _run_and_get_key(capsys)
+    capsys.readouterr()
+
+    rc = main(["purge", key])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "purged" in out
+    assert "execution(s)" in out
+
+
+def test_purge_key_makes_execution_unavailable(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    key = _run_and_get_key(capsys)
+    main(["purge", key])
+    capsys.readouterr()
+
+    main(["list", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["executions"] == []
+
+
+def test_purge_unknown_key_returns_nothing_to_purge(capsys):
+    rc = main(["purge", "nonexistentkey000"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "nothing to purge" in out
+
+
+def test_purge_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    key = _run_and_get_key(capsys)
+    capsys.readouterr()
+
+    rc = main(["purge", key, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert data["executions_removed"] == 1
+    assert isinstance(data["bytes_freed"], int)
+    assert isinstance(data["blobs_removed"], int)
+
+
+def test_purge_all_requires_confirm(capsys):
+    rc = main(["purge", "--all"])
+    err = capsys.readouterr().err
+    assert rc == 4
+    assert "purge all" in err
+
+
+def test_purge_all_with_correct_confirm(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    _run_and_get_key(capsys)
+    capsys.readouterr()
+
+    rc = main(["purge", "--all", "--confirm", "purge all"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "purged" in out
+
+
+def test_purge_all_hard_requires_different_confirm(capsys):
+    rc = main(["purge", "--all", "--hard", "--confirm", "purge all"])
+    err = capsys.readouterr().err
+    assert rc == 4
+    assert "hard delete all" in err
+
+
+def test_purge_all_hard_with_correct_confirm(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    _run_and_get_key(capsys)
+    capsys.readouterr()
+
+    rc = main(["purge", "--all", "--hard", "--confirm", "hard delete all"])
+    assert rc == 0
+    capsys.readouterr()
+
+    main(["list", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["executions"] == []
+
+
+def test_purge_by_tag(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    run_cli(
+        [
+            "run",
+            "--client",
+            "fake",
+            "--model",
+            "m1",
+            "--effort",
+            "high",
+            "--prompt",
+            "STDOUT hi",
+            "--tag",
+            "old",
+        ]
+    )
+    run_cli(
+        ["run", "--client", "fake", "--model", "m1", "--effort", "high", "--prompt", "STDOUT bye"]
+    )
+    capsys.readouterr()
+
+    rc = main(["purge", "--tag", "old"])
+    assert rc == 0
+    capsys.readouterr()
+
+    main(["list", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert len(data["executions"]) == 1
+
+
+def test_purge_hard_key_removes_all_db_records(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    key = _run_and_get_key(capsys)
+    capsys.readouterr()
+
+    rc = main(["purge", key, "--hard"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "deleted" in out
+
+    main(["list", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["executions"] == []

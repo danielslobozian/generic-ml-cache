@@ -106,6 +106,10 @@ class CachedMlExecutionService(ABC):
         """Whether this command cannot be cached. Default: always cacheable."""
         return False
 
+    def _after_record(self, execution_key: str) -> None:
+        """Called once after a successful store. Override to add post-record hooks
+        such as quota-based eviction. Default: no-op."""
+
     def _execution_tags(self, command: CacheableExecutionCommand) -> List[str]:
         """User-supplied tags to attach to executions this service records.
         Metadata only — never part of the key. Default: none."""
@@ -242,6 +246,7 @@ class CachedMlExecutionService(ABC):
             if should_store:
                 self._record_event(journal_events.RECORD, execution_key, command)
                 self._apply_tags(execution_key, command)
+                self._after_record(execution_key)
             else:
                 self._record_event(journal_events.RUN, execution_key, command)
             return execution

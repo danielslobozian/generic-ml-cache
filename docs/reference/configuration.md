@@ -28,9 +28,7 @@ explicit request.
 | `store` | Where the store lives on disk. | per-user data dir (see below) | *(none — by design)* |
 | `timeout` | Seconds before a real call is killed; empty means no timeout. | none | `GMLCACHE_TIMEOUT` |
 | `trust_scan` | Whether `--allow-path` (scan) calls may be cached. `false` keeps them passthrough (always fresh, never stored); `true` asserts the scanned folders are stable and lets them cache. | `false` | `GMLCACHE_TRUST_SCAN` |
-| `max_size` | Reserved for planned size-based eviction. **Not yet enforced.** | off | `GMLCACHE_MAX_SIZE` |
-
-Size-based eviction is planned, not yet implemented — see the [roadmap](../ROADMAP.md).
+| `max_size` | Storage quota. When set, the least-recently-accessed executions are soft-purged (LRU) after each new record until the store is at or below this size. Accepts a suffixed value: `5GB`, `500MB`, `100KB`. | off | `GMLCACHE_MAX_SIZE` |
 
 ## Precedence
 
