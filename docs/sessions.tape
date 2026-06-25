@@ -53,3 +53,11 @@ Sleep 1500ms
 # 5) Aggregate report across all sessions tagged sprint-3.
 Type "gmlcache session report --tag sprint-3"  Enter
 Sleep 3000ms
+
+# 6) Add an extra tag to session B, then remove the original one.
+Type "gmlcache session tag --add $GMLCACHE_SESSION released"  Enter
+Sleep 1200ms
+Type "gmlcache session tag --remove $GMLCACHE_SESSION sprint-3"  Enter
+Sleep 1200ms
+Type "gmlcache session report $GMLCACHE_SESSION"  Enter
+Sleep 2500ms
