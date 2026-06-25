@@ -1094,7 +1094,7 @@ def _cmd_status_line(args: argparse.Namespace) -> int:
 
     host: str = args.host
     port: int = args.port
-    stats_url = f"http://{host}:{port}/sessions/{session_id}/stats"
+    stats_url = f"http://{host}:{port}/sessions/{session_id}/stats"  # NOSONAR
     try:
         with urllib.request.urlopen(stats_url, timeout=2) as response:  # noqa: S310
             print(response.read().decode())
