@@ -17,3 +17,10 @@ def client(tmp_path: Path) -> TestClient:
     """A TestClient wired against a real but temporary store."""
     application = create_app(tmp_path)
     return TestClient(application)
+
+
+@pytest.fixture
+def app_and_client(tmp_path: Path):
+    """Return (app, TestClient) so tests can seed wired internals directly."""
+    application = create_app(tmp_path)
+    return application, TestClient(application)

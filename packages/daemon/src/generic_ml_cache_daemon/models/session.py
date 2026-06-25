@@ -26,6 +26,19 @@ class SessionResponse(BaseModel):
     spec: Optional[SpecBody] = None
 
 
+class ModelUsageBody(BaseModel):
+    client: str
+    model: str
+    spent_input: int
+    spent_output: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    reasoning_tokens: int
+    saved_tokens: int
+    executions: int
+    hits: int
+
+
 class SessionStatsResponse(BaseModel):
     session_id: str
     tags: List[str]
@@ -33,6 +46,7 @@ class SessionStatsResponse(BaseModel):
     calls: int
     hits: int
     hit_rate: float
+    by_model: List[ModelUsageBody] = []
 
 
 class TagBody(BaseModel):

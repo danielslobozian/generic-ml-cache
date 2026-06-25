@@ -21,7 +21,13 @@ EVENTS = [
     _row("2026-06-23T08:00:00+00:00", "miss", "claude", "sonnet", None),  # invocation only
 ]
 USAGE = {
-    "k1": TokenUsage(input_tokens=100, output_tokens=50),
+    "k1": TokenUsage(
+        input_tokens=100,
+        output_tokens=50,
+        cache_read_tokens=20,
+        cache_write_tokens=5,
+        reasoning_tokens=30,
+    ),
     "k2": TokenUsage(input_tokens=10, output_tokens=5),
     # k3 absent -> the run reported no usage
 }
@@ -54,6 +60,29 @@ def test_tokens_grouped_by_client_and_model():
 
     gptx = by_model[("openai", "gpt-x")]
     assert (gptx.spent_tokens, gptx.executions) == (0, 1)  # unknown usage -> 0 tokens, still 1 exec
+
+
+def test_extended_token_fields_aggregated():
+    by_model = {(m.client, m.model): m for m in _report().by_model}
+    sonnet = by_model[("claude", "sonnet")]
+    assert (sonnet.cache_read_tokens, sonnet.cache_write_tokens, sonnet.reasoning_tokens) == (
+        20,
+        5,
+        30,
+    )
+
+    # k2 had no cache/reasoning tokens — should be zero, not error
+    haiku = by_model[("claude", "haiku")]
+    assert (haiku.cache_read_tokens, haiku.cache_write_tokens, haiku.reasoning_tokens) == (0, 0, 0)
+
+    # unknown usage -> all extended fields are zero
+    gptx = by_model[("openai", "gpt-x")]
+    assert (gptx.cache_read_tokens, gptx.cache_write_tokens, gptx.reasoning_tokens) == (0, 0, 0)
+
+
+def test_extended_token_fields_zero_on_empty_session():
+    r = build_session_report("nope", [], {})
+    assert r.by_model == []
 
 
 def test_by_day_is_activity_counts_oldest_first():

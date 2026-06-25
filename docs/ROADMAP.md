@@ -182,14 +182,14 @@ same execution request model, caching engine, and persistence layer.
   `--provider` flag is needed.
 - No new runtime dependencies — all three adapters use stdlib `urllib`.
 
-### 0.11.0 — Retention and invalidation
+### 0.11.0 — Retention and invalidation *(released 2026-06-25)*
 
 - Size quotas.
 - Explicit invalidation commands.
 - Metadata-driven cleanup. Single-user; no per-scope policy.
 - Time-based cleanup is deferred to the daemon milestone (requires a resident process).
 
-### 0.12.0 — Session tags
+### 0.12.0 — Session tags *(released 2026-06-25)*
 
 Sessions carry tags — the same concept as execution tags, applied one level up. A session
 may have zero, one, or many tags; none are required.
@@ -203,7 +203,7 @@ may have zero, one, or many tags; none are required.
 - Session tags are **metadata only**: a session without tags behaves exactly as today and
   session tags never enter execution identity.
 
-### 0.13.0 — Daemon transport
+### 0.13.0 — Daemon transport *(released 2026-06-25)*
 
 A resident local process that exposes the same execution engine through a local HTTP
 interface — another *interface* over the same engine, never another engine and never a
@@ -261,7 +261,7 @@ multi-user service. See the [daemon transport design note](future/daemon-transpo
   versioned against a `generic-ml-cache-core>=X` range.
 - Strictly local and single-user — see [Positioning](design/positioning.md).
 
-### 0.14.0 — Developer status bar and launcher
+### 0.14.0 — Developer status bar and launcher *(released 2026-06-25)*
 
 A cross-platform launcher and a Claude Code status bar integration for live session
 visibility. Depends on the daemon HTTP API from 0.13.0.

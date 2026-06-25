@@ -9,8 +9,13 @@ import secrets
 from fastapi import APIRouter, HTTPException, Request
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+from generic_ml_cache_core.application.usecase.session_report import (
+    ModelUsage,
+    build_session_report,
+)
 
 from generic_ml_cache_daemon.models.session import (
+    ModelUsageBody,
     SessionCreateBody,
     SessionListResponse,
     SessionResponse,
@@ -20,9 +25,6 @@ from generic_ml_cache_daemon.models.session import (
 )
 
 router = APIRouter(prefix="/sessions")
-
-_HIT = "hit"
-_MISS = "miss"
 
 
 def _spec_to_body(spec: SessionSpec | None) -> SpecBody | None:
@@ -74,20 +76,44 @@ def get_session(session_id: str, request: Request) -> SessionResponse:
 
 @router.get("/{session_id}/stats")
 def get_session_stats(session_id: str, request: Request) -> SessionStatsResponse:
-    """Return call/hit statistics for a session."""
-    metrics = request.app.state.wired.metrics
-    counts = metrics.session_event_counts(session_id)
-    hits = counts.get(_HIT, 0)
-    misses = counts.get(_MISS, 0)
-    calls = hits + misses
-    hit_rate = round(hits / calls, 4) if calls > 0 else 0.0
+    """Return call/hit statistics and per-model token usage for a session."""
+    wired = request.app.state.wired
+    events = wired.metrics.session_events(session_id)
+    usage_by_key = _collect_usage(events, wired.repository)
+    report = build_session_report(session_id, events, usage_by_key)
+    hit_rate = round(report.hits / report.invocations, 4) if report.invocations > 0 else 0.0
     return SessionStatsResponse(
         session_id=session_id,
-        tags=metrics.session_tags(session_id),
-        spec=_spec_to_body(metrics.session_spec(session_id)),
-        calls=calls,
-        hits=hits,
+        tags=wired.metrics.session_tags(session_id),
+        spec=_spec_to_body(wired.metrics.session_spec(session_id)),
+        calls=report.invocations,
+        hits=report.hits,
         hit_rate=hit_rate,
+        by_model=[_model_usage_body(mu) for mu in report.by_model],
+    )
+
+
+def _collect_usage(events, repository) -> dict:
+    usage_by_key = {}
+    for execution_key in {row.execution_key for row in events if row.execution_key}:
+        execution = repository.find_current(execution_key)
+        if execution is not None:
+            usage_by_key[execution_key] = execution.token_usage
+    return usage_by_key
+
+
+def _model_usage_body(mu: ModelUsage) -> ModelUsageBody:
+    return ModelUsageBody(
+        client=mu.client,
+        model=mu.model,
+        spent_input=mu.spent_input,
+        spent_output=mu.spent_output,
+        cache_read_tokens=mu.cache_read_tokens,
+        cache_write_tokens=mu.cache_write_tokens,
+        reasoning_tokens=mu.reasoning_tokens,
+        saved_tokens=mu.saved_tokens,
+        executions=mu.executions,
+        hits=mu.hits,
     )
 
 
