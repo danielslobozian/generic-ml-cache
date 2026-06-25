@@ -863,3 +863,46 @@ def test_purge_hard_key_removes_all_db_records(tmp_path, monkeypatch, capsys):
     main(["list", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert data["executions"] == []
+
+
+# --- session tags (0.12.0) ---------------------------------------------------
+
+
+def test_session_start_prints_hex_id(capsys):
+    rc = main(["session", "start"])
+    assert rc == 0
+    out = capsys.readouterr().out.strip()
+    assert len(out) == 16
+    int(out, 16)  # must be valid hex
+
+
+def test_session_start_with_tag_stores_tag(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    rc = main(["session", "start", "--tag", "ticket-001"])
+    assert rc == 0
+    session_id = capsys.readouterr().out.strip()
+
+    main(["session", "report", session_id, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert "ticket-001" in data.get("tags", [])
+
+
+def test_session_start_with_multiple_tags(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    rc = main(["session", "start", "--tag", "alpha", "--tag", "beta"])
+    assert rc == 0
+    session_id = capsys.readouterr().out.strip()
+
+    main(["session", "report", session_id, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert set(data.get("tags", [])) == {"alpha", "beta"}

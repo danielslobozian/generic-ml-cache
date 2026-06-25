@@ -1487,8 +1487,15 @@ def _resolve_session(args: argparse.Namespace) -> Optional[str]:
 def _cmd_session_start(args: argparse.Namespace) -> int:
     import secrets
 
+    session_id = secrets.token_hex(8)
     # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
-    print(secrets.token_hex(8))
+    print(session_id)
+    tags = getattr(args, "tag", None) or []
+    if tags:
+        settings = config.resolve_settings(config.load())
+        wired = build_use_cases(Path(str(settings["store"][0])))
+        for tag in tags:
+            wired.metrics.add_session_tag(session_id, tag)
     return 0
 
 
@@ -1508,8 +1515,10 @@ def _comma(n: int) -> str:
     return f"{n:,}"
 
 
-def _render_session_report(report) -> str:
+def _render_session_report(report, tags: list = None) -> str:
     lines = [f"session     : {report.session_id}"]
+    if tags:
+        lines.append(f"tags        : {', '.join(sorted(tags))}")
     if report.span_start:
         span = (
             report.span_start
@@ -1545,9 +1554,10 @@ def _render_session_report(report) -> str:
     return "\n".join(lines)
 
 
-def _session_report_json(report) -> dict:
+def _session_report_json(report, tags: list) -> dict:
     return {
         "session": report.session_id,
+        "tags": tags,
         "invocations": report.invocations,
         "executions": report.executions,
         "hits": report.hits,
@@ -1584,6 +1594,7 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
         return 4
     wired = build_use_cases(store_root)
     events = wired.metrics.session_events(args.session_id)
+    tags = wired.metrics.session_tags(args.session_id)
     # Join each event's execution to its token usage (the current execution per key).
     usage_by_key = {}
     for key in {e.execution_key for e in events if e.execution_key}:
@@ -1595,12 +1606,12 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     if args.json:
         import json
 
-        print(json.dumps(_session_report_json(report), indent=2))
+        print(json.dumps(_session_report_json(report, tags), indent=2))
         return 0
-    if report.invocations == 0:
+    if report.invocations == 0 and not tags:
         print(f"no events recorded for session {args.session_id!r}")
         return 0
-    print(_render_session_report(report))
+    print(_render_session_report(report, tags))
     return 0
 
 
@@ -2082,6 +2093,12 @@ def build_parser() -> argparse.ArgumentParser:
     session = sub.add_parser("session", help="group a workflow's runs under a session id")
     session_sub = session.add_subparsers(dest="session_command")
     session_start = session_sub.add_parser("start", help="generate a new session id and print it")
+    session_start.add_argument(
+        "--tag",
+        action="append",
+        metavar="TAG",
+        help="attach a tag to the session (repeatable)",
+    )
     session_start.set_defaults(func=_cmd_session_start)
     session_report = session_sub.add_parser("report", help="summarise a session's activity")
     session_report.add_argument("session_id", help="the session id to report on")
