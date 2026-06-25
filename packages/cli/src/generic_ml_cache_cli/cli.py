@@ -50,6 +50,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
 )
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
@@ -1498,6 +1499,21 @@ def _resolve_session(args: argparse.Namespace) -> Optional[str]:
     return flag if flag else (os.environ.get("GMLCACHE_SESSION") or None)
 
 
+def _parse_spec_args(args: argparse.Namespace) -> "Optional[SessionSpec]":
+    """Return a SessionSpec from --client/--model/--effort, or None if all are absent.
+    Raises ValueError on a partial spec (some but not all flags supplied).
+    """
+    client = getattr(args, "client", None)
+    model = getattr(args, "model", None)
+    effort = getattr(args, "effort", None)
+    provided = [x is not None for x in (client, model, effort)]
+    if not any(provided):
+        return None
+    if not all(provided):
+        raise ValueError("--client, --model, and --effort must all be supplied together")
+    return SessionSpec(client=client, model=model, effort=effort)
+
+
 def _cmd_session_start(args: argparse.Namespace) -> int:
     import secrets
 
@@ -1505,11 +1521,71 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
     # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
     print(session_id)
     tags = getattr(args, "tag", None) or []
-    if tags:
+    try:
+        spec = _parse_spec_args(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if tags or spec:
         settings = config.resolve_settings(config.load())
         wired = build_use_cases(Path(str(settings["store"][0])))
         for tag in tags:
             wired.metrics.add_session_tag(session_id, tag)
+        if spec is not None:
+            wired.metrics.set_session_spec(session_id, spec)
+    return 0
+
+
+def _cmd_session_update(args: argparse.Namespace) -> int:
+    try:
+        spec = _parse_spec_args(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if spec is None:
+        print(
+            "error: --client, --model, and --effort are all required for session update",
+            file=sys.stderr,
+        )
+        return 2
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    wired = build_use_cases(store_root)
+    wired.metrics.set_session_spec(args.session_id, spec)
+    if not args.json:
+        print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
+    else:
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "session": args.session_id,
+                    "spec": {
+                        "client": spec.client,
+                        "model": spec.model,
+                        "effort": spec.effort,
+                    },
+                },
+                indent=2,
+            )
+        )
+    return 0
+
+
+def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    wired = build_use_cases(store_root)
+    wired.metrics.clear_session_spec(args.session_id)
+    if not args.json:
+        print(f"spec cleared for session {args.session_id}")
+    else:
+        import json
+
+        print(json.dumps({"session": args.session_id, "spec": None}, indent=2))
     return 0
 
 
@@ -1694,7 +1770,7 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
 
 def _cmd_session(args: argparse.Namespace) -> int:
     print(
-        "usage: gmlcache session start | gmlcache session tag <id> | gmlcache session report <id>",
+        "usage: gmlcache session start | tag | update | clear-spec | report",
         file=sys.stderr,
     )
     return 2
@@ -2191,7 +2267,40 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAG",
         help="attach a tag to the session (repeatable)",
     )
+    session_start.add_argument("--client", metavar="CLIENT", help="adapter for the session spec")
+    session_start.add_argument("--model", metavar="MODEL", help="model for the session spec")
+    session_start.add_argument(
+        "--effort",
+        metavar="EFFORT",
+        help="effort for the session spec (empty string for Cursor)",
+    )
     session_start.set_defaults(func=_cmd_session_start)
+    session_update = session_sub.add_parser(
+        "update", help="replace the execution spec on an existing session"
+    )
+    session_update.add_argument("session_id", help="the session id to update")
+    session_update.add_argument(
+        "--client", required=True, metavar="CLIENT", help="adapter for the new spec"
+    )
+    session_update.add_argument(
+        "--model", required=True, metavar="MODEL", help="model for the new spec"
+    )
+    session_update.add_argument(
+        "--effort",
+        required=True,
+        metavar="EFFORT",
+        help="effort for the new spec (empty string for Cursor)",
+    )
+    session_update.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_update.set_defaults(func=_cmd_session_update)
+    session_clear_spec = session_sub.add_parser(
+        "clear-spec", help="remove the execution spec from an existing session"
+    )
+    session_clear_spec.add_argument("session_id", help="the session id to clear the spec from")
+    session_clear_spec.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON"
+    )
+    session_clear_spec.set_defaults(func=_cmd_session_clear_spec)
     session_tag_cmd = session_sub.add_parser(
         "tag", help="add or remove tags on an existing session"
     )

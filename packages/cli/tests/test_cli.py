@@ -1003,6 +1003,127 @@ def test_session_tag_no_flags_returns_error(capsys):
     assert "add" in capsys.readouterr().err
 
 
+# --- session spec (0.13.0) ---------------------------------------------------
+
+
+def test_session_start_with_spec_attaches_spec(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    rc = main(
+        ["session", "start", "--client", "claude", "--model", "claude-opus-4-8", "--effort", "high"]
+    )
+    assert rc == 0
+    session_id = capsys.readouterr().out.strip()
+    assert session_id  # non-empty hex id
+
+
+def test_session_start_partial_spec_returns_error(capsys):
+    rc = main(["session", "start", "--client", "claude"])
+    assert rc == 2
+    assert "effort" in capsys.readouterr().err or "model" in capsys.readouterr().err
+
+
+def test_session_update_sets_spec(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "gemini",
+            "--model",
+            "gemini-2.0-flash",
+            "--effort",
+            "",
+        ]
+    )
+    assert rc == 0
+
+
+def test_session_update_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "claude",
+            "--model",
+            "claude-sonnet-4-6",
+            "--effort",
+            "medium",
+            "--json",
+        ]
+    )
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["session"] == session_id
+    assert data["spec"]["client"] == "claude"
+    assert data["spec"]["model"] == "claude-sonnet-4-6"
+    assert data["spec"]["effort"] == "medium"
+
+
+def test_session_clear_spec_succeeds(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+    main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "claude",
+            "--model",
+            "m",
+            "--effort",
+            "low",
+        ]
+    )
+    capsys.readouterr()
+
+    rc = main(["session", "clear-spec", session_id])
+    assert rc == 0
+
+
+def test_session_clear_spec_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(["session", "clear-spec", session_id, "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["session"] == session_id
+    assert data["spec"] is None
+
+
 def test_session_report_by_tag_aggregates_sessions(tmp_path, monkeypatch, capsys):
     import json
 
