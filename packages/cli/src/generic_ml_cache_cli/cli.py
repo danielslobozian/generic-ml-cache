@@ -985,6 +985,99 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_daemon(args: argparse.Namespace) -> int:
+    print("usage: gmlcache daemon {start,stop,status}", file=sys.stderr)
+    return 1
+
+
+def _cmd_daemon_start(args: argparse.Namespace) -> int:
+    try:
+        from generic_ml_cache_daemon.app import create_app  # noqa: PLC0415
+    except ImportError:
+        print(
+            "error: generic-ml-cache-daemon is not installed. "
+            "Install it with: pip install generic-ml-cache-daemon",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        import uvicorn  # noqa: PLC0415
+    except ImportError:
+        print("error: uvicorn is not installed (install generic-ml-cache-daemon)", file=sys.stderr)
+        return 1
+
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+
+    session_id: Optional[str] = getattr(args, "session", None) or None
+    enable_metrics: bool = getattr(args, "metrics", False)
+    host: str = args.host
+    port: int = args.port
+
+    application = create_app(store_root, session_id=session_id, enable_metrics=enable_metrics)
+    uvicorn.run(application, host=host, port=port)
+    return 0
+
+
+def _cmd_daemon_status(args: argparse.Namespace) -> int:
+    import json as _json  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    host: str = args.host
+    port: int = args.port
+    url = f"http://{host}:{port}/health"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310
+            data = _json.loads(resp.read())
+            status = data.get("status", "unknown")
+    except urllib.error.URLError:
+        status = "not running"
+        if not getattr(args, "json", False):
+            print(f"daemon: {status}")
+            return 1
+
+    if getattr(args, "json", False):
+        import json as _json2  # noqa: PLC0415
+
+        print(_json2.dumps({"status": status, "host": host, "port": port}))
+    else:
+        print(f"daemon: {status} (http://{host}:{port})")
+    return 0 if status == "ok" else 1
+
+
+def _cmd_daemon_stop(args: argparse.Namespace) -> int:
+    import signal  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    host: str = args.host
+    port: int = args.port
+    health_url = f"http://{host}:{port}/health"
+    try:
+        urllib.request.urlopen(health_url, timeout=3)  # noqa: S310
+    except urllib.error.URLError:
+        print("daemon: not running", file=sys.stderr)
+        return 1
+
+    store_root = _store_root()
+    pid_path = (store_root / ".daemon.pid") if store_root else None
+    if pid_path is None or not pid_path.exists():
+        print("daemon: running but no PID file found — send SIGTERM manually", file=sys.stderr)
+        return 1
+
+    try:
+        pid = int(pid_path.read_text().strip())
+        os.kill(pid, signal.SIGTERM)
+        pid_path.unlink(missing_ok=True)
+        print(f"daemon: sent SIGTERM to PID {pid}")
+        return 0
+    except (ValueError, OSError) as exc:
+        print(f"daemon: failed to stop — {exc}", file=sys.stderr)
+        return 1
+
+
 def _cmd_init(args: argparse.Namespace) -> int:
     try:
         path, created = config.write_default_config()
@@ -2374,6 +2467,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="create the config file in the default location (if absent), then show the store",
     )
     init.set_defaults(func=_cmd_init)
+
+    daemon = sub.add_parser("daemon", help="manage the generic-ml-cache HTTP daemon")
+    daemon_sub = daemon.add_subparsers(dest="daemon_command")
+
+    _daemon_host_port = {"host": "127.0.0.1", "port": 8765}
+
+    daemon_start = daemon_sub.add_parser("start", help="start the HTTP daemon (foreground)")
+    daemon_start.add_argument("--host", default=_daemon_host_port["host"], metavar="HOST")
+    daemon_start.add_argument("--port", type=int, default=_daemon_host_port["port"], metavar="PORT")
+    daemon_start.add_argument("--session", metavar="SESSION_ID", help="bind daemon to a session")
+    daemon_start.add_argument("--metrics", action="store_true", help="enable Prometheus /metrics")
+    daemon_start.set_defaults(func=_cmd_daemon_start)
+
+    daemon_status = daemon_sub.add_parser("status", help="check if the daemon is running")
+    daemon_status.add_argument("--host", default=_daemon_host_port["host"], metavar="HOST")
+    daemon_status.add_argument(
+        "--port", type=int, default=_daemon_host_port["port"], metavar="PORT"
+    )
+    daemon_status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    daemon_status.set_defaults(func=_cmd_daemon_status)
+
+    daemon_stop = daemon_sub.add_parser("stop", help="send SIGTERM to a running daemon")
+    daemon_stop.add_argument("--host", default=_daemon_host_port["host"], metavar="HOST")
+    daemon_stop.add_argument("--port", type=int, default=_daemon_host_port["port"], metavar="PORT")
+    daemon_stop.set_defaults(func=_cmd_daemon_stop)
+
+    daemon.set_defaults(func=_cmd_daemon)
 
     return parser
 

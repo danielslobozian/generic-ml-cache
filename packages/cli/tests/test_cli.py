@@ -1293,3 +1293,81 @@ def test_purge_session_tag_unknown_tag_is_noop(tmp_path, monkeypatch, capsys):
     rc = main(["purge", "--session-tag", "ghost"])
     assert rc == 0
     assert "nothing to purge" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# daemon subcommand
+# ---------------------------------------------------------------------------
+
+
+def test_daemon_no_subcommand_returns_1(capsys):
+    rc = main(["daemon"])
+    assert rc == 1
+
+
+def test_daemon_start_no_daemon_package(monkeypatch):
+    import sys
+
+    saved = sys.modules.get("generic_ml_cache_daemon")
+    sys.modules["generic_ml_cache_daemon"] = None  # block import
+    sys.modules["generic_ml_cache_daemon.app"] = None
+    try:
+        rc = main(["daemon", "start"])
+        assert rc == 1
+    finally:
+        if saved is None:
+            sys.modules.pop("generic_ml_cache_daemon", None)
+            sys.modules.pop("generic_ml_cache_daemon.app", None)
+        else:
+            sys.modules["generic_ml_cache_daemon"] = saved
+
+
+def test_daemon_status_not_running(capsys):
+    rc = main(["daemon", "status", "--host", "127.0.0.1", "--port", "19999"])
+    assert rc == 1
+    assert "not running" in capsys.readouterr().out
+
+
+def test_daemon_status_json_not_running(capsys):
+    import json
+
+    rc = main(["daemon", "status", "--host", "127.0.0.1", "--port", "19999", "--json"])
+    assert rc == 1
+    data = json.loads(capsys.readouterr().out)
+    assert data["status"] == "not running"
+
+
+def test_daemon_stop_not_running(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    rc = main(["daemon", "stop", "--host", "127.0.0.1", "--port", "19999"])
+    assert rc == 1
+
+
+def test_daemon_start_calls_uvicorn(tmp_path, monkeypatch, capsys):
+    from unittest.mock import MagicMock, patch
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    mock_app = MagicMock()
+    mock_create_app = MagicMock(return_value=mock_app)
+    mock_uvicorn = MagicMock()
+
+    with (
+        patch("generic_ml_cache_cli.cli._store_root", return_value=tmp_path),
+        patch.dict(
+            "sys.modules",
+            {
+                "generic_ml_cache_daemon": MagicMock(),
+                "generic_ml_cache_daemon.app": MagicMock(create_app=mock_create_app),
+                "uvicorn": mock_uvicorn,
+            },
+        ),
+    ):
+        rc = main(["daemon", "start"])
+
+    assert rc == 0
+    mock_uvicorn.run.assert_called_once()
