@@ -52,7 +52,7 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build packages/${{ matrix.package }} --outdir dist
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: dist-${{ matrix.package }}
           path: dist/
@@ -69,7 +69,7 @@ jobs:
     permissions:
       id-token: write # OIDC token for Trusted Publishing
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: dist-core
           path: dist/
@@ -83,7 +83,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: dist-cli
           path: dist/
@@ -99,7 +99,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: dist-daemon
           path: dist/

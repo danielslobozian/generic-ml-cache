@@ -88,6 +88,7 @@ def main() -> None:
                 str(_exe(venv, "pip")), "install", "-q",
                 "-e", str(repo_root / "packages" / "core"),
                 "-e", str(repo_root / "packages" / "cli"),
+                "-e", str(repo_root / "packages" / "daemon"),
             ],
             check=True,
         )

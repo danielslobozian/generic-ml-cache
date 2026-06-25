@@ -19,7 +19,7 @@
 
 <br>
 
-[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Usage](#usage)&nbsp;&nbsp;•&nbsp;&nbsp;[Two packages](#built-as-two-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
+[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Usage](#usage)&nbsp;&nbsp;•&nbsp;&nbsp;[Three packages](#three-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
 
 </div>
 
@@ -30,7 +30,8 @@
 ## Install
 
 ```bash
-pip install generic-ml-cache-cli      # installs the `gmlcache` command (and the engine, generic-ml-cache-core)
+pip install generic-ml-cache-cli      # gmlcache command + the engine (generic-ml-cache-core)
+pip install generic-ml-cache-daemon   # optional: local HTTP API (gmlcache daemon)
 ```
 
 ## Usage
@@ -98,16 +99,17 @@ It is **not** a gateway, **not** a multi-user router, and **not** a way to make 
 
 <br>
 
-## Built as two packages
+## Three packages
 
-`gmlcache` — the terminal client — is the face most people use. Behind it sits a **reusable engine** you can embed in your own application instead of driving it from a terminal.
+`gmlcache` — the terminal client — is the face most people use. Behind it sits a **reusable engine** you can embed in your own application, and an optional **HTTP daemon** that exposes the same cache as a local REST API.
 
 | Package | What it is | Install |
 |---|---|---|
 | [`generic-ml-cache-cli`](packages/cli) | the `gmlcache` terminal client | `pip install generic-ml-cache-cli` |
 | [`generic-ml-cache-core`](packages/core) | the engine — domain, use cases, ports, and the default adapters; **stateless** | `pip install generic-ml-cache-core` |
+| [`generic-ml-cache-daemon`](packages/daemon) | local HTTP API over the cache store; Claude gateway proxy | `pip install generic-ml-cache-daemon` |
 
-The CLI is one inbound driver over the engine; a daemon could be another. The engine ships everything but the user interface and the data source — to embed it, depend on the core and inject your own data source:
+The CLI and the daemon are both inbound drivers over the same engine. The engine ships everything but the user interface and the data source — to embed it, depend on the core and inject your own data source:
 
 ```python
 from generic_ml_cache_core import build_use_cases
