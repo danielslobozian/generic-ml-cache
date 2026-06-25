@@ -31,6 +31,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       # core is dependency-free; cli depends on core, so install core first (editable)
       # so the matrixed package builds against the in-repo core, not a PyPI release.
