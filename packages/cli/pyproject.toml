@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "generic-ml-cache-cli"
-version = "0.10.0"
+version = "0.11.0"
 description = "Terminal UI for generic-ml-cache: the gmlcache command. A thin inbound driver over generic-ml-cache-core -- reads config, provides the data source, maps commands onto the core library."
 readme = "README.md"
 requires-python = ">=3.9"
