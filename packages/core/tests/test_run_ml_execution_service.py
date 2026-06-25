@@ -142,6 +142,9 @@ class FakeMetrics(MetricsPort):
     def add_session_tag(self, session_id, tag) -> None:
         pass
 
+    def remove_session_tag(self, session_id, tag) -> None:
+        pass
+
     def session_tags(self, session_id) -> List[str]:
         return []
 

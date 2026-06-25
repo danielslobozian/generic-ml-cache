@@ -98,6 +98,11 @@ class MetricsPort(ABC):
         """Attach ``tag`` to ``session_id``. Must never raise."""
 
     @abstractmethod
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        """Detach ``tag`` from ``session_id``. No-op when the tag is absent.
+        Must never raise."""
+
+    @abstractmethod
     def session_tags(self, session_id: str) -> List[str]:
         """Return the distinct tags attached to ``session_id``.
         Empty list for an unknown session."""

@@ -962,6 +962,47 @@ def test_session_tag_add_json_output(tmp_path, monkeypatch, capsys):
     assert "proj" in data["tags"]
 
 
+def test_session_tag_remove_detaches_tag(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    main(["session", "tag", session_id, "--add", "keep", "--add", "drop"])
+    capsys.readouterr()
+
+    rc = main(["session", "tag", session_id, "--remove", "drop"])
+    assert rc == 0
+    capsys.readouterr()
+
+    main(["session", "report", session_id, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert "keep" in data.get("tags", [])
+    assert "drop" not in data.get("tags", [])
+
+
+def test_session_tag_remove_noop_when_tag_absent(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(["session", "tag", session_id, "--remove", "ghost"])
+    assert rc == 0
+
+
+def test_session_tag_no_flags_returns_error(capsys):
+    rc = main(["session", "tag", "some-id"])
+    assert rc == 2
+    assert "add" in capsys.readouterr().err
+
+
 def test_session_report_by_tag_aggregates_sessions(tmp_path, monkeypatch, capsys):
     import json
 

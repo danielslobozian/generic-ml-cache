@@ -68,6 +68,9 @@ class JournalMetrics(MetricsPort):
     def add_session_tag(self, session_id: str, tag: str) -> None:
         self._registry.add_session_tag(session_id, tag)
 
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        self._registry.remove_session_tag(session_id, tag)
+
     def session_tags(self, session_id: str) -> List[str]:
         return self._registry.session_tags_for_id(session_id)
 

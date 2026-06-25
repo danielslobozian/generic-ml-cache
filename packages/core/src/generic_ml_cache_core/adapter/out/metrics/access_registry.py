@@ -232,6 +232,21 @@ class AccessRegistry:
         except Exception:
             pass
 
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        """Detach ``tag`` from ``session_id``. No-op when the tag is absent. Never raises."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "DELETE FROM session_tags WHERE session_id = ? AND tag = ?",
+                    (session_id, tag),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
     def session_tags_for_id(self, session_id: str) -> List[str]:
         """Return the distinct tags attached to ``session_id`` ([] if unknown or unavailable)."""
         try:

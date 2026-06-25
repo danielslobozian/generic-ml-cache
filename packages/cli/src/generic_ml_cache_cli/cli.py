@@ -1670,12 +1670,17 @@ def _cmd_session_report_by_tag(wired, tag: str, as_json: bool) -> int:
 
 
 def _cmd_session_tag(args: argparse.Namespace) -> int:
+    if not args.add and not args.remove:
+        print("error: supply at least one --add or --remove flag", file=sys.stderr)
+        return 2
     store_root = _store_root()
     if store_root is None:
         return 4
     wired = build_use_cases(store_root)
     for tag in args.add:
         wired.metrics.add_session_tag(args.session_id, tag)
+    for tag in args.remove:
+        wired.metrics.remove_session_tag(args.session_id, tag)
     if not args.json:
         tags = wired.metrics.session_tags(args.session_id)
         print(f"tags : {', '.join(sorted(tags))}")
@@ -2187,14 +2192,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="attach a tag to the session (repeatable)",
     )
     session_start.set_defaults(func=_cmd_session_start)
-    session_tag_cmd = session_sub.add_parser("tag", help="add tags to an existing session")
+    session_tag_cmd = session_sub.add_parser(
+        "tag", help="add or remove tags on an existing session"
+    )
     session_tag_cmd.add_argument("session_id", help="the session id to tag")
     session_tag_cmd.add_argument(
         "--add",
         action="append",
-        required=True,
+        default=[],
         metavar="TAG",
         help="tag to attach (repeatable)",
+    )
+    session_tag_cmd.add_argument(
+        "--remove",
+        action="append",
+        default=[],
+        metavar="TAG",
+        help="tag to detach (repeatable)",
     )
     session_tag_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_tag_cmd.set_defaults(func=_cmd_session_tag)

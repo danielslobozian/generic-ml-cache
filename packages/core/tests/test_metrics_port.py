@@ -91,6 +91,11 @@ class InMemoryMetrics(MetricsPort):
     def add_session_tag(self, session_id: str, tag: str) -> None:
         self._session_tags.setdefault(session_id, []).append(tag)
 
+    def remove_session_tag(self, session_id: str, tag: str) -> None:
+        tags = self._session_tags.get(session_id, [])
+        if tag in tags:
+            tags.remove(tag)
+
     def session_tags(self, session_id: str) -> List[str]:
         return list(dict.fromkeys(self._session_tags.get(session_id, [])))
 
