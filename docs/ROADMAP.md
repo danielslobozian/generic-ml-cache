@@ -31,9 +31,9 @@ The current ruling for versioning is:
   "current capability" release. Each `0.x` minor lands a feature milestone; `y` covers
   fixes and small corrections.
 - `1.0.0` is the **stable, feature-rich** release — the point at which every planned
-  feature has landed (gateway, daemon, and SDK adapters included), the **alpha tag is
-  removed**, and the CLI surface, execution-record schema, and adapter contract are locked
-  under a compatibility policy.
+  feature has landed (gateway, daemon, dynamic adapter loading, and developer tooling
+  included), the **alpha tag is removed**, and the CLI surface, execution-record schema,
+  and adapter contract are locked under a compatibility policy.
 
 Schema-shaping features (persistence, sessions) deliberately land **before** `1.0.0`,
 while `0.x` still permits the record schema to change — so `1.0.0` can lock a schema that
@@ -219,12 +219,44 @@ multi-user service. See the [daemon transport design note](future/daemon-transpo
   session. Composing with session tags enables a clean shell alias — create the session,
   start the daemon bound to it, set the base URL, then launch the client; all in one
   command.
+- **Session execution spec**: at `session start`, optionally attach a complete execution
+  spec — adapter, model, and effort. All three move together; partial specs are rejected.
+  Effort may be empty for adapters that bake it into the model name (Cursor). Runs within
+  that session inherit the spec without the caller repeating it. The spec is always
+  validated at runtime against the active adapter whitelist — if the adapter has been
+  removed from the whitelist since the session was created, the call fails immediately
+  with a clear error.
+- **Session spec mutation**: `session update --client <a> --model <m> [--effort <e>]`
+  replaces the spec atomically, forward-only — past runs are unaffected.
+  `session clear-spec <id>` removes the spec entirely without requiring empty fields.
+- **Session tag removal**: `session tag <id> --remove <tag>` (complement to `--add`
+  from 0.12.0).
+- **Gateway routing**: the daemon uses the session spec as its routing directive — a call
+  arriving from one adapter can be transparently redirected to the adapter configured in
+  the session, enabling subscription-aware routing without any change to the calling
+  client.
 - Transport-level live status and events.
 - Ships as a **dedicated, independently-versioned package** (`generic-ml-cache-daemon`),
   versioned against a `generic-ml-cache-core>=X` range.
 - Strictly local and single-user — see [Positioning](design/positioning.md).
 
-### 0.14.0 — Scheduled eviction
+### 0.14.0 — Developer status bar and launcher
+
+A cross-platform launcher and a Claude Code status bar integration for live session
+visibility. Depends on the daemon HTTP API from 0.13.0.
+
+- **Launcher script** (bash / PowerShell / macOS shell): creates a cache session, exports
+  `GMLCACHE_SESSION` and the daemon base URL into the environment, then starts Claude Code
+  with the gateway already configured. One command starts a fully instrumented session.
+- **Status bar**: a Claude Code status line configuration that polls the daemon's session
+  endpoint and displays live stats — call count, cache hit count, current configured
+  adapter — updating as the session progresses.
+- The status bar makes the cache's behaviour visible without leaving the editor: call
+  counts accumulate in real time, hit/miss ratio builds, and the active adapter is always
+  visible — even when the underlying client has made many more calls than the user
+  explicitly triggered.
+
+### 0.15.0 — Scheduled eviction
 
 Time-based cache maintenance, enabled by the resident daemon from 0.13.0.
 
@@ -232,19 +264,20 @@ Time-based cache maintenance, enabled by the resident daemon from 0.13.0.
 - Complements the size-based eviction introduced in 0.11.0.
 - Eviction events surfaced through the daemon's live status reporting.
 
-### 0.15.0 — SDK adapters and dynamic adapter loading
+### 0.16.0 — Dynamic adapter loading and adapter whitelist
 
-Replace the stdlib `urllib`-based API adapters and CLI subprocess wrappers with official
-provider SDKs; split adapters out of `core` into dedicated optional packages. Use Python
-entry points for automatic discovery.
+Replace the static adapter registry with entry-point discovery; add a config-driven
+whitelist to control which adapters are active at runtime. SDK adapters are a
+post-1.0.0 concern.
 
-- **SDK adapters** (3 CLI agent SDKs + 3 provider API SDKs) become the canonical
-  implementations. `core` ships no concrete adapters — only the ports and the entry-point
-  discovery loop.
-- **Adapter packages** (`generic-ml-cache-adapters-cli`,
-  `generic-ml-cache-adapters-anthropic`, etc.) declare `gmlcache.adapters` entry points.
-  Installing a package makes its adapter available; not installing it leaves 0 adapters for
-  that provider.
+- **Entry-point discovery**: adapter packages declare `gmlcache.adapters` entry points.
+  Installing a package makes its adapter available; not installing it leaves no adapter
+  for that provider. No explicit registration in the library is required.
+- **Adapter whitelist**: configure in the config file with `adapters = *` (all
+  discovered adapters active), `adapters = claude, cursor` (named filter), or omit
+  entirely (same as `*`). Removing an adapter from the whitelist disables it
+  immediately — any session spec referencing it fails at the next call with a clear
+  error.
 - **Unified registry**: the current `client/registry` and `api/api_registry` are merged
   into a single registry keyed on `MlRunnerPort.name`, populated at startup by scanning
   entry points.
@@ -259,7 +292,7 @@ entry points for automatic discovery.
 - Stable execution-record schema and compatibility policy.
 - Stable adapter contract — including verifying the per-client read-permission mechanism
   currently confirmed only for Claude.
-- Public documentation aligned with actual behavior.
+- Public documentation aligned with actual behaviour.
 
 ## After 1.0.0
 
@@ -267,6 +300,11 @@ The dedicated adapter packages (`generic-ml-cache-adapters-*`) and the daemon pa
 (`generic-ml-cache-daemon`) will version independently against a
 `generic-ml-cache-core>=X` compatibility range once 1.0.0 has locked the core contract.
 Core and cli remain lockstep; the surrounding ecosystem can evolve at its own cadence.
+
+**SDK adapters** (replacing the stdlib `urllib` API adapters and CLI subprocess wrappers
+with official provider SDKs) are a post-1.0.0 nice-to-have. The entry-point discovery
+mechanism from 0.16.0 means SDK adapters can be introduced as new adapter packages
+without any change to the core.
 
 ## Out of scope unless explicitly revisited
 
