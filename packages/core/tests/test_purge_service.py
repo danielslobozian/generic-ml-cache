@@ -59,6 +59,7 @@ class FakeMetrics(MetricsPort):
         self._last_access = last_access or {}
         self._session_keys = session_keys or {}
         self._deleted_keys: List[str] = []
+        self._session_tags_index: Dict[str, List[str]] = {}
 
     def record_event(self, event, *, execution_key, client, model, effort, session_id=None):
         pass
@@ -83,6 +84,19 @@ class FakeMetrics(MetricsPort):
 
     def delete_events_for_key(self, execution_key: str) -> None:
         self._deleted_keys.append(execution_key)
+
+    def add_session_tag(self, session_id: str, tag: str) -> None:
+        pass
+
+    def session_tags(self, session_id: str) -> List[str]:
+        return []
+
+    def session_ids_for_tag(self, tag: str) -> List[str]:
+        return self._session_tags_index.get(tag, [])
+
+    def _with_session_tags(self, tag_to_sessions: Dict[str, List[str]]) -> "FakeMetrics":
+        self._session_tags_index = tag_to_sessions
+        return self
 
 
 def _identity(prompt: str = "p") -> ManagedCallIdentity:
@@ -452,3 +466,63 @@ def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():
 
     assert report.executions_removed >= 1
     assert report.bytes_freed > 0
+
+
+# --- purge_by_session_tag / hard_delete_by_session_tag -----------------------
+
+
+def _svc_with_session_tag(tag: str, session_ids: List[str], key_per_session: Dict[str, str]):
+    """Build a PurgeService wired with executions, one per session under ``tag``."""
+    repo, store = _repo_with_entries(list(key_per_session.values()))
+    metrics = FakeMetrics(
+        session_keys={sid: [key] for sid, key in key_per_session.items()},
+    )._with_session_tags({tag: session_ids})
+    return PurgeService(repo, store, metrics), repo
+
+
+def _repo_with_entries(keys: List[str]):
+    repo = InMemoryExecutionRepository(FixedClock())
+    blob_store = InMemoryBlobStore()
+    for key in keys:
+        identity = _identity(prompt=key)
+        execution = _execution(identity, content=key.encode())
+        repo.save(execution)
+        blob_store.put("blob_" + key.encode().hex(), key.encode())
+    return repo, blob_store
+
+
+def test_purge_by_session_tag_removes_executions():
+    svc, repo = _svc_with_session_tag(
+        "sprint",
+        ["s1", "s2"],
+        {"s1": "key1", "s2": "key2"},
+    )
+    report = svc.purge_by_session_tag("sprint")
+    assert report.executions_removed == 2
+
+
+def test_purge_by_session_tag_unknown_tag_is_noop():
+    svc, repo = _svc_with_session_tag("sprint", ["s1"], {"s1": "key1"})
+    report = svc.purge_by_session_tag("ghost")
+    assert report.executions_removed == 0
+
+
+def test_hard_delete_by_session_tag_removes_executions():
+    svc, repo = _svc_with_session_tag(
+        "sprint",
+        ["s1"],
+        {"s1": "key1"},
+    )
+    report = svc.hard_delete_by_session_tag("sprint")
+    assert report.executions_removed == 1
+
+
+def test_purge_by_session_tag_deduplicates_shared_keys():
+    """A key appearing in two sessions under the same tag is purged only once."""
+    repo, blob_store = _repo_with_entries(["shared-key"])
+    metrics = FakeMetrics(
+        session_keys={"s1": ["shared-key"], "s2": ["shared-key"]},
+    )._with_session_tags({"tag": ["s1", "s2"]})
+    svc = PurgeService(repo, blob_store, metrics)
+    report = svc.purge_by_session_tag("tag")
+    assert report.executions_removed == 1

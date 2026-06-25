@@ -1104,20 +1104,21 @@ def _cmd_purge(args: argparse.Namespace) -> int:
     key = getattr(args, "key", None)
     tag = getattr(args, "tag", None)
     session = getattr(args, "session", None)
+    session_tag = getattr(args, "session_tag", None)
     purge_all = getattr(args, "all", False)
     hard = getattr(args, "hard", False)
     confirm = getattr(args, "confirm", None)
 
-    selectors = [bool(key), bool(tag), bool(session), bool(purge_all)]
+    selectors = [bool(key), bool(tag), bool(session), bool(session_tag), bool(purge_all)]
     if sum(selectors) == 0:
         print(
-            "gmlc: provide a target: <key>, --tag <tag>, --session <id>, or --all",
+            "gmlc: provide a target: <key>, --tag, --session, --session-tag, or --all",
             file=sys.stderr,
         )
         return 1
     if sum(selectors) > 1:
         print(
-            "gmlc: only one of <key>, --tag, --session, --all may be given",
+            "gmlc: only one of <key>, --tag, --session, --session-tag, --all may be given",
             file=sys.stderr,
         )
         return 1
@@ -1142,6 +1143,12 @@ def _cmd_purge(args: argparse.Namespace) -> int:
         report = svc.hard_delete_by_tag(tag) if hard else svc.purge_by_tag(tag)
     elif session:
         report = svc.hard_delete_by_session(session) if hard else svc.purge_by_session(session)
+    elif session_tag:
+        report = (
+            svc.hard_delete_by_session_tag(session_tag)
+            if hard
+            else svc.purge_by_session_tag(session_tag)
+        )
     else:
         report = svc.hard_delete_all() if hard else svc.purge_all()
 
@@ -1202,6 +1209,13 @@ def _cmd_list(args: argparse.Namespace) -> int:
     excluded_tags = set(getattr(args, "exclude_tag", None) or [])
     if excluded_tags:
         entries = [entry for entry in entries if not excluded_tags & set(entry["tags"])]
+    wanted_session_tags = list(getattr(args, "session_tag", None) or [])
+    if wanted_session_tags:
+        allowed_keys: set = set()
+        for session_tag in wanted_session_tags:
+            for session_id in wired.metrics.session_ids_for_tag(session_tag):
+                allowed_keys.update(wired.metrics.execution_keys_for_session(session_id))
+        entries = [entry for entry in entries if entry["key"] in allowed_keys]
 
     if args.json:
         print(json.dumps({"executions": entries}, indent=2))
@@ -1487,8 +1501,15 @@ def _resolve_session(args: argparse.Namespace) -> Optional[str]:
 def _cmd_session_start(args: argparse.Namespace) -> int:
     import secrets
 
+    session_id = secrets.token_hex(8)
     # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
-    print(secrets.token_hex(8))
+    print(session_id)
+    tags = getattr(args, "tag", None) or []
+    if tags:
+        settings = config.resolve_settings(config.load())
+        wired = build_use_cases(Path(str(settings["store"][0])))
+        for tag in tags:
+            wired.metrics.add_session_tag(session_id, tag)
     return 0
 
 
@@ -1508,8 +1529,10 @@ def _comma(n: int) -> str:
     return f"{n:,}"
 
 
-def _render_session_report(report) -> str:
+def _render_session_report(report, tags: list = None) -> str:
     lines = [f"session     : {report.session_id}"]
+    if tags:
+        lines.append(f"tags        : {', '.join(sorted(tags))}")
     if report.span_start:
         span = (
             report.span_start
@@ -1545,9 +1568,10 @@ def _render_session_report(report) -> str:
     return "\n".join(lines)
 
 
-def _session_report_json(report) -> dict:
+def _session_report_json(report, tags: list) -> dict:
     return {
         "session": report.session_id,
+        "tags": tags,
         "invocations": report.invocations,
         "executions": report.executions,
         "hits": report.hits,
@@ -1582,30 +1606,92 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
+    session_id = getattr(args, "session_id", None)
+    tag = getattr(args, "tag", None)
+    if not session_id and not tag:
+        print("gmlc: provide a session id or --tag <tag>", file=sys.stderr)
+        return 1
     wired = build_use_cases(store_root)
-    events = wired.metrics.session_events(args.session_id)
+
+    if tag:
+        return _cmd_session_report_by_tag(wired, tag, args.json)
+
+    events = wired.metrics.session_events(session_id)
+    tags = wired.metrics.session_tags(session_id)
     # Join each event's execution to its token usage (the current execution per key).
     usage_by_key = {}
     for key in {e.execution_key for e in events if e.execution_key}:
         execution = wired.repository.find_current(key)
         if execution is not None:
             usage_by_key[key] = execution.token_usage
-    report = build_session_report(args.session_id, events, usage_by_key)
+    report = build_session_report(session_id, events, usage_by_key)
 
     if args.json:
         import json
 
-        print(json.dumps(_session_report_json(report), indent=2))
+        print(json.dumps(_session_report_json(report, tags), indent=2))
         return 0
-    if report.invocations == 0:
-        print(f"no events recorded for session {args.session_id!r}")
+    if report.invocations == 0 and not tags:
+        print(f"no events recorded for session {session_id!r}")
         return 0
+    print(_render_session_report(report, tags))
+    return 0
+
+
+def _cmd_session_report_by_tag(wired, tag: str, as_json: bool) -> int:
+    session_ids = wired.metrics.session_ids_for_tag(tag)
+    if not session_ids:
+        print(f"no sessions tagged {tag!r}")
+        return 0
+    # Collect events from all matching sessions; build one merged report.
+    all_events = []
+    for session_id in session_ids:
+        all_events.extend(wired.metrics.session_events(session_id))
+    usage_by_key = {}
+    for key in {e.execution_key for e in all_events if e.execution_key}:
+        execution = wired.repository.find_current(key)
+        if execution is not None:
+            usage_by_key[key] = execution.token_usage
+    report = build_session_report(tag, all_events, usage_by_key)
+
+    if as_json:
+        import json
+
+        payload = _session_report_json(report, [tag])
+        payload["tag"] = tag
+        payload["session_count"] = len(session_ids)
+        del payload["session"]
+        print(json.dumps(payload, indent=2))
+        return 0
+    lines = [f"tag         : {tag}", f"sessions    : {len(session_ids)}"]
+    print("\n".join(lines))
     print(_render_session_report(report))
     return 0
 
 
+def _cmd_session_tag(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    wired = build_use_cases(store_root)
+    for tag in args.add:
+        wired.metrics.add_session_tag(args.session_id, tag)
+    if not args.json:
+        tags = wired.metrics.session_tags(args.session_id)
+        print(f"tags : {', '.join(sorted(tags))}")
+    else:
+        import json
+
+        tags = wired.metrics.session_tags(args.session_id)
+        print(json.dumps({"session": args.session_id, "tags": tags}, indent=2))
+    return 0
+
+
 def _cmd_session(args: argparse.Namespace) -> int:
-    print("usage: gmlcache session start | gmlcache session report <id>", file=sys.stderr)
+    print(
+        "usage: gmlcache session start | gmlcache session tag <id> | gmlcache session report <id>",
+        file=sys.stderr,
+    )
     return 2
 
 
@@ -1982,6 +2068,11 @@ def build_parser() -> argparse.ArgumentParser:
     purgep.add_argument("key", nargs="?", help="execution key to purge")
     purgep.add_argument("--tag", help="purge all executions carrying this tag")
     purgep.add_argument("--session", help="purge all executions from this session")
+    purgep.add_argument(
+        "--session-tag",
+        dest="session_tag",
+        help="purge all executions from sessions carrying this tag",
+    )
     purgep.add_argument("--all", action="store_true", help="purge every execution in the store")
     purgep.add_argument(
         "--hard",
@@ -2014,6 +2105,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="exclude_tag",
         metavar="TAG",
         help="drop executions carrying any of these tags (repeatable; match-any)",
+    )
+    listp.add_argument(
+        "--session-tag",
+        action="append",
+        dest="session_tag",
+        metavar="TAG",
+        help="only executions from sessions carrying this tag (repeatable; match-any)",
     )
     listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     listp.set_defaults(func=_cmd_list)
@@ -2082,9 +2180,35 @@ def build_parser() -> argparse.ArgumentParser:
     session = sub.add_parser("session", help="group a workflow's runs under a session id")
     session_sub = session.add_subparsers(dest="session_command")
     session_start = session_sub.add_parser("start", help="generate a new session id and print it")
+    session_start.add_argument(
+        "--tag",
+        action="append",
+        metavar="TAG",
+        help="attach a tag to the session (repeatable)",
+    )
     session_start.set_defaults(func=_cmd_session_start)
+    session_tag_cmd = session_sub.add_parser("tag", help="add tags to an existing session")
+    session_tag_cmd.add_argument("session_id", help="the session id to tag")
+    session_tag_cmd.add_argument(
+        "--add",
+        action="append",
+        required=True,
+        metavar="TAG",
+        help="tag to attach (repeatable)",
+    )
+    session_tag_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_tag_cmd.set_defaults(func=_cmd_session_tag)
     session_report = session_sub.add_parser("report", help="summarise a session's activity")
-    session_report.add_argument("session_id", help="the session id to report on")
+    session_report.add_argument(
+        "session_id",
+        nargs="?",
+        help="the session id to report on (omit when using --tag)",
+    )
+    session_report.add_argument(
+        "--tag",
+        metavar="TAG",
+        help="aggregate all sessions sharing this tag",
+    )
     session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     session_report.set_defaults(func=_cmd_session_report)
     session.set_defaults(func=_cmd_session)

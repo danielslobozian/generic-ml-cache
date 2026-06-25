@@ -139,6 +139,15 @@ class FakeMetrics(MetricsPort):
     def delete_events_for_key(self, execution_key) -> None:
         pass
 
+    def add_session_tag(self, session_id, tag) -> None:
+        pass
+
+    def session_tags(self, session_id) -> List[str]:
+        return []
+
+    def session_ids_for_tag(self, tag) -> List[str]:
+        return []
+
     def event_names(self) -> List[str]:
         return [r["event"] for r in self.events]
 

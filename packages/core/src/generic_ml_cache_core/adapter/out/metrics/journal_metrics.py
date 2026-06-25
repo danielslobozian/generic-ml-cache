@@ -64,3 +64,12 @@ class JournalMetrics(MetricsPort):
 
     def delete_events_for_key(self, execution_key: str) -> None:
         self._registry.delete_events_for_key(execution_key)
+
+    def add_session_tag(self, session_id: str, tag: str) -> None:
+        self._registry.add_session_tag(session_id, tag)
+
+    def session_tags(self, session_id: str) -> List[str]:
+        return self._registry.session_tags_for_id(session_id)
+
+    def session_ids_for_tag(self, tag: str) -> List[str]:
+        return self._registry.session_ids_for_tag(tag)

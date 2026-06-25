@@ -11,10 +11,10 @@ Usage:
 
 Requires: python3 (3.11+), vhs (https://github.com/charmbracelet/vhs)
 
-Tapes that call a real client (demo.tape, sessions.tape, api.tape, …) still
-need that client installed and authenticated; this script only wires the cache
-itself.  The purge.tape uses --executable to override the client with a fake
-script and needs no real API key.
+Tapes that call a real client (demo.tape, api.tape, …) still need that client
+installed and authenticated; this script only wires the cache itself.
+Tapes that use --executable $GMLCACHE_FAKE_CLAUDE (purge.tape, sessions.tape)
+need no real API key — the fake script is installed automatically.
 """
 
 from __future__ import annotations

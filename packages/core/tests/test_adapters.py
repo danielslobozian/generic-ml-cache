@@ -2,14 +2,19 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import shutil
 import sys
+from pathlib import Path
 
 import pytest
 
 from generic_ml_cache_core import UnknownClient, get_adapter
 from generic_ml_cache_core.adapter.out.client.registry import registered_names
 from generic_ml_cache_core.common.errors import ClientNotFound
-from generic_ml_cache_core.adapter.out.client.prime_directive import PRIME_DIRECTIVE
+from generic_ml_cache_core.adapter.out.client.prime_directive import (
+    PRIME_DIRECTIVE,
+    build_system_prompt,
+)
 
 
 def test_builtins_are_registered():
@@ -247,3 +252,250 @@ def test_claude_grant_setup_seeds_main_config_and_dir(tmp_path, monkeypatch):
     assert (cfg / ".claude.json").read_text() == '{"x":1}'  # main config seeded
     assert (cfg / ".credentials.json").is_file()  # dir creds seeded
     assert (cfg / "settings.json").is_file()  # our grant file written
+
+
+def test_claude_grant_setup_copies_subdirectory_from_claude_dir(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    extensions_dir = fake_home / ".claude" / "extensions"
+    extensions_dir.mkdir(parents=True)
+    (extensions_dir / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+    cfg = tmp_path / "cfg"
+    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    assert (cfg / "extensions" / "config.json").is_file()
+
+
+def test_claude_grant_setup_survives_main_config_copy_error(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    fake_home.mkdir(parents=True)
+    (fake_home / ".claude.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+    original_copy = shutil.copy2
+
+    def _raise_on_claude_json(src, dst, **kwargs):
+        if str(dst).endswith(".claude.json"):
+            raise OSError("permission denied")
+        return original_copy(src, dst, **kwargs)
+
+    monkeypatch.setattr(shutil, "copy2", _raise_on_claude_json)
+    cfg = tmp_path / "cfg"
+    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    assert (cfg / "settings.json").is_file()
+    assert not (cfg / ".claude.json").is_file()
+
+
+def test_codex_grant_setup_survives_auth_copy_error(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    (fake_home / ".codex").mkdir(parents=True)
+    (fake_home / ".codex" / "auth.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+
+    def _always_raise_oserror(*args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(shutil, "copy2", _always_raise_oserror)
+    cfg = tmp_path / "cfg"
+    result = get_adapter("codex").grant_setup(tmp_path / "run", cfg, ())
+    assert "CODEX_HOME" in result
+    assert (cfg / "config.toml").is_file()
+    assert not (cfg / "auth.json").is_file()
+
+
+def test_claude_grant_setup_survives_credential_copy_error_in_claude_dir(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home"
+    (fake_home / ".claude").mkdir(parents=True)
+    (fake_home / ".claude" / ".credentials.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+
+    def _always_raise_oserror(*args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(shutil, "copy2", _always_raise_oserror)
+    cfg = tmp_path / "cfg"
+    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    assert (cfg / "settings.json").is_file()
+    assert not (cfg / ".credentials.json").is_file()
+
+
+# --- read_access_argv ---------------------------------------------------------
+
+
+def test_claude_read_access_argv_produces_add_dir_flag_for_each_path():
+    extra_paths = ["/data/dir-a", "/data/dir-b"]
+    argv = get_adapter("claude").read_access_argv(extra_paths)
+    assert argv == ["--add-dir", "/data/dir-a", "--add-dir", "/data/dir-b"]
+
+
+def test_claude_read_access_argv_returns_empty_list_for_no_paths():
+    assert get_adapter("claude").read_access_argv([]) == []
+
+
+# --- stream_event: pure parsing, no subprocess --------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw_line, expected_result",
+    [
+        ("not json", None),
+        ('"a string"', None),
+        ('{"type": "system", "subtype": "init"}', {"kind": "start"}),
+        ('{"type": "system", "subtype": "thinking_tokens"}', {"kind": "thinking"}),
+        ('{"type": "system", "subtype": "other"}', None),
+        (
+            '{"type": "stream_event", "event": {"type": "content_block_start",'
+            ' "content_block": {"type": "tool_use", "name": "bash"}}}',
+            {"kind": "tool", "name": "bash"},
+        ),
+        ('{"type": "stream_event", "event": {"type": "other"}}', None),
+        ('{"type": "result"}', {"kind": "result"}),
+        ('{"type": "unknown"}', None),
+    ],
+)
+def test_claude_stream_event_parses_correctly(raw_line, expected_result):
+    assert get_adapter("claude").stream_event(raw_line) == expected_result
+
+
+@pytest.mark.parametrize(
+    "raw_line, expected_result",
+    [
+        ("not json", None),
+        ('"a string"', None),
+        ('{"type": "thread.started"}', {"kind": "start"}),
+        ('{"type": "turn.completed"}', {"kind": "result"}),
+        ('{"type": "error"}', {"kind": "error"}),
+        ('{"type": "turn.failed"}', {"kind": "error"}),
+        (
+            '{"type": "item.completed", "item": {"type": "agent_message"}}',
+            {"kind": "message"},
+        ),
+        (
+            '{"type": "item.completed", "item": {"type": "code_cell"}}',
+            {"kind": "tool", "name": "code_cell"},
+        ),
+        ('{"type": "item.completed", "item": {}}', None),
+        ('{"type": "other"}', None),
+    ],
+)
+def test_codex_stream_event_parses_correctly(raw_line, expected_result):
+    assert get_adapter("codex").stream_event(raw_line) == expected_result
+
+
+@pytest.mark.parametrize(
+    "raw_line, expected_result",
+    [
+        ("not json", None),
+        ('"a string"', None),
+        ('{"type": "system", "subtype": "init"}', {"kind": "start"}),
+        ('{"type": "assistant"}', {"kind": "message"}),
+        ('{"type": "result"}', {"kind": "result"}),
+        ('{"type": "unknown"}', None),
+    ],
+)
+def test_cursor_stream_event_parses_correctly(raw_line, expected_result):
+    assert get_adapter("cursor").stream_event(raw_line) == expected_result
+
+
+# --- parse_output edge cases --------------------------------------------------
+
+
+def test_codex_parse_output_tolerates_empty_and_non_json_lines_in_stream():
+    stdout = "\n".join(
+        [
+            "",  # empty line — exercises the "not line: continue" guard
+            "garbage line",
+            '{"type": "item.completed", "item": {"type": "agent_message", "text": "hello"}}',
+            '{"type": "turn.completed", "usage": {"input_tokens": 10, "output_tokens": 5}}',
+        ]
+    )
+    parsed_output = get_adapter("codex").parse_output(stdout)
+    assert parsed_output.text.strip() == "hello"
+
+
+def test_codex_parse_output_tolerates_non_dict_json_in_stream():
+    stdout = "\n".join(
+        [
+            '"just a string"',
+            '{"type": "item.completed", "item": {"type": "agent_message", "text": "hi"}}',
+            '{"type": "turn.completed", "usage": {}}',
+        ]
+    )
+    parsed_output = get_adapter("codex").parse_output(stdout)
+    assert parsed_output.text.strip() == "hi"
+
+
+def test_cursor_parse_output_falls_back_to_raw_when_result_is_not_a_string():
+    raw_stdout = '{"result": 42, "usage": {}}'
+    parsed_output = get_adapter("cursor").parse_output(raw_stdout)
+    assert parsed_output.text == raw_stdout
+    assert parsed_output.usage is None
+
+
+# --- models_argv --------------------------------------------------------------
+
+
+def test_cursor_models_argv_returns_list_models_command():
+    argv = get_adapter("cursor").models_argv("/usr/bin/cursor-agent")
+    assert argv == ["/usr/bin/cursor-agent", "--list-models"]
+
+
+def test_cursor_parse_model_list_marks_default_model():
+    stdout = "claude-4-5 - Claude 4.5 (default)\ngpt-5 - GPT-5\n"
+    models = get_adapter("cursor").parse_model_list(stdout)
+    default_models = [model for model in models if model.default]
+    assert len(default_models) == 1
+    assert default_models[0].id == "claude-4-5"
+    assert default_models[0].name == "Claude 4.5"
+
+
+def test_cursor_parse_model_list_marks_current_model():
+    stdout = "claude-4-5 - Claude 4.5\ngpt-5 - GPT-5 (current)\n"
+    models = get_adapter("cursor").parse_model_list(stdout)
+    current_models = [model for model in models if model.current]
+    assert len(current_models) == 1
+    assert current_models[0].id == "gpt-5"
+    assert current_models[0].name == "GPT-5"
+
+
+def test_cursor_parse_model_list_skips_tip_line_containing_separator():
+    # "Tip:" lines that also contain " - " must be filtered by the second guard (line 183)
+    stdout = "Tip: pass --model to select - a model\nclaude-4-5 - Claude 4.5\n"
+    models = get_adapter("cursor").parse_model_list(stdout)
+    assert len(models) == 1
+    assert models[0].id == "claude-4-5"
+
+
+def test_cursor_parse_model_list_skips_entry_with_empty_ident():
+    # A line whose ident is empty after stripping triggers the ident-guard continue (line 187)
+    stdout = " - orphaned label\nclaude-4-5 - Claude 4.5\n"
+    models = get_adapter("cursor").parse_model_list(stdout)
+    assert len(models) == 1
+    assert models[0].id == "claude-4-5"
+
+
+# --- build_system_prompt: allowed_read_paths branch ---------------------------
+
+
+def test_build_system_prompt_includes_allowed_read_paths_when_provided():
+    allowed_paths = ["/data/input.txt", "/shared/context/"]
+    prompt = build_system_prompt(allowed_read_paths=allowed_paths)
+    assert "DECLARED READ PATHS" in prompt
+    assert "/data/input.txt" in prompt
+    assert "/shared/context/" in prompt
+
+
+def test_build_system_prompt_includes_user_prompt_after_directive():
+    user_prompt = "You are a helpful assistant."
+    prompt = build_system_prompt(user_system_prompt=user_prompt)
+    directive_index = prompt.index("PRIME DIRECTIVE")
+    user_index = prompt.index(user_prompt)
+    assert directive_index < user_index
+
+
+def test_build_system_prompt_combines_read_paths_and_user_prompt():
+    prompt = build_system_prompt(
+        user_system_prompt="Focus on Python.",
+        allowed_read_paths=["/src/main.py"],
+    )
+    assert "DECLARED READ PATHS" in prompt
+    assert "/src/main.py" in prompt
+    assert "Focus on Python." in prompt

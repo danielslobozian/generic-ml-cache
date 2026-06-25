@@ -53,6 +53,7 @@ class AccessRegistry:
         conn = sqlite3.connect(self._path)
         conn.execute(_SCHEMA)
         self._ensure_session_column(conn)
+        self._ensure_session_tags_table(conn)
         return conn
 
     @staticmethod
@@ -62,6 +63,20 @@ class AccessRegistry:
         if "session_id" not in columns:
             conn.execute("ALTER TABLE access_events ADD COLUMN session_id TEXT")
             conn.commit()
+
+    @staticmethod
+    def _ensure_session_tags_table(conn: sqlite3.Connection) -> None:
+        # Additive migration for registries created before session tags existed.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_tags (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                tag        TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
 
     def record(
         self,
@@ -200,6 +215,52 @@ class AccessRegistry:
                 conn.close()
         except Exception:
             pass
+
+    def add_session_tag(self, session_id: str, tag: str) -> None:
+        """Attach ``tag`` to ``session_id``. Duplicate tags are stored once per call;
+        callers that want idempotency should check first. Non-load-bearing: never raises."""
+        try:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    "INSERT INTO session_tags (session_id, tag) VALUES (?, ?)",
+                    (session_id, tag),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
+    def session_tags_for_id(self, session_id: str) -> List[str]:
+        """Return the distinct tags attached to ``session_id`` ([] if unknown or unavailable)."""
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT DISTINCT tag FROM session_tags WHERE session_id = ? ORDER BY tag",
+                    (session_id,),
+                ).fetchall()
+                return [tag for (tag,) in rows]
+            finally:
+                conn.close()
+        except Exception:
+            return []
+
+    def session_ids_for_tag(self, tag: str) -> List[str]:
+        """Return the distinct session ids carrying ``tag`` ([] if unknown or unavailable)."""
+        try:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    "SELECT DISTINCT session_id FROM session_tags WHERE tag = ?",
+                    (tag,),
+                ).fetchall()
+                return [session_id for (session_id,) in rows]
+            finally:
+                conn.close()
+        except Exception:
+            return []
 
     def last_access(self) -> Dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
