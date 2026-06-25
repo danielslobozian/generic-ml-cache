@@ -92,3 +92,17 @@ class MetricsPort(ABC):
     def delete_events_for_key(self, execution_key: str) -> None:
         """Remove all journal events for ``execution_key``. Called during a
         hard delete to erase the key's access history. Must never raise."""
+
+    @abstractmethod
+    def add_session_tag(self, session_id: str, tag: str) -> None:
+        """Attach ``tag`` to ``session_id``. Must never raise."""
+
+    @abstractmethod
+    def session_tags(self, session_id: str) -> List[str]:
+        """Return the distinct tags attached to ``session_id``.
+        Empty list for an unknown session."""
+
+    @abstractmethod
+    def session_ids_for_tag(self, tag: str) -> List[str]:
+        """Return the distinct session ids carrying ``tag``.
+        Empty list when no sessions have that tag."""

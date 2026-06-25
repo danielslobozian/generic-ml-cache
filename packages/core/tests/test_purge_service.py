@@ -84,6 +84,15 @@ class FakeMetrics(MetricsPort):
     def delete_events_for_key(self, execution_key: str) -> None:
         self._deleted_keys.append(execution_key)
 
+    def add_session_tag(self, session_id: str, tag: str) -> None:
+        pass
+
+    def session_tags(self, session_id: str) -> List[str]:
+        return []
+
+    def session_ids_for_tag(self, tag: str) -> List[str]:
+        return []
+
 
 def _identity(prompt: str = "p") -> ManagedCallIdentity:
     return ManagedCallIdentity(

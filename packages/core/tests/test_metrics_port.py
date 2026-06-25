@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import pytest
 
@@ -17,6 +17,7 @@ class InMemoryMetrics(MetricsPort):
 
     def __init__(self) -> None:
         self._events: list = []
+        self._session_tags: Dict[str, List[str]] = {}
 
     def record_event(
         self,
@@ -87,6 +88,15 @@ class InMemoryMetrics(MetricsPort):
     def delete_events_for_key(self, execution_key: str) -> None:
         self._events = [e for e in self._events if e["execution_key"] != execution_key]
 
+    def add_session_tag(self, session_id: str, tag: str) -> None:
+        self._session_tags.setdefault(session_id, []).append(tag)
+
+    def session_tags(self, session_id: str) -> List[str]:
+        return list(dict.fromkeys(self._session_tags.get(session_id, [])))
+
+    def session_ids_for_tag(self, tag: str) -> List[str]:
+        return list(dict.fromkeys(sid for sid, tags in self._session_tags.items() if tag in tags))
+
 
 def test_port_cannot_be_instantiated_directly():
     with pytest.raises(TypeError):
@@ -132,3 +142,50 @@ def test_record_event_accepts_none_execution_key():
     metrics = InMemoryMetrics()
     metrics.record_event("miss", execution_key=None, client="claude", model="sonnet", effort="")
     assert metrics.event_counts() == {"miss": 1}
+
+
+# --- session tags ------------------------------------------------------------
+
+
+def test_session_tags_empty_for_unknown_session():
+    assert InMemoryMetrics().session_tags("no-such-session") == []
+
+
+def test_session_ids_for_tag_empty_when_no_sessions_tagged():
+    assert InMemoryMetrics().session_ids_for_tag("anything") == []
+
+
+def test_add_session_tag_and_retrieve():
+    metrics = InMemoryMetrics()
+    metrics.add_session_tag("s1", "feature-x")
+    assert metrics.session_tags("s1") == ["feature-x"]
+
+
+def test_multiple_tags_on_one_session():
+    metrics = InMemoryMetrics()
+    metrics.add_session_tag("s1", "alpha")
+    metrics.add_session_tag("s1", "beta")
+    assert set(metrics.session_tags("s1")) == {"alpha", "beta"}
+
+
+def test_session_ids_for_tag_returns_all_matching_sessions():
+    metrics = InMemoryMetrics()
+    metrics.add_session_tag("s1", "ticket-001")
+    metrics.add_session_tag("s2", "ticket-001")
+    metrics.add_session_tag("s3", "other")
+    assert set(metrics.session_ids_for_tag("ticket-001")) == {"s1", "s2"}
+
+
+def test_session_ids_for_tag_deduplicates():
+    metrics = InMemoryMetrics()
+    metrics.add_session_tag("s1", "t")
+    metrics.add_session_tag("s1", "t")
+    assert metrics.session_ids_for_tag("t") == ["s1"]
+
+
+def test_session_tags_are_isolated_per_session():
+    metrics = InMemoryMetrics()
+    metrics.add_session_tag("s1", "x")
+    metrics.add_session_tag("s2", "y")
+    assert metrics.session_tags("s1") == ["x"]
+    assert metrics.session_tags("s2") == ["y"]
