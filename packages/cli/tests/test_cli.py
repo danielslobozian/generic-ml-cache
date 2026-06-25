@@ -906,3 +906,57 @@ def test_session_start_with_multiple_tags(tmp_path, monkeypatch, capsys):
     main(["session", "report", session_id, "--json"])
     data = json.loads(capsys.readouterr().out)
     assert set(data.get("tags", [])) == {"alpha", "beta"}
+
+
+def test_session_tag_add_attaches_tag(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(["session", "tag", session_id, "--add", "retro"])
+    assert rc == 0
+    capsys.readouterr()
+
+    main(["session", "report", session_id, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert "retro" in data.get("tags", [])
+
+
+def test_session_tag_add_multiple_tags(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    main(["session", "tag", session_id, "--add", "x", "--add", "y"])
+    capsys.readouterr()
+
+    main(["session", "report", session_id, "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert set(data.get("tags", [])) == {"x", "y"}
+
+
+def test_session_tag_add_json_output(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    rc = main(["session", "tag", session_id, "--add", "proj", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["session"] == session_id
+    assert "proj" in data["tags"]

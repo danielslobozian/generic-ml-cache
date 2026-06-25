@@ -1615,8 +1615,29 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_session_tag(args: argparse.Namespace) -> int:
+    store_root = _store_root()
+    if store_root is None:
+        return 4
+    wired = build_use_cases(store_root)
+    for tag in args.add:
+        wired.metrics.add_session_tag(args.session_id, tag)
+    if not args.json:
+        tags = wired.metrics.session_tags(args.session_id)
+        print(f"tags : {', '.join(sorted(tags))}")
+    else:
+        import json
+
+        tags = wired.metrics.session_tags(args.session_id)
+        print(json.dumps({"session": args.session_id, "tags": tags}, indent=2))
+    return 0
+
+
 def _cmd_session(args: argparse.Namespace) -> int:
-    print("usage: gmlcache session start | gmlcache session report <id>", file=sys.stderr)
+    print(
+        "usage: gmlcache session start | gmlcache session tag <id> | gmlcache session report <id>",
+        file=sys.stderr,
+    )
     return 2
 
 
@@ -2100,6 +2121,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="attach a tag to the session (repeatable)",
     )
     session_start.set_defaults(func=_cmd_session_start)
+    session_tag_cmd = session_sub.add_parser("tag", help="add tags to an existing session")
+    session_tag_cmd.add_argument("session_id", help="the session id to tag")
+    session_tag_cmd.add_argument(
+        "--add",
+        action="append",
+        required=True,
+        metavar="TAG",
+        help="tag to attach (repeatable)",
+    )
+    session_tag_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_tag_cmd.set_defaults(func=_cmd_session_tag)
     session_report = session_sub.add_parser("report", help="summarise a session's activity")
     session_report.add_argument("session_id", help="the session id to report on")
     session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
