@@ -32,6 +32,7 @@ from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import CacheMiss
 
@@ -449,10 +450,6 @@ def test_passthrough_native_args_in_identity():
 
 
 # --- LRU auto-eviction hook --------------------------------------------------
-
-
-from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
 
 class _SpyPurge:
