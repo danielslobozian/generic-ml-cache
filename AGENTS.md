@@ -125,6 +125,9 @@ packages/core/   THE LIBRARY (generic_ml_cache_core) — everything but the UI &
   application/domain/model/    domain objects & value objects — the nouns the
                                system is about (execution, call-identity, result,
                                usage). Pure. No I/O, no framework, no adapters.
+                               Related value objects are grouped into named
+                               subpackages (e.g. `purge/` holds `PurgeReport`
+                               and related retention types).
   application/domain/service/  domain services — pure rules that span objects.
   application/usecase/         use cases — orchestration; each names an action and
                                takes a command as input.
@@ -169,6 +172,47 @@ So the interface carries the `UseCase` name and the implementation carries
 `Service`. The failing case: a concrete class named `<Action>UseCase` in
 `usecase/` with no interface above it is wrong — the name belongs to the port,
 and the driving adapter has nothing to depend on but the concrete class.
+
+**The one exception — a coordinating service with a single implementation.**
+A service that is called only from the composition root (never driven by an
+external actor through a port) and has exactly one concrete form does not need
+an inbound port ABC. It lives in `application/usecase/`, is named `<Concept>Service`,
+and is injected as a concrete dependency through the composition root.
+`PurgeService` is the model: the CLI drives it through the wired object, not
+through an interface, because there will never be an alternative purge strategy.
+*Failing case: inventing a `PurgeUseCase` ABC with one implementor just to
+"follow the pattern" — adding an interface with no second implementation is
+ceremony, not architecture.*
+
+### The base-use-case hook (post-record side effects)
+
+`CachedMlExecutionService` is the abstract base for all recording use cases.
+It exposes a `_after_record(execution_key: str) -> None` template-method hook
+called immediately after every successful execution record. Override it in a
+concrete subclass when a post-record side effect is needed (quota eviction,
+indexing, notification).
+
+- **Post-record side effects belong here**, not scattered inline across multiple
+  implementations.
+- The hook receives only the key of the just-recorded execution.
+- **The hook must not raise.** A side-effect failure must not roll back or
+  obscure a successful record. Swallow and log, never propagate.
+- The base implementation is a silent no-op; subclasses opt in by overriding.
+
+```python
+# WRONG — post-record side effect inlined in the concrete service
+class RunMlExecutionService(CachedMlExecutionService):
+    def execute(self, command):
+        key = super().execute(command)
+        self._purge_service.evict_to_quota(self._max_size)  # wrong place
+        return key
+
+# RIGHT — side effect isolated in the hook; base class calls it at the right moment
+class RunMlExecutionService(CachedMlExecutionService):
+    def _after_record(self, execution_key: str) -> None:
+        if self._max_size:
+            self._purge_service.evict_to_quota(self._max_size)
+```
 
 ## 5. Layer & dependency discipline (the invariants)
 
@@ -378,6 +422,9 @@ return blob_path.read_bytes()
 
 ## Using this document
 
+- **Read this file before writing any code.** An agent that skips this step will
+  violate rules that are clearly stated here, as happened with the dual-linter
+  requirement in 0.11.0 — the rule existed; it simply was not read.
 - New code is generated to clear every rule above on the first write — not to be
   corrected toward it afterward.
 - Review against it rule by rule. A respectable-looking violation (`path`, a noun
