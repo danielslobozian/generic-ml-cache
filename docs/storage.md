@@ -86,15 +86,22 @@ separate from the executions, which stay pure.
 
 ## Eviction
 
-Size-based eviction is **planned, not yet implemented**. The `max_size` configuration key
-is reserved for it but is not enforced today, and there is no background scheduler. See
-the [roadmap](ROADMAP.md).
+Two automatic eviction policies are available when the daemon is running:
+
+- **Size-based (LRU)**: set `max_size` (config) or `GMLCACHE_MAX_SIZE` (env). After each
+  recorded execution the daemon evicts the least-recently-accessed entries until the store
+  is at or below the quota.
+- **Time-based (stale)**: set `max_age` (config) or `GMLCACHE_MAX_AGE` (env). The daemon
+  sweeps entries not accessed within the window on a configurable interval (default 1 hour;
+  override with `GMLCACHE_EVICTION_INTERVAL`).
+
+Both are soft purges — blobs are freed but execution records, token usage, and tags are
+kept. See [Retention and quota](concepts/retention.md) for the full policy reference.
 
 ## Future retention and invalidation
 
-Retention work extends today's size-based eviction with explicit prune and invalidation,
-and — with the daemon — time-based cleanup of stale entries. It is single-user storage
-cleanup; there is no per-user namespace.
+Retention work may extend eviction with explicit prune and invalidation rules. It is
+single-user storage cleanup; there is no per-user namespace.
 
 Invalidation deletes an execution's metadata and its now-unreferenced blobs. It is a
 storage operation, not a login or authentication operation.

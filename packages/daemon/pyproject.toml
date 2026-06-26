@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "generic-ml-cache-daemon"
-version = "0.14.0"
+version = "0.15.0"
 description = "Local HTTP daemon for generic-ml-cache: REST API, gateway proxy, and session transport. A thin inbound driver over generic-ml-cache-core."
 requires-python = ">=3.9"
 license = "Apache-2.0"

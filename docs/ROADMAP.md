@@ -284,13 +284,23 @@ visibility. Depends on the daemon HTTP API from 0.13.0.
   visible — even when the underlying client has made many more calls than the user
   explicitly triggered.
 
-### 0.15.0 — Scheduled eviction
+### 0.15.0 — Scheduled eviction *(released 2026-06-27)*
 
 Time-based cache maintenance, enabled by the resident daemon from 0.13.0.
 
-- TTL-based and stale-entry cleanup configured in the store settings.
-- Complements the size-based eviction introduced in 0.11.0.
-- Eviction events surfaced through the daemon's live status reporting.
+- **`max_age` config setting** (`max_age = 30d` / `GMLCACHE_MAX_AGE`): configures the maximum
+  time since last access before an entry is considered stale. Accepted suffixes: s/m/h/d/w.
+- **`PurgeService.evict_stale()`** (core): soft-purges entries older than the cutoff; falls back
+  to `created_at` for entries that have never been accessed.
+- **`EvictionScheduler`** (daemon): asyncio background task running both `evict_to_quota` and
+  `evict_stale` on a configurable interval (default 1 h, overridable via
+  `GMLCACHE_EVICTION_INTERVAL`). Started only when at least one limit is configured.
+- **Eviction stats in `GET /info`**: `last_run_at`, `last_executions_removed`, `last_bytes_freed`,
+  `max_size`, `max_age`, and `interval` surfaced in the daemon's info endpoint.
+- **`gmlcache daemon start`** now threads `max_size` and `max_age` from the resolved config into
+  the daemon, so both LRU and stale eviction are active when started via the CLI.
+- **Demo tapes** (`docs/tapes/evict-lru.tape`, `docs/tapes/evict-stale.tape`): VHS cassettes
+  demonstrating both eviction modes; all tapes moved to `docs/tapes/`.
 
 ### 0.16.0 — Dynamic adapter loading and adapter whitelist
 
