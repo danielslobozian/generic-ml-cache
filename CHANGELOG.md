@@ -15,7 +15,7 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
-## [0.14.0] - 2026-06-25
+## [0.14.0] - 2026-06-26
 
 ### Added
 
@@ -24,27 +24,34 @@ is the single changelog for all three; entries note which package(s) a change to
   Reads the session from `GMLCACHE_SESSION` or `--session`; reads the daemon address from
   `--host` / `--port` (defaults `127.0.0.1:8765`). Exits 0 silently when no session is
   set or the daemon is not running — safe for repeated polling from a status bar.
-- **`scripts/format-status-line.py`** (scripts): user-owned formatter that assembles a
-  single status-bar line from four independent sources — git context (repo, branch, HEAD
-  hash, dirty-file count), abbreviated current working directory, gmlcache session stats
-  (calls, hits, hit rate, per-model token breakdown with cache-read / cache-write /
-  reasoning token counts), and the `ctt` Claude quota widget (`ctt prompt --no-cloud`).
-  Each section is silently skipped if its source is unavailable. Designed to be edited
-  freely; icons and field order are customisable.
-- **`scripts/launch-claude.sh`** (scripts): bash launcher that creates a new gmlcache
-  session (`gmlcache session start`), exports `GMLCACHE_SESSION`, starts the daemon in
-  the background if not already running, then `exec`s `claude` so signals and exit codes
-  propagate cleanly. Accepts `--tag TAG` (repeatable) for session tagging; all other
-  arguments are forwarded to `claude`.
-- **`scripts/launch-claude.ps1`** (scripts): PowerShell equivalent of the bash launcher
-  for Windows; same session/daemon lifecycle, same `--Tag` parameter for session tags.
-- **`.claude/settings.json`** (project): project-level Claude Code configuration that
-  wires `scripts/format-status-line.py` as the `statusLine` command, making live cache
-  stats visible in the Claude Code status bar for every developer who opens the project.
+- **`scripts/format-status-line.py`** (scripts): cross-platform Python formatter that
+  assembles a single Claude Code status-bar line from four independent sections — git
+  context (repo, branch, HEAD hash, dirty-file count), abbreviated current working
+  directory, gmlcache session stats (calls, hits, hit rate, per-model token breakdown with
+  cache-read / cache-write / reasoning token counts), and a Claude Max quota widget
+  (`3% : 3h58m  ·  66% 1d3h`) read from the OAuth token Claude Code stores in
+  `~/.claude/.credentials.json`. Each section is silently skipped if its source is
+  unavailable. Results are cached for 60 s to avoid excessive API calls.
+- **`docs/shell-integration.md`** (docs): documented shell integration examples for
+  Linux/macOS (bash/zsh function) and Windows (PowerShell function) showing how to create
+  a gmlcache session, start the daemon, and launch Claude Code through the gateway in one
+  command. Framed as copy-and-adapt snippets, not maintained scripts.
+- **`.claude/settings.json`** (project): project-level Claude Code configuration wiring
+  `scripts/format-status-line.py` as the `statusLine` command.
 - **Extended token fields in session stats** (core + daemon): `ModelUsage` (core) and
   `ModelUsageBody` / `SessionStatsResponse` (daemon) now include `cache_read_tokens`,
   `cache_write_tokens`, and `reasoning_tokens`. `GET /sessions/{id}/stats` returns these
   fields per model alongside the existing `spent_input` / `spent_output` / `saved_tokens`.
+- **Gateway session routing** (core + daemon): session ID now travels in the URL path
+  (`/gateway/claude/{session_id}/v1/messages`) so the daemon is fully stateless and
+  multiple sessions can share one daemon simultaneously. Full request and response bodies
+  are stored on every forwarded call; forwarded calls emit `RECORD` (not `MISS`) so token
+  counts appear correctly in session reports.
+
+### Removed
+
+- **`scripts/launch-claude.sh`** and **`scripts/launch-claude.ps1`**: shell scripts
+  removed; replaced by the documented examples in `docs/shell-integration.md`.
 
 ## [0.13.0] - 2026-06-25
 
