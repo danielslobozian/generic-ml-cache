@@ -1633,9 +1633,9 @@ def _parse_spec_args(args: argparse.Namespace) -> "Optional[SessionSpec]":
 
 
 def _cmd_session_start(args: argparse.Namespace) -> int:
-    import secrets
+    import uuid
 
-    session_id = secrets.token_hex(8)
+    session_id = str(uuid.uuid4())
     # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
     print(session_id)
     tags = getattr(args, "tag", None) or []

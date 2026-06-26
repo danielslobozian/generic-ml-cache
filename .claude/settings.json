@@ -1,3 +1,6 @@
 {
-  "statusLine": "python3 scripts/format-status-line.py"
+  "statusLine": {
+    "type": "command",
+    "command": "python3 scripts/format-status-line.py"
+  }
 }

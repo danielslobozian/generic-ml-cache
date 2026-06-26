@@ -868,12 +868,14 @@ def test_purge_hard_key_removes_all_db_records(tmp_path, monkeypatch, capsys):
 # --- session tags (0.12.0) ---------------------------------------------------
 
 
-def test_session_start_prints_hex_id(capsys):
+def test_session_start_prints_uuid(capsys):
+    import uuid
+
     rc = main(["session", "start"])
     assert rc == 0
     out = capsys.readouterr().out.strip()
-    assert len(out) == 16
-    int(out, 16)  # must be valid hex
+    parsed = uuid.UUID(out)  # must be a valid UUID
+    assert str(parsed) == out
 
 
 def test_session_start_with_tag_stores_tag(tmp_path, monkeypatch, capsys):

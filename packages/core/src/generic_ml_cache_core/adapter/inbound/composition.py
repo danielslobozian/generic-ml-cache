@@ -32,7 +32,11 @@ from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import Sqli
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.adapter.out.gateway.http_gateway_forward_adapter import (
+    HttpGatewayForwardAdapter,
+)
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
+from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
 from generic_ml_cache_core.common.errors import UnknownClient
 
 _BLOBS_DIRNAME = "blobs"
@@ -49,6 +53,7 @@ class WiredUseCases:
     blob_store: BlobStorePort
     repository: SqliteExecutionRepository
     metrics: JournalMetrics
+    run_gateway: RunMlGatewayService
 
 
 def _recover_store(store_root: Path) -> None:
@@ -139,6 +144,13 @@ def build_use_cases(
     kind = resolve_execution_kind(client) if client is not None else None
     runners = _build_runners(client, kind, executable_override, timeout, stream_path)
     purge = PurgeService(repository, blob_store, metrics)
+    gateway_forward = HttpGatewayForwardAdapter()
+    run_gateway = RunMlGatewayService(
+        blob_store=blob_store,
+        gateway_forward_port=gateway_forward,
+        repository=repository,
+        metrics=metrics,
+    )
     return WiredUseCases(
         run_ml=RunMlExecutionService(
             file_fingerprint,
@@ -154,4 +166,5 @@ def build_use_cases(
         blob_store=blob_store,
         repository=repository,
         metrics=metrics,
+        run_gateway=run_gateway,
     )

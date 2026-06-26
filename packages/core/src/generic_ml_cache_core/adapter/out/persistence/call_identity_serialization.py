@@ -18,12 +18,17 @@ from generic_ml_cache_core.application.domain.model.identity.api_call_identity i
 )
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.identity.gateway_call_identity import (
+    GatewayCallIdentity,
+)
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
+
+_GATEWAY_KIND = "gateway"
 
 
 @dataclass(frozen=True)
@@ -76,6 +81,14 @@ def serialize_identity(identity: CallIdentity) -> SerializedIdentity:
                 }
             ),
         )
+    if isinstance(identity, GatewayCallIdentity):
+        return SerializedIdentity(
+            kind=_GATEWAY_KIND,
+            client="anthropic",
+            model="",
+            effort="",
+            identity_json=json.dumps({"cache_key": identity.cache_key}),
+        )
     raise ValueError(f"cannot serialize unknown call identity type: {type(identity).__name__}")
 
 
@@ -106,4 +119,6 @@ def deserialize_identity(serialized: SerializedIdentity) -> CallIdentity:
             system_fingerprint=fields.get("system_fingerprint"),
             effort=serialized.effort,
         )
+    if serialized.kind == _GATEWAY_KIND:
+        return GatewayCallIdentity(cache_key=fields["cache_key"])
     raise ValueError(f"cannot deserialize unknown identity kind: {serialized.kind!r}")

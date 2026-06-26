@@ -261,17 +261,24 @@ multi-user service. See the [daemon transport design note](future/daemon-transpo
   versioned against a `generic-ml-cache-core>=X` range.
 - Strictly local and single-user — see [Positioning](design/positioning.md).
 
-### 0.14.0 — Developer status bar and launcher *(released 2026-06-25)*
+### 0.14.0 — Developer status bar and shell integration examples *(released 2026-06-25)*
 
-A cross-platform launcher and a Claude Code status bar integration for live session
+A Claude Code status bar and documented shell integration patterns for live session
 visibility. Depends on the daemon HTTP API from 0.13.0.
 
-- **Launcher script** (bash / PowerShell / macOS shell): creates a cache session, exports
-  `GMLCACHE_SESSION` and the daemon base URL into the environment, then starts Claude Code
-  with the gateway already configured. One command starts a fully instrumented session.
-- **Status bar**: a Claude Code status line configuration that polls the daemon's session
-  endpoint and displays live stats — call count, cache hit count, current configured
-  adapter — updating as the session progresses.
+- **Shell integration examples** (`docs/shell-integration.md`): documented patterns
+  (bash/zsh function for Linux and macOS, PowerShell equivalent for Windows) showing
+  how to create a session, start the daemon, and launch Claude Code with the gateway
+  configured in one command. These are copy-and-adapt examples, not maintained scripts
+  that ship as a product.
+- **Status bar** (`scripts/format-status-line.py`): a Python script wired into Claude
+  Code's `statusLine` setting that polls the daemon's session endpoint and displays
+  live stats — call count, cache hit count, and per-model token usage — updating as
+  the session progresses. Platform-neutral; works on Linux, macOS, and Windows via
+  the same file.
+- **Claude quota display**: the status bar also shows Claude Max usage for the current
+  5-hour block and 7-day window (`3% : 3h58m  ·  66% 1d3h`), read from the OAuth
+  token Claude Code stores locally. Cached for 60 s; silently omitted when unavailable.
 - The status bar makes the cache's behaviour visible without leaving the editor: call
   counts accumulate in real time, hit/miss ratio builds, and the active adapter is always
   visible — even when the underlying client has made many more calls than the user
