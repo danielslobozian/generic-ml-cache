@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import time as _time_module
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -548,26 +549,6 @@ def test_purge_by_session_tag_deduplicates_shared_keys():
 # evict_stale (0.15.0)
 # ---------------------------------------------------------------------------
 
-import time as _time_module
-
-
-def _repo_with_created_at(keys_epochs):
-    """Build a repo + blob store with entries whose created_at matches epoch."""
-    from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
-        InMemoryExecutionRepository,
-    )
-    from datetime import datetime, timezone
-
-    repo = InMemoryExecutionRepository(FixedClock())
-    blob_store = InMemoryBlobStore()
-    for key, epoch in keys_epochs:
-        iso = datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
-        _save_execution(repo, blob_store, key)
-        # patch created_at via the size entries so the fallback path is testable
-        # (in-memory repo stores created_at as the clock value; we control the
-        # last_access dict passed to evict_stale instead)
-    return repo, blob_store
-
 
 def test_evict_stale_removes_entries_older_than_cutoff():
     now = _time_module.time()
@@ -614,7 +595,6 @@ def test_evict_stale_noop_when_nothing_is_stale():
 
 
 def test_evict_stale_fallback_to_created_at_when_no_access_event():
-    now = _time_module.time()
     repo, blob_store = _repo_with_entries(["never-accessed"])
     # no last_access entry for this key -> falls back to created_at (fixed clock = _MOMENT)
     # _MOMENT is 2026-06-21 09:30 UTC, which is far in the past

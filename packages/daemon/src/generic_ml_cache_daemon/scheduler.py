@@ -60,10 +60,7 @@ class EvictionScheduler:
         """Cancel the background task and wait for it to finish."""
         if self._task is not None:
             self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+            await asyncio.gather(self._task, return_exceptions=True)
             self._task = None
 
     async def _loop(self) -> None:
