@@ -970,7 +970,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
     print(f"encryption  : {encryption}")
     print("effective settings (no run flags applied):")
-    for key in ("mode", "persist", "store", "timeout", "trust_scan", "max_size"):
+    for key in ("mode", "persist", "store", "timeout", "trust_scan", "max_size", "max_age"):
         value, source = settings[key]
         shown = "none" if value is None else value
         if isinstance(shown, bool):

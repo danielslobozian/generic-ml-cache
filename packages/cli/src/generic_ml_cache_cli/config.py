@@ -108,9 +108,11 @@ store = {store}
 trust_scan = false
 # Optional cache size cap. Off by default = keep every execution forever. When set
 # (e.g. 5GB / 500MB / a byte count), the cache evicts the least-recently-used
-# executions to make room as it records new ones. Time-based ("not used in N days")
-# eviction arrives with daemon mode.
+# executions to make room as it records new ones.
 # max_size = 5GB
+# Optional age cap. Off by default. When set (e.g. 30d, 12h, 2w), the daemon
+# periodically soft-purges executions not accessed within this window.
+# max_age = 30d
 
 # Optional: pin a client's executable (off-PATH installs, or a specific build).
 # [executables]
@@ -172,6 +174,7 @@ class FileConfig:
     timeout: Optional[float] = None
     trust_scan: Optional[bool] = None
     max_size: Optional[int] = None
+    max_age: Optional[float] = None
     executables: Dict[str, str] = field(default_factory=dict)
     source: Optional[Path] = None
 
@@ -188,6 +191,8 @@ _FALSE = {"false", "0", "no", "off"}
 
 _SIZE_UNITS = {"b": 1, "kb": 1024, "mb": 1024**2, "gb": 1024**3, "tb": 1024**4}
 
+_AGE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+
 
 def _parse_size(raw: str, where: str) -> int:
     """Parse a human size (``5GB``, ``500MB``, ``1048576``) into bytes (base 1024)."""
@@ -201,6 +206,20 @@ def _parse_size(raw: str, where: str) -> int:
             f"invalid size unit {unit!r} {where}; expected one of {sorted(_SIZE_UNITS)}"
         )
     return int(float(number) * _SIZE_UNITS[unit])
+
+
+def _parse_age(raw: str, where: str) -> float:
+    """Parse a human duration (``30d``, ``12h``, ``3600s``, ``2w``) into seconds."""
+    text = raw.strip().lower().replace(" ", "")
+    match = re.fullmatch(r"([0-9]*\.?[0-9]+)([a-z]*)", text)
+    if not match:
+        raise ConfigError(f"invalid age {raw!r} {where}; e.g. 30d, 12h, 3600s")
+    number, unit = match.group(1), match.group(2) or "s"
+    if unit not in _AGE_UNITS:
+        raise ConfigError(
+            f"invalid age unit {unit!r} {where}; expected one of {sorted(_AGE_UNITS)}"
+        )
+    return float(number) * _AGE_UNITS[unit]
 
 
 def _parse_bool(raw: str, where: str) -> bool:
@@ -246,6 +265,9 @@ def load(path: Optional[Path] = None) -> FileConfig:
     max_size_raw = get("max_size")
     max_size = _parse_size(max_size_raw, f"in {p}") if max_size_raw else None
 
+    max_age_raw = get("max_age")
+    max_age = _parse_age(max_age_raw, f"in {p}") if max_age_raw else None
+
     # [executables]: client name -> path/command. Kept verbatim and leniently
     # (unknown client keys are not an error -- the adapter registry is
     # extensible, and a key is only ever consulted when that client is run).
@@ -262,6 +284,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
         timeout=timeout,
         trust_scan=trust_scan,
         max_size=max_size,
+        max_age=max_age,
         executables=executables,
         source=p,
     )
@@ -336,6 +359,11 @@ def resolve_settings(
         _parse_size(max_size_env_raw, "in GMLCACHE_MAX_SIZE") if max_size_env_raw else None
     )
 
+    max_age_env_raw = env.get("GMLCACHE_MAX_AGE")
+    max_age_env = (
+        _parse_age(max_age_env_raw, "in GMLCACHE_MAX_AGE") if max_age_env_raw else None
+    )
+
     return {
         "mode": _pick(mode_flag, mode_env, file_cfg.mode, DEFAULTS["mode"]),
         # persist: per-call depth (meter/cache/dataset), same precedence as mode.
@@ -349,6 +377,9 @@ def resolve_settings(
         # max_size: off (None) by default = keep everything. Standing policy, so
         # config/env only, no per-call flag.
         "max_size": _pick(None, max_size_env, file_cfg.max_size, None),
+        # max_age: off (None) by default = no time-based eviction. Standing policy,
+        # config/env only, no per-call flag. Value is seconds since last access.
+        "max_age": _pick(None, max_age_env, file_cfg.max_age, None),
     }
 
 

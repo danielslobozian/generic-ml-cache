@@ -203,6 +203,35 @@ def test_store_has_no_env_override(tmp_path, monkeypatch):
     assert settings["store"] == (str(config.default_store_path()), "default")
 
 
+def test_max_age_parsed_from_file(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nmax_age = 30d\n")
+    cfg = config.load(p)
+    assert cfg.max_age == 30 * 86400
+
+
+def test_max_age_units(tmp_path):
+    for spec, expected in [("1s", 1.0), ("2m", 120.0), ("3h", 10800.0), ("1w", 604800.0)]:
+        p = _write(tmp_path / f"c_{spec}.ini", f"[defaults]\nmax_age = {spec}\n")
+        assert config.load(p).max_age == expected
+
+
+def test_max_age_invalid_unit_raises(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nmax_age = 30x\n")
+    with pytest.raises(ConfigError):
+        config.load(p)
+
+
+def test_max_age_env_override(tmp_path, monkeypatch):
+    monkeypatch.setenv("GMLCACHE_MAX_AGE", "7d")
+    settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))
+    assert settings["max_age"] == (7 * 86400, "env")
+
+
+def test_max_age_default_is_none(tmp_path):
+    settings = config.resolve_settings(config.load(tmp_path / "absent.ini"))
+    assert settings["max_age"] == (None, "default")
+
+
 def test_init_writes_config_and_is_idempotent(tmp_path):
     target = tmp_path / "cfg" / "config.ini"
     path, created = config.write_default_config(target)
