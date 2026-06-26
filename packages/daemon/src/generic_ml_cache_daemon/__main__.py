@@ -21,7 +21,7 @@ _AGE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
 def _parse_size(raw: str) -> Optional[int]:
-    m = re.fullmatch(r"([0-9]*\.?[0-9]+)([a-z]*)", raw.strip().lower().replace(" ", ""))
+    m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([a-z]*)", raw.strip().lower().replace(" ", ""))
     if not m:
         return None
     number, unit = m.group(1), m.group(2) or "b"
@@ -30,7 +30,7 @@ def _parse_size(raw: str) -> Optional[int]:
 
 
 def _parse_age(raw: str) -> Optional[float]:
-    m = re.fullmatch(r"([0-9]*\.?[0-9]+)([a-z]*)", raw.strip().lower().replace(" ", ""))
+    m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([a-z]*)", raw.strip().lower().replace(" ", ""))
     if not m:
         return None
     number, unit = m.group(1), m.group(2) or "s"

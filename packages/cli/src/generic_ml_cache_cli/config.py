@@ -197,7 +197,7 @@ _AGE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 def _parse_size(raw: str, where: str) -> int:
     """Parse a human size (``5GB``, ``500MB``, ``1048576``) into bytes (base 1024)."""
     text = raw.strip().lower().replace(" ", "")
-    match = re.fullmatch(r"([0-9]*\.?[0-9]+)([a-z]*)", text)
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([a-z]*)", text)
     if not match:
         raise ConfigError(f"invalid size {raw!r} {where}; e.g. 5GB, 500MB, or a byte count")
     number, unit = match.group(1), match.group(2) or "b"
@@ -211,7 +211,7 @@ def _parse_size(raw: str, where: str) -> int:
 def _parse_age(raw: str, where: str) -> float:
     """Parse a human duration (``30d``, ``12h``, ``3600s``, ``2w``) into seconds."""
     text = raw.strip().lower().replace(" ", "")
-    match = re.fullmatch(r"([0-9]*\.?[0-9]+)([a-z]*)", text)
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([a-z]*)", text)
     if not match:
         raise ConfigError(f"invalid age {raw!r} {where}; e.g. 30d, 12h, 3600s")
     number, unit = match.group(1), match.group(2) or "s"
