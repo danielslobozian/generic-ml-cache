@@ -15,6 +15,37 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-06-27
+
+### Added
+
+- **`max_age` config setting** (cli): new `max_age` key in `[defaults]` (e.g. `max_age = 30d`)
+  and matching `GMLCACHE_MAX_AGE` environment variable. Accepted suffixes: `s`, `m`, `h`, `d`,
+  `w`. Parsed with the same unit-aware parser as `max_size`. Shown in `gmlcache status`.
+- **`PurgeService.evict_stale(max_age_seconds)`** (core): soft-purges current executions whose
+  last access (from the access journal) is older than the configured cutoff. Entries that have
+  never been accessed fall back to their `created_at` timestamp. Zero or negative values are a
+  no-op.
+- **`EvictionScheduler`** (daemon): asyncio background task that runs `evict_to_quota` and/or
+  `evict_stale` on a configurable interval (default 1 hour). Wired into the FastAPI lifespan;
+  starts only when at least one limit (`max_size` or `max_age`) is configured.
+- **Eviction stats in `GET /info`** (daemon): response now includes an `eviction` object with
+  `max_size`, `max_age`, `interval`, `last_run_at`, `last_executions_removed`, and
+  `last_bytes_freed` — the result of the most recent sweep.
+- **`gmlcache daemon start` threads eviction config** (cli): reads `max_size` and `max_age`
+  from the resolved config and passes them to `create_app`, so the daemon respects eviction
+  settings when started via the CLI.
+- **`GMLCACHE_EVICTION_INTERVAL`** (daemon): environment variable to override the default
+  1-hour sweep interval (in seconds). Useful for testing and automated environments.
+- **Eviction demo tapes** (docs): `docs/tapes/evict-lru.tape` and `docs/tapes/evict-stale.tape`
+  demonstrate LRU quota enforcement and scheduled stale eviction with the enriched fake client.
+  All tapes moved from `docs/` to `docs/tapes/`.
+- **Enriched fake client** (docs): `render-tape.py` fake client now reads the prompt from stdin
+  and echoes it back (`Cached: <prompt>`), making `list` output meaningful in eviction demos.
+- **Retention docs updated** (docs): `docs/concepts/retention.md` gains a "Scheduled stale
+  eviction" section covering `max_age`, `GMLCACHE_EVICTION_INTERVAL`, and the `/info` eviction
+  field; `docs/reference/cli.md` gains an "Automatic eviction" subsection with GIF anchors.
+
 ## [0.14.0] - 2026-06-26
 
 ### Added
@@ -716,7 +747,8 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.14.0...v0.15.0
 [0.1.0]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.16...v0.1.0
 [0.0.16]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.14...v0.0.15

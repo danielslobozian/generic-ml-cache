@@ -128,9 +128,6 @@ Sessions build on that same metadata: `session report` rolls up a workflow's run
 | **Live streaming** | `run --stream` (and `execution watch`) emit the client's live progress as NDJSON |
 | **Alias** | `alias <client> -- <native args>` — a thin wrapper that caches a raw native call (stdout/stderr/exit) |
 
-> [!NOTE]
-> Size-based eviction is **planned, not yet implemented** — see the [roadmap](docs/ROADMAP.md).
-
 <br>
 
 ## What is an execution request?
