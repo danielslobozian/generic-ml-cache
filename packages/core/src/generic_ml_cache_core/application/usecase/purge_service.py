@@ -108,11 +108,7 @@ class PurgeService:
         cutoff = time.time() - max_age_seconds
         entries = self._repository.current_executions_with_sizes()
         last_access = self._metrics.last_access()
-        stale_keys = [
-            e.execution_key
-            for e in entries
-            if _lru_epoch(e, last_access) < cutoff
-        ]
+        stale_keys = [e.execution_key for e in entries if _lru_epoch(e, last_access) < cutoff]
         return self._soft_purge_keys(stale_keys)
 
     def evict_to_quota(self, max_bytes: int) -> PurgeReport:

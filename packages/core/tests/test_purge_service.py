@@ -552,8 +552,8 @@ def test_purge_by_session_tag_deduplicates_shared_keys():
 
 def test_evict_stale_removes_entries_older_than_cutoff():
     now = _time_module.time()
-    old_epoch = now - 10_000   # clearly older than 1 h
-    recent_epoch = now - 60    # clearly within 1 h
+    old_epoch = now - 10_000  # clearly older than 1 h
+    recent_epoch = now - 60  # clearly within 1 h
 
     id_old = _identity("old")
     id_recent = _identity("recent")
