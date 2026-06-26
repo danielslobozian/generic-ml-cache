@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from unittest.mock import MagicMock
 
-import pytest
-
 from generic_ml_cache_core.application.domain.model.gateway.forwarded_response import (
     ForwardedResponse,
 )

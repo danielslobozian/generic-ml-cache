@@ -4,8 +4,6 @@ import urllib.error
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from generic_ml_cache_core.adapter.out.gateway.http_gateway_forward_adapter import (
     HttpGatewayForwardAdapter,
 )

@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 
-import pytest
-
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import GatewayRequest
 
 
