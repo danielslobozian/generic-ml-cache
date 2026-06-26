@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +13,20 @@ from fastapi import FastAPI
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
 
 from generic_ml_cache_daemon import __version__
+
+_CAPTURE_ENV_FLAG = "GMLCACHE_GATEWAY_CAPTURE"
+_CAPTURE_ENV_PATH = "GMLCACHE_GATEWAY_CAPTURE_PATH"
+_CAPTURE_FILENAME = "gateway-capture.ndjson"
+
+
+def _resolve_capture_path(store_root: Path) -> Optional[Path]:
+    """Return the capture file path when capture is enabled, else None."""
+    if not os.environ.get(_CAPTURE_ENV_FLAG):
+        return None
+    custom_path = os.environ.get(_CAPTURE_ENV_PATH)
+    if custom_path:
+        return Path(custom_path)
+    return store_root / _CAPTURE_FILENAME
 
 
 def create_app(
@@ -38,7 +53,7 @@ def create_app(
         redoc_url="/redoc",
     )
 
-    wired_use_cases = build_use_cases(store_root)
+    wired_use_cases = build_use_cases(store_root, client="claude")
     application.state.wired = wired_use_cases
     application.state.store_root = store_root
     application.state.session_id = session_id
@@ -59,5 +74,11 @@ def create_app(
     application.include_router(run_router)
     application.include_router(jobs_router)
     application.include_router(gateway_router)
+
+    capture_path = _resolve_capture_path(store_root)
+    if capture_path is not None:
+        from generic_ml_cache_daemon.middleware.capture import GatewayCaptureMiddleware  # noqa: PLC0415
+
+        application.add_middleware(GatewayCaptureMiddleware, capture_path=capture_path)
 
     return application

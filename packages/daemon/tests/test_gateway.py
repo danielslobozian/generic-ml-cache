@@ -1,48 +1,34 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for POST /gateway/claude/v1/messages."""
+"""Tests for POST /gateway/claude/{session_id}/v1/messages."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
 from starlette.testclient import TestClient
 
-from generic_ml_cache_core.application.domain.model.execution.artifact import (
-    Artifact,
-    ArtifactType,
+from generic_ml_cache_core.application.domain.model.gateway.gateway_response import GatewayResponse
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
+    RunMlGatewayCommand,
 )
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.domain.model.execution.execution_state import (
-    ExecutionState,
-)
-from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 
-_URL = "/gateway/claude/v1/messages"
+_SESSION = "test-session-abc"
+_URL = f"/gateway/claude/{_SESSION}/v1/messages"
 
-
-def _make_execution(stdout: str = "Hello!", state: ExecutionState = ExecutionState.SUCCESS):
-    execution = MagicMock(spec=MlExecution)
-    execution.execution_state = state
-    execution.execution_kind = ExecutionKind.API
-    execution.token_usage = None
-    artifact = MagicMock(spec=Artifact)
-    artifact.artifact_type = ArtifactType.STDOUT
-    artifact.content = stdout.encode()
-    execution.artifacts = [artifact]
-    execution.call_identity = MagicMock()
-    execution.call_identity.generate_key.return_value = "gateway-key-001"
-    return execution
-
-
-def _patched_client(tmp_path: Path, execution) -> TestClient:
-    from generic_ml_cache_daemon.app import create_app
-
-    app = create_app(tmp_path)
-    app.state.wired.run_ml.execute = MagicMock(return_value=execution)
-    return TestClient(app)
-
+_ANTHROPIC_BODY = json.dumps(
+    {
+        "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Hello!"}],
+        "model": "claude-opus-4-8",
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 10, "output_tokens": 5},
+    }
+).encode()
 
 _SINGLE_TURN = {
     "model": "claude-opus-4-8",
@@ -50,62 +36,99 @@ _SINGLE_TURN = {
 }
 
 
+def _make_gateway_response(
+    cache_hit: bool = False,
+    status_code: int = 200,
+    body: bytes = _ANTHROPIC_BODY,
+) -> GatewayResponse:
+    return GatewayResponse(
+        response_body_bytes=body,
+        status_code=status_code,
+        cache_hit=cache_hit,
+    )
+
+
+def _patched_client(tmp_path: Path, gateway_response: GatewayResponse) -> TestClient:
+    from generic_ml_cache_daemon.app import create_app
+
+    app = create_app(tmp_path)
+    app.state.wired.run_gateway.execute = MagicMock(return_value=gateway_response)
+    return TestClient(app)
+
+
 # ---------------------------------------------------------------------------
-# Happy path
+# Happy path — status code and response body
 # ---------------------------------------------------------------------------
 
 
 def test_gateway_returns_200(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    response = tc.post(_URL, json=_SINGLE_TURN)
-    assert response.status_code == 200
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    assert tc.post(_URL, json=_SINGLE_TURN).status_code == 200
 
 
-def test_gateway_returns_content_block(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution(stdout="World!"))
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["content"][0]["type"] == "text"
-    assert body["content"][0]["text"] == "World!"
+def test_gateway_returns_response_body_verbatim(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    assert tc.post(_URL, json=_SINGLE_TURN).content == _ANTHROPIC_BODY
 
 
-def test_gateway_returns_role_assistant(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["role"] == "assistant"
+def test_gateway_x_cache_hit_false_on_miss(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response(cache_hit=False))
+    assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "false"
 
 
-def test_gateway_returns_model_echoed(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["model"] == "claude-opus-4-8"
-
-
-def test_gateway_returns_message_id(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["id"].startswith("msg_")
-
-
-def test_gateway_returns_usage_dict(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert "input_tokens" in body["usage"]
-    assert "output_tokens" in body["usage"]
-
-
-def test_gateway_x_cache_hit_true_on_success(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["x_cache_hit"] is True
+def test_gateway_x_cache_hit_true_on_hit(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response(cache_hit=True))
+    assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "true"
 
 
 # ---------------------------------------------------------------------------
-# Error paths
+# Command construction — verify what the route passes to the use case
 # ---------------------------------------------------------------------------
 
 
-def test_gateway_multi_turn_returns_422(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
+def test_gateway_command_carries_api_token(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    tc.post(_URL, json=_SINGLE_TURN, headers={"x-api-key": "sk-ant-test"})
+    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+    assert command.api_token == "sk-ant-test"
+
+
+def test_gateway_command_carries_model(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    tc.post(_URL, json=_SINGLE_TURN)
+    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+    assert command.gateway_request.model == "claude-opus-4-8"
+
+
+def test_gateway_command_carries_messages(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    tc.post(_URL, json=_SINGLE_TURN)
+    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+    assert command.gateway_request.messages[0]["role"] == "user"
+
+
+def test_gateway_command_carries_system(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    body = {**_SINGLE_TURN, "system": "You are a helpful assistant."}
+    tc.post(_URL, json=body)
+    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+    assert command.gateway_request.system == "You are a helpful assistant."
+
+
+def test_gateway_session_id_from_url_path(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    tc.post(_URL, json=_SINGLE_TURN)
+    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+    assert command.session_id == _SESSION
+
+
+# ---------------------------------------------------------------------------
+# Multi-turn and extra fields
+# ---------------------------------------------------------------------------
+
+
+def test_gateway_multi_turn_returns_200(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
     multi_turn = {
         "model": "claude-opus-4-8",
         "messages": [
@@ -114,46 +137,33 @@ def test_gateway_multi_turn_returns_422(tmp_path: Path) -> None:
             {"role": "user", "content": "How are you?"},
         ],
     }
-    response = tc.post(_URL, json=multi_turn)
-    assert response.status_code == 422
+    assert tc.post(_URL, json=multi_turn).status_code == 200
 
 
-def test_gateway_failed_execution_returns_502(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution(state=ExecutionState.FAILED))
+def test_gateway_extra_fields_ignored(tmp_path: Path) -> None:
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    body = {**_SINGLE_TURN, "metadata": {"user_id": "abc"}, "stream": False}
+    assert tc.post(_URL, json=body).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Upstream error forwarding
+# ---------------------------------------------------------------------------
+
+
+def test_gateway_forwards_upstream_4xx_status(tmp_path: Path) -> None:
+    error_body = json.dumps({"type": "error", "error": {"type": "rate_limit_error"}}).encode()
+    tc = _patched_client(tmp_path, _make_gateway_response(status_code=429, body=error_body))
     response = tc.post(_URL, json=_SINGLE_TURN)
-    assert response.status_code == 502
+    assert response.status_code == 429
+    assert response.content == error_body
+
+
+# ---------------------------------------------------------------------------
+# Validation — missing required field
+# ---------------------------------------------------------------------------
 
 
 def test_gateway_missing_model_returns_422(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    response = tc.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]})
-    assert response.status_code == 422
-
-
-def test_gateway_system_prompt_forwarded(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_execution())
-    body = {**_SINGLE_TURN, "system": "You are a helpful assistant."}
-    response = tc.post(_URL, json=body)
-    assert response.status_code == 200
-    call_args = tc.app.state.wired.run_ml.execute.call_args[0][0]
-    assert call_args.user_system_prompt == "You are a helpful assistant."
-
-
-def test_gateway_no_stdout_artifact_returns_empty_content(tmp_path: Path) -> None:
-    execution = _make_execution()
-    execution.artifacts = []  # no artifacts
-    tc = _patched_client(tmp_path, execution)
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["content"][0]["text"] == ""
-
-
-def test_gateway_token_usage_present_in_response(tmp_path: Path) -> None:
-    execution = _make_execution()
-    token_usage = MagicMock()
-    token_usage.input_tokens = 10
-    token_usage.output_tokens = 20
-    execution.token_usage = token_usage
-    tc = _patched_client(tmp_path, execution)
-    body = tc.post(_URL, json=_SINGLE_TURN).json()
-    assert body["usage"]["input_tokens"] == 10
-    assert body["usage"]["output_tokens"] == 20
+    tc = _patched_client(tmp_path, _make_gateway_response())
+    assert tc.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 422
