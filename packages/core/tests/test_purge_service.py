@@ -542,3 +542,91 @@ def test_purge_by_session_tag_deduplicates_shared_keys():
     svc = PurgeService(repo, blob_store, metrics)
     report = svc.purge_by_session_tag("tag")
     assert report.executions_removed == 1
+
+
+# ---------------------------------------------------------------------------
+# evict_stale (0.15.0)
+# ---------------------------------------------------------------------------
+
+import time as _time_module
+
+
+def _repo_with_created_at(keys_epochs):
+    """Build a repo + blob store with entries whose created_at matches epoch."""
+    from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
+        InMemoryExecutionRepository,
+    )
+    from datetime import datetime, timezone
+
+    repo = InMemoryExecutionRepository(FixedClock())
+    blob_store = InMemoryBlobStore()
+    for key, epoch in keys_epochs:
+        iso = datetime.fromtimestamp(epoch, tz=timezone.utc).isoformat()
+        _save_execution(repo, blob_store, key)
+        # patch created_at via the size entries so the fallback path is testable
+        # (in-memory repo stores created_at as the clock value; we control the
+        # last_access dict passed to evict_stale instead)
+    return repo, blob_store
+
+
+def test_evict_stale_removes_entries_older_than_cutoff():
+    now = _time_module.time()
+    old_epoch = now - 10_000   # clearly older than 1 h
+    recent_epoch = now - 60    # clearly within 1 h
+
+    id_old = _identity("old")
+    id_recent = _identity("recent")
+    old_key = id_old.generate_key()
+    recent_key = id_recent.generate_key()
+
+    repo = InMemoryExecutionRepository(FixedClock())
+    blob_store = InMemoryBlobStore()
+    repo.save(_execution(id_old, b"old"))
+    blob_store.put("blob_" + b"old".hex(), b"old")
+    repo.save(_execution(id_recent, b"recent"))
+    blob_store.put("blob_" + b"recent".hex(), b"recent")
+
+    metrics = FakeMetrics(last_access={old_key: old_epoch, recent_key: recent_epoch})
+    svc = PurgeService(repo, blob_store, metrics)
+
+    report = svc.evict_stale(max_age_seconds=3600)
+    assert report.executions_removed == 1
+    assert repo.find_current(old_key) is None or not repo.find_current(old_key).output_persisted
+    assert repo.find_current(recent_key) is not None
+
+
+def test_evict_stale_noop_when_nothing_is_stale():
+    now = _time_module.time()
+    id1 = _identity("k1")
+    id2 = _identity("k2")
+    key1, key2 = id1.generate_key(), id2.generate_key()
+
+    repo = InMemoryExecutionRepository(FixedClock())
+    blob_store = InMemoryBlobStore()
+    repo.save(_execution(id1, b"v1"))
+    repo.save(_execution(id2, b"v2"))
+
+    metrics = FakeMetrics(last_access={key1: now - 60, key2: now - 120})
+    svc = PurgeService(repo, blob_store, metrics)
+
+    report = svc.evict_stale(max_age_seconds=3600)
+    assert report.executions_removed == 0
+
+
+def test_evict_stale_fallback_to_created_at_when_no_access_event():
+    now = _time_module.time()
+    repo, blob_store = _repo_with_entries(["never-accessed"])
+    # no last_access entry for this key -> falls back to created_at (fixed clock = _MOMENT)
+    # _MOMENT is 2026-06-21 09:30 UTC, which is far in the past
+    metrics = FakeMetrics(last_access={})
+    svc = PurgeService(repo, blob_store, metrics)
+
+    report = svc.evict_stale(max_age_seconds=60)  # 1 minute — _MOMENT is way older
+    assert report.executions_removed == 1
+
+
+def test_evict_stale_zero_or_negative_max_age_is_noop():
+    repo, blob_store = _repo_with_entries(["key1"])
+    svc = PurgeService(repo, blob_store, FakeMetrics())
+    assert svc.evict_stale(max_age_seconds=0).executions_removed == 0
+    assert svc.evict_stale(max_age_seconds=-1).executions_removed == 0

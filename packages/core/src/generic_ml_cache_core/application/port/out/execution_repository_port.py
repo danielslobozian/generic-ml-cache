@@ -117,3 +117,4 @@ class ExecutionRepositoryPort(ABC):
         """Return every distinct execution key in the store, regardless of state.
         Used by hard_delete_all to ensure no key — including those with only
         failed or superseded executions — is left behind."""
+
