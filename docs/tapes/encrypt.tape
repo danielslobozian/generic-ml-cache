@@ -1,7 +1,7 @@
 # gmlcache demo — at-rest encryption: enable it, then watch the store lock.
 #
-# Render:   python3 docs/render-tape.py docs/encrypt.tape
-#        or: vhs docs/encrypt.tape   (if gmlcache is already on PATH with a cold store)
+# Render:   python3 docs/render-tape.py docs/tapes/encrypt.tape
+#        or: vhs docs/tapes/encrypt.tape   (if gmlcache is already on PATH with a cold store)
 #
 # Requires: vhs + the `gmlcache` command on PATH (built with the [encryption] extra),
 #   and a client named `claude` on PATH. Start from a COLD, public store.

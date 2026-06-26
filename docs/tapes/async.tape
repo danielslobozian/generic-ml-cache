@@ -1,7 +1,7 @@
 # gmlcache demo — detached executions: submit, check, watch, fetch the result.
 #
-# Render:   python3 docs/render-tape.py docs/async.tape
-#        or: vhs docs/async.tape   (if gmlcache is already on PATH with a cold store)
+# Render:   python3 docs/render-tape.py docs/tapes/async.tape
+#        or: vhs docs/tapes/async.tape   (if gmlcache is already on PATH with a cold store)
 #
 # Requires: vhs + the `gmlcache` command on PATH, and a client named `claude` on PATH.
 #   Start from a COLD store. The detached worker is a real gmlcache process, so `claude`

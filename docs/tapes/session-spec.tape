@@ -1,6 +1,6 @@
 # gmlcache demo — session exec spec + tag management (new in 0.13.0).
 #
-# Render:   python3 docs/render-tape.py docs/session-spec.tape
+# Render:   python3 docs/render-tape.py docs/tapes/session-spec.tape
 #
 # render-tape.py installs gmlcache from source in an isolated tmp venv and store.
 # No real API key is needed — all operations are session metadata only.

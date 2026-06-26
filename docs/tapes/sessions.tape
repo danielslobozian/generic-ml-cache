@@ -1,7 +1,7 @@
 # gmlcache demo — sessions: group a workflow's runs, tag them, then report.
 #
-# Render:   python3 docs/render-tape.py docs/sessions.tape
-#        or: vhs docs/sessions.tape   (if gmlcache is already on PATH with a cold store)
+# Render:   python3 docs/render-tape.py docs/tapes/sessions.tape
+#        or: vhs docs/tapes/sessions.tape   (if gmlcache is already on PATH with a cold store)
 #
 # render-tape.py installs gmlcache from source in an isolated tmp venv and store,
 # and exports GMLCACHE_FAKE_CLAUDE — a fake executable so no real API key is needed.

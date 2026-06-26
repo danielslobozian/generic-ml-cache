@@ -1,7 +1,7 @@
 # gmlcache demo — purge: reclaim space with soft purge by tag, then wipe with purge --all.
 #
-# Render:   python3 docs/render-tape.py docs/purge.tape
-#        or: vhs docs/purge.tape   (if gmlcache is already on PATH)
+# Render:   python3 docs/render-tape.py docs/tapes/purge.tape
+#        or: vhs docs/tapes/purge.tape   (if gmlcache is already on PATH)
 #
 # render-tape.sh installs gmlcache from source in an isolated tmp venv and store,
 # and exports GMLCACHE_FAKE_CLAUDE — a fake executable so no real API key is needed.

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime
 from typing import Dict, List
 
@@ -92,6 +93,23 @@ class PurgeService:
         return self._hard_delete_keys(self._repository.all_execution_keys())
 
     # -- quota enforcement ----------------------------------------------------
+
+    def evict_stale(self, max_age_seconds: float) -> PurgeReport:
+        """Soft-purge current executions not accessed within ``max_age_seconds``.
+
+        An execution's "last access" is the most recent event in the access
+        journal for that key.  Executions that have never been accessed fall back
+        to their ``created_at`` timestamp.  Returns an empty report when nothing
+        is stale.
+        """
+        if max_age_seconds <= 0:
+            return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
+
+        cutoff = time.time() - max_age_seconds
+        entries = self._repository.current_executions_with_sizes()
+        last_access = self._metrics.last_access()
+        stale_keys = [e.execution_key for e in entries if _lru_epoch(e, last_access) < cutoff]
+        return self._soft_purge_keys(stale_keys)
 
     def evict_to_quota(self, max_bytes: int) -> PurgeReport:
         """Soft-purge the least-recently-accessed executions until the store is at

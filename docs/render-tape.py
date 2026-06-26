@@ -6,15 +6,18 @@ at a temporary store, then render the VHS cassette.  The temp environment is
 cleaned up on exit.
 
 Usage:
-    python3 docs/render-tape.py docs/purge.tape
-    python3 docs/render-tape.py docs/sessions.tape
+    python3 docs/render-tape.py docs/tapes/purge.tape
+    python3 docs/render-tape.py docs/tapes/sessions.tape
+    python3 docs/render-tape.py docs/tapes/evict-lru.tape
+    python3 docs/render-tape.py docs/tapes/evict-stale.tape
 
 Requires: python3 (3.11+), vhs (https://github.com/charmbracelet/vhs)
 
 Tapes that call a real client (demo.tape, api.tape, …) still need that client
 installed and authenticated; this script only wires the cache itself.
-Tapes that use --executable $GMLCACHE_FAKE_CLAUDE (purge.tape, sessions.tape)
-need no real API key — the fake script is installed automatically.
+Tapes that use --executable $GMLCACHE_FAKE_CLAUDE (purge.tape, sessions.tape,
+evict-lru.tape, evict-stale.tape) need no real API key — the fake script reads
+the prompt from stdin and echoes it back, so list/inspect output is readable.
 """
 
 from __future__ import annotations
@@ -40,21 +43,29 @@ def _exe(venv: Path, name: str) -> Path:
 def _fake_client(tmp: Path) -> Path:
     """Write a minimal fake client script and return its path.
 
-    Outputs a plain-text response; the claude adapter stores it verbatim
-    because parse_output gracefully degrades when stdout is not JSON.
+    Reads the first non-empty line from stdin (the prompt delivered by the
+    claude adapter) and echoes it back as a one-line cached response.  This
+    makes eviction demos meaningful: the list command shows which prompt each
+    surviving entry belongs to.  parse_output degrades gracefully when stdout
+    is plain text rather than JSON.
     """
     if sys.platform == "win32":
         script = tmp / "fake_claude.bat"
         script.write_text(
             "@echo off\n"
-            "echo Cached response: once recorded, served instantly.\n",
+            "set /p PROMPT=\n"
+            'echo Cached: %PROMPT%\n',
             encoding="utf-8",
         )
     else:
         script = tmp / "fake_claude.sh"
         script.write_text(
             "#!/bin/sh\n"
-            "echo 'Cached response: once recorded, served instantly.'\n",
+            # Read lines until we find a non-empty one (skip blank context lines).
+            "while IFS= read -r line; do\n"
+            '  [ -n "$line" ] && echo "Cached: $line" && exit 0\n'
+            "done\n"
+            "echo 'Cached: (empty prompt)'\n",
             encoding="utf-8",
         )
         script.chmod(0o755)

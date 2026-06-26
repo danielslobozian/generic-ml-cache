@@ -14,7 +14,12 @@ from generic_ml_cache_core.adapter.out.client.registry import registered_names
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.metrics import is_prometheus_available
-from generic_ml_cache_daemon.models.health import HealthResponse, InfoResponse, ReadyResponse
+from generic_ml_cache_daemon.models.health import (
+    EvictionInfo,
+    HealthResponse,
+    InfoResponse,
+    ReadyResponse,
+)
 
 router = APIRouter()
 
@@ -45,11 +50,20 @@ def get_info(request: Request) -> InfoResponse:
     store_root: str = str(request.app.state.store_root)
     session_id: str | None = request.app.state.session_id
     all_adapter_names: List[str] = sorted(set(registered_names()) | set(registered_api_names()))
+    stats = request.app.state.eviction_stats
     return InfoResponse(
         version=__version__,
         store_root=store_root,
         session_id=session_id,
         adapters=all_adapter_names,
+        eviction=EvictionInfo(
+            max_size=stats.max_size,
+            max_age=stats.max_age,
+            interval=stats.interval,
+            last_run_at=stats.last_run_at,
+            last_executions_removed=stats.last_executions_removed,
+            last_bytes_freed=stats.last_bytes_freed,
+        ),
     )
 
 

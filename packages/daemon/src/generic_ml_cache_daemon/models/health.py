@@ -18,8 +18,18 @@ class ReadyResponse(BaseModel):
     detail: Optional[str] = None
 
 
+class EvictionInfo(BaseModel):
+    max_size: Optional[int] = None
+    max_age: Optional[float] = None
+    interval: float
+    last_run_at: Optional[float] = None
+    last_executions_removed: int = 0
+    last_bytes_freed: int = 0
+
+
 class InfoResponse(BaseModel):
     version: str
     store_root: str
     session_id: Optional[str] = None
     adapters: List[str]
+    eviction: EvictionInfo

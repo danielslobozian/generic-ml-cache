@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +14,7 @@ from fastapi import FastAPI
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
 
 from generic_ml_cache_daemon import __version__
+from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 
 _CAPTURE_ENV_FLAG = "GMLCACHE_GATEWAY_CAPTURE"
 _CAPTURE_ENV_PATH = "GMLCACHE_GATEWAY_CAPTURE_PATH"
@@ -34,6 +36,9 @@ def create_app(
     *,
     session_id: Optional[str] = None,
     enable_metrics: bool = False,
+    max_size: Optional[int] = None,
+    max_age: Optional[float] = None,
+    eviction_interval: float = 3600.0,
 ) -> FastAPI:
     """Create and configure the daemon FastAPI application.
 
@@ -41,23 +46,49 @@ def create_app(
         store_root: path to the gmlcache store directory (the injected data source).
         session_id: optional session all intercepted calls are recorded under.
         enable_metrics: expose the Prometheus /metrics endpoint.
+        max_size: optional store size cap in bytes; eviction runs each interval.
+        max_age: optional max seconds since last access; stale entries evicted each interval.
+        eviction_interval: seconds between eviction sweeps (default 3600).
 
     Returns:
         A fully wired FastAPI application. Routes are mounted by this function;
         callers should not mount additional routes after construction.
     """
+    wired_use_cases = build_use_cases(store_root, client="claude")
+
+    eviction_stats = EvictionStats(
+        max_size=max_size,
+        max_age=max_age,
+        interval=eviction_interval,
+    )
+    scheduler = EvictionScheduler(
+        wired_use_cases.purge,
+        eviction_stats,
+        interval=eviction_interval,
+    )
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        if max_size is not None or max_age is not None:
+            scheduler.start()
+        try:
+            yield
+        finally:
+            await scheduler.stop()
+
     application = FastAPI(
         title="generic-ml-cache daemon",
         version=__version__,
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
-    wired_use_cases = build_use_cases(store_root, client="claude")
     application.state.wired = wired_use_cases
     application.state.store_root = store_root
     application.state.session_id = session_id
     application.state.enable_metrics = enable_metrics
+    application.state.eviction_stats = eviction_stats
 
     from generic_ml_cache_daemon.jobs import JobRegistry
     from generic_ml_cache_daemon.routes.executions import router as executions_router
