@@ -1,6 +1,6 @@
 # gmlcache demo — browsing the store: list, tags, stats, inspect.
 #
-# Render:   python3 docs/render-tape.py docs/inspect.tape
+# Render:   python3 docs/render-tape.py docs/tapes/inspect.tape
 #
 # render-tape.py installs gmlcache from source in an isolated tmp venv and store,
 # and exports GMLCACHE_FAKE_CLAUDE — no real API key is needed.

@@ -1015,7 +1015,17 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
     host: str = args.host
     port: int = args.port
 
-    application = create_app(store_root, session_id=session_id, enable_metrics=enable_metrics)
+    settings = config.resolve_settings(config.load())
+    max_size: Optional[int] = settings["max_size"][0]  # type: ignore[assignment]
+    max_age: Optional[float] = settings["max_age"][0]  # type: ignore[assignment]
+
+    application = create_app(
+        store_root,
+        session_id=session_id,
+        enable_metrics=enable_metrics,
+        max_size=max_size,
+        max_age=max_age,
+    )
     uvicorn.run(application, host=host, port=port)
     return 0
 

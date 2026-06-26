@@ -1,14 +1,14 @@
 # gmlcache demo (hero) — the same command twice: first calls the real client, then hits cache.
 # The banner + command menu live in their own cassette (help.tape); this one is the value demo.
 #
-# Render:   python3 docs/render-tape.py docs/demo.tape
-#        or: vhs docs/demo.tape   (if gmlcache is already on PATH with a cold store)
+# Render:   python3 docs/render-tape.py docs/tapes/demo.tape
+#        or: vhs docs/tapes/demo.tape   (if gmlcache is already on PATH with a cold store)
 #
 # Requires: vhs + the `gmlcache` command on PATH, with a real client (claude here)
 #           installed and authenticated.
 #
 # IMPORTANT: start from a COLD cache so the first run is a real miss. Clear the store
-#   (its path is shown by `gmlcache status`) then run `vhs docs/demo.tape`.
+#   (its path is shown by `gmlcache status`) then run `vhs docs/tapes/demo.tape`.
 #
 # Crispness: the asset is rendered large; display it at ~50% width so it stays
 # sharp (a downsampled "retina" asset).

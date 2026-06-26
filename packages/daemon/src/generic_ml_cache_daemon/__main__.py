@@ -49,12 +49,16 @@ def main() -> None:
     max_age_raw = os.environ.get("GMLCACHE_MAX_AGE", "")
     max_age = _parse_age(max_age_raw) if max_age_raw else None
 
+    interval_raw = os.environ.get("GMLCACHE_EVICTION_INTERVAL", "")
+    eviction_interval = float(interval_raw) if interval_raw else 3600.0
+
     application = create_app(
         store_root,
         session_id=session_id,
         enable_metrics=enable_metrics,
         max_size=max_size,
         max_age=max_age,
+        eviction_interval=eviction_interval,
     )
     uvicorn.run(application, host=_DEFAULT_HOST, port=_DEFAULT_PORT)
 

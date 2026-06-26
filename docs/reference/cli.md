@@ -144,6 +144,24 @@ options (`--mode` / `--offline` / `--force`, `--stream`, `--record-on-error`,
 <img src="../images/gmlcache-purge.gif" alt="gmlcache purge: stats shows store size; purge --tag frees blobs; purge --all with confirmation phrase empties the store" width="760">
 </div>
 
+### Automatic eviction
+
+Set `max_size` to keep the store under a size ceiling; gmlcache evicts the
+least-recently-accessed entries after each run that pushes past the limit.
+
+<div align="center">
+<img src="../images/gmlcache-evict-lru.gif" alt="gmlcache LRU eviction: six entries recorded into a 100-byte store; only the three newest entries survive" width="760">
+</div>
+
+Set `max_age` (config or `GMLCACHE_MAX_AGE`) and run the daemon; it sweeps entries not
+accessed within the configured window on each eviction interval (default 1 hour).
+
+<div align="center">
+<img src="../images/gmlcache-evict-stale.gif" alt="gmlcache stale eviction: four entries recorded; daemon started with max_age=1s; after the first sweep all entries are gone" width="760">
+</div>
+
+See [Retention and quota](../concepts/retention.md) for the full policy reference.
+
 ### Encryption
 
 At-rest encryption is **store-wide** and optional. gmlcache generates the token (no outside

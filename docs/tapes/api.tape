@@ -3,7 +3,7 @@
 #
 # Render:
 #   ANTHROPIC_API_KEY=... OPENAI_API_KEY=... GEMINI_API_KEY=... \
-#   vhs docs/api.tape  ->  docs/images/gmlcache-api.gif
+#   vhs docs/tapes/api.tape  ->  docs/images/gmlcache-api.gif
 #
 # Requires: vhs, gmlcache with API adapter support, and one valid key per provider.
 # A cold isolated store is used (XDG_DATA_HOME is reset in the hidden section).

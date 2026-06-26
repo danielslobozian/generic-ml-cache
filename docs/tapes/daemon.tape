@@ -1,6 +1,6 @@
 # gmlcache demo — daemon: start the HTTP API, hit endpoints, stop.
 #
-# Render:   python3 docs/render-tape.py docs/daemon.tape
+# Render:   python3 docs/render-tape.py docs/tapes/daemon.tape
 #
 # render-tape.py installs core + cli + daemon from source in an isolated tmp venv
 # and store, sets GMLCACHE_FAKE_CLAUDE, and exports GMLCACHE_CONFIG.

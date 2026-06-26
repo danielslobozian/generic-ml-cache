@@ -360,9 +360,7 @@ def resolve_settings(
     )
 
     max_age_env_raw = env.get("GMLCACHE_MAX_AGE")
-    max_age_env = (
-        _parse_age(max_age_env_raw, "in GMLCACHE_MAX_AGE") if max_age_env_raw else None
-    )
+    max_age_env = _parse_age(max_age_env_raw, "in GMLCACHE_MAX_AGE") if max_age_env_raw else None
 
     return {
         "mode": _pick(mode_flag, mode_env, file_cfg.mode, DEFAULTS["mode"]),

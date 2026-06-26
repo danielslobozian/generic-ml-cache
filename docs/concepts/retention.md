@@ -17,6 +17,7 @@
 - [What retention means](#what-retention-means)
 - [Store size](#store-size)
 - [Size quota and LRU eviction](#size-quota-and-lru-eviction)
+- [Scheduled stale eviction](#scheduled-stale-eviction)
 - [Soft purge vs hard delete](#soft-purge-vs-hard-delete)
 - [The purge command](#the-purge-command)
 - [What survives a soft purge](#what-survives-a-soft-purge)
@@ -25,7 +26,9 @@
 ---
 
 gmlcache keeps every recorded execution until you remove it or a quota forces eviction.
-There is no automatic time-based expiry — entries persist until you act.
+Without configuration, entries persist until you act.  Two quota mechanisms can make
+eviction automatic: a size ceiling (LRU) and a maximum age (time-based), both enforced
+by the daemon on a configurable interval.
 
 ## What retention means
 
@@ -76,6 +79,45 @@ result immediately.
 > LRU eviction is a **soft purge** — blobs are freed and artifact rows are removed, but
 > execution records, token usage, tags, and access events are kept. Statistics survive
 > eviction. See [Soft purge vs hard delete](#soft-purge-vs-hard-delete) below.
+
+<div align="center">
+<img src="../images/gmlcache-evict-lru.gif" alt="gmlcache LRU eviction: six entries recorded into a 100-byte store; the three oldest are evicted automatically; only the three newest entries survive" width="760">
+</div>
+
+## Scheduled stale eviction
+
+When the daemon is running, it can also remove entries that have not been accessed within
+a configurable time window.  Set `max_age` in the config file or via the environment:
+
+```ini
+# config file — remove entries not accessed in the last 30 days
+max_age = 30d
+```
+
+```bash
+# environment — same effect
+export GMLCACHE_MAX_AGE=30d
+```
+
+Accepted suffixes: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks).
+
+The daemon reads this setting at startup and sweeps the store on a fixed interval (default
+1 hour).  An entry's "last access" is the most recent cache hit or `inspect` call recorded
+in the access journal; entries that have never been accessed fall back to their creation
+timestamp.  The sweep is a soft purge — statistics and history survive.
+
+The sweep interval can be overridden via `GMLCACHE_EVICTION_INTERVAL` (seconds), which is
+useful in automated environments where tighter control over sweep frequency is needed.
+Check the last sweep result without waiting for the next one:
+
+```bash
+curl -s http://127.0.0.1:8765/info | python3 -m json.tool
+# "eviction": { "max_age": 2592000.0, "last_run_at": 1751234567.3, ... }
+```
+
+<div align="center">
+<img src="../images/gmlcache-evict-stale.gif" alt="gmlcache stale eviction: four entries recorded; daemon started with max_age=1s; after the first sweep all entries are gone" width="760">
+</div>
 
 ## Soft purge vs hard delete
 
