@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "generic-ml-cache-cli"
-version = "0.18.0"
+dynamic = ["version"]
 description = "Terminal UI for generic-ml-cache: the gmlcache command. A thin inbound driver over generic-ml-cache-core -- reads config, provides the data source, maps commands onto the core library."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -38,6 +38,11 @@ gmlcache = "generic_ml_cache_cli.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "vulture>=2", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
+
+[tool.hatch.version]
+source = "regex"
+path = "../../VERSION"
+pattern = "^(?P<version>[^\\n]+)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/generic_ml_cache_cli", "src/generic_ml_cache_common"]

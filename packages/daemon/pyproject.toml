@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "generic-ml-cache-daemon"
-version = "0.18.0"
+dynamic = ["version"]
 description = "Local HTTP daemon for generic-ml-cache: REST API, gateway proxy, and session transport. A thin inbound driver over generic-ml-cache-core."
 requires-python = ">=3.9"
 license = "Apache-2.0"
@@ -50,6 +50,11 @@ dev = [
   "import-linter>=2",
   "pyright>=1.1",
 ]
+
+[tool.hatch.version]
+source = "regex"
+path = "../../VERSION"
+pattern = "^(?P<version>[^\\n]+)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/generic_ml_cache_daemon", "src/generic_ml_cache_common"]
