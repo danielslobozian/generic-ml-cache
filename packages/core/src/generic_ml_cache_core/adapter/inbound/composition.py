@@ -8,7 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, FrozenSet, Optional
 
+from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
+from generic_ml_cache_core.adapter.out.client.discover import (
+    list_models,
+    list_models_all,
+    probe_all,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.execution_repository_port import ExecutionRepositoryPort

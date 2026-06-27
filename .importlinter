@@ -53,5 +53,7 @@ ignore_imports =
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.api.stub_api_client_adapter
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.api.api_discover
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.client.discover
     # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
     generic_ml_cache_cli.cli -> generic_ml_cache_daemon.app
