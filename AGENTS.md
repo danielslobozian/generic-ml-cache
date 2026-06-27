@@ -459,6 +459,16 @@ return blob_path.read_bytes()
   Running only the linters, or skipping coverage, is a partial check, not a pass.
   The XMLs produced by (3), (4), and (5) are the exact files Sonar ingests — running
   them locally shows the number Sonar will report before any push.
+- **Never work directly on `main`.** Every change — no matter how small — is made on
+  a dedicated branch. Branch naming:
+  - `feature/<scope>` — user-facing capability
+  - `tech/<scope>` — internal refactor, tooling, or build change
+  - `fix/<scope>` — bug fix
+  - `release/<version>` — version bump + changelog only (no code)
+  - `docs/<scope>` — documentation only
+  Create the branch before touching any file. `main` is only ever updated via a merged
+  PR. An agent that edits files while on `main` has violated this rule; the correct
+  recovery is `git checkout -b <branch>` immediately (staged changes carry over).
 - This file evolves with the project. When a new structural decision is made, it is
   recorded here as an enforceable line with its failing case, so the standard and
   the code never drift.
