@@ -15,6 +15,26 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-06-27
+
+### Added
+
+- **`/gh-pr` Claude Code skill** (tooling): new slash command that automates the full
+  release flow — bumps `VERSION`, generates a `CHANGELOG` entry from commits since the
+  last tag, marks the version as released in `ROADMAP.md`, commits, pushes, and opens
+  the release PR. Tracked in `tools/claude-code/commands/gh-pr.md` and deployed to
+  `.claude/commands/gh-pr.md` locally.
+- **`ruff check` and `ruff format --check` pre-commit hooks** (tooling): two new gates
+  (lint and format) run before the existing `import-linter` and `pyright` hooks on
+  every `git commit`. All four hooks are now wired and pass clean.
+- **Single `VERSION` file** (build): replaces the per-package `version = "x.y.z"`
+  literals in all three `pyproject.toml` files. Each package reads the version via
+  hatchling's `regex` source (`path = "../../VERSION"`). A release version bump is now
+  one edit to one file.
+- **No-work-on-main rule** (process): documented in `AGENTS.md` with branch naming
+  conventions (`feature/`, `tech/`, `fix/`, `release/`, `docs/`). Every change,
+  regardless of size, must be made on a dedicated branch and merged via PR.
+
 ## [0.18.0] - 2026-06-27
 
 ### Added
