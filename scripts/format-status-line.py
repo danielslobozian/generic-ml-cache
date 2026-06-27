@@ -1,24 +1,21 @@
 #!/usr/bin/env python3
 """format-status-line.py — default gmlcache status-bar formatter.
 
-Assembles up to two output lines:
+Assembles a single status line from five independent sections:
 
-  Line 1 (always):
-    1. git    — repo name, branch, HEAD hash, dirty-file count
-    2. cache  — gmlcache session ID, calls/hits, per-model token usage
-    3. cwd    — abbreviated current working directory
-    4. quota  — Claude 5-hour rolling window usage + time to reset
-
-  Line 2 (when a PR/MR exists for the current branch):
-    5. pr     — PR/MR number, CI check counts (✓/✗/⋯), comment count, URL
-                Uses `gh` for GitHub repos, `glab` for GitLab. Silently
-                omitted if neither CLI is available or no PR/MR is open.
-                Results are cached for 30 s to avoid hitting the API on
-                every status-bar refresh.
+  1. git    — ⎇  repo name, branch, HEAD hash, dirty-file count
+  2. cache  — gmlcache session ID, calls/hits, per-model token usage
+  3. pr     — ⤴  PR/MR number, CI check counts (✓/✗/⋯), comment count, URL
+              Uses `gh` for GitHub repos, `glab` for GitLab. Silently
+              omitted if neither CLI is available or no PR/MR is open.
+              Results are cached for 30 s to avoid hitting the API on
+              every status-bar refresh.
+  4. cwd    — 📁  abbreviated current working directory
+  5. quota  — ⏱  Claude 5-hour rolling window usage + time to reset
 
 Each section is independent — if a source is unavailable it is silently
-omitted. Whether line 2 renders as a separate line depends on the terminal
-and the host application; Claude Code TUI mode may or may not stack lines.
+omitted. Claude Code renders only the first line of output, so everything
+lives in one │-separated line.
 
 CUSTOMISE: comment out any section you don't need, rearrange the order in
 main(), or change the icon/format variables at the top of each section.
@@ -388,40 +385,30 @@ def pr_section() -> str:
 
 
 def main() -> None:
-    # Line 1: always present when inside a git repo
-    line1: list[str] = []
+    sections: list[str] = []
 
     git = git_section()
     if git:
-        line1.append(git)
+        sections.append(git)
 
     cache = cache_section()
     if cache:
-        line1.append(cache)
-
-    cwd = cwd_section()
-    if cwd:
-        line1.append(cwd)
-
-    quota = quota_section()
-    if quota:
-        line1.append(quota)
-
-    # Line 2: PR/MR status — only rendered when a PR is open for this branch
-    line2: list[str] = []
+        sections.append(cache)
 
     pr = pr_section()
     if pr:
-        line2.append(pr)
+        sections.append(pr)
 
-    output: list[str] = []
-    if line1:
-        output.append(_SEP.join(line1))
-    if line2:
-        output.append(_SEP.join(line2))
+    cwd = cwd_section()
+    if cwd:
+        sections.append(cwd)
 
-    if output:
-        print("\n".join(output))
+    quota = quota_section()
+    if quota:
+        sections.append(quota)
+
+    if sections:
+        print(_SEP.join(sections))
 
 
 if __name__ == "__main__":
