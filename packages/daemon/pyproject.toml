@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "generic-ml-cache-daemon"
-version = "0.17.0"
+version = "0.18.0"
 description = "Local HTTP daemon for generic-ml-cache: REST API, gateway proxy, and session transport. A thin inbound driver over generic-ml-cache-core."
 requires-python = ">=3.9"
 license = "Apache-2.0"
@@ -25,7 +25,7 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "generic-ml-cache-core>=0.16.0",
+  "generic-ml-cache-core>=0.18.0",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
@@ -57,7 +57,6 @@ packages = ["src/generic_ml_cache_daemon", "src/generic_ml_cache_common"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-filterwarnings = ["ignore::DeprecationWarning:yoyo"]
 
 [tool.coverage.run]
 omit = ["*/generic_ml_cache_daemon/__main__.py"]

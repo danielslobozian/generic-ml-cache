@@ -380,7 +380,7 @@ those gates expose are fixed before the gates go green.
     Anthropic API call for subscribers; falls back to the API when `rate_limits` is
     absent.
 
-### 0.18.0 — DB architecture redesign and SQLite schema migrations
+### 0.18.0 — DB architecture redesign and SQLite schema migrations *(released 2026-06-27)*
 
 Core has accumulated schema changes across `0.x` releases with no formal migration
 story, and the current `build_use_cases(store_root)` pattern violates the
