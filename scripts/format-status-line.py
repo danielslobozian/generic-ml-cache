@@ -62,6 +62,11 @@ def _run(cmd: list[str], timeout: int = 2) -> str:
         return ""
 
 
+def _hyperlink(url: str, text: str) -> str:
+    """Wrap text in an OSC 8 terminal hyperlink. Renders as coloured, clickable text."""
+    return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
+
+
 def _fmt_k(count: int) -> str:
     """Format a token count as '12.3k', '999', or '0'."""
     if count <= 0:
@@ -309,7 +314,8 @@ def _github_pr_section() -> str:
         and not c.get("conclusion")
     )
 
-    parts: list[str] = [f"⤴  #{number}"]
+    label = _hyperlink(url, f"#{number}") if url else f"#{number}"
+    parts: list[str] = [f"⤴  {label}"]
     if failed:
         parts.append(f"✗{failed}")
     if passed:
@@ -318,8 +324,6 @@ def _github_pr_section() -> str:
         parts.append(f"⋯{pending}")
     if comments:
         parts.append(f"💬{len(comments)}")
-    if url:
-        parts.append(url)
 
     return "  ".join(parts)
 
@@ -345,13 +349,12 @@ def _gitlab_mr_section() -> str:
         "⋯" if pipeline_status in ("running", "pending", "waiting_for_resource") else "",
     )
 
-    parts: list[str] = [f"⤴  !{number}"]
+    label = _hyperlink(url, f"!{number}") if url else f"!{number}"
+    parts: list[str] = [f"⤴  {label}"]
     if check_icon:
         parts.append(check_icon)
     if notes:
         parts.append(f"💬{notes}")
-    if url:
-        parts.append(url)
 
     return "  ".join(parts)
 
