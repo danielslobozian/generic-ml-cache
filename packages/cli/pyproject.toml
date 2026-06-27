@@ -46,7 +46,6 @@ packages = ["src/generic_ml_cache_cli", "src/generic_ml_cache_common"]
 testpaths = ["tests"]
 addopts = "-ra -v"
 timeout = 60
-filterwarnings = ["ignore::DeprecationWarning:yoyo"]
 
 [tool.ruff]
 line-length = 100
