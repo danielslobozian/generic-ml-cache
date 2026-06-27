@@ -6,21 +6,14 @@ It is **non-load-bearing by construction** -- it records *that* a hit / miss /
 record / eviction happened, for `stats` and `prune` to read, but it never gates
 correctness. Every operation swallows its own errors: if the database is missing,
 locked, unwritable, or corrupt, the cache still resolves exactly as it would
-without it. It is deliberately separate from the executions, which stay pure and
-immutable -- no access counters are ever written back into a recording.
-
-Stored in the store directory as ``registry.sqlite3`` (stdlib ``sqlite3``). It
-carries no integrity/checksum role: a checksum kept
-beside the data it guards, in a folder the user can write, protects nothing a
-determined editor couldn't also rewrite -- so we don't pretend to.
+without it. Schema is owned by the yoyo migration ``0001.unified-schema``.
 """
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from sqlite3 import Connection
+from typing import Callable, Dict, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 
@@ -29,72 +22,15 @@ HIT = "hit"
 MISS = "miss"
 RECORD = "record"
 
-_DB_NAME = "registry.sqlite3"
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS access_events (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts         TEXT NOT NULL,
-    event      TEXT NOT NULL,
-    match_key  TEXT,
-    client     TEXT,
-    model      TEXT,
-    effort     TEXT,
-    session_id TEXT
-)
-"""
-
 
 class AccessRegistry:
-    """A best-effort SQLite log of access events, living beside the executions."""
+    """A best-effort log of cache access events in the unified gmlcache database."""
 
-    def __init__(self, root: Path) -> None:
-        self._path = Path(root) / _DB_NAME
+    def __init__(self, conn_factory: Callable[[], Connection]) -> None:
+        self._conn_factory = conn_factory
 
-    def _connect(self) -> sqlite3.Connection:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(self._path)
-        conn.execute(_SCHEMA)
-        self._ensure_session_column(conn)
-        self._ensure_session_tags_table(conn)
-        self._ensure_session_specs_table(conn)
-        return conn
-
-    @staticmethod
-    def _ensure_session_column(conn: sqlite3.Connection) -> None:
-        # Additive migration for registries created before sessions existed.
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(access_events)")}
-        if "session_id" not in columns:
-            conn.execute("ALTER TABLE access_events ADD COLUMN session_id TEXT")
-            conn.commit()
-
-    @staticmethod
-    def _ensure_session_tags_table(conn: sqlite3.Connection) -> None:
-        # Additive migration for registries created before session tags existed.
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS session_tags (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                session_id TEXT NOT NULL,
-                tag        TEXT NOT NULL
-            )
-            """
-        )
-        conn.commit()
-
-    @staticmethod
-    def _ensure_session_specs_table(conn: sqlite3.Connection) -> None:
-        # Additive migration for registries created before session specs existed.
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS session_specs (
-                session_id TEXT PRIMARY KEY,
-                client     TEXT NOT NULL,
-                model      TEXT NOT NULL,
-                effort     TEXT NOT NULL
-            )
-            """
-        )
-        conn.commit()
+    def _connect(self) -> Connection:
+        return self._conn_factory()
 
     def record(
         self,
@@ -345,8 +281,6 @@ class AccessRegistry:
         try:
             conn = self._connect()
             try:
-                self._ensure_session_tags_table(conn)
-                self._ensure_session_specs_table(conn)
                 rows = conn.execute(
                     "SELECT DISTINCT session_id FROM access_events WHERE session_id IS NOT NULL "
                     "UNION SELECT session_id FROM session_tags "

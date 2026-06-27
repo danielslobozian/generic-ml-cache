@@ -275,7 +275,7 @@ def test_remove_tag_noop_when_absent(tmp_path: Path) -> None:
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path)
-    test_client = TestClient(application)
-    session_id = test_client.post("/sessions", json={"tags": ["x"]}).json()["session_id"]
-    response = test_client.delete(f"/sessions/{session_id}/tags/notthere")
+    with TestClient(application) as test_client:
+        session_id = test_client.post("/sessions", json={"tags": ["x"]}).json()["session_id"]
+        response = test_client.delete(f"/sessions/{session_id}/tags/notthere")
     assert response.status_code == 204

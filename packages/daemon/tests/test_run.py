@@ -65,40 +65,40 @@ def test_run_unknown_client_detail_mentions_client(client: TestClient) -> None:
 
 
 def test_run_sync_returns_200(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution())
-    response = tc.post("/run", json={"client": "anthropic", "model": "m", "prompt": "hi"})
+    with _patched_client(tmp_path, _make_mock_execution()) as tc:
+        response = tc.post("/run", json={"client": "anthropic", "model": "m", "prompt": "hi"})
     assert response.status_code == 200
 
 
 def test_run_sync_returns_execution_key(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution())
-    body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
+    with _patched_client(tmp_path, _make_mock_execution()) as tc:
+        body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
     assert body["execution_key"] == "deadbeef01234567"
 
 
 def test_run_sync_returns_state(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution())
-    body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
+    with _patched_client(tmp_path, _make_mock_execution()) as tc:
+        body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
     assert body["state"] == "success"
 
 
 def test_run_sync_returns_stdout(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution(stdout="world"))
-    body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
+    with _patched_client(tmp_path, _make_mock_execution(stdout="world")) as tc:
+        body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
     assert body["stdout"] == "world"
 
 
 def test_run_sync_cache_hit_flag_true_when_success_with_stdout(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution())
-    body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
+    with _patched_client(tmp_path, _make_mock_execution()) as tc:
+        body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
     assert body["cache_hit"] is True
 
 
 def test_run_sync_no_stdout_returns_none(tmp_path: Path) -> None:
     execution = _make_mock_execution()
     execution.artifacts = []
-    tc = _patched_client(tmp_path, execution)
-    body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
+    with _patched_client(tmp_path, execution) as tc:
+        body = tc.post("/run", json={"client": "anthropic", "model": "m"}).json()
     assert body["stdout"] is None
 
 
@@ -108,25 +108,25 @@ def test_run_sync_no_stdout_returns_none(tmp_path: Path) -> None:
 
 
 def test_run_sse_returns_event_stream_content_type(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution())
-    with tc.stream(
-        "POST",
-        "/run",
-        json={"client": "anthropic", "model": "m"},
-        headers={"Accept": "text/event-stream"},
-    ) as response:
-        assert "text/event-stream" in response.headers["content-type"]
+    with _patched_client(tmp_path, _make_mock_execution()) as tc:
+        with tc.stream(
+            "POST",
+            "/run",
+            json={"client": "anthropic", "model": "m"},
+            headers={"Accept": "text/event-stream"},
+        ) as response:
+            assert "text/event-stream" in response.headers["content-type"]
 
 
 def test_run_sse_emits_accepted_then_complete(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_mock_execution(stdout="sse-out"))
-    with tc.stream(
-        "POST",
-        "/run",
-        json={"client": "anthropic", "model": "m"},
-        headers={"Accept": "text/event-stream"},
-    ) as response:
-        lines = [ln for ln in response.iter_lines() if ln.startswith("data:")]
+    with _patched_client(tmp_path, _make_mock_execution(stdout="sse-out")) as tc:
+        with tc.stream(
+            "POST",
+            "/run",
+            json={"client": "anthropic", "model": "m"},
+            headers={"Accept": "text/event-stream"},
+        ) as response:
+            lines = [ln for ln in response.iter_lines() if ln.startswith("data:")]
     assert len(lines) >= 2
     accepted = json.loads(lines[0].removeprefix("data: "))
     assert accepted["type"] == "accepted"

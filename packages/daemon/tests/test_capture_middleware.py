@@ -48,10 +48,8 @@ def _read_records(capture_path: Path) -> list[dict]:
 
 def test_non_gateway_path_is_not_captured(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.get("/health")
-
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.get("/health")
     assert _read_records(capture_path) == []
 
 
@@ -62,20 +60,16 @@ def test_non_gateway_path_is_not_captured(tmp_path: Path) -> None:
 
 def test_gateway_request_produces_one_record(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "claude-opus-4-8"})
-
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "claude-opus-4-8"})
     assert len(_read_records(capture_path)) == 1
 
 
 def test_captured_record_has_all_expected_fields(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "claude-opus-4-8"})
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "claude-opus-4-8"})
     record = _read_records(capture_path)[0]
-
     for field in (
         "ts",
         "method",
@@ -91,43 +85,35 @@ def test_captured_record_has_all_expected_fields(tmp_path: Path) -> None:
 
 def test_captured_record_method_and_path(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "m"})
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "m"})
     record = _read_records(capture_path)[0]
-
     assert record["method"] == "POST"
     assert record["path"] == "/gateway/claude/v1/messages"
 
 
 def test_captured_request_body_is_parsed_json(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "sonnet", "x": 1})
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "sonnet", "x": 1})
     record = _read_records(capture_path)[0]
-
     assert record["request_body"] == {"model": "sonnet", "x": 1}
 
 
 def test_captured_response_body_is_parsed_json(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "m"})
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "m"})
     record = _read_records(capture_path)[0]
-
     assert record["response_body"]["role"] == "assistant"
     assert record["response_status"] == 200
 
 
 def test_captured_duration_ms_is_non_negative(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "m"})
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "m"})
     record = _read_records(capture_path)[0]
-
     assert isinstance(record["duration_ms"], int)
     assert record["duration_ms"] >= 0
 
@@ -139,57 +125,49 @@ def test_captured_duration_ms_is_non_negative(tmp_path: Path) -> None:
 
 def test_x_api_key_header_is_redacted(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post(
-        "/gateway/claude/v1/messages",
-        json={"model": "m"},
-        headers={"x-api-key": "sk-secret-value"},
-    )
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post(
+            "/gateway/claude/v1/messages",
+            json={"model": "m"},
+            headers={"x-api-key": "sk-secret-value"},
+        )
     record = _read_records(capture_path)[0]
-
     assert record["request_headers"].get("x-api-key") == "[REDACTED]"
 
 
 def test_authorization_header_is_redacted(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post(
-        "/gateway/claude/v1/messages",
-        json={"model": "m"},
-        headers={"Authorization": "Bearer tok123"},
-    )
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post(
+            "/gateway/claude/v1/messages",
+            json={"model": "m"},
+            headers={"Authorization": "Bearer tok123"},
+        )
     record = _read_records(capture_path)[0]
-
     assert record["request_headers"].get("authorization") == "[REDACTED]"
 
 
 def test_chatgpt_account_id_header_is_redacted(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post(
-        "/gateway/claude/v1/messages",
-        json={"model": "m"},
-        headers={"chatgpt-account-id": "workspace-secret"},
-    )
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post(
+            "/gateway/claude/v1/messages",
+            json={"model": "m"},
+            headers={"chatgpt-account-id": "workspace-secret"},
+        )
     record = _read_records(capture_path)[0]
-
     assert record["request_headers"].get("chatgpt-account-id") == "[REDACTED]"
 
 
 def test_non_sensitive_headers_are_preserved(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post(
-        "/gateway/claude/v1/messages",
-        json={"model": "m"},
-        headers={"anthropic-version": "2023-06-01"},
-    )
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post(
+            "/gateway/claude/v1/messages",
+            json={"model": "m"},
+            headers={"anthropic-version": "2023-06-01"},
+        )
     record = _read_records(capture_path)[0]
-
     assert record["request_headers"].get("anthropic-version") == "2023-06-01"
 
 
@@ -200,12 +178,10 @@ def test_non_sensitive_headers_are_preserved(tmp_path: Path) -> None:
 
 def test_multiple_requests_produce_multiple_records(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post("/gateway/claude/v1/messages", json={"model": "a"})
-    test_client.post("/gateway/claude/v1/messages", json={"model": "b"})
-    test_client.post("/gateway/claude/v1/messages", json={"model": "c"})
-
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post("/gateway/claude/v1/messages", json={"model": "a"})
+        test_client.post("/gateway/claude/v1/messages", json={"model": "b"})
+        test_client.post("/gateway/claude/v1/messages", json={"model": "c"})
     records = _read_records(capture_path)
     assert len(records) == 3
     assert records[0]["request_body"]["model"] == "a"
@@ -219,15 +195,13 @@ def test_multiple_requests_produce_multiple_records(tmp_path: Path) -> None:
 
 def test_non_json_request_body_captured_as_string(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
-    test_client = TestClient(_make_app(capture_path))
-
-    test_client.post(
-        "/gateway/claude/v1/messages",
-        content=b"not json at all",
-        headers={"content-type": "text/plain"},
-    )
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post(
+            "/gateway/claude/v1/messages",
+            content=b"not json at all",
+            headers={"content-type": "text/plain"},
+        )
     record = _read_records(capture_path)[0]
-
     assert isinstance(record["request_body"], str)
     assert "not json" in record["request_body"]
 

@@ -13,7 +13,7 @@ _RUN = ["run", "--client", "fake", "--model", "m1", "--effort", "high", "--promp
 
 
 def _session_ids(tmp_path):
-    dbs = glob.glob(str(tmp_path / "**" / "registry.sqlite3"), recursive=True)
+    dbs = glob.glob(str(tmp_path / "**" / "executions.sqlite3"), recursive=True)
     if not dbs:
         return []
     conn = sqlite3.connect(dbs[0])

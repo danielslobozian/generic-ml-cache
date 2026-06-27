@@ -6,8 +6,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from sqlite3 import Connection
 from typing import Callable, Dict, FrozenSet, Optional, cast
 
+from generic_ml_cache_core.adapter.inbound.migration import run_migrations as run_migrations
+from generic_ml_cache_core.adapter.inbound.migration import schema_version as schema_version
 from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models as list_api_models
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_core.adapter.out.client.discover import (
@@ -41,7 +44,7 @@ from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_sto
     FilesystemEncryptionManifestStore,
 )
 from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
-from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
+from generic_ml_cache_core.adapter.out.persistence.filesystem_store_lock import FilesystemStoreLock
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
@@ -55,7 +58,6 @@ from generic_ml_cache_core.application.usecase.run_ml_execution_service import R
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
 
 _BLOBS_DIRNAME = "blobs"
-_EXECUTIONS_DB = "executions.sqlite3"
 
 ExecutableOverride = Callable[[str], Optional[str]]
 
@@ -75,7 +77,7 @@ def _recover_store(store_root: Path) -> None:
     StoreEncryptor(
         store_root,
         FilesystemEncryptionManifestStore(store_root),
-        SqliteStoreLock(store_root),
+        FilesystemStoreLock(store_root),
     ).recover()
 
 
@@ -146,6 +148,7 @@ def _build_runners(
 
 
 def build_use_cases(
+    conn_factory: Callable[[], Connection],
     store_root: Path,
     executable_override: Optional[ExecutableOverride] = None,
     timeout: Optional[float] = None,
@@ -159,8 +162,9 @@ def build_use_cases(
     _recover_store(store_root)
     clock = SystemClock()
     blob_store = _resolve_blob_store(store_root, encryption_token)
-    repository = SqliteExecutionRepository(store_root / _EXECUTIONS_DB, clock)
-    metrics = JournalMetrics(AccessRegistry(store_root))
+    run_migrations(conn_factory)
+    repository = SqliteExecutionRepository(conn_factory, clock)
+    metrics = JournalMetrics(AccessRegistry(conn_factory))
     file_fingerprint = FilesystemFileFingerprint()
     kind = resolve_execution_kind(client, whitelist=whitelist) if client is not None else None
     runners = _build_runners(
@@ -220,6 +224,6 @@ def build_store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
     return StoreEncryptor(
         store_root,
         FilesystemEncryptionManifestStore(store_root),
-        SqliteStoreLock(store_root),
+        FilesystemStoreLock(store_root),
         cipher,
     )

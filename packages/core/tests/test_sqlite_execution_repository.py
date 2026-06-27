@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime, timezone
 
 
+from generic_ml_cache_core.adapter.inbound.migration import run_migrations
 from generic_ml_cache_core.adapter.out.persistence.sqlite_execution_repository import (
     SqliteExecutionRepository,
 )
@@ -41,8 +43,17 @@ class FixedClock(ClockPort):
         return _MOMENT
 
 
+def _make_factory(db_path):
+    def _connect():
+        return sqlite3.connect(str(db_path))
+
+    return _connect
+
+
 def _repository(tmp_path) -> SqliteExecutionRepository:
-    return SqliteExecutionRepository(tmp_path / "executions.sqlite3", clock=FixedClock())
+    factory = _make_factory(tmp_path / "executions.sqlite3")
+    run_migrations(factory)
+    return SqliteExecutionRepository(factory, clock=FixedClock())
 
 
 def _managed_identity(prompt_fingerprint: str = "p") -> ManagedCallIdentity:

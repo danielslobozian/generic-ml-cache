@@ -1,0 +1,4 @@
+[tui]
+# Ordered list of footer status-line items. Available identifiers:
+# model-with-reasoning, model, context-remaining, current-dir, git-branch
+status_line = ["model-with-reasoning", "context-remaining", "git-branch"]

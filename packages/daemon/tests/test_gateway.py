@@ -62,23 +62,23 @@ def _patched_client(tmp_path: Path, gateway_response: GatewayResponse) -> TestCl
 
 
 def test_gateway_returns_200(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    assert tc.post(_URL, json=_SINGLE_TURN).status_code == 200
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        assert tc.post(_URL, json=_SINGLE_TURN).status_code == 200
 
 
 def test_gateway_returns_response_body_verbatim(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    assert tc.post(_URL, json=_SINGLE_TURN).content == _ANTHROPIC_BODY
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        assert tc.post(_URL, json=_SINGLE_TURN).content == _ANTHROPIC_BODY
 
 
 def test_gateway_x_cache_hit_false_on_miss(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response(cache_hit=False))
-    assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "false"
+    with _patched_client(tmp_path, _make_gateway_response(cache_hit=False)) as tc:
+        assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "false"
 
 
 def test_gateway_x_cache_hit_true_on_hit(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response(cache_hit=True))
-    assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "true"
+    with _patched_client(tmp_path, _make_gateway_response(cache_hit=True)) as tc:
+        assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -87,39 +87,39 @@ def test_gateway_x_cache_hit_true_on_hit(tmp_path: Path) -> None:
 
 
 def test_gateway_command_carries_api_token(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    tc.post(_URL, json=_SINGLE_TURN, headers={"x-api-key": "sk-ant-test"})
-    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-    assert command.api_token == "sk-ant-test"
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        tc.post(_URL, json=_SINGLE_TURN, headers={"x-api-key": "sk-ant-test"})
+        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+        assert command.api_token == "sk-ant-test"
 
 
 def test_gateway_command_carries_model(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    tc.post(_URL, json=_SINGLE_TURN)
-    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-    assert command.gateway_request.model == "claude-opus-4-8"
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        tc.post(_URL, json=_SINGLE_TURN)
+        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+        assert command.gateway_request.model == "claude-opus-4-8"
 
 
 def test_gateway_command_carries_messages(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    tc.post(_URL, json=_SINGLE_TURN)
-    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-    assert command.gateway_request.messages[0]["role"] == "user"
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        tc.post(_URL, json=_SINGLE_TURN)
+        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+        assert command.gateway_request.messages[0]["role"] == "user"
 
 
 def test_gateway_command_carries_system(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    body = {**_SINGLE_TURN, "system": "You are a helpful assistant."}
-    tc.post(_URL, json=body)
-    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-    assert command.gateway_request.system == "You are a helpful assistant."
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        body = {**_SINGLE_TURN, "system": "You are a helpful assistant."}
+        tc.post(_URL, json=body)
+        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+        assert command.gateway_request.system == "You are a helpful assistant."
 
 
 def test_gateway_session_id_from_url_path(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    tc.post(_URL, json=_SINGLE_TURN)
-    command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-    assert command.session_id == _SESSION
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        tc.post(_URL, json=_SINGLE_TURN)
+        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+        assert command.session_id == _SESSION
 
 
 # ---------------------------------------------------------------------------
@@ -128,22 +128,22 @@ def test_gateway_session_id_from_url_path(tmp_path: Path) -> None:
 
 
 def test_gateway_multi_turn_returns_200(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    multi_turn = {
-        "model": "claude-opus-4-8",
-        "messages": [
-            {"role": "user", "content": "Hi"},
-            {"role": "assistant", "content": "Hello!"},
-            {"role": "user", "content": "How are you?"},
-        ],
-    }
-    assert tc.post(_URL, json=multi_turn).status_code == 200
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        multi_turn = {
+            "model": "claude-opus-4-8",
+            "messages": [
+                {"role": "user", "content": "Hi"},
+                {"role": "assistant", "content": "Hello!"},
+                {"role": "user", "content": "How are you?"},
+            ],
+        }
+        assert tc.post(_URL, json=multi_turn).status_code == 200
 
 
 def test_gateway_extra_fields_ignored(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    body = {**_SINGLE_TURN, "metadata": {"user_id": "abc"}, "stream": False}
-    assert tc.post(_URL, json=body).status_code == 200
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        body = {**_SINGLE_TURN, "metadata": {"user_id": "abc"}, "stream": False}
+        assert tc.post(_URL, json=body).status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +153,10 @@ def test_gateway_extra_fields_ignored(tmp_path: Path) -> None:
 
 def test_gateway_forwards_upstream_4xx_status(tmp_path: Path) -> None:
     error_body = json.dumps({"type": "error", "error": {"type": "rate_limit_error"}}).encode()
-    tc = _patched_client(tmp_path, _make_gateway_response(status_code=429, body=error_body))
-    response = tc.post(_URL, json=_SINGLE_TURN)
-    assert response.status_code == 429
-    assert response.content == error_body
+    with _patched_client(tmp_path, _make_gateway_response(status_code=429, body=error_body)) as tc:
+        response = tc.post(_URL, json=_SINGLE_TURN)
+        assert response.status_code == 429
+        assert response.content == error_body
 
 
 # ---------------------------------------------------------------------------
@@ -165,5 +165,7 @@ def test_gateway_forwards_upstream_4xx_status(tmp_path: Path) -> None:
 
 
 def test_gateway_missing_model_returns_422(tmp_path: Path) -> None:
-    tc = _patched_client(tmp_path, _make_gateway_response())
-    assert tc.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 422
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        assert (
+            tc.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 422
+        )

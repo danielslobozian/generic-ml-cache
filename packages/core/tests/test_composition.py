@@ -8,6 +8,7 @@ client runner, blob store, SQLite repository, and metrics — with the fake clie
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Optional
 
 from generic_ml_cache_core.adapter.inbound.composition import (
@@ -22,6 +23,16 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 )
 
 
+def _factory(tmp_path):
+    db_path = tmp_path / "executions.sqlite3"
+
+    def _connect():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(str(db_path))
+
+    return _connect
+
+
 def _stdout(execution) -> Optional[bytes]:
     for artifact in execution.artifacts:
         if artifact.artifact_type is ArtifactType.STDOUT:
@@ -30,7 +41,7 @@ def _stdout(execution) -> Optional[bytes]:
 
 
 def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
-    wired = build_use_cases(tmp_path, client="fake")
+    wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake")
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
         client="fake",
@@ -63,16 +74,19 @@ def test_managed_durable_across_a_fresh_wiring(tmp_path):
         context="",
         prompt="STDOUT durable",
     )
-    build_use_cases(tmp_path, client="fake").run_ml.execute(command)
+    build_use_cases(_factory(tmp_path), tmp_path, client="fake").run_ml.execute(command)
     # A brand-new wiring on the same store serves the prior run from disk.
-    replay = build_use_cases(tmp_path, client="fake").run_ml.execute(command)
+    replay = build_use_cases(_factory(tmp_path), tmp_path, client="fake").run_ml.execute(command)
     assert b"durable" in _stdout(replay)
     key = replay.call_identity.generate_key()
-    assert len(build_use_cases(tmp_path, client="fake").repository.find_all(key)) == 2
+    assert (
+        len(build_use_cases(_factory(tmp_path), tmp_path, client="fake").repository.find_all(key))
+        == 2
+    )
 
 
 def test_passthrough_records_then_replays(tmp_path):
-    wired = build_use_cases(tmp_path, client="fake")
+    wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake")
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
         client="fake",
@@ -87,7 +101,7 @@ def test_passthrough_records_then_replays(tmp_path):
 
 
 def test_api_records_then_replays_with_the_stub(tmp_path):
-    wired = build_use_cases(tmp_path)
+    wired = build_use_cases(_factory(tmp_path), tmp_path)
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.API, client="openai", model="gpt-x", context="", prompt="hi"
     )
@@ -100,7 +114,7 @@ def test_api_records_then_replays_with_the_stub(tmp_path):
 
 
 def test_api_client_routes_to_api_adapter(tmp_path):
-    wired = build_use_cases(tmp_path, client="fake-api")
+    wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake-api")
     command = RunMlExecutionCommand(
         execution_kind=resolve_execution_kind("fake-api"),
         client="fake-api",

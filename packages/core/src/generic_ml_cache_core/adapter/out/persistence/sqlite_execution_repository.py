@@ -5,10 +5,9 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import datetime
-from pathlib import Path
-from typing import List, Optional
+from sqlite3 import Connection
+from typing import Callable, List, Optional
 
 from generic_ml_cache_core.adapter.out.persistence.call_identity_serialization import (
     SerializedIdentity,
@@ -36,60 +35,8 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
     ExecutionSummary,
 )
 
-_DB_NAME = "executions.sqlite3"
-
 #: stored string values of the input artifact types, for the idempotency check.
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
-
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS call_identities (
-    execution_key TEXT PRIMARY KEY,
-    kind          TEXT NOT NULL,
-    client        TEXT NOT NULL,
-    model         TEXT NOT NULL,
-    effort        TEXT NOT NULL,
-    identity_json TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS executions (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    execution_key     TEXT NOT NULL,
-    kind              TEXT NOT NULL,
-    state             TEXT NOT NULL,
-    output_persisted  INTEGER NOT NULL,
-    superseded_at     TEXT,
-    failure_reason    TEXT,
-    failure_message   TEXT,
-    failure_exit_code INTEGER,
-    created_at        TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_executions_key ON executions(execution_key);
-CREATE TABLE IF NOT EXISTS artifacts (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    execution_id  INTEGER NOT NULL,
-    artifact_type TEXT NOT NULL,
-    name          TEXT,
-    encoding      TEXT NOT NULL,
-    blob_key      TEXT NOT NULL,
-    size_bytes    INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_artifacts_execution ON artifacts(execution_id);
-CREATE TABLE IF NOT EXISTS token_usage (
-    execution_id       INTEGER PRIMARY KEY,
-    input_tokens       INTEGER,
-    output_tokens      INTEGER,
-    cache_read_tokens  INTEGER,
-    cache_write_tokens INTEGER,
-    reasoning_tokens   INTEGER,
-    cost_usd           REAL,
-    raw_json           TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS execution_tags (
-    execution_id INTEGER NOT NULL,
-    tag          TEXT NOT NULL,
-    UNIQUE(execution_id, tag)
-);
-"""
 
 
 class SqliteExecutionRepository(ExecutionRepositoryPort):
@@ -103,22 +50,12 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
     dehydrated (content is None). The clock is injected and stamps supersession.
     """
 
-    def __init__(self, path: Path, clock: ClockPort) -> None:
-        self._path = Path(path)
+    def __init__(self, conn_factory: Callable[[], Connection], clock: ClockPort) -> None:
+        self._conn_factory = conn_factory
         self._clock = clock
-        self._ensure_schema()
 
-    def _connect(self) -> sqlite3.Connection:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(self._path)
-
-    def _ensure_schema(self) -> None:
-        connection = self._connect()
-        try:
-            connection.executescript(_SCHEMA)
-            connection.commit()
-        finally:
-            connection.close()
+    def _connect(self) -> Connection:
+        return self._conn_factory()
 
     # -- reads ------------------------------------------------------------
 
@@ -200,7 +137,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _upsert_identity(
-        connection: sqlite3.Connection, execution_key: str, identity: CallIdentity
+        connection: Connection, execution_key: str, identity: CallIdentity
     ) -> None:
         serialized = serialize_identity(identity)
         connection.execute(
@@ -218,7 +155,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _supersede_prior_current(
-        connection: sqlite3.Connection, execution_key: str, stamped_at: datetime
+        connection: Connection, execution_key: str, stamped_at: datetime
     ) -> None:
         connection.execute(
             "UPDATE executions SET superseded_at = ? WHERE execution_key = ? "
@@ -228,7 +165,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_execution(
-        connection: sqlite3.Connection,
+        connection: Connection,
         execution_key: str,
         execution: MlExecution,
         stamped_at: datetime,
@@ -254,7 +191,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_artifacts(
-        connection: sqlite3.Connection, execution_id: int, artifacts: List[Artifact]
+        connection: Connection, execution_id: int, artifacts: List[Artifact]
     ) -> None:
         for artifact in artifacts:
             connection.execute(
@@ -272,7 +209,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_token_usage(
-        connection: sqlite3.Connection, execution_id: int, token_usage: Optional[TokenUsage]
+        connection: Connection, execution_id: int, token_usage: Optional[TokenUsage]
     ) -> None:
         if token_usage is None:
             return
@@ -294,7 +231,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
     # -- tags (a separate annotation; never rewrites an execution) --------
 
     @staticmethod
-    def _current_execution_id(connection: sqlite3.Connection, execution_key: str) -> Optional[int]:
+    def _current_execution_id(connection: Connection, execution_key: str) -> Optional[int]:
         row = connection.execute(
             "SELECT id FROM executions WHERE execution_key = ? AND state = ? "
             "AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id DESC LIMIT 1",
@@ -357,7 +294,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     # -- reconstruction ---------------------------------------------------
 
-    def _load_execution(self, connection: sqlite3.Connection, row: tuple) -> MlExecution:
+    def _load_execution(self, connection: Connection, row: tuple) -> MlExecution:
         (
             execution_id,
             execution_key,
@@ -392,7 +329,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         )
 
     @staticmethod
-    def _load_identity(connection: sqlite3.Connection, execution_key: str) -> CallIdentity:
+    def _load_identity(connection: Connection, execution_key: str) -> CallIdentity:
         kind, client, model, effort, identity_json = connection.execute(
             "SELECT kind, client, model, effort, identity_json FROM call_identities "
             "WHERE execution_key = ?",
@@ -405,7 +342,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         )
 
     @staticmethod
-    def _load_artifacts(connection: sqlite3.Connection, execution_id: int) -> List[Artifact]:
+    def _load_artifacts(connection: Connection, execution_id: int) -> List[Artifact]:
         rows = connection.execute(
             "SELECT artifact_type, name, encoding, blob_key, size_bytes FROM artifacts "
             "WHERE execution_id = ? ORDER BY id",
@@ -424,9 +361,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         ]
 
     @staticmethod
-    def _load_token_usage(
-        connection: sqlite3.Connection, execution_id: int
-    ) -> Optional[TokenUsage]:
+    def _load_token_usage(connection: Connection, execution_id: int) -> Optional[TokenUsage]:
         row = connection.execute(
             "SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
             "reasoning_tokens, cost_usd, raw_json FROM token_usage WHERE execution_id = ?",

@@ -22,9 +22,14 @@ omitted. Output is two lines:
 CUSTOMISE: comment out any section you don't need, rearrange the order in
 main(), or change the icon/format variables at the top of each section.
 
-Usage — wire into Claude Code's status bar via .claude/settings.json:
+Usage — copy tools/claude-code/settings.json to .claude/settings.json, or add
+manually:
   {
-    "statusLine": "python3 $(git rev-parse --show-toplevel)/scripts/format-status-line.py"
+    "statusLine": {
+      "type": "command",
+      "command": "python3 $(git rev-parse --show-toplevel)/tools/claude-code/format-status-line.py",
+      "refreshInterval": 30
+    }
   }
 """
 

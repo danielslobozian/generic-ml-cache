@@ -47,6 +47,40 @@ def test_doctor_cli_lists_clients(capsys):
     assert "present" in out
 
 
+def test_doctor_shows_schema_not_initialised_on_fresh_store(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    rc = main(["doctor"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "store schema" in out
+    assert "not initialised" in out
+
+
+def test_doctor_shows_schema_version_after_first_run(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    main(["run", "--client", "fake", "--model", "m", "--effort", "e", "--prompt", "STDOUT hi"])
+    capsys.readouterr()
+    rc = main(["doctor"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "store schema" in out
+    assert "0001.unified-schema" in out
+    assert "migration(s) applied" in out
+
+
+def test_doctor_json_includes_schema_key(tmp_path, monkeypatch, capsys):
+    import json
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    main(["run", "--client", "fake", "--model", "m", "--effort", "e", "--prompt", "STDOUT hi"])
+    capsys.readouterr()
+    rc = main(["doctor", "--json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert "clients" in data and "schema" in data
+    assert any(m["migration_id"] == "0001.unified-schema" for m in data["schema"])
+
+
 # --- list_models --------------------------------------------------------------
 
 
