@@ -610,3 +610,53 @@ def test_evict_stale_zero_or_negative_max_age_is_noop():
     svc = PurgeService(repo, blob_store, FakeMetrics())
     assert svc.evict_stale(max_age_seconds=0).executions_removed == 0
     assert svc.evict_stale(max_age_seconds=-1).executions_removed == 0
+
+
+# --- hard_delete_by_tag / hard_delete_by_session ----------------------------
+
+
+def test_hard_delete_by_tag_removes_tagged_execution():
+    svc, repo, store, _ = _service()
+    identity = _identity("tagged-key")
+    repo.save(_execution(identity, content=b"data"))
+    store.put("blob_" + b"data".hex(), b"data")
+    key = identity.generate_key()
+    repo.add_tags(key, ["my-tag"])
+
+    report = svc.hard_delete_by_tag("my-tag")
+
+    assert report.executions_removed == 1
+    assert repo.find_current(key) is None
+
+
+def test_hard_delete_by_tag_unknown_tag_returns_empty_report():
+    svc, _, _, _ = _service()
+
+    report = svc.hard_delete_by_tag("nonexistent-tag")
+
+    assert report.executions_removed == 0
+    assert report.bytes_freed == 0
+
+
+def test_hard_delete_by_session_removes_matching_executions():
+    identity = _identity("sess-key")
+    key = identity.generate_key()
+    repo = InMemoryExecutionRepository(FixedClock())
+    store = InMemoryBlobStore()
+    repo.save(_execution(identity, content=b"answer"))
+    store.put("blob_" + b"answer".hex(), b"answer")
+    metrics = FakeMetrics(session_keys={"sess-1": [key]})
+    svc = PurgeService(repo, store, metrics)
+
+    report = svc.hard_delete_by_session("sess-1")
+
+    assert report.executions_removed == 1
+    assert repo.find_current(key) is None
+
+
+def test_hard_delete_by_session_unknown_session_returns_empty_report():
+    svc, _, _, _ = _service()
+
+    report = svc.hard_delete_by_session("no-such-session")
+
+    assert report.executions_removed == 0

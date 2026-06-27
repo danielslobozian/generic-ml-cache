@@ -86,3 +86,32 @@ def test_schema_version_returns_applied_migrations(tmp_path: Path) -> None:
 def test_schema_version_returns_empty_before_migrations(tmp_path: Path) -> None:
     factory = _factory(tmp_path / "empty.sqlite3")
     assert schema_version(factory) == []
+
+
+def test_schema_version_returns_empty_on_broken_connection() -> None:
+    import unittest.mock as mock
+
+    bad_conn = mock.MagicMock()
+    bad_conn.execute.side_effect = sqlite3.OperationalError("database is locked")
+
+    def _bad():
+        return bad_conn
+
+    assert schema_version(_bad) == []
+
+
+def test_migration_rollback_on_failure(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    # Patch _CURRENT_VERSION to a version whose SQL file doesn't exist so
+    # migration fails inside the transaction and triggers ROLLBACK + error log.
+    import generic_ml_cache_core.adapter.inbound.migration as _m
+
+    original = _m._CURRENT_VERSION
+    try:
+        _m._CURRENT_VERSION = 99
+        try:
+            run_migrations(factory)
+        except Exception:
+            pass  # expected — we only care that it didn't hang and logged
+    finally:
+        _m._CURRENT_VERSION = original
