@@ -13,6 +13,16 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 
 
 @dataclass(frozen=True)
+class ExecutionSummary:
+    """A uniform reporting row for an execution, across all identity kinds."""
+
+    execution_key: str
+    kind: str
+    client: str
+    model: str
+
+
+@dataclass(frozen=True)
 class ExecutionSizeEntry:
     """A size-reporting row used by the retention service for LRU eviction ordering."""
 
@@ -117,3 +127,15 @@ class ExecutionRepositoryPort(ABC):
         """Return every distinct execution key in the store, regardless of state.
         Used by hard_delete_all to ensure no key — including those with only
         failed or superseded executions — is left behind."""
+
+    # -- reporting ------------------------------------------------------------
+
+    @abstractmethod
+    def current_execution_summaries(self) -> List[ExecutionSummary]:
+        """A uniform reporting view of the current (servable) executions: key,
+        kind, and the denormalized client/model — across all identity kinds."""
+
+    @abstractmethod
+    def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
+        """Return current executions whose key starts with ``key_prefix``
+        (so a short key from ``list`` is enough to ``inspect``)."""

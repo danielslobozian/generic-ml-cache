@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -34,22 +33,13 @@ from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
     ExecutionSizeEntry,
+    ExecutionSummary,
 )
 
 _DB_NAME = "executions.sqlite3"
 
 #: stored string values of the input artifact types, for the idempotency check.
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
-
-
-@dataclass(frozen=True)
-class ExecutionSummary:
-    """A uniform reporting row for an execution, across all identity kinds."""
-
-    execution_key: str
-    kind: str
-    client: str
-    model: str
 
 
 _SCHEMA = """

@@ -17,6 +17,7 @@ from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
     ExecutionSizeEntry,
+    ExecutionSummary,
 )
 
 
@@ -143,6 +144,30 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
 
     def all_execution_keys(self) -> List[str]:
         return list(self._by_key.keys())
+
+    # -- reporting ------------------------------------------------------------
+
+    def current_execution_summaries(self) -> List[ExecutionSummary]:
+        return [
+            ExecutionSummary(
+                execution_key=key,
+                kind=execution.execution_kind.value,
+                client=execution.call_identity.client,
+                model=execution.call_identity.model,
+            )
+            for key, executions in self._by_key.items()
+            for execution in executions
+            if self._is_servable(execution)
+        ]
+
+    def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
+        return [
+            replace(execution)
+            for key, executions in self._by_key.items()
+            if key.startswith(key_prefix)
+            for execution in executions
+            if self._is_servable(execution)
+        ]
 
     @staticmethod
     def _is_servable(execution: MlExecution) -> bool:
