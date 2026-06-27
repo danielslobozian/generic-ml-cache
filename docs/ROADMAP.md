@@ -302,25 +302,213 @@ Time-based cache maintenance, enabled by the resident daemon from 0.13.0.
 - **Demo tapes** (`docs/tapes/evict-lru.tape`, `docs/tapes/evict-stale.tape`): VHS cassettes
   demonstrating both eviction modes; all tapes moved to `docs/tapes/`.
 
-### 0.16.0 — Dynamic adapter loading and adapter whitelist
+### 0.16.0 — Dynamic adapter loading and adapter whitelist *(released 2026-06-27)*
 
-Replace the static adapter registry with entry-point discovery; add a config-driven
-whitelist to control which adapters are active at runtime. SDK adapters are a
-post-1.0.0 concern.
+Replace the split static registries with a unified registry; add a config-driven
+whitelist to control which adapters are active at runtime. Third-party entry-point
+discovery is 0.20.0; SDK adapters are post-1.0.0.
 
-- **Entry-point discovery**: adapter packages declare `gmlcache.adapters` entry points.
-  Installing a package makes its adapter available; not installing it leaves no adapter
-  for that provider. No explicit registration in the library is required.
+- **`@adapter` decorator**: marks a class for automatic discovery by the built-in
+  scanner (`pkgutil.iter_modules`); replaces explicit `register()` calls in the
+  built-in adapter modules.
+- **Unified registry** (`adapter/registry.py`): the split `client/registry` and
+  `api/api_registry` are merged into a single registry keyed on `MlRunnerPort.name`.
+  `load_adapters()` drives all resolution; `registered_names()` returns all adapters,
+  `registered_local_names()` returns `LOCAL_MANAGED` adapters only.
 - **Adapter whitelist**: configure in the config file with `adapters = *` (all
-  discovered adapters active), `adapters = claude, cursor` (named filter), or omit
-  entirely (same as `*`). Removing an adapter from the whitelist disables it
-  immediately — any session spec referencing it fails at the next call with a clear
-  error.
-- **Unified registry**: the current `client/registry` and `api/api_registry` are merged
-  into a single registry keyed on `MlRunnerPort.name`, populated at startup by scanning
-  entry points.
+  active), `adapters = claude, cursor` (named filter), or omit (same as `*`).
+  Threads through `build_use_cases`, `probe_all`, `list_models`, and
+  `list_api_models`; also accepted by the daemon via `GMLCACHE_ADAPTERS`.
+  Removing an adapter from the whitelist causes any call referencing it to fail
+  immediately with a clear error.
 - `ModelListingPort` stays as an opt-in interface (`isinstance` check); no separate
   registry needed.
+- `gmlcache status` reports the active adapter filter; `gmlcache daemon start`
+  threads the whitelist from config into the daemon.
+
+### 0.17.0 — SQLite schema migrations
+
+The execution repository has accumulated schema changes across `0.x` releases with
+no formal migration story. Before 1.0.0 locks the schema, a migration layer ensures
+every existing store is upgradeable in place.
+
+- **`schema_version` table**: recorded on first startup; tracks the applied migration
+  sequence so each migration is idempotent and the current version is always known.
+- **Migration runner**: executes ordered migration scripts at startup; no manual
+  intervention is required for in-place upgrades from any prior `0.x` release.
+- **`gmlcache doctor`** reports the current schema version alongside the existing
+  client diagnostics.
+- **1.0.0 compatibility promise**: any store created by a `0.x` release can be
+  upgraded to the 1.0.0 schema by a single run of the new binary.
+- No automatic backup — the store is local and single-user; the docs recommend a
+  manual copy before upgrading from `0.x`.
+
+### 0.18.0 — Technical diagnostics logging
+
+A second, distinct observability subsystem — technical diagnostics — added as a pure
+hexagonal outbound port. The journal (product observability) is untouched and
+unchanged; the two subsystems serve different readers and must never be merged.
+
+**What each subsystem answers:**
+
+| | Journal *(exists)* | Diagnostics *(this milestone)* |
+|---|---|---|
+| Question | *What happened to the cache?* | *Why did the code do that?* |
+| Vocabulary | Closed — a fixed set of named events | Open — severity levels |
+| Shape | Named events | DEBUG / INFO / WARN / ERROR |
+
+**Decided (durable):**
+
+- **R1 — Hexagonal port**: core emits through a `DiagnosticsPort`; it never imports a
+  logging library directly. Core holds the equivalent of `Logger`; the edge holds the
+  equivalent of `logback.xml`.
+- **R2 — Severity-leveled**: the port speaks DEBUG / INFO / WARN / ERROR. No named-event
+  vocabulary; that model belongs to the journal. A diagnostic event name lives inside the
+  line as plain, greppable text — never as a pre-declared enum.
+- **R3 — Edges configure**: the CLI and daemon each supply the concrete adapter — level
+  threshold, format, destination. None of those decisions exist in core.
+- **R4 — Fidelity safe by construction**: because core can only emit through the port
+  and the edge owns the destination, the CLI adapter is built so diagnostics can never
+  reach the replay channel. Quiet mode emits zero diagnostics. The byte-exact replay
+  contract is protected structurally — not by convention.
+- **R5 — Never-raise**: a diagnostics failure must never break or alter an execution —
+  the same contract the metrics port already holds.
+- **R6 — One context source**: structured context (execution key, session id, client,
+  model, effort) is derived from the same envelope that already feeds the journal; no
+  parallel context variables.
+- **R7 — Quality floor on first write**: diagnostic event tokens and field names reveal
+  content; logs are greppable and meaningful from the name alone. The quality floor is
+  cleared on first write, not deferred.
+
+**Highest-value instrumentation points** (to guide the build, not its contract):
+
+1. The currently-silent swallow points on the metrics/observability path — the single
+   biggest usability win, as failures there are invisible today.
+2. The cache-resolution decision branch (which branch and why) at DEBUG.
+3. The client / gateway invocation boundary.
+
+**Open questions (reserved for the implementation session):**
+
+- Concrete port method shape and signatures.
+- CLI flags and their names/defaults (level, format, file); whether the logger plumbs
+  into the existing `-v/--verbose gmlc:` channel or sits beside it.
+- Text vs JSON defaults per surface; the daemon's default format.
+- Destinations (stderr vs file vs both) per surface.
+- Build order — CLI-first vs daemon-first.
+
+Ships under the two-commit release rule.
+
+### 0.19.0 — CLI decomposition and complexity gate
+
+`cli.py` has grown to 2,600+ lines and 79 functions — a God Module. This milestone
+decomposes it into a `commands/` package and enforces a complexity ceiling in CI.
+
+- **`commands/` package**: each command group (`run`, `alias`, `session`, `daemon`,
+  `execution`, `list`, `inspect`, `doctor`, `models`, `config`, `encrypt`) becomes
+  its own module; shared helpers (`output`, `errors`) extracted where they serve more
+  than one command.
+- **McCabe complexity gate** (C901): added to the ruff lint config with a threshold
+  of 10; CI fails on any function exceeding it. Current violations (`_cmd_purge` at 12,
+  `_communicate_streaming` at 17, and three others) resolved as part of the
+  decomposition.
+- **Test infrastructure**: `fake_client.py` currently duplicated verbatim in both
+  `packages/core/tests/` and `packages/cli/tests/`; the duplicate removed, canonical
+  location retained.
+
+### 0.20.0 — Third-party adapter entry points
+
+0.16.0 shipped the `@adapter` decorator and built-in scanner for adapters within
+`generic_ml_cache_core`. Third-party adapters — packages such as
+`generic-ml-cache-adapter-ollama` — require a proper Python entry-point mechanism.
+
+- **`gmlcache.adapters` entry point group**: adapter packages declare an entry point
+  in this group; installing the package makes its adapter available without any change
+  to core.
+- **Discovery priority**: entry-point adapters are loaded alongside built-ins; the
+  whitelist applies uniformly to both.
+- **Adapter contract version**: declared so third-party adapters can assert
+  compatibility with the core version they target.
+- **`gmlcache doctor`** reports entry-point adapters alongside built-ins, with their
+  source package noted.
+
+### 0.21.0 — Type checking gate and `py.typed` markers
+
+- **`py.typed` markers** added to `generic-ml-cache-core` and `generic-ml-cache-cli`;
+  consumers get IDE type inference and type-safe imports without installing stubs.
+- **`pyright`** (basic mode) added to CI as a hard gate; failures block merge.
+- Core targets strict-ish typing; CLI and daemon target moderate typing.
+- Existing type errors resolved as part of gate introduction.
+
+### 0.22.0 — Error taxonomy: machine-readable codes
+
+The exception hierarchy in `common/errors.py` is well-structured. This milestone adds
+machine-readable `code` attributes to enable programmatic handling by library consumers
+and consistent HTTP responses from the daemon.
+
+- Each `CacheError` subclass gains a stable `code: str` class attribute
+  (e.g. `"cache.miss"`, `"adapter.unavailable"`, `"store.locked"`).
+- The daemon maps each code to its HTTP status; error responses carry the code in
+  the JSON body.
+- The CLI renders each error class consistently; no behavioral change for existing users.
+- The code namespace is documented as part of the stable public API (see 0.23.0).
+
+### 0.23.0 — Public API boundary
+
+`generic-ml-cache-core` is a library. Without a declared public surface, consumers can
+import any internal path and receive a silent breakage on upgrade.
+
+- Explicit `__all__` on `generic_ml_cache_core.__init__`; anything not listed is
+  internal and may change between minor versions.
+- The public surface is: `build_use_cases`, `WiredUseCases`, `RunMlExecutionCommand`,
+  `ClientAdapter`, `MlRunnerPort`, `register`, `get_adapter`, all error types from
+  `common/errors.py`, and the checksum utilities.
+- `generic-ml-cache-cli`'s re-export surface aligned and documented.
+- Internal module paths (`adapter/out/…`, `adapter/inbound/…`, persistence internals)
+  documented as internal in the architecture docs.
+
+### 0.24.0 — Compatibility policy
+
+A written compatibility policy is required for 1.0.0 to be a promise rather than a label.
+
+Documents:
+
+- What is stable at 1.0.0: CLI surface, execution-record schema, adapter contract,
+  public API (`__all__` from 0.23.0).
+- What can change between `0.x` minor versions (alpha; no stability guarantee).
+- The supported Python version range and its update cadence.
+- The execution-record schema compatibility promise: what a 1.x binary guarantees
+  about stores created by earlier 1.x releases.
+- The adapter contract compatibility promise: what a third-party adapter written
+  against 1.0.0 can rely on across 1.x releases.
+- The migration promise: what a user must do to move from any `0.x` store to 1.0.0
+  (one run of the new binary; see 0.17.0).
+
+### 0.25.0 — Doctor diagnostic bundle
+
+Strengthen `gmlcache doctor` from a client-availability check into a full operational
+diagnostic surface.
+
+- **`gmlcache doctor --json`**: machine-readable output of every diagnostic field;
+  the existing text output is unchanged.
+- **Extended fields**: Python version, OS, config path, store path, current schema
+  version (from 0.17.0), store permissions, and daemon reachability.
+- **`gmlcache doctor --bundle`**: writes the full diagnostic to a timestamped file
+  for support purposes; any sensitive value (token, API keys) is redacted before
+  writing.
+
+### 0.26.0 — Configuration schema versioning and validation
+
+- **`gmlcache config validate`**: parses and validates the config file without
+  executing anything; reports all errors and warnings and exits non-zero on any
+  error. Distinct from a run — purely a diagnostic.
+- **`gmlcache config show --resolved`**: displays the fully resolved configuration
+  across all sources (default → file → env → flag) as structured output. Distinct
+  from `gmlcache status`, which shows runtime and store state; this shows only
+  configuration resolution.
+- **`version` key**: config file gains an optional `version` key; future config
+  schema changes check it to detect stale files and emit a clear migration message.
+- Documentation covers the config schema exhaustively: every key, accepted values,
+  default, and resolution order.
 
 ### 1.0.0 — Stable, feature-rich cache
 
@@ -340,9 +528,9 @@ The dedicated adapter packages (`generic-ml-cache-adapters-*`) and the daemon pa
 Core and cli remain lockstep; the surrounding ecosystem can evolve at its own cadence.
 
 **SDK adapters** (replacing the stdlib `urllib` API adapters and CLI subprocess wrappers
-with official provider SDKs) are a post-1.0.0 nice-to-have. The entry-point discovery
-mechanism from 0.16.0 means SDK adapters can be introduced as new adapter packages
-without any change to the core.
+with official provider SDKs) are a post-1.0.0 nice-to-have. The entry-point mechanism
+from 0.20.0 means SDK adapters can be introduced as new adapter packages without any
+change to the core.
 
 ## Out of scope unless explicitly revisited
 
