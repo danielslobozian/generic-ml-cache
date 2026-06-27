@@ -15,6 +15,12 @@ from generic_ml_cache_core.adapter.inbound.composition import (
     build_use_cases,
     resolve_execution_kind,
 )
+from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+    RunMlExecutionCommand,
+)
 
 
 def _factory(tmp_path):
@@ -25,12 +31,6 @@ def _factory(tmp_path):
         return sqlite3.connect(str(db_path))
 
     return _connect
-from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
-    RunMlExecutionCommand,
-)
 
 
 def _stdout(execution) -> Optional[bytes]:

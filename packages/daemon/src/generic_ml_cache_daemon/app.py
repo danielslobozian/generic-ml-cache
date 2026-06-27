@@ -14,6 +14,8 @@ from typing import Callable, FrozenSet, Optional
 from fastapi import FastAPI
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_daemon import __version__
+from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 
 _DB_NAME = "executions.sqlite3"
 
@@ -26,9 +28,6 @@ def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
         return sqlite3.connect(str(db_path), check_same_thread=False)
 
     return _connect
-
-from generic_ml_cache_daemon import __version__
-from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 
 _CAPTURE_ENV_FLAG = "GMLCACHE_GATEWAY_CAPTURE"
 _CAPTURE_ENV_PATH = "GMLCACHE_GATEWAY_CAPTURE_PATH"

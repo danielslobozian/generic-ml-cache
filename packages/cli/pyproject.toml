@@ -40,7 +40,7 @@ gmlcache = "generic_ml_cache_cli.cli:main"
 dev = ["pytest>=7", "pytest-cov", "coverage>=7", "vulture>=2", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/generic_ml_cache_cli", "../../common/src/generic_ml_cache_common"]
+packages = ["src/generic_ml_cache_cli", "src/generic_ml_cache_common"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

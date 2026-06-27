@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 from generic_ml_cache_common.datasource import sqlite_connection_factory
 
 
