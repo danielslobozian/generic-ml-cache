@@ -321,7 +321,7 @@ def _github_pr_section() -> str:
     if passed:
         parts.append(f"✓{passed}")
     if pending:
-        parts.append(f"⋯{pending}")
+        parts.append(f"⋯ {pending}")
     if comments:
         parts.append(f"💬{len(comments)}")
 
