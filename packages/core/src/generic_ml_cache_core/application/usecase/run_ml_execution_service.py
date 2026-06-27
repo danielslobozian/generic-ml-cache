@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Dict, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
@@ -32,6 +33,7 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )
@@ -59,8 +61,9 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
         metrics: MetricsPort,
         purge_service: Optional[PurgeService] = None,
         max_size: Optional[int] = None,
+        diag: Optional[DiagnosticsPort] = None,
     ) -> None:
-        super().__init__(blob_store, repository, metrics)
+        super().__init__(blob_store, repository, metrics, diag)
         self._file_fingerprint = file_fingerprint
         self._runners = runners
         self._purge = purge_service
@@ -86,12 +89,24 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
         )
 
     def _run_client(self, command: RunMlExecutionCommand) -> ClientRunResult:
+        _t = time.perf_counter()
         runner = self._runners.get(command.execution_kind)
         if runner is None:
+            self._diag.error(
+                "no runner registered for execution kind",
+                kind=str(command.execution_kind),
+                client=command.client,
+            )
             raise RuntimeError(
                 f"No runner registered for {command.execution_kind!r}; "
                 "pass client= to build_use_cases or wire a runner for this kind"
             )
+        self._diag.debug(
+            "invoking client",
+            client=command.client,
+            kind=str(command.execution_kind),
+            model=command.model or "",
+        )
         if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             request = MlRequest(
                 model="",
@@ -112,7 +127,15 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
                 client_args=command.client_args,
                 grants=frozenset(command.grants),
             )
-        return runner.run(request)
+        result = runner.run(request)
+        self._diag.debug(
+            "invoking client EXIT",
+            client=command.client,
+            kind=str(command.execution_kind),
+            model=command.model or "",
+            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+        )
+        return result
 
     def _after_record(self, execution_key: str) -> None:
         if self._purge is not None and self._max_size is not None:

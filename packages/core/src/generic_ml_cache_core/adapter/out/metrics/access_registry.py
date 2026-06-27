@@ -15,7 +15,11 @@ from datetime import datetime, timezone
 from sqlite3 import Connection
 from typing import Callable, Dict, List, Optional, Tuple
 
+from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
+    NullDiagnosticsAdapter,
+)
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
 # Every cache resolution appends one event; HIT is the one queried for hit-rate.
 HIT = "hit"
@@ -26,11 +30,19 @@ RECORD = "record"
 class AccessRegistry:
     """A best-effort log of cache access events in the unified gmlcache database."""
 
-    def __init__(self, conn_factory: Callable[[], Connection]) -> None:
+    def __init__(
+        self,
+        conn_factory: Callable[[], Connection],
+        diag: Optional[DiagnosticsPort] = None,
+    ) -> None:
         self._conn_factory = conn_factory
+        self._diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
 
     def _connect(self) -> Connection:
         return self._conn_factory()
+
+    def _warn_db_error(self, operation: str, exc: Exception) -> None:
+        self._diag.warn(f"access registry DB error — {operation}", exc=exc)
 
     def record(
         self,
@@ -64,9 +76,8 @@ class AccessRegistry:
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:
-            # Non-load-bearing: observability must never break the cache.
-            pass
+        except Exception as exc:
+            self._warn_db_error("record event", exc)
 
     def hit_counts_by_key(self) -> Dict[str, int]:
         """Return {match_key: number-of-hits} across all recorded HIT events
@@ -87,7 +98,8 @@ class AccessRegistry:
                 return {key: int(count) for key, count in rows}
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("hit_counts_by_key", exc)
             return {}
 
     def event_counts(self) -> Dict[str, int]:
@@ -101,7 +113,8 @@ class AccessRegistry:
                 return {event: count for event, count in rows}
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("event_counts", exc)
             return {}
 
     def session_event_counts(self, session_id: str) -> Dict[str, int]:
@@ -116,7 +129,8 @@ class AccessRegistry:
                 return {event: count for event, count in rows}
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("session_event_counts", exc)
             return {}
 
     def session_events(self, session_id: str) -> List[Tuple]:
@@ -132,7 +146,8 @@ class AccessRegistry:
                 ).fetchall()
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("session_events", exc)
             return []
 
     def execution_keys_for_session(self, session_id: str) -> List[str]:
@@ -150,7 +165,8 @@ class AccessRegistry:
                 return [key for (key,) in rows]
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("execution_keys_for_session", exc)
             return []
 
     def delete_events_for_key(self, execution_key: str) -> None:
@@ -167,8 +183,8 @@ class AccessRegistry:
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._warn_db_error("delete_events_for_key", exc)
 
     def add_session_tag(self, session_id: str, tag: str) -> None:
         """Attach ``tag`` to ``session_id``. Duplicate tags are stored once per call;
@@ -183,8 +199,8 @@ class AccessRegistry:
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._warn_db_error("add_session_tag", exc)
 
     def remove_session_tag(self, session_id: str, tag: str) -> None:
         """Detach ``tag`` from ``session_id``. No-op when the tag is absent. Never raises."""
@@ -198,8 +214,8 @@ class AccessRegistry:
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._warn_db_error("remove_session_tag", exc)
 
     def session_tags_for_id(self, session_id: str) -> List[str]:
         """Return the distinct tags attached to ``session_id`` ([] if unknown or unavailable)."""
@@ -213,7 +229,8 @@ class AccessRegistry:
                 return [tag for (tag,) in rows]
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("session_tags_for_id", exc)
             return []
 
     def session_ids_for_tag(self, tag: str) -> List[str]:
@@ -228,7 +245,8 @@ class AccessRegistry:
                 return [session_id for (session_id,) in rows]
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("session_ids_for_tag", exc)
             return []
 
     def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
@@ -246,8 +264,8 @@ class AccessRegistry:
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._warn_db_error("set_session_spec", exc)
 
     def clear_session_spec(self, session_id: str) -> None:
         """Remove the execution spec for ``session_id``. No-op if absent. Never raises."""
@@ -258,8 +276,8 @@ class AccessRegistry:
                 conn.commit()
             finally:
                 conn.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            self._warn_db_error("clear_session_spec", exc)
 
     def session_spec_for_id(self, session_id: str) -> Optional[SessionSpec]:
         """Return the execution spec for ``session_id``, or None if unset."""
@@ -273,7 +291,8 @@ class AccessRegistry:
                 return SessionSpec(client=row[0], model=row[1], effort=row[2]) if row else None
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("session_spec_for_id", exc)
             return None
 
     def list_session_ids(self) -> List[str]:
@@ -289,7 +308,8 @@ class AccessRegistry:
                 return [row[0] for row in rows]
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("list_session_ids", exc)
             return []
 
     def last_access(self) -> Dict[str, float]:
@@ -305,12 +325,13 @@ class AccessRegistry:
                 ).fetchall()
             finally:
                 conn.close()
-        except Exception:
+        except Exception as exc:
+            self._warn_db_error("last_access", exc)
             return {}
         out: Dict[str, float] = {}
         for key, ts in rows:
             try:
                 out[key] = datetime.fromisoformat(ts).timestamp()
-            except Exception:
-                pass
+            except Exception as exc:
+                self._diag.debug("last_access: skipping unparseable timestamp", key=key, exc=exc)
         return out

@@ -39,6 +39,11 @@ from generic_ml_cache_core.adapter.inbound.composition import (
     load_cipher,
     resolve_execution_kind,
 )
+from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
+    NullDiagnosticsAdapter,
+)
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_common.diagnostics_adapter import StructlogDiagnosticsAdapter
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
@@ -84,6 +89,30 @@ def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
         return sqlite3.connect(str(db_path))
 
     return _connect
+
+
+def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:
+    """Build the DiagnosticsPort from resolved settings.
+
+    Precedence: --log-level flag > GMLCACHE_LOG_LEVEL env > config key > off (quiet).
+    Log file:   --log-file flag  > GMLCACHE_LOG_FILE env  > config key > <store>/gmlcache.log.
+    """
+    level: Optional[str] = getattr(args, "log_level", None)
+    log_file_flag: Optional[str] = getattr(args, "log_file", None)
+    try:
+        settings = config.resolve_settings(
+            config.load(),
+            log_level_flag=level,
+            log_file_flag=log_file_flag,
+        )
+    except Exception:
+        return NullDiagnosticsAdapter()
+    resolved_level = settings["log_level"][0]
+    if not resolved_level:
+        return NullDiagnosticsAdapter()
+    log_file = Path(str(settings["log_file"][0]))
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    return StructlogDiagnosticsAdapter(log_file, level=str(resolved_level))
 
 
 #: capabilities a caller may open with --grant, sourced from the adapter seam so
@@ -346,6 +375,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             client=spec["client"],
             max_size=spec.get("max_size"),
             whitelist=_spec_whitelist(spec),
+            diag=_make_diag(args),
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -404,6 +434,7 @@ def _cmd_alias(args: argparse.Namespace) -> int:
             client=args.client,
             max_size=int(settings["max_size"][0]) if settings["max_size"][0] is not None else None,  # type: ignore[arg-type]
             whitelist=file_cfg.adapters,
+            diag=_make_diag(args),
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -475,6 +506,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                     client=spec["client"],
                     max_size=spec.get("max_size"),
                     whitelist=_spec_whitelist(spec),
+                    diag=_make_diag(args),
                 )
                 execution = wired.run_ml.execute(command)
             except Exception as exc:
@@ -592,7 +624,12 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
         return 4
     token = _resolve_token(args)
     try:
-        wired = build_use_cases(_db_conn_factory(store_root), store_root, encryption_token=token)
+        wired = build_use_cases(
+            _db_conn_factory(store_root),
+            store_root,
+            encryption_token=token,
+            diag=_make_diag(args),
+        )
         execution = wired.repository.find_current(key)
         if execution is None:
             print(
@@ -751,7 +788,12 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
     token = _resolve_token(args)
     output_dir = Path(args.output_dir)
     try:
-        wired = build_use_cases(_db_conn_factory(store_root), store_root, encryption_token=token)
+        wired = build_use_cases(
+            _db_conn_factory(store_root),
+            store_root,
+            encryption_token=token,
+            diag=_make_diag(args),
+        )
         execution = wired.repository.find_current(key)
         if execution is None:
             print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
@@ -802,7 +844,9 @@ def _cmd_check(args: argparse.Namespace) -> int:
         client_args=list(getattr(args, "client_arg", None) or []),
         grants=list(getattr(args, "grant", None) or []),
     )
-    report = build_use_cases(_db_conn_factory(store_root), store_root).probe.execute(command)
+    report = build_use_cases(
+        _db_conn_factory(store_root), store_root, diag=_make_diag(args)
+    ).probe.execute(command)
     execution = report.execution
     usage = execution.token_usage if execution is not None else None
     file_count = (
@@ -857,7 +901,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 
     store_root = Path(str(settings["store"][0]))
     matches = build_use_cases(
-        _db_conn_factory(store_root), store_root
+        _db_conn_factory(store_root), store_root, diag=_make_diag(args)
     ).repository.find_current_by_key_prefix(args.execution)
     if not matches:
         print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
@@ -910,10 +954,14 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
     settings = config.resolve_settings(file_cfg)
     store_root = Path(str(settings["store"][0]))
-    applied = schema_version(_db_conn_factory(store_root))
+    _diag = _make_diag(args)
+    applied = schema_version(_db_conn_factory(store_root), diag=_diag)
 
     statuses = probe_all(
-        timeout=args.timeout, executables=file_cfg.executables, whitelist=file_cfg.adapters
+        timeout=args.timeout,
+        executables=file_cfg.executables,
+        whitelist=file_cfg.adapters,
+        diag=_diag,
     )
 
     if args.json:
@@ -960,6 +1008,7 @@ def _cmd_models(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
+    _diag = _make_diag(args)
     if args.client:
         executable = config.executable_for(file_cfg, args.client, flag=args.executable)
         try:
@@ -969,6 +1018,7 @@ def _cmd_models(args: argparse.Namespace) -> int:
                     executable=executable,
                     timeout=args.timeout,
                     whitelist=file_cfg.adapters,
+                    diag=_diag,
                 )
             ]
         except UnknownClient:
@@ -979,6 +1029,7 @@ def _cmd_models(args: argparse.Namespace) -> int:
             timeout=args.timeout,
             executables=file_cfg.executables,
             whitelist=file_cfg.adapters,
+            diag=_diag,
         )
 
     if args.json:
@@ -1240,9 +1291,8 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         if settings["max_size"][0] is not None
         else None
     )
-    wired = build_use_cases(
-        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
-    )
+    store_root = Path(str(settings["store"][0]))
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     summaries = wired.repository.current_execution_summaries()
     store_bytes = wired.repository.total_stored_bytes()
     access = wired.metrics.event_counts()
@@ -1346,9 +1396,8 @@ def _cmd_purge(args: argparse.Namespace) -> int:
             )
             return 4
 
-    wired = build_use_cases(
-        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
-    )
+    store_root = Path(str(settings["store"][0]))
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     svc = wired.purge
 
     if key:
@@ -1402,9 +1451,8 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(
-        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
-    )
+    store_root = Path(str(settings["store"][0]))
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     hit_counts = wired.metrics.hit_counts_by_key()
     entries = [
         {
@@ -1464,9 +1512,8 @@ def _cmd_tags(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(
-        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
-    )
+    store_root = Path(str(settings["store"][0]))
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     counts: dict = {}
     for summary in wired.repository.current_execution_summaries():
         for tag in wired.repository.tags_for(summary.execution_key):
@@ -1556,11 +1603,13 @@ def _cmd_export(args: argparse.Namespace) -> int:
 
     lines = []
     skipped_no_input = 0
+    store_root = Path(str(settings["store"][0]))
     try:
         wired = build_use_cases(
-            _db_conn_factory(Path(str(settings["store"][0]))),
-            Path(str(settings["store"][0])),
+            _db_conn_factory(store_root),
+            store_root,
             encryption_token=_resolve_token(args),
+            diag=_make_diag(args),
         )
         for summary in wired.repository.current_execution_summaries():
             tags = wired.repository.tags_for(summary.execution_key)
@@ -1734,9 +1783,8 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
         return 2
     if tags or spec:
         settings = config.resolve_settings(config.load())
-        wired = build_use_cases(
-            _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
-        )
+        store_root = Path(str(settings["store"][0]))
+        wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
         for tag in tags:
             wired.metrics.add_session_tag(session_id, tag)
         if spec is not None:
@@ -1759,7 +1807,7 @@ def _cmd_session_update(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    wired = build_use_cases(_db_conn_factory(store_root), store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     wired.metrics.set_session_spec(args.session_id, spec)
     if not args.json:
         print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
@@ -1786,7 +1834,7 @@ def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    wired = build_use_cases(_db_conn_factory(store_root), store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     wired.metrics.clear_session_spec(args.session_id)
     if not args.json:
         print(f"spec cleared for session {args.session_id}")
@@ -1895,7 +1943,7 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     if not session_id and not tag:
         print("gmlc: provide a session id or --tag <tag>", file=sys.stderr)
         return 1
-    wired = build_use_cases(_db_conn_factory(store_root), store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
 
     if tag:
         return _cmd_session_report_by_tag(wired, tag, args.json)
@@ -1961,7 +2009,7 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    wired = build_use_cases(_db_conn_factory(store_root), store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     for tag in args.add:
         wired.metrics.add_session_tag(args.session_id, tag)
     for tag in args.remove:
@@ -2116,6 +2164,23 @@ def build_parser() -> argparse.ArgumentParser:
         description="Content-addressed cache/proxy for agentic CLI calls.",
     )
     parser.add_argument("--version", action="version", version=f"gmlcache {__version__}")
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARN", "ERROR"],
+        default=None,
+        dest="log_level",
+        help="enable technical diagnostic logging at the given level (default: off)",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        dest="log_file",
+        metavar="PATH",
+        help=(
+            "write diagnostic logs to this file "
+            "(default: <store>/gmlcache.log when --log-level is set)"
+        ),
+    )
     # metavar curates the usage/positional display (and hides internal commands like
     # __worker, which argparse's help=SUPPRESS does not reliably hide for subparsers).
     sub = parser.add_subparsers(dest="command", required=False, metavar="<command>")

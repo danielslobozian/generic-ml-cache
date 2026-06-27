@@ -14,10 +14,15 @@ from typing import Callable, FrozenSet, Optional
 from fastapi import FastAPI
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
+    NullDiagnosticsAdapter,
+)
+from generic_ml_cache_common.diagnostics_adapter import StructlogDiagnosticsAdapter
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 
 _DB_NAME = "executions.sqlite3"
+_LOG_FILE_NAME = "gmlcache.log"
 
 
 def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
@@ -69,7 +74,17 @@ def create_app(
         A fully wired FastAPI application. Routes are mounted by this function;
         callers should not mount additional routes after construction.
     """
-    wired_use_cases = build_use_cases(_db_conn_factory(store_root), store_root, client="claude")
+    log_level = os.environ.get("GMLCACHE_LOG_LEVEL")
+    log_file_env = os.environ.get("GMLCACHE_LOG_FILE")
+    if log_level:
+        log_file = Path(log_file_env) if log_file_env else store_root / _LOG_FILE_NAME
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        _diag = StructlogDiagnosticsAdapter(log_file, level=log_level)
+    else:
+        _diag = NullDiagnosticsAdapter()
+    wired_use_cases = build_use_cases(
+        _db_conn_factory(store_root), store_root, client="claude", diag=_diag
+    )
 
     eviction_stats = EvictionStats(
         max_size=max_size,
