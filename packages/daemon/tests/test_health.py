@@ -49,8 +49,8 @@ def test_ready_returns_503_when_store_inaccessible(tmp_path: Path) -> None:
         side_effect=RuntimeError("simulated store failure")
     )
 
-    test_client = TestClient(application, raise_server_exceptions=False)
-    response = test_client.get("/ready")
+    with TestClient(application, raise_server_exceptions=False) as test_client:
+        response = test_client.get("/ready")
     assert response.status_code == 503
     assert response.json()["status"] == "not ready"
 
@@ -86,8 +86,8 @@ def test_info_session_id_returned_when_bound(tmp_path: Path) -> None:
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, session_id="my-session")
-    test_client = TestClient(application)
-    response = test_client.get("/info")
+    with TestClient(application) as test_client:
+        response = test_client.get("/info")
     assert response.json()["session_id"] == "my-session"
 
 
@@ -106,8 +106,8 @@ def test_info_adapters_whitelist_restricts_list(tmp_path: Path) -> None:
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, whitelist=frozenset({"fake", "fake_stdin"}))
-    test_client = TestClient(application)
-    adapters = test_client.get("/info").json()["adapters"]
+    with TestClient(application) as test_client:
+        adapters = test_client.get("/info").json()["adapters"]
     assert set(adapters).issubset({"fake", "fake_stdin"})
 
 
@@ -120,8 +120,8 @@ def test_info_adapters_whitelist_unknown_name_returns_empty(tmp_path: Path) -> N
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, whitelist=frozenset({"__nonexistent__"}))
-    test_client = TestClient(application)
-    adapters = test_client.get("/info").json()["adapters"]
+    with TestClient(application) as test_client:
+        adapters = test_client.get("/info").json()["adapters"]
     assert adapters == []
 
 
@@ -144,8 +144,8 @@ def test_metrics_returns_200_when_enabled(tmp_path: Path) -> None:
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, enable_metrics=True)
-    test_client = TestClient(application)
-    response = test_client.get("/metrics")
+    with TestClient(application) as test_client:
+        response = test_client.get("/metrics")
     assert response.status_code == 200
 
 
@@ -153,6 +153,6 @@ def test_metrics_returns_prometheus_text_when_enabled(tmp_path: Path) -> None:
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, enable_metrics=True)
-    test_client = TestClient(application)
-    response = test_client.get("/metrics")
+    with TestClient(application) as test_client:
+        response = test_client.get("/metrics")
     assert "python_gc_objects_collected_total" in response.text
