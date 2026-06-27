@@ -15,10 +15,14 @@ from generic_ml_cache_core.adapter.out.client.discover import (
     list_models_all as list_models_all,
     probe_all as probe_all,
 )
-from generic_ml_cache_core.application.domain.model.encryption.encryption_state import EncryptionState
+from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
+    EncryptionState,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.execution_repository_port import ExecutionRepositoryPort
+from generic_ml_cache_core.application.port.out.execution_repository_port import (
+    ExecutionRepositoryPort,
+)
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
@@ -122,7 +126,9 @@ def _build_runners(
         cls = cast(type[AbstractManagedLocalAdapter], type(registered))
         exe_override = executable_override(client) if executable_override else None
         managed = cls(executable_override=exe_override, timeout=timeout, stream_path=stream_path)
-        passthrough = AbstractPassthroughLocalAdapter(cast(ClientAdapter, registered), exe_override, timeout)
+        passthrough = AbstractPassthroughLocalAdapter(
+            cast(ClientAdapter, registered), exe_override, timeout
+        )
         return {
             ExecutionKind.LOCAL_MANAGED: managed,
             ExecutionKind.LOCAL_PASSTHROUGH: passthrough,
@@ -190,6 +196,7 @@ def build_use_cases(
 # -- Encryption helpers -------------------------------------------------------
 # Exposed here so driver packages (CLI, daemon) can manage store encryption
 # without importing adapter.out types directly.
+
 
 def get_encryption_state(store_root: Path) -> EncryptionState:
     """Return the current encryption state of the store at ``store_root``."""

@@ -157,12 +157,14 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
                 if not self._is_servable(execution):
                     continue
                 serialized = serialize_identity(execution.call_identity)
-                result.append(ExecutionSummary(
-                    execution_key=key,
-                    kind=execution.execution_kind.value,
-                    client=serialized.client,
-                    model=serialized.model,
-                ))
+                result.append(
+                    ExecutionSummary(
+                        execution_key=key,
+                        kind=execution.execution_kind.value,
+                        client=serialized.client,
+                        model=serialized.model,
+                    )
+                )
         return result
 
     def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:

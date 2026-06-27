@@ -258,7 +258,9 @@ def _resolve_cache_mode(args: argparse.Namespace, settings: dict) -> CacheMode:
     return CacheMode(str(settings["mode"][0]))
 
 
-def _run_cached_execution(execute: Callable[[], MlExecution]) -> Tuple[Optional[MlExecution], Optional[int]]:
+def _run_cached_execution(
+    execute: Callable[[], MlExecution],
+) -> Tuple[Optional[MlExecution], Optional[int]]:
     """Run a wired ``execute()`` call, translating the failure modes shared by every
     cached command into ``(None, exit_code)``; on success returns ``(execution, None)``.
 
@@ -1198,7 +1200,11 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    max_size_bytes: Optional[int] = int(settings["max_size"][0]) if settings["max_size"][0] is not None else None  # type: ignore[arg-type]
+    max_size_bytes: Optional[int] = (
+        int(settings["max_size"][0])  # type: ignore[arg-type]
+        if settings["max_size"][0] is not None
+        else None
+    )
     wired = build_use_cases(Path(str(settings["store"][0])))
     summaries = wired.repository.current_execution_summaries()
     store_bytes = wired.repository.total_stored_bytes()
