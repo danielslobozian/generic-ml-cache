@@ -14,6 +14,9 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
+from generic_ml_cache_core.adapter.out.persistence.call_identity_serialization import (
+    serialize_identity,
+)
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
     ExecutionSizeEntry,
@@ -148,17 +151,19 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
     # -- reporting ------------------------------------------------------------
 
     def current_execution_summaries(self) -> List[ExecutionSummary]:
-        return [
-            ExecutionSummary(
-                execution_key=key,
-                kind=execution.execution_kind.value,
-                client=execution.call_identity.client,
-                model=execution.call_identity.model,
-            )
-            for key, executions in self._by_key.items()
-            for execution in executions
-            if self._is_servable(execution)
-        ]
+        result = []
+        for key, executions in self._by_key.items():
+            for execution in executions:
+                if not self._is_servable(execution):
+                    continue
+                serialized = serialize_identity(execution.call_identity)
+                result.append(ExecutionSummary(
+                    execution_key=key,
+                    kind=execution.execution_kind.value,
+                    client=serialized.client,
+                    model=serialized.model,
+                ))
+        return result
 
     def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
         return [

@@ -13,12 +13,13 @@ caller *what is here*; deciding *what to use* stays with the caller.
 from __future__ import annotations
 
 import subprocess
-from typing import Dict, FrozenSet, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple, cast
 
 from generic_ml_cache_core.adapter.registry import (
     get_adapter,
     registered_local_names as registered_names,
 )
+from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.application.domain.model.client_status import (
     ClientStatus as ClientStatus,
 )
@@ -44,7 +45,7 @@ def probe(name: str, executable: Optional[str] = None, timeout: float = 10.0) ->
 
     Never raises for an absent client -- absence is reported in the result.
     """
-    adapter = get_adapter(name)
+    adapter = cast(ClientAdapter, get_adapter(name))
     try:
         exe = adapter.resolve_executable(executable)
     except ClientNotFound as exc:

@@ -27,7 +27,7 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from generic_ml_cache_core.application.domain.model.run.client_run_result import (
     ClientRunResult,
@@ -225,7 +225,7 @@ def _run_client(
     )
 
     stopped: dict[str, int | None] = {"signum": None}
-    previous: dict[int, object] = {}
+    previous: Dict[int, Any] = {}
     installed: List[int] = []
 
     def _on_stop(signum, _frame):

@@ -23,16 +23,27 @@ class KeyedCallInputs(Protocol):
 
     Allow-paths and scan-trust are *not* here — they decide cacheability, not the
     key (see ``domain/service/cacheability.py``).
+
+    All attributes are declared as read-only (@property) so frozen dataclasses
+    satisfy this protocol without pyright emitting mutable-attribute mismatches.
     """
 
-    client: str
-    model: str
-    effort: str
-    context: str
-    prompt: str
-    input_file_paths: List[str]
-    client_args: List[str]
-    grants: List[str]
+    @property
+    def client(self) -> str: ...
+    @property
+    def model(self) -> str: ...
+    @property
+    def effort(self) -> str: ...
+    @property
+    def context(self) -> str: ...
+    @property
+    def prompt(self) -> str: ...
+    @property
+    def input_file_paths(self) -> List[str]: ...
+    @property
+    def client_args(self) -> List[str]: ...
+    @property
+    def grants(self) -> List[str]: ...
 
 
 def build_call_identity(

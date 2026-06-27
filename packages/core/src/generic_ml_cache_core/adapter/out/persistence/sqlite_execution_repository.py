@@ -250,7 +250,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
                 stamped_at.isoformat(),
             ),
         )
-        return int(cursor.lastrowid)
+        return int(cursor.lastrowid or 0)
 
     @staticmethod
     def _insert_artifacts(

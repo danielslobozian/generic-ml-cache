@@ -32,11 +32,18 @@ _TEXT_ENCODING = "utf-8"
 
 class CacheableExecutionCommand(Protocol):
     """What the shared flow needs of any execution command: a cache mode and a
-    persistence policy. The kind-specific fields are read through hooks."""
+    persistence policy. The kind-specific fields are read through hooks.
 
-    cache_mode: CacheMode
-    persistence_depth: PersistenceDepth
-    session_id: Optional[str]
+    Attributes are declared read-only (@property) so frozen dataclasses satisfy
+    this protocol without pyright mutable-attribute mismatches.
+    """
+
+    @property
+    def cache_mode(self) -> CacheMode: ...
+    @property
+    def persistence_depth(self) -> PersistenceDepth: ...
+    @property
+    def session_id(self) -> Optional[str]: ...
 
     def should_persist(self, succeeded: bool) -> bool: ...
 

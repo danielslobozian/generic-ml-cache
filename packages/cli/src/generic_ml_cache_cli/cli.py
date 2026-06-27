@@ -23,7 +23,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 try:
     import argcomplete
@@ -230,8 +230,8 @@ def _command_from_spec(spec: dict) -> RunMlExecutionCommand:
         context=spec["context"],
         prompt=spec["prompt"],
         user_system_prompt=spec["system_prompt"],
-        input_file_paths=[Path(p) for p in spec["input_file_paths"]],
-        allow_paths=[Path(p) for p in spec["allow_paths"]],
+        input_file_paths=[str(Path(p)) for p in spec["input_file_paths"]],
+        allow_paths=[str(Path(p)) for p in spec["allow_paths"]],
         scan_trust=spec["trust_scan"],
         client_args=list(spec["client_args"]),
         grants=list(spec["grants"]),
@@ -258,7 +258,7 @@ def _resolve_cache_mode(args: argparse.Namespace, settings: dict) -> CacheMode:
     return CacheMode(str(settings["mode"][0]))
 
 
-def _run_cached_execution(execute):
+def _run_cached_execution(execute: Callable[[], MlExecution]) -> Tuple[Optional[MlExecution], Optional[int]]:
     """Run a wired ``execute()`` call, translating the failure modes shared by every
     cached command into ``(None, exit_code)``; on success returns ``(execution, None)``.
 
@@ -332,6 +332,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
     if error is not None:
         return error
+    assert execution is not None
 
     # Materialise captured files into the cwd, exactly as the real client would.
     _apply_output_files(execution, Path.cwd())
@@ -379,15 +380,16 @@ def _cmd_alias(args: argparse.Namespace) -> int:
         lambda: build_use_cases(
             store_root,
             lambda _client: executable,
-            settings["timeout"][0],
+            float(settings["timeout"][0]) if settings["timeout"][0] is not None else None,  # type: ignore[arg-type]
             encryption_token=_resolve_token(args),
             client=args.client,
-            max_size=settings["max_size"][0],
+            max_size=int(settings["max_size"][0]) if settings["max_size"][0] is not None else None,  # type: ignore[arg-type]
             whitelist=file_cfg.adapters,
         ).run_ml.execute(command)
     )
     if error is not None:
         return error
+    assert execution is not None
     return _relay_execution(execution)
 
 
@@ -1196,7 +1198,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    max_size_bytes = settings["max_size"][0]
+    max_size_bytes: Optional[int] = int(settings["max_size"][0]) if settings["max_size"][0] is not None else None  # type: ignore[arg-type]
     wired = build_use_cases(Path(str(settings["store"][0])))
     summaries = wired.repository.current_execution_summaries()
     store_bytes = wired.repository.total_stored_bytes()
@@ -1664,7 +1666,7 @@ def _parse_spec_args(args: argparse.Namespace) -> "Optional[SessionSpec]":
         return None
     if not all(provided):
         raise ValueError("--client, --model, and --effort must all be supplied together")
-    return SessionSpec(client=client, model=model, effort=effort)
+    return SessionSpec(client=str(client), model=str(model), effort=str(effort))
 
 
 def _cmd_session_start(args: argparse.Namespace) -> int:
@@ -1758,7 +1760,7 @@ def _comma(n: int) -> str:
     return f"{n:,}"
 
 
-def _render_session_report(report, tags: list = None) -> str:
+def _render_session_report(report, tags: Optional[list] = None) -> str:
     lines = [f"session     : {report.session_id}"]
     if tags:
         lines.append(f"tags        : {', '.join(sorted(tags))}")
@@ -1845,15 +1847,16 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     if tag:
         return _cmd_session_report_by_tag(wired, tag, args.json)
 
-    events = wired.metrics.session_events(session_id)
-    tags = wired.metrics.session_tags(session_id)
+    assert session_id is not None
+    events = wired.metrics.session_events(str(session_id))
+    tags = wired.metrics.session_tags(str(session_id))
     # Join each event's execution to its token usage (the current execution per key).
     usage_by_key = {}
     for key in {e.execution_key for e in events if e.execution_key}:
         execution = wired.repository.find_current(key)
         if execution is not None:
             usage_by_key[key] = execution.token_usage
-    report = build_session_report(session_id, events, usage_by_key)
+    report = build_session_report(str(session_id), events, usage_by_key)
 
     if args.json:
         import json
