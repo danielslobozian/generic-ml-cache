@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
 """format-status-line.py — default gmlcache status-bar formatter.
 
-Pulls from four data sources and assembles a single status line:
+Assembles up to two output lines:
 
-  1. git           — repo name, branch, HEAD hash, dirty-file count
-  2. gmlcache      — session ID, tags, calls/hits, per-model token usage
-  3. cwd           — abbreviated current working directory
-  4. quota         — Claude 5-hour rolling window: output tokens used, % of
-                     limit, and time until the oldest call in the window expires.
-                     Set CLAUDE_MAX_WINDOW_TOKENS to override the default limit.
+  Line 1 (always):
+    1. git    — repo name, branch, HEAD hash, dirty-file count
+    2. cache  — gmlcache session ID, calls/hits, per-model token usage
+    3. cwd    — abbreviated current working directory
+    4. quota  — Claude 5-hour rolling window usage + time to reset
 
-Each section is independent — if a source is unavailable (daemon not running,
-not a git repo) the section is silently omitted.
+  Line 2 (when a PR/MR exists for the current branch):
+    5. pr     — PR/MR number, CI check counts (✓/✗/⋯), comment count, URL
+                Uses `gh` for GitHub repos, `glab` for GitLab. Silently
+                omitted if neither CLI is available or no PR/MR is open.
+                Results are cached for 30 s to avoid hitting the API on
+                every status-bar refresh.
+
+Each section is independent — if a source is unavailable it is silently
+omitted. Whether line 2 renders as a separate line depends on the terminal
+and the host application; Claude Code TUI mode may or may not stack lines.
 
 CUSTOMISE: comment out any section you don't need, rearrange the order in
 main(), or change the icon/format variables at the top of each section.
 
 Usage — wire into Claude Code's status bar via .claude/settings.json:
   {
-    "statusLine": "python3 /path/to/scripts/format-status-line.py"
+    "statusLine": "python3 $(git rev-parse --show-toplevel)/scripts/format-status-line.py"
   }
 """
 
@@ -26,6 +33,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import ssl
 import subprocess
 import tempfile
@@ -261,31 +269,159 @@ def quota_section() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Section 5: pull request / merge request status (gh or glab)
+# ---------------------------------------------------------------------------
+
+_PR_CACHE = Path(tempfile.gettempdir()) / "gmlcache-pr-status.json"
+_PR_TTL = 30  # seconds between gh/glab API calls
+
+
+def _cmd_exists(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def _github_pr_section() -> str:
+    """Return PR status for the current branch using the gh CLI."""
+    raw = _run(
+        ["gh", "pr", "view", "--json", "number,url,comments,statusCheckRollup"],
+        timeout=5,
+    )
+    if not raw:
+        return ""
+    try:
+        pr: dict = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+
+    number = pr.get("number", "")
+    url = pr.get("url", "")
+    comments = pr.get("comments") or []
+    checks = pr.get("statusCheckRollup") or []
+
+    passed = sum(
+        1 for c in checks
+        if c.get("conclusion") in ("SUCCESS", "NEUTRAL", "SKIPPED")
+    )
+    failed = sum(
+        1 for c in checks
+        if c.get("conclusion") in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED")
+    )
+    pending = sum(
+        1 for c in checks
+        if c.get("status") in ("IN_PROGRESS", "QUEUED", "WAITING", "PENDING")
+        and not c.get("conclusion")
+    )
+
+    parts: list[str] = [f"⤴  #{number}"]
+    if failed:
+        parts.append(f"✗{failed}")
+    if passed:
+        parts.append(f"✓{passed}")
+    if pending:
+        parts.append(f"⋯{pending}")
+    if comments:
+        parts.append(f"💬{len(comments)}")
+    if url:
+        parts.append(url)
+
+    return "  ".join(parts)
+
+
+def _gitlab_mr_section() -> str:
+    """Return MR status for the current branch using the glab CLI."""
+    raw = _run(["glab", "mr", "view", "--output", "json"], timeout=5)
+    if not raw:
+        return ""
+    try:
+        mr: dict = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+
+    number = mr.get("iid") or mr.get("id", "")
+    url = mr.get("web_url", "")
+    notes = mr.get("user_notes_count", 0)
+    pipeline = mr.get("pipeline") or {}
+    pipeline_status = pipeline.get("status", "")
+
+    check_icon = {"success": "✓", "failed": "✗", "canceled": "✗"}.get(
+        pipeline_status,
+        "⋯" if pipeline_status in ("running", "pending", "waiting_for_resource") else "",
+    )
+
+    parts: list[str] = [f"⤴  !{number}"]
+    if check_icon:
+        parts.append(check_icon)
+    if notes:
+        parts.append(f"💬{notes}")
+    if url:
+        parts.append(url)
+
+    return "  ".join(parts)
+
+
+def pr_section() -> str:
+    """Return PR/MR info, cached for _PR_TTL seconds to avoid hammering the API."""
+    try:
+        cached = json.loads(_PR_CACHE.read_text())
+        if time.time() - cached.get("ts", 0) < _PR_TTL:
+            return cached.get("line", "")
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    if _cmd_exists("gh"):
+        line = _github_pr_section()
+    elif _cmd_exists("glab"):
+        line = _gitlab_mr_section()
+    else:
+        return ""
+
+    try:
+        _PR_CACHE.write_text(json.dumps({"ts": time.time(), "line": line}))
+    except OSError:
+        pass
+    return line
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    sections = []
+    # Line 1: always present when inside a git repo
+    line1: list[str] = []
 
     git = git_section()
     if git:
-        sections.append(git)
+        line1.append(git)
 
     cache = cache_section()
     if cache:
-        sections.append(cache)
+        line1.append(cache)
 
     cwd = cwd_section()
     if cwd:
-        sections.append(cwd)
+        line1.append(cwd)
 
     quota = quota_section()
     if quota:
-        sections.append(quota)
+        line1.append(quota)
 
-    if sections:
-        print(_SEP.join(sections))
+    # Line 2: PR/MR status — only rendered when a PR is open for this branch
+    line2: list[str] = []
+
+    pr = pr_section()
+    if pr:
+        line2.append(pr)
+
+    output: list[str] = []
+    if line1:
+        output.append(_SEP.join(line1))
+    if line2:
+        output.append(_SEP.join(line2))
+
+    if output:
+        print("\n".join(output))
 
 
 if __name__ == "__main__":
