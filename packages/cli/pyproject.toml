@@ -28,7 +28,7 @@ classifiers = [
 dependencies = [
     "generic-ml-cache-core>=0.18.0",
     "argcomplete>=3,<4",
-    "structlog>=26",
+    "structlog>=21",
 ]
 
 [project.urls]
