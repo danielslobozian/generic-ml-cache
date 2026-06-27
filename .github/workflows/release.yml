@@ -1,8 +1,8 @@
 name: Release to PyPI
 
-# Publishes all three packages to PyPI on a version tag (e.g. v0.2.0), via PyPI Trusted
+# Publishes all three packages to PyPI on a version tag (e.g. v0.19.0), via PyPI Trusted
 # Publishing (OIDC — no API token is stored). The three packages are versioned in
-# lockstep: bump all three pyprojects to the release version, then tag.
+# lockstep from the root VERSION file; bump VERSION, update CHANGELOG, then tag.
 
 on:
   push:
@@ -12,25 +12,23 @@ permissions:
   contents: read
 
 jobs:
-  # Fail fast if the tag does not match the package version, so a mistagged release
-  # (e.g. v0.3.0 pointing at a commit still on 0.2.0) never builds and publishes the
-  # wrong version. Both packages are lockstep, so both must match the tag.
+  # Fail fast if the tag does not match the root VERSION file, so a mistagged release
+  # (e.g. v0.20.0 pointing at a commit still on 0.19.0) never builds and publishes the
+  # wrong version. All three packages read their version from VERSION (dynamic hatchling).
   guard:
     name: Tag matches version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Tag must equal all three package versions
+      - name: Tag must equal VERSION
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          for package in core cli daemon; do
-            version="$(grep -m1 '^version = ' "packages/$package/pyproject.toml" | sed -E 's/version = "(.*)"/\1/')"
-            if [ "$version" != "$tag" ]; then
-              echo "::error::tag ${GITHUB_REF_NAME} does not match packages/$package version $version"
-              exit 1
-            fi
-          done
-          echo "tag v$tag matches all three package versions"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match VERSION ($version)"
+            exit 1
+          fi
+          echo "tag v$tag matches VERSION $version"
 
   build:
     name: Build (${{ matrix.package }})
