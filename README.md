@@ -18,6 +18,9 @@
 [![CLI adapters](https://img.shields.io/badge/CLI%20adapters-claude%20%C2%B7%20codex%20%C2%B7%20cursor--agent-7c3aed?style=for-the-badge)](docs/concepts/adapters.md)
 [![API adapters](https://img.shields.io/badge/API%20adapters-anthropic%20%C2%B7%20openai%20%C2%B7%20gemini-0891b2?style=for-the-badge)](docs/concepts/adapters.md)
 
+[![pyright](https://img.shields.io/badge/pyright-passing-059669?style=for-the-badge)](pyrightconfig.json)
+[![import-linter](https://img.shields.io/badge/import--linter-4%20contracts-4f46e5?style=for-the-badge)](.importlinter)
+
 <br>
 
 [Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Three packages](#three-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
@@ -79,6 +82,36 @@ from generic_ml_cache_core import build_use_cases
 wired = build_use_cases(store_root="/path/you/choose")   # you provide the data source
 result = wired.run_managed.execute(command)              # the engine does the rest
 ```
+
+<br>
+
+## Adapters
+
+gmlcache ships built-in adapters for every port in the engine. Because the architecture is ports-and-adapters, additional backends slot in without touching the domain logic.
+
+### Client adapters
+
+| Adapter | Kind | Core | CLI | Daemon |
+|---|---|:---:|:---:|:---:|
+| `claude` | Managed CLI | ✅ | ✅ | — |
+| `codex` | Managed CLI | ✅ | ✅ | — |
+| `cursor-agent` | Managed CLI | ✅ | ✅ | — |
+| `anthropic` | REST API | ✅ | ✅ | ✅ |
+| `openai` | REST API | ✅ | ✅ | ✅ |
+| `gemini` | REST API | ✅ | ✅ | ✅ |
+
+**Managed CLI** adapters drive the vendor's installed binary as a subprocess; the cache wraps the process boundary. **REST API** adapters call the provider endpoint directly using stdlib HTTP — no third-party SDK required.
+
+### Storage
+
+The engine stores executions across two complementary backends, both zero-dependency and zero-config by default.
+
+| Backend | Role | Status |
+|---|---|:---:|
+| Filesystem | Blob store — stdout, stderr, generated files, at-rest encryption | ✅ |
+| SQLite | Index & metadata — cache keys, usage, tags, session records | ✅ |
+
+The storage layer is a set of outbound ports. A PostgreSQL persistence adapter or an S3 blob adapter would implement the same port interfaces and be wired in at the composition root — no engine changes required.
 
 <br>
 
