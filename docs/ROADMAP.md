@@ -326,7 +326,7 @@ discovery is 0.20.0; SDK adapters are post-1.0.0.
 - `gmlcache status` reports the active adapter filter; `gmlcache daemon start`
   threads the whitelist from config into the daemon.
 
-### 0.17.0 — Type checking gate, hexagonal boundary enforcement, and `py.typed` markers
+### 0.17.0 — Type checking gate, hexagonal boundary enforcement, and `py.typed` markers *(released 2026-06-27)*
 
 Two new quality gates (import-linter and pyright) mechanically enforce the hexagonal
 architecture boundaries that were previously only documented as rules. All violations
@@ -335,13 +335,18 @@ those gates expose are fixed before the gates go green.
 - **`py.typed` markers** added to all three packages; consumers get IDE type inference
   and type-safe imports without installing stubs.
 - **`import-linter`** added to CI as a hard gate; a single `.importlinter` at the repo
-  root declares hexagonal contracts across all three packages:
+  root declares four hexagonal contracts across all three packages:
   - *Application ring isolation*: `generic_ml_cache_core.application` may not import
     from `generic_ml_cache_core.adapter` — the hexagonal invariant; dependencies point
     inward, never outward.
   - *Driver packages*: `generic_ml_cache_cli` and `generic_ml_cache_daemon` may not
     import from `generic_ml_cache_core.adapter.out` — drivers work through ports and
     the composition root, never past it into driven-adapter implementations.
+  - *Domain purity*: `generic_ml_cache_core.application.domain` may not import from
+    `generic_ml_cache_core.application.usecase` — domain objects model the world,
+    not workflows.
+  - *Adapter isolation*: driven adapter sub-packages must not import each other —
+    cross-adapter wiring belongs exclusively in the composition root.
 - **`pyright`** (basic mode) added to CI as a hard gate; failures block merge. A
   root-level `pyrightconfig.json` covers all three packages.
 - **Violations fixed** (all violations exposed by the new gates resolved before the
@@ -356,8 +361,24 @@ those gates expose are fixed before the gates go green.
     where it belongs.
   - CLI's direct `adapter.out` imports (crypto, lock, discover modules) encapsulated
     behind port or composition-root calls.
+- **Pre-commit hooks** (`.pre-commit-config.yaml`): both `lint-imports` and `pyright`
+  run as a local commit-time gate backed by the project's own `.venv` — violations
+  are caught before `git commit` writes, so malformed code never reaches history.
 - **AGENTS.md** gains gates 6 (`lint-imports`) and 7 (`pyright`) — no interpretive
   rules, just "run these tools."
+- **README badges**: `pyright` (passing) and `import-linter` (4 contracts) badge row
+  added; client adapter compatibility matrix and storage backend table added.
+- **Status bar enhancements** (`scripts/format-status-line.py`):
+  - PR/CI section added (⤴ `#<number>` with coloured ✓/✗/⋯ check counts and 💬
+    comment count); auto-detects `gh` (GitHub) or `glab` (GitLab); OSC 8 hyperlink
+    on the PR number for Ctrl/Cmd-click.
+  - Two-line layout: git · cache · cwd · quota on line 1; PR/CI directly below the
+    branch name on line 2.
+  - `refreshInterval: 30` in `.claude/settings.json` — re-runs the script every 30 s
+    so CI counts update without requiring user interaction.
+  - Reads Claude Code's stdin JSON for `cwd` and rate-limit quota — eliminates the
+    Anthropic API call for subscribers; falls back to the API when `rate_limits` is
+    absent.
 
 ### 0.18.0 — DB architecture redesign and SQLite schema migrations
 
