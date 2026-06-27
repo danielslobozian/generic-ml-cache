@@ -275,7 +275,7 @@ def quota_section() -> str:
 # ---------------------------------------------------------------------------
 
 _PR_CACHE = Path(tempfile.gettempdir()) / "gmlcache-pr-status.json"
-_PR_TTL = 30  # seconds between gh/glab API calls
+_PR_TTL = 10  # seconds between gh/glab API calls
 
 
 def _cmd_exists(name: str) -> bool:
@@ -314,14 +314,19 @@ def _github_pr_section() -> str:
         and not c.get("conclusion")
     )
 
+    _RED    = "\033[91m"
+    _GREEN  = "\033[92m"
+    _YELLOW = "\033[93m"
+    _RESET  = "\033[0m"
+
     label = _hyperlink(url, f"#{number}") if url else f"#{number}"
     parts: list[str] = [f"⤴  {label}"]
     if failed:
-        parts.append(f"✗{failed}")
+        parts.append(f"{_RED}✗{failed}{_RESET}")
     if passed:
-        parts.append(f"✓{passed}")
+        parts.append(f"{_GREEN}✓{passed}{_RESET}")
     if pending:
-        parts.append(f"⋯ {pending}")
+        parts.append(f"{_YELLOW}⋯ {pending}{_RESET}")
     if comments:
         parts.append(f"💬{len(comments)}")
 
