@@ -326,24 +326,75 @@ discovery is 0.20.0; SDK adapters are post-1.0.0.
 - `gmlcache status` reports the active adapter filter; `gmlcache daemon start`
   threads the whitelist from config into the daemon.
 
-### 0.17.0 — SQLite schema migrations
+### 0.17.0 — Type checking gate, hexagonal boundary enforcement, and `py.typed` markers
 
-The execution repository has accumulated schema changes across `0.x` releases with
-no formal migration story. Before 1.0.0 locks the schema, a migration layer ensures
-every existing store is upgradeable in place.
+Two new quality gates (import-linter and pyright) mechanically enforce the hexagonal
+architecture boundaries that were previously only documented as rules. All violations
+those gates expose are fixed before the gates go green.
 
+- **`py.typed` markers** added to all three packages; consumers get IDE type inference
+  and type-safe imports without installing stubs.
+- **`import-linter`** added to CI as a hard gate; a single `.importlinter` at the repo
+  root declares hexagonal contracts across all three packages:
+  - *Application ring isolation*: `generic_ml_cache_core.application` may not import
+    from `generic_ml_cache_core.adapter` — the hexagonal invariant; dependencies point
+    inward, never outward.
+  - *Driver packages*: `generic_ml_cache_cli` and `generic_ml_cache_daemon` may not
+    import from `generic_ml_cache_core.adapter.out` — drivers work through ports and
+    the composition root, never past it into driven-adapter implementations.
+- **`pyright`** (basic mode) added to CI as a hard gate; failures block merge. A
+  root-level `pyrightconfig.json` covers all three packages.
+- **Violations fixed** (all violations exposed by the new gates resolved before the
+  gate goes green):
+  - `WiredUseCases` fields re-typed as port interfaces (`ExecutionRepositoryPort`,
+    `MetricsPort`) instead of concrete adapter classes — the composition root must
+    not leak adapter types into the application ring.
+  - `current_execution_summaries()` and `find_current_by_key_prefix()` promoted from
+    the SQLite adapter to `ExecutionRepositoryPort`, removing the only remaining
+    non-port CLI-to-adapter calls.
+  - `ExecutionSummary` dataclass moved from the adapter file to the domain/port layer
+    where it belongs.
+  - CLI's direct `adapter.out` imports (crypto, lock, discover modules) encapsulated
+    behind port or composition-root calls.
+- **AGENTS.md** gains gates 6 (`lint-imports`) and 7 (`pyright`) — no interpretive
+  rules, just "run these tools."
+
+### 0.18.0 — DB architecture redesign and SQLite schema migrations
+
+Core has accumulated schema changes across `0.x` releases with no formal migration
+story, and the current `build_use_cases(store_root)` pattern violates the
+ports-and-adapters contract by having core spawn SQLite files internally. This
+milestone fixes the architecture and introduces a proper migration layer.
+
+**Architecture change (non-negotiable):**
+Core is a pure library and may not spawn databases. The new contract is:
+- **Core owns** the schema SQL and the migration runner (pure DBAPI2-agnostic SQL).
+- **The caller** (CLI or daemon) owns the datasource (the connection).
+- `build_use_cases` is refactored to accept a pre-built PEP 249 `Connection` instead
+  of a `store_root: Path`. Core never calls `sqlite3.connect()` directly.
+- `packages/common/` (a plain folder, no separate PyPI package) provides shared schema
+  SQL and the migration runner, referenced via hatchling `packages` config in both CLI
+  and daemon `pyproject.toml`.
+
+**Single unified DB:** the two SQLite files (`executions.sqlite3` and
+`registry.sqlite3`) are merged into one. The `session_specs` table is load-bearing
+(gateway routing), which invalidates any "non-load-bearing" justification for a
+separate file.
+
+**Migration layer:**
 - **`schema_version` table**: recorded on first startup; tracks the applied migration
   sequence so each migration is idempotent and the current version is always known.
 - **Migration runner**: executes ordered migration scripts at startup; no manual
-  intervention is required for in-place upgrades from any prior `0.x` release.
-- **`gmlcache doctor`** reports the current schema version alongside the existing
-  client diagnostics.
-- **1.0.0 compatibility promise**: any store created by a `0.x` release can be
-  upgraded to the 1.0.0 schema by a single run of the new binary.
-- No automatic backup — the store is local and single-user; the docs recommend a
-  manual copy before upgrading from `0.x`.
+  intervention required for in-place upgrades from any prior `0.x` release.
+- Pure SQL — no ORM, no SQLAlchemy. DBAPI2-agnostic: the same runner works with
+  `sqlite3`, `psycopg2`, or any PEP 249 compliant driver.
+- **`gmlcache doctor`** reports the current schema version alongside existing diagnostics.
+- **1.0.0 compatibility promise**: any store created by a `0.x` release can be upgraded
+  to the 1.0.0 schema by a single run of the new binary.
+- No automatic backup — the store is local and single-user; docs recommend a manual
+  copy before upgrading from `0.x`.
 
-### 0.18.0 — Technical diagnostics logging
+### 0.19.0 — Technical diagnostics logging
 
 A second, distinct observability subsystem — technical diagnostics — added as a pure
 hexagonal outbound port. The journal (product observability) is untouched and
@@ -398,7 +449,7 @@ unchanged; the two subsystems serve different readers and must never be merged.
 
 Ships under the two-commit release rule.
 
-### 0.19.0 — CLI decomposition and complexity gate
+### 0.20.0 — CLI decomposition and complexity gate
 
 `cli.py` has grown to 2,600+ lines and 79 functions — a God Module. This milestone
 decomposes it into a `commands/` package and enforces a complexity ceiling in CI.
@@ -415,7 +466,7 @@ decomposes it into a `commands/` package and enforces a complexity ceiling in CI
   `packages/core/tests/` and `packages/cli/tests/`; the duplicate removed, canonical
   location retained.
 
-### 0.20.0 — Third-party adapter entry points
+### 0.21.0 — Third-party adapter entry points
 
 0.16.0 shipped the `@adapter` decorator and built-in scanner for adapters within
 `generic_ml_cache_core`. Third-party adapters — packages such as
@@ -430,14 +481,6 @@ decomposes it into a `commands/` package and enforces a complexity ceiling in CI
   compatibility with the core version they target.
 - **`gmlcache doctor`** reports entry-point adapters alongside built-ins, with their
   source package noted.
-
-### 0.21.0 — Type checking gate and `py.typed` markers
-
-- **`py.typed` markers** added to `generic-ml-cache-core` and `generic-ml-cache-cli`;
-  consumers get IDE type inference and type-safe imports without installing stubs.
-- **`pyright`** (basic mode) added to CI as a hard gate; failures block merge.
-- Core targets strict-ish typing; CLI and daemon target moderate typing.
-- Existing type errors resolved as part of gate introduction.
 
 ### 0.22.0 — Error taxonomy: machine-readable codes
 
