@@ -14,8 +14,10 @@ Assembles a single status line from five independent sections:
   5. quota  — ⏱  Claude 5-hour rolling window usage + time to reset
 
 Each section is independent — if a source is unavailable it is silently
-omitted. Claude Code renders only the first line of output, so everything
-lives in one │-separated line.
+omitted. Output is two lines:
+
+  Line 1: git  │  cache  │  cwd  │  quota
+  Line 2: PR/CI (sits directly below the branch name for easy scanning)
 
 CUSTOMISE: comment out any section you don't need, rearrange the order in
 main(), or change the icon/format variables at the top of each section.
@@ -33,6 +35,7 @@ import os
 import shutil
 import ssl
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
@@ -101,7 +104,7 @@ def git_section() -> str:
 
     porcelain = _run(["git", "status", "--porcelain"])
     dirty_count = (
-        len([l for l in porcelain.splitlines() if l.strip()]) if porcelain else 0
+        len([ln for ln in porcelain.splitlines() if ln.strip()]) if porcelain else 0
     )
 
     parts = ["⎇"]
@@ -122,9 +125,14 @@ def git_section() -> str:
 # ---------------------------------------------------------------------------
 
 
-def cwd_section() -> str:
+def cwd_section(cc_data: dict) -> str:
     """Return e.g. '📁 ~/my-work/python/generic-ml-cache'."""
-    return "📁  " + _abbrev_home(os.getcwd())
+    cwd = (
+        (cc_data.get("workspace") or {}).get("current_dir")
+        or cc_data.get("cwd")
+        or os.getcwd()
+    )
+    return "📁  " + _abbrev_home(cwd)
 
 
 # ---------------------------------------------------------------------------
@@ -226,8 +234,21 @@ def _fmt_reset(iso_str: str) -> str:
         return ""
 
 
-def quota_section() -> str:
-    """Return e.g. '3% : 4h45m  ·  65% 1d4h' from the Anthropic usage API.
+def _fmt_reset_ts(epoch: float) -> str:
+    """Format a Unix-epoch reset timestamp as a human duration from now."""
+    if not epoch:
+        return ""
+    secs = max(int(epoch - time.time()), 0)
+    h, rem = divmod(secs, 3600)
+    m = rem // 60
+    if h >= 24:
+        d, rh = divmod(h, 24)
+        return f"{d}d{rh}h"
+    return f"{h}h{m:02d}m" if h else f"{m}m"
+
+
+def _quota_section_api() -> str:
+    """Fallback: fetch rate-limit data from the Anthropic usage API.
     Results are cached for 60 s so the API is not called on every refresh.
     """
     try:
@@ -268,6 +289,32 @@ def quota_section() -> str:
     except OSError:
         pass
     return line
+
+
+def quota_section(cc_data: dict) -> str:
+    """Return e.g. '⏱ 3% : 4h45m  ·  65% 1d4h'.
+
+    Reads from Claude Code's stdin JSON first — instant, no HTTP, no OAuth.
+    Falls back to the Anthropic usage API for older Claude Code versions or
+    sessions where rate_limits is absent (non-Pro/Max).
+    """
+    rate_limits = cc_data.get("rate_limits") or {}
+    five = rate_limits.get("five_hour") or {}
+    seven = rate_limits.get("seven_day") or {}
+
+    if five or seven:
+        parts = []
+        if five:
+            p5 = round(five.get("used_percentage", 0) or 0)
+            r5 = _fmt_reset_ts(five.get("resets_at", 0))
+            parts.append(f"{p5}% : {r5}" if r5 else f"{p5}%")
+        if seven:
+            p7 = round(seven.get("used_percentage", 0) or 0)
+            r7 = _fmt_reset_ts(seven.get("resets_at", 0))
+            parts.append(f"{p7}% {r7}" if r7 else f"{p7}%")
+        return "⏱  " + "  ·  ".join(parts) if parts else ""
+
+    return _quota_section_api()
 
 
 # ---------------------------------------------------------------------------
@@ -397,30 +444,23 @@ def pr_section() -> str:
 
 
 def main() -> None:
-    sections: list[str] = []
+    try:
+        cc_data: dict = json.load(sys.stdin)
+    except (json.JSONDecodeError, ValueError):
+        cc_data = {}
 
-    git = git_section()
-    if git:
-        sections.append(git)
+    # Line 1: project context + session health
+    line1: list[str] = []
+    for seg in (git_section(), cache_section(), cwd_section(cc_data), quota_section(cc_data)):
+        if seg:
+            line1.append(seg)
+    if line1:
+        print(_SEP.join(line1))
 
-    cache = cache_section()
-    if cache:
-        sections.append(cache)
-
+    # Line 2: PR/CI — sits directly below the git branch for easy scanning
     pr = pr_section()
     if pr:
-        sections.append(pr)
-
-    cwd = cwd_section()
-    if cwd:
-        sections.append(cwd)
-
-    quota = quota_section()
-    if quota:
-        sections.append(quota)
-
-    if sections:
-        print(_SEP.join(sections))
+        print(pr)
 
 
 if __name__ == "__main__":

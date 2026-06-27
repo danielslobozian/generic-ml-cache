@@ -26,7 +26,6 @@ from generic_ml_cache_core.application.domain.model.client_status import (
 from generic_ml_cache_core.application.domain.model.model_listing import (
     ModelListing as ModelListing,
 )
-from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
 
