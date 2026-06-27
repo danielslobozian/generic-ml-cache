@@ -10,6 +10,7 @@ from sqlite3 import Connection
 from typing import Callable, Dict, FrozenSet, Optional, cast
 
 from generic_ml_cache_core.adapter.inbound.migration import run_migrations as run_migrations
+from generic_ml_cache_core.adapter.inbound.migration import schema_version as schema_version
 from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models as list_api_models
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_core.adapter.out.client.discover import (

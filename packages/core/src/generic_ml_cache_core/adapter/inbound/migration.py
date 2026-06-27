@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from sqlite3 import Connection
-from typing import Callable
+from typing import Callable, List
 
 import yoyo
 
@@ -47,3 +47,18 @@ def run_migrations(conn_factory: Callable[[], Connection]) -> None:
             backend.apply_migrations(backend.to_apply(migrations))
     finally:
         backend.connection.close()
+
+
+def schema_version(conn_factory: Callable[[], Connection]) -> List[dict]:
+    """Return applied migrations in order, or an empty list if the store has no schema yet."""
+    conn = conn_factory()
+    try:
+        rows = conn.execute(
+            "SELECT migration_id, applied_at_utc"
+            " FROM _yoyo_migration ORDER BY applied_at_utc"
+        ).fetchall()
+        return [{"migration_id": row[0], "applied_at_utc": row[1]} for row in rows]
+    except Exception:
+        return []
+    finally:
+        conn.close()

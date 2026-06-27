@@ -898,13 +898,17 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache_core.adapter.inbound.composition import probe_all
+    from generic_ml_cache_core.adapter.inbound.composition import probe_all, schema_version
 
     try:
         file_cfg = config.load()
     except ConfigError as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
+
+    settings = config.resolve_settings(file_cfg)
+    store_root = Path(str(settings["store"][0]))
+    applied = schema_version(_db_conn_factory(store_root))
 
     statuses = probe_all(
         timeout=args.timeout, executables=file_cfg.executables, whitelist=file_cfg.adapters
@@ -913,18 +917,25 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     if args.json:
         import json
 
-        print(json.dumps([asdict(s) for s in statuses], indent=2))
+        print(json.dumps({"clients": [asdict(s) for s in statuses], "schema": applied}, indent=2))
         return 0
 
     if not statuses:
         print("no client adapters are registered")
-        return 0
-    print("configured clients (advisory — discovery never chooses or gates a run):")
-    for s in statuses:
-        if s.present:
-            print(f"  {s.name:<8} present  {(s.version or 'version unknown'):<28}  {s.executable}")
-        else:
-            print(f"  {s.name:<8} missing  {s.detail or ''}")
+    else:
+        print("configured clients (advisory — discovery never chooses or gates a run):")
+        for s in statuses:
+            if s.present:
+                print(f"  {s.name:<8} present  {(s.version or 'version unknown'):<28}  {s.executable}")
+            else:
+                print(f"  {s.name:<8} missing  {s.detail or ''}")
+
+    print()
+    if applied:
+        latest = applied[-1]
+        print(f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}  ({latest['applied_at_utc']})")
+    else:
+        print("store schema : not initialised (run any gmlcache command to apply migrations)")
     return 0
 
 

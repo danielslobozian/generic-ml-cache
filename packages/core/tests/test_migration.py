@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from generic_ml_cache_core.adapter.inbound.migration import run_migrations
+from generic_ml_cache_core.adapter.inbound.migration import run_migrations, schema_version
 
 
 def _factory(db_path: Path):
@@ -83,3 +83,17 @@ def test_migration_rejects_memory_database() -> None:
 
     with pytest.raises(ValueError, match="file-backed"):
         run_migrations(memory_factory)
+
+
+def test_schema_version_returns_applied_migrations(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    run_migrations(factory)
+    result = schema_version(factory)
+    assert len(result) >= 1
+    assert result[0]["migration_id"] == "0001.unified-schema"
+    assert result[0]["applied_at_utc"]
+
+
+def test_schema_version_returns_empty_before_migrations(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "empty.sqlite3")
+    assert schema_version(factory) == []
