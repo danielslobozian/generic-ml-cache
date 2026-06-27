@@ -80,7 +80,7 @@ def _abbrev_home(path: str) -> str:
 
 
 def git_section() -> str:
-    """Return e.g. 'generic-ml-cache  main  a3b7c8  ±4'."""
+    """Return e.g. '⎇ generic-ml-cache  main  a3b7c8  ±4'."""
     branch = _run(["git", "branch", "--show-current"])
     if not branch:
         return ""
@@ -94,7 +94,7 @@ def git_section() -> str:
         len([l for l in porcelain.splitlines() if l.strip()]) if porcelain else 0
     )
 
-    parts = []
+    parts = ["⎇"]
     if repo_name:
         parts.append(repo_name)
     if branch:
@@ -113,8 +113,8 @@ def git_section() -> str:
 
 
 def cwd_section() -> str:
-    """Return abbreviated path of the current working directory."""
-    return _abbrev_home(os.getcwd())
+    """Return e.g. '📁 ~/my-work/python/generic-ml-cache'."""
+    return "📁  " + _abbrev_home(os.getcwd())
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ def quota_section() -> str:
     if seven:
         parts.append(f"{p7}% {r7}" if r7 else f"{p7}%")
 
-    line = "  ·  ".join(parts)
+    line = "⏱  " + "  ·  ".join(parts)
     try:
         _QUOTA_CACHE.write_text(json.dumps({"ts": time.time(), "line": line}))
     except OSError:
@@ -275,6 +275,10 @@ def main() -> None:
     cache = cache_section()
     if cache:
         sections.append(cache)
+
+    cwd = cwd_section()
+    if cwd:
+        sections.append(cwd)
 
     quota = quota_section()
     if quota:
