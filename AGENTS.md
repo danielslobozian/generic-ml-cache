@@ -442,14 +442,19 @@ return blob_path.read_bytes()
   3. `python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-fail-under=80 --cov-report=xml:packages/core/coverage.xml`
   4. `python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-fail-under=80 --cov-report=xml:packages/cli/coverage.xml`
   5. `python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-fail-under=80 --cov-report=xml:packages/daemon/coverage.xml`
-  6. `lint-imports` — enforces the hexagonal import contracts declared in `.importlinter`.
-     Both contracts must be KEPT: the application ring must not import adapters, and
-     driver packages (CLI, daemon) must not reach past the composition root into
-     `adapter.out`. A BROKEN contract is an architecture defect, not a style issue.
+  6. `lint-imports` — enforces the four hexagonal import contracts in `.importlinter`:
+     application ring must not import adapters; driver packages must not reach past the
+     composition root into `adapter.out`; domain model must not import use cases;
+     driven adapter sub-packages must not import each other. A BROKEN contract is an
+     architecture defect, not a style issue.
   7. `pyright` — static type checking (basic mode) against `pyrightconfig.json`.
      Zero errors required. `# type: ignore` is acceptable only for provably safe casts
      that cannot be expressed in the type system; a comment must be present explaining
      why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
+
+  Gates 6 and 7 also run automatically as **pre-commit hooks** (`.pre-commit-config.yaml`).
+  After cloning, run `.venv/bin/pre-commit install` once to wire them into `git commit`.
+  A commit that breaks either contract is then rejected before it enters local history.
 
   Running only the linters, or skipping coverage, is a partial check, not a pass.
   The XMLs produced by (3), (4), and (5) are the exact files Sonar ingests — running
