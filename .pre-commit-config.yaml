@@ -18,7 +18,23 @@ repos:
   - repo: local
     hooks:
 
-      # Gate 1 — hexagonal import contracts
+      # Gate 1 — ruff linter
+      - id: ruff-check
+        name: ruff (lint)
+        entry: .venv/bin/ruff check packages/
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      # Gate 2 — ruff formatter
+      - id: ruff-format
+        name: ruff (format check)
+        entry: .venv/bin/ruff format --check packages/
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      # Gate 3 — hexagonal import contracts
       # Checks all four contracts declared in .importlinter:
       #   1. Application ring must not import adapters
       #   2. Driver packages must not import driven adapter implementations
@@ -31,7 +47,7 @@ repos:
         pass_filenames: false
         types: [python]
 
-      # Gate 2 — static type checking (pyright basic mode)
+      # Gate 4 — static type checking (pyright basic mode)
       # Zero errors required. See pyrightconfig.json for scope and settings.
       # `type: ignore` is acceptable only for provably safe casts that cannot
       # be expressed in the type system; a comment must explain why.
