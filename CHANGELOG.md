@@ -15,6 +15,42 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-06-27
+
+### Added
+
+- **Unified adapter registry** (core): `adapter/registry.py` replaces the split
+  `client/registry.py` and `api/api_registry.py`. A single registry keyed on
+  `MlRunnerPort.name` now covers both local-managed and API adapters.
+  `load_adapters(whitelist)` drives all resolution; `registered_names()` returns all
+  adapters; `registered_local_names()` returns `LOCAL_MANAGED` adapters only.
+- **`@adapter` class decorator** (core): marks a built-in adapter class for automatic
+  discovery by the built-in scanner (`pkgutil.iter_modules`). Replaces explicit
+  `register()` calls in each built-in module.
+- **Adapter whitelist** (cli, daemon): a `FrozenSet[str]` whitelist that threads
+  through the entire stack — `build_use_cases`, `probe_all`, `list_models`,
+  `list_api_models`, and every registry lookup. Configure in the config file with
+  `adapters = *` (all active), `adapters = claude, cursor` (named filter), or omit
+  (same as `*`). Referencing an adapter outside the whitelist fails immediately with
+  a clear `UnknownClient` error.
+- **`GMLCACHE_ADAPTERS` env var** (daemon): `*` or a comma-separated name list;
+  parsed on startup and passed to `create_app` as the daemon whitelist.
+- **`gmlcache status` shows active adapter filter** (cli): text mode reports
+  `* (all active)` or `<name>, <name>  (from config)`; `--json` includes an
+  `"adapters"` field (`null` for all-active, sorted list when filtered).
+- **`gmlcache daemon start` threads whitelist from config** (cli): passes
+  `file_cfg.adapters` to `create_app`, so the daemon inherits the config-file filter.
+- **`GET /info` reports filtered adapter list** (daemon): the `adapters` field in the
+  info response reflects the active whitelist rather than the full installed set.
+- **`UnknownClient` caught in run/alias error path** (cli): a whitelisted-out adapter
+  now returns exit 4 with a clear message in both `gmlcache run` and `gmlcache alias`,
+  rather than an unhandled exception.
+
+### Removed
+
+- `adapter/out/client/registry.py` (core): replaced by the unified registry.
+- `adapter/out/api/api_registry.py` (core): replaced by the unified registry.
+
 ## [0.15.0] - 2026-06-27
 
 ### Added
@@ -747,7 +783,8 @@ forever by content checksum.
   CLI to be installed.
 - Apache-2.0 license and full open-source project documentation.
 
-[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.14.0...v0.15.0
 [0.1.0]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.16...v0.1.0
 [0.0.16]: https://github.com/danielslobozian/generic-ml-cache/compare/v0.0.15...v0.0.16
