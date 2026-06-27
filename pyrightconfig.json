@@ -1,0 +1,11 @@
+{
+  "include": [
+    "packages/core/src",
+    "packages/cli/src",
+    "packages/daemon/src"
+  ],
+  "pythonVersion": "3.9",
+  "typeCheckingMode": "basic",
+  "venvPath": ".",
+  "venv": ".venv"
+}

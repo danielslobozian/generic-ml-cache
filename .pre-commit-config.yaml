@@ -1,0 +1,43 @@
+# .pre-commit-config.yaml — architecture and type-checking gates
+#
+# These hooks run BEFORE a commit is written. A failing hook rejects the
+# commit so malformed code can never reach the local history (and therefore
+# can never be pushed).
+#
+# Both tools are declared as local hooks backed by the project's own .venv,
+# so no additional environment is created and no network access is required
+# at hook-run time.
+#
+# Install the git hook once per clone:
+#   .venv/bin/pre-commit install
+#
+# Run manually against all files (e.g. after changing .importlinter):
+#   .venv/bin/pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+
+      # Gate 1 — hexagonal import contracts
+      # Checks all four contracts declared in .importlinter:
+      #   1. Application ring must not import adapters
+      #   2. Driver packages must not import driven adapter implementations
+      #   3. Domain model must not import use cases
+      #   4. Driven adapter sub-packages must not import each other
+      - id: lint-imports
+        name: import-linter (architecture contracts)
+        entry: .venv/bin/lint-imports
+        language: system
+        pass_filenames: false
+        types: [python]
+
+      # Gate 2 — static type checking (pyright basic mode)
+      # Zero errors required. See pyrightconfig.json for scope and settings.
+      # `type: ignore` is acceptable only for provably safe casts that cannot
+      # be expressed in the type system; a comment must explain why.
+      - id: pyright
+        name: pyright (static type checking)
+        entry: .venv/bin/pyright
+        language: system
+        pass_filenames: false
+        types: [python]

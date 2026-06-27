@@ -6,11 +6,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, FrozenSet, Optional
+from typing import Callable, Dict, FrozenSet, Optional, cast
 
+from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models as list_api_models
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
+from generic_ml_cache_core.adapter.out.client.discover import (
+    list_models as list_models,
+    list_models_all as list_models_all,
+    probe_all as probe_all,
+)
+from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
+    EncryptionState,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.out.execution_repository_port import (
+    ExecutionRepositoryPort,
+)
+from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
@@ -35,6 +48,9 @@ from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.adapter.out.gateway.http_gateway_forward_adapter import (
     HttpGatewayForwardAdapter,
 )
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
+    RunMlExecutionUseCase,
+)
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
 
@@ -46,12 +62,12 @@ ExecutableOverride = Callable[[str], Optional[str]]
 
 @dataclass(frozen=True)
 class WiredUseCases:
-    run_ml: RunMlExecutionService
+    run_ml: RunMlExecutionUseCase
     probe: ProbeService
     purge: PurgeService
     blob_store: BlobStorePort
-    repository: SqliteExecutionRepository
-    metrics: JournalMetrics
+    repository: ExecutionRepositoryPort
+    metrics: MetricsPort
     run_gateway: RunMlGatewayService
 
 
@@ -97,15 +113,22 @@ def _build_runners(
     """Build the runners dict for the given client and kind."""
     if kind is ExecutionKind.LOCAL_MANAGED:
         from generic_ml_cache_core.adapter.registry import get_adapter
+        from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+            AbstractManagedLocalAdapter,
+        )
         from generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter import (
             AbstractPassthroughLocalAdapter,
         )
+        from generic_ml_cache_core.application.port.out.base import ClientAdapter
 
+        assert client is not None
         registered = get_adapter(client, whitelist=whitelist)
-        cls = type(registered)
+        cls = cast(type[AbstractManagedLocalAdapter], type(registered))
         exe_override = executable_override(client) if executable_override else None
         managed = cls(executable_override=exe_override, timeout=timeout, stream_path=stream_path)
-        passthrough = AbstractPassthroughLocalAdapter(registered, exe_override, timeout)
+        passthrough = AbstractPassthroughLocalAdapter(
+            cast(ClientAdapter, registered), exe_override, timeout
+        )
         return {
             ExecutionKind.LOCAL_MANAGED: managed,
             ExecutionKind.LOCAL_PASSTHROUGH: passthrough,
@@ -113,6 +136,7 @@ def _build_runners(
     if kind is ExecutionKind.API:
         from generic_ml_cache_core.adapter.registry import get_adapter
 
+        assert client is not None
         return {ExecutionKind.API: get_adapter(client, whitelist=whitelist)}
     # client=None: provide a stub API runner so cache-replay and management commands
     # can still serve API-kind executions from the store without a real provider.
@@ -166,4 +190,36 @@ def build_use_cases(
         repository=repository,
         metrics=metrics,
         run_gateway=run_gateway,
+    )
+
+
+# -- Encryption helpers -------------------------------------------------------
+# Exposed here so driver packages (CLI, daemon) can manage store encryption
+# without importing adapter.out types directly.
+
+
+def get_encryption_state(store_root: Path) -> EncryptionState:
+    """Return the current encryption state of the store at ``store_root``."""
+    return FilesystemEncryptionManifestStore(store_root).state()
+
+
+def load_cipher():
+    """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
+    try:
+        from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
+    except ImportError as exc:  # pragma: no cover
+        raise SystemExit(
+            "error: encryption needs an optional dependency — install with "
+            '`pip install "generic-ml-cache-core[encryption]"`'
+        ) from exc
+    return AesGcmCipher()
+
+
+def build_store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
+    """Construct a StoreEncryptor for the store at ``store_root``."""
+    return StoreEncryptor(
+        store_root,
+        FilesystemEncryptionManifestStore(store_root),
+        SqliteStoreLock(store_root),
+        cipher,
     )

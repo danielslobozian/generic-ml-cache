@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
@@ -20,10 +21,8 @@ class MlRunnerPort(ABC):
     already IS the selected client.
     """
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """The unique adapter name (e.g. ``"claude"``, ``"anthropic"``, ``"pass-claude"``)."""
+    name: ClassVar[str]
+    """The unique adapter name (e.g. ``"claude"``, ``"anthropic"``, ``"pass-claude"``)."""
 
     @property
     @abstractmethod

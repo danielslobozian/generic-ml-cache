@@ -1,6 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "python3 scripts/format-status-line.py"
+    "command": "python3 $(git rev-parse --show-toplevel)/scripts/format-status-line.py",
+    "refreshInterval": 30
   }
 }

@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional
 
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.port.out.metrics_port import SessionEventRow
 
 #: Events where a real client call ran (vs. a HIT replay or an offline MISS).
 EXECUTED_EVENTS = frozenset({"record", "run", "would_hit", "would_miss"})
@@ -89,7 +90,7 @@ def _tokens(usage: Optional[TokenUsage]) -> Optional[int]:
 
 def build_session_report(
     session_id: str,
-    events: Iterable["object"],
+    events: Iterable[SessionEventRow],
     usage_by_key: Dict[str, TokenUsage],
 ) -> SessionReport:
     """Aggregate a session's journal rows into a :class:`SessionReport`.

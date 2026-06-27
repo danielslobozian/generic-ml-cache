@@ -1,0 +1,92 @@
+[importlinter]
+root_packages =
+    generic_ml_cache_core
+    generic_ml_cache_cli
+    generic_ml_cache_daemon
+
+# Rule 1 — the application ring is independent of the adapter layer.
+# Domain, use cases, and ports may not import from any adapter (inbound or outbound).
+# This is the hexagonal invariant: dependencies point inward, never outward.
+[importlinter:contract:hex-application-ring]
+name = Application ring must not import adapters
+type = forbidden
+source_modules =
+    generic_ml_cache_core.application
+forbidden_modules =
+    generic_ml_cache_core.adapter
+
+# Rule 2 — driver packages (CLI, daemon) depend on the composition root and the
+# public ports, never on driven (outbound) adapter implementations directly.
+# A driver calls build_use_cases() and works through WiredUseCases + ports;
+# it never reaches past the composition root into adapter.out.*.
+#
+# ignore_imports below are NOT violations — they are legitimate architectural wiring:
+#   * composition.py is the composition root; it is supposed to import adapter.out
+#     to assemble the real adapters. These edges are suppressed because import-linter
+#     checks transitively: cli → core → composition → adapter.out would otherwise
+#     be flagged even though cli never uses those types directly.
+#     Will be revisited in 0.18.0 when build_use_cases accepts a Connection instead
+#     of a store_root Path and the wiring moves to the caller.
+#   * cli.cli → daemon.app is an optional lazy import (ImportError-guarded) for the
+#     `gmlcache daemon start` command. The daemon package is not a hard dependency.
+[importlinter:contract:hex-drivers-no-driven-adapters]
+name = Driver packages must not import driven adapter implementations
+type = forbidden
+source_modules =
+    generic_ml_cache_cli
+    generic_ml_cache_daemon
+forbidden_modules =
+    generic_ml_cache_core.adapter.out
+ignore_imports =
+    # Composition root wiring — legitimate adapter assembly (0.18.0 will refactor)
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.clock.system_clock
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.metrics.access_registry
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.metrics.journal_metrics
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.persistence.sqlite_execution_repository
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.encrypting_blob_store
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.store_encryptor
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.storage.filesystem_blob_store
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.gateway.http_gateway_forward_adapter
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.api.stub_api_client_adapter
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.api.api_discover
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.client.discover
+    # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
+    generic_ml_cache_cli.cli -> generic_ml_cache_daemon.app
+
+# Rule 3 — domain model purity.
+# Domain objects (entities, value objects, domain events) must not import use cases
+# or application services. They are pure: they model the world, not the workflows.
+# Violations here mean business logic is leaking into the domain layer.
+[importlinter:contract:hex-domain-purity]
+name = Domain model must not import use cases
+type = forbidden
+source_modules =
+    generic_ml_cache_core.application.domain
+forbidden_modules =
+    generic_ml_cache_core.application.usecase
+
+# Rule 4 — driven adapter isolation.
+# Individual adapter.out sub-packages must not depend on each other. Each adapter
+# knows only about the port interfaces it implements (application.port.out.*).
+# Cross-adapter wiring happens exclusively in the composition root (adapter.inbound.composition).
+# If adapter.out.persistence imports adapter.out.metrics, those two adapters are coupled
+# and can no longer be tested or swapped independently.
+[importlinter:contract:hex-adapter-isolation]
+name = Driven adapter sub-packages must not import each other
+type = independence
+modules =
+    generic_ml_cache_core.adapter.out.api
+    generic_ml_cache_core.adapter.out.client
+    generic_ml_cache_core.adapter.out.clock
+    generic_ml_cache_core.adapter.out.crypto
+    generic_ml_cache_core.adapter.out.fingerprint
+    generic_ml_cache_core.adapter.out.gateway
+    generic_ml_cache_core.adapter.out.metrics
+    generic_ml_cache_core.adapter.out.persistence
+    generic_ml_cache_core.adapter.out.storage

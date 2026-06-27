@@ -99,7 +99,8 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
             # Not the shape we expected -- keep the raw output, skip usage.
             return ParsedOutput(text=stdout, usage=None)
 
-        block = doc.get("usage") if isinstance(doc.get("usage"), dict) else {}
+        _usage_val = doc.get("usage")
+        block: Dict[str, Any] = _usage_val if isinstance(_usage_val, dict) else {}
         raw: Dict[str, Any] = {}
         for key in ("usage", "modelUsage", "total_cost_usd"):
             if key in doc:
