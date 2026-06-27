@@ -54,8 +54,7 @@ def schema_version(conn_factory: Callable[[], Connection]) -> List[dict]:
     conn = conn_factory()
     try:
         rows = conn.execute(
-            "SELECT migration_id, applied_at_utc"
-            " FROM _yoyo_migration ORDER BY applied_at_utc"
+            "SELECT migration_id, applied_at_utc FROM _yoyo_migration ORDER BY applied_at_utc"
         ).fetchall()
         return [{"migration_id": row[0], "applied_at_utc": row[1]} for row in rows]
     except Exception:

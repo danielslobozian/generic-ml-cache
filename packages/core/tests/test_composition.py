@@ -79,7 +79,10 @@ def test_managed_durable_across_a_fresh_wiring(tmp_path):
     replay = build_use_cases(_factory(tmp_path), tmp_path, client="fake").run_ml.execute(command)
     assert b"durable" in _stdout(replay)
     key = replay.call_identity.generate_key()
-    assert len(build_use_cases(_factory(tmp_path), tmp_path, client="fake").repository.find_all(key)) == 2
+    assert (
+        len(build_use_cases(_factory(tmp_path), tmp_path, client="fake").repository.find_all(key))
+        == 2
+    )
 
 
 def test_passthrough_records_then_replays(tmp_path):

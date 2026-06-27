@@ -58,7 +58,9 @@ def test_migration_records_applied_migration(tmp_path: Path) -> None:
     run_migrations(factory)
     conn = factory()
     try:
-        rows = conn.execute("SELECT migration_id FROM _yoyo_migration ORDER BY applied_at_utc").fetchall()
+        rows = conn.execute(
+            "SELECT migration_id FROM _yoyo_migration ORDER BY applied_at_utc"
+        ).fetchall()
     finally:
         conn.close()
     migration_ids = [r[0] for r in rows]

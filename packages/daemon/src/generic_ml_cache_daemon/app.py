@@ -29,6 +29,7 @@ def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
 
     return _connect
 
+
 _CAPTURE_ENV_FLAG = "GMLCACHE_GATEWAY_CAPTURE"
 _CAPTURE_ENV_PATH = "GMLCACHE_GATEWAY_CAPTURE_PATH"
 _CAPTURE_FILENAME = "gateway-capture.ndjson"

@@ -361,9 +361,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         ]
 
     @staticmethod
-    def _load_token_usage(
-        connection: Connection, execution_id: int
-    ) -> Optional[TokenUsage]:
+    def _load_token_usage(connection: Connection, execution_id: int) -> Optional[TokenUsage]:
         row = connection.execute(
             "SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
             "reasoning_tokens, cost_usd, raw_json FROM token_usage WHERE execution_id = ?",

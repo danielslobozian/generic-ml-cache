@@ -856,7 +856,9 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    matches = build_use_cases(_db_conn_factory(store_root), store_root).repository.find_current_by_key_prefix(args.execution)
+    matches = build_use_cases(
+        _db_conn_factory(store_root), store_root
+    ).repository.find_current_by_key_prefix(args.execution)
     if not matches:
         print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
         return 4
@@ -926,14 +928,18 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         print("configured clients (advisory — discovery never chooses or gates a run):")
         for s in statuses:
             if s.present:
-                print(f"  {s.name:<8} present  {(s.version or 'version unknown'):<28}  {s.executable}")
+                print(
+                    f"  {s.name:<8} present  {(s.version or 'version unknown'):<28}  {s.executable}"
+                )
             else:
                 print(f"  {s.name:<8} missing  {s.detail or ''}")
 
     print()
     if applied:
         latest = applied[-1]
-        print(f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}  ({latest['applied_at_utc']})")
+        print(
+            f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}  ({latest['applied_at_utc']})"
+        )
     else:
         print("store schema : not initialised (run any gmlcache command to apply migrations)")
     return 0
@@ -1234,7 +1240,9 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         if settings["max_size"][0] is not None
         else None
     )
-    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
+    wired = build_use_cases(
+        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
+    )
     summaries = wired.repository.current_execution_summaries()
     store_bytes = wired.repository.total_stored_bytes()
     access = wired.metrics.event_counts()
@@ -1338,7 +1346,9 @@ def _cmd_purge(args: argparse.Namespace) -> int:
             )
             return 4
 
-    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
+    wired = build_use_cases(
+        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
+    )
     svc = wired.purge
 
     if key:
@@ -1392,7 +1402,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
+    wired = build_use_cases(
+        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
+    )
     hit_counts = wired.metrics.hit_counts_by_key()
     entries = [
         {
@@ -1452,7 +1464,9 @@ def _cmd_tags(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
+    wired = build_use_cases(
+        _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
+    )
     counts: dict = {}
     for summary in wired.repository.current_execution_summaries():
         for tag in wired.repository.tags_for(summary.execution_key):
@@ -1720,7 +1734,9 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
         return 2
     if tags or spec:
         settings = config.resolve_settings(config.load())
-        wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
+        wired = build_use_cases(
+            _db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0]))
+        )
         for tag in tags:
             wired.metrics.add_session_tag(session_id, tag)
         if spec is not None:
