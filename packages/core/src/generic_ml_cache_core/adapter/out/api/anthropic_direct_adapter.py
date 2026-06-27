@@ -15,6 +15,7 @@ from generic_ml_cache_core.application.domain.model.run.client_run_result import
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
+from generic_ml_cache_core.adapter.registry import adapter
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 
@@ -22,6 +23,7 @@ _BASE_URL = "https://api.anthropic.com/v1"
 _API_VERSION = "2023-06-01"
 
 
+@adapter
 class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
     """Calls Anthropic's Messages API using stdlib urllib.
 

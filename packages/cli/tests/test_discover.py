@@ -100,3 +100,35 @@ def test_probe_reports_version_check_failed_when_subprocess_raises(monkeypatch):
     assert status.present is True
     assert status.version is None
     assert "version check failed" in (status.detail or "")
+
+
+# --- whitelist filtering (0.16.0) -------------------------------------------
+
+
+def test_probe_all_whitelist_restricts_to_named_adapters():
+    # Only the 'fake' adapter is in the whitelist; 'fake_stdin' and others must be absent.
+    results = probe_all(whitelist=frozenset({"fake"}))
+    names = {s.name for s in results}
+    assert "fake" in names
+    assert "fake_stdin" not in names
+
+
+def test_probe_all_none_whitelist_returns_all_local_adapters():
+    no_filter = probe_all(whitelist=None)
+    filtered = probe_all(whitelist=frozenset({"fake"}))
+    assert len(no_filter) > len(filtered)
+
+
+def test_list_models_all_whitelist_restricts_to_named_adapters():
+    results = list_models_all(whitelist=frozenset({"fake"}))
+    names = {m.name for m in results}
+    assert "fake" in names
+    assert "fake_stdin" not in names
+
+
+def test_list_models_whitelist_blocks_excluded_adapter():
+    from generic_ml_cache_core.common.errors import UnknownClient
+    import pytest
+
+    with pytest.raises(UnknownClient, match="unknown adapter"):
+        list_models("fake_stdin", whitelist=frozenset({"fake"}))

@@ -2,27 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Client adapters.
 
-Importing this package registers the built-in adapters. The Claude adapter is
-registered eagerly. Codex and Cursor are also registered so all three v0.0.1
-clients are available out of the box; their flag mappings are best-effort and
-documented as such.
+Built-in adapters carry the ``@adapter`` decorator and are discovered
+automatically by the unified registry scanner.  No explicit registration here.
 """
 
 from __future__ import annotations
 
-from generic_ml_cache_core.adapter.out.client.codex import CodexAdapter
-from generic_ml_cache_core.adapter.out.client.cursor import CursorAdapter
-from generic_ml_cache_core.adapter.out.client.registry import (
-    get_adapter,
-    register,
-    registered_names,
-)
+from generic_ml_cache_core.adapter.registry import get_adapter, register, registered_names
 from generic_ml_cache_core.application.port.out.base import ClientAdapter
-
-# Eager registration of the built-in adapters.
-from . import claude  # noqa: F401  (registers ClaudeAdapter)
-
-register(CodexAdapter())
-register(CursorAdapter())
 
 __all__ = ["ClientAdapter", "get_adapter", "register", "registered_names"]

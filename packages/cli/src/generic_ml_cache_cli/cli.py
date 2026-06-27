@@ -42,8 +42,7 @@ from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import Sqli
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
-from generic_ml_cache_core.adapter.out.api.api_registry import registered_api_names
-from generic_ml_cache_core.adapter.out.client.registry import registered_names
+from generic_ml_cache_core.adapter.registry import registered_local_names, registered_names
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
     ArtifactType,
@@ -68,6 +67,7 @@ from generic_ml_cache_core.common.errors import (
     EncryptionTokenRequired,
     RunInterrupted,
     StoreLocked,
+    UnknownClient,
     WrongEncryptionToken,
 )
 
@@ -213,13 +213,19 @@ def _resolve_managed_run(args: argparse.Namespace):
         "executable": config.executable_for(file_cfg, args.client, flag=args.executable),
         "timeout": settings["timeout"][0],
         "max_size": settings["max_size"][0],
+        "adapters": sorted(file_cfg.adapters) if file_cfg.adapters is not None else None,
     }
     return spec, Path(str(settings["store"][0])), _resolve_token(args)
 
 
+def _spec_whitelist(spec: dict):
+    raw = spec.get("adapters")
+    return frozenset(raw) if raw is not None else None
+
+
 def _command_from_spec(spec: dict) -> RunMlExecutionCommand:
     return RunMlExecutionCommand(
-        execution_kind=resolve_execution_kind(spec["client"]),
+        execution_kind=resolve_execution_kind(spec["client"], whitelist=_spec_whitelist(spec)),
         client=spec["client"],
         model=spec["model"],
         effort=spec["effort"],
@@ -281,6 +287,9 @@ def _run_cached_execution(execute):
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return None, 4
+    except UnknownClient as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return None, 4
     except CacheError as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return None, 4
@@ -306,7 +315,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "detach", False):
         return _submit_detached(spec, store_root, token)
 
-    command = _command_from_spec(spec)
+    try:
+        command = _command_from_spec(spec)
+    except UnknownClient as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
     execution, error = _run_cached_execution(
         lambda: build_use_cases(
             store_root,
@@ -316,6 +329,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             stream_path=getattr(args, "stream", None),
             client=spec["client"],
             max_size=spec.get("max_size"),
+            whitelist=_spec_whitelist(spec),
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -371,6 +385,7 @@ def _cmd_alias(args: argparse.Namespace) -> int:
             encryption_token=_resolve_token(args),
             client=args.client,
             max_size=settings["max_size"][0],
+            whitelist=file_cfg.adapters,
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -439,6 +454,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                     stream_path=str(events),  # client live events land in the job's log
                     client=spec["client"],
                     max_size=spec.get("max_size"),
+                    whitelist=_spec_whitelist(spec),
                 )
                 execution = wired.run_ml.execute(command)
             except Exception as exc:
@@ -870,7 +886,9 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    statuses = probe_all(timeout=args.timeout, executables=file_cfg.executables)
+    statuses = probe_all(
+        timeout=args.timeout, executables=file_cfg.executables, whitelist=file_cfg.adapters
+    )
 
     if args.json:
         import json
@@ -895,7 +913,6 @@ def _cmd_models(args: argparse.Namespace) -> int:
 
     from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models
     from generic_ml_cache_core.adapter.out.client.discover import list_models, list_models_all
-    from generic_ml_cache_core.common.errors import UnknownClient
 
     try:
         file_cfg = config.load()
@@ -906,12 +923,23 @@ def _cmd_models(args: argparse.Namespace) -> int:
     if args.client:
         executable = config.executable_for(file_cfg, args.client, flag=args.executable)
         try:
-            listings = [list_models(args.client, executable=executable, timeout=args.timeout)]
+            listings = [
+                list_models(
+                    args.client,
+                    executable=executable,
+                    timeout=args.timeout,
+                    whitelist=file_cfg.adapters,
+                )
+            ]
         except UnknownClient:
-            # Not a CLI client — try the API provider registry (gemini, anthropic, …).
-            listings = [list_api_models(args.client)]
+            # Not a local managed adapter — try the API provider registry.
+            listings = [list_api_models(args.client, whitelist=file_cfg.adapters)]
     else:
-        listings = list_models_all(timeout=args.timeout, executables=file_cfg.executables)
+        listings = list_models_all(
+            timeout=args.timeout,
+            executables=file_cfg.executables,
+            whitelist=file_cfg.adapters,
+        )
 
     if args.json:
         import json
@@ -950,6 +978,8 @@ def _cmd_status(args: argparse.Namespace) -> int:
     loaded = file_cfg.source is not None
     encryption = FilesystemEncryptionManifestStore(Path(str(settings["store"][0]))).state().value
 
+    adapters_whitelist = sorted(file_cfg.adapters) if file_cfg.adapters is not None else None
+
     if args.json:
         import json
 
@@ -960,6 +990,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
                     "loaded": loaded,
                     "encryption": encryption,
                     "settings": {k: {"value": v[0], "source": v[1]} for k, v in settings.items()},
+                    "adapters": adapters_whitelist,
                     "executables": dict(file_cfg.executables),
                 },
                 indent=2,
@@ -976,6 +1007,10 @@ def _cmd_status(args: argparse.Namespace) -> int:
         if isinstance(shown, bool):
             shown = "true" if shown else "false"
         print(f"  {key:<10} {str(shown):<14} (from {source})")
+    if adapters_whitelist is None:
+        print("adapters    : * (all active)")
+    else:
+        print(f"adapters    : {', '.join(adapters_whitelist)} (from config)")
     if file_cfg.executables:
         print("executables (from config; --executable still overrides per call):")
         for client, exe in file_cfg.executables.items():
@@ -1015,7 +1050,8 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
     host: str = args.host
     port: int = args.port
 
-    settings = config.resolve_settings(config.load())
+    _daemon_cfg = config.load()
+    settings = config.resolve_settings(_daemon_cfg)
     max_size: Optional[int] = settings["max_size"][0]  # type: ignore[assignment]
     max_age: Optional[float] = settings["max_age"][0]  # type: ignore[assignment]
 
@@ -1025,6 +1061,7 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
         enable_metrics=enable_metrics,
         max_size=max_size,
         max_age=max_age,
+        whitelist=_daemon_cfg.adapters,
     )
     uvicorn.run(application, host=host, port=port)
     return 0
@@ -2040,7 +2077,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=False, metavar="<command>")
 
     run = sub.add_parser("run", help="resolve a request (record on miss, replay on hit)")
-    run.add_argument("--client", required=True, choices=registered_names() + registered_api_names())
+    run.add_argument("--client", required=True, choices=registered_names())
     run.add_argument("--model", required=True)
     run.add_argument(
         "--effort",
@@ -2164,7 +2201,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_shared_run_options(aliasp)
-    aliasp.add_argument("client", choices=registered_names(), help="the native client to wrap")
+    aliasp.add_argument(
+        "client", choices=registered_local_names(), help="the native client to wrap"
+    )
     aliasp.add_argument(
         "native_args",
         nargs=argparse.REMAINDER,
@@ -2187,7 +2226,7 @@ def build_parser() -> argparse.ArgumentParser:
         "check",
         help="probe whether a call is already cached (read-only; launches and records nothing)",
     )
-    check.add_argument("--client", required=True, choices=registered_names())
+    check.add_argument("--client", required=True, choices=registered_local_names())
     check.add_argument("--model", required=True)
     check.add_argument(
         "--effort",

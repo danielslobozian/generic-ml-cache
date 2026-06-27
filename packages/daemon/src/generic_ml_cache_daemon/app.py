@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import FrozenSet, Optional
 
 from fastapi import FastAPI
 
@@ -39,6 +39,7 @@ def create_app(
     max_size: Optional[int] = None,
     max_age: Optional[float] = None,
     eviction_interval: float = 3600.0,
+    whitelist: Optional[FrozenSet[str]] = None,
 ) -> FastAPI:
     """Create and configure the daemon FastAPI application.
 
@@ -89,6 +90,7 @@ def create_app(
     application.state.session_id = session_id
     application.state.enable_metrics = enable_metrics
     application.state.eviction_stats = eviction_stats
+    application.state.whitelist = whitelist
 
     from generic_ml_cache_daemon.jobs import JobRegistry
     from generic_ml_cache_daemon.routes.executions import router as executions_router

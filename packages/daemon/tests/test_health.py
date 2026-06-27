@@ -102,6 +102,29 @@ def test_info_adapters_sorted(client: TestClient) -> None:
     assert adapters == sorted(adapters)
 
 
+def test_info_adapters_whitelist_restricts_list(tmp_path: Path) -> None:
+    from generic_ml_cache_daemon.app import create_app
+
+    application = create_app(tmp_path, whitelist=frozenset({"fake", "fake_stdin"}))
+    test_client = TestClient(application)
+    adapters = test_client.get("/info").json()["adapters"]
+    assert set(adapters).issubset({"fake", "fake_stdin"})
+
+
+def test_info_adapters_none_whitelist_returns_all(client: TestClient) -> None:
+    no_filter = client.get("/info").json()["adapters"]
+    assert len(no_filter) >= 1
+
+
+def test_info_adapters_whitelist_unknown_name_returns_empty(tmp_path: Path) -> None:
+    from generic_ml_cache_daemon.app import create_app
+
+    application = create_app(tmp_path, whitelist=frozenset({"__nonexistent__"}))
+    test_client = TestClient(application)
+    adapters = test_client.get("/info").json()["adapters"]
+    assert adapters == []
+
+
 # ---------------------------------------------------------------------------
 # /metrics
 # ---------------------------------------------------------------------------

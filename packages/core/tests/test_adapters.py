@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from generic_ml_cache_core import UnknownClient, get_adapter
-from generic_ml_cache_core.adapter.out.client.registry import registered_names
+from generic_ml_cache_core.adapter.registry import registered_names
 from generic_ml_cache_core.common.errors import ClientNotFound
 from generic_ml_cache_core.adapter.out.client.prime_directive import (
     PRIME_DIRECTIVE,

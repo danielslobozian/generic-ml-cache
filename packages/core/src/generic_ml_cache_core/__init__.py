@@ -28,11 +28,11 @@ from generic_ml_cache_core.adapter.inbound.composition import (  # noqa: E402  #
     WiredUseCases,
     build_use_cases,
 )
-from generic_ml_cache_core.adapter.out.client import (  # noqa: E402  # fmt: skip
-    ClientAdapter,
+from generic_ml_cache_core.adapter.registry import (  # noqa: E402  # fmt: skip
     get_adapter,
     register,
 )
+from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
     file_content_fingerprint,

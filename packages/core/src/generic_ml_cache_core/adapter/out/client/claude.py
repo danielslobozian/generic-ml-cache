@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
     AbstractManagedLocalAdapter,
 )
-from generic_ml_cache_core.adapter.out.client.registry import register
+from generic_ml_cache_core.adapter.registry import adapter
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
 from generic_ml_cache_core.application.domain.model.usage.usage import (
     Usage,
@@ -29,6 +29,7 @@ from generic_ml_cache_core.application.port.out.base import (
 )
 
 
+@adapter
 class ClaudeAdapter(AbstractManagedLocalAdapter):
     name = "claude"
     default_executable = "claude"
@@ -211,6 +212,3 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
         if t == "result":
             return {"kind": "result"}
         return None
-
-
-register(ClaudeAdapter())
