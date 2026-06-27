@@ -238,7 +238,7 @@ def quota_section() -> str:
 
     def _pct(bucket: dict) -> int:
         u = bucket.get("utilization", 0)
-        return int(u * 100) if u <= 1 else int(u)
+        return round(u)
 
     five = data.get("five_hour") or {}
     seven = data.get("seven_day") or {}
