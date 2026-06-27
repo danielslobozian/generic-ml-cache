@@ -33,6 +33,7 @@ from generic_ml_cache_core.common.checksum import file_content_fingerprint
 from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
 
 _TEXT_ENCODING = "utf-8"
+_EXECUTE_EXIT = "execute EXIT"
 
 
 class CacheableExecutionCommand(Protocol):
@@ -90,7 +91,7 @@ class CachedMlExecutionService(ABC):
                 self._diag.debug("uncacheable — bypassing cache", key=execution_key)
                 result = self._run_uncacheable(command, call_identity, execution_key)
                 self._diag.debug(
-                    "execute EXIT",
+                    _EXECUTE_EXIT,
                     key=execution_key,
                     duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                     outcome="uncacheable",
@@ -100,7 +101,7 @@ class CachedMlExecutionService(ABC):
             if command.cache_mode is CacheMode.OFFLINE:
                 result = self._serve_offline(command, execution_key)
                 self._diag.debug(
-                    "execute EXIT",
+                    _EXECUTE_EXIT,
                     key=execution_key,
                     duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                     outcome="offline-hit",
@@ -112,7 +113,7 @@ class CachedMlExecutionService(ABC):
                 # the call *would* have hit a stored entry (would-be hit/miss).
                 result = self._run_metered(command, call_identity, execution_key)
                 self._diag.debug(
-                    "execute EXIT",
+                    _EXECUTE_EXIT,
                     key=execution_key,
                     duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                     outcome="metered",
@@ -124,7 +125,7 @@ class CachedMlExecutionService(ABC):
                 if current_execution is not None:
                     result = self._serve_hit(command, execution_key, current_execution)
                     self._diag.debug(
-                        "execute EXIT",
+                        _EXECUTE_EXIT,
                         key=execution_key,
                         duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                         outcome="hit",

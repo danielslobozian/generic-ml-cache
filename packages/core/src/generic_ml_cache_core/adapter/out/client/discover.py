@@ -33,6 +33,8 @@ from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
+_LIST_MODELS_EXIT = "list-models EXIT"
+
 
 def _probe_version(
     argv: List[str], timeout: float, diag: Optional[DiagnosticsPort] = None
@@ -151,7 +153,7 @@ def list_models(
     except ClientNotFound as exc:
         result = ModelListing(name=name, present=False, supported=False, reason=str(exc))
         _diag.debug(
-            "list-models EXIT",
+            _LIST_MODELS_EXIT,
             name=name,
             present=False,
             duration_ms=round((time.perf_counter() - _t) * 1000, 1),
@@ -167,7 +169,7 @@ def list_models(
             reason="this client has no model-listing command",
         )
         _diag.debug(
-            "list-models EXIT",
+            _LIST_MODELS_EXIT,
             name=name,
             supported=False,
             duration_ms=round((time.perf_counter() - _t) * 1000, 1),
@@ -187,7 +189,7 @@ def list_models(
             name=name, present=True, supported=True, reason=f"model listing failed: {exc}"
         )
         _diag.debug(
-            "list-models EXIT",
+            _LIST_MODELS_EXIT,
             name=name,
             duration_ms=round((time.perf_counter() - _t) * 1000, 1),
         )
@@ -203,7 +205,7 @@ def list_models(
             reason=f"client exited {proc.returncode}: {detail}",
         )
         _diag.debug(
-            "list-models EXIT",
+            _LIST_MODELS_EXIT,
             name=name,
             returncode=proc.returncode,
             duration_ms=round((time.perf_counter() - _t) * 1000, 1),

@@ -18,13 +18,13 @@ class NullDiagnosticsAdapter(DiagnosticsPort):
     """Drops every diagnostic event silently. Never raises."""
 
     def debug(self, msg: str, **context: object) -> None:
-        pass
+        pass  # intentional no-op: null object silently discards all diagnostics
 
     def info(self, msg: str, **context: object) -> None:
-        pass
+        pass  # intentional no-op: null object silently discards all diagnostics
 
     def warn(self, msg: str, **context: object) -> None:
-        pass
+        pass  # intentional no-op: null object silently discards all diagnostics
 
     def error(self, msg: str, exc: Optional[BaseException] = None, **context: object) -> None:
-        pass
+        pass  # intentional no-op: null object silently discards all diagnostics
