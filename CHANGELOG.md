@@ -15,6 +15,35 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-06-28
+
+### Added
+
+- **`DiagnosticsPort`** (core): new hexagonal outbound port
+  (`application/port/out/diagnostics_port.py`) with `debug`, `info`, `warn`, and
+  `error` severity levels plus structured `**context` kwargs. Core never imports a
+  logging library directly; it emits through this port.
+- **`NullDiagnosticsAdapter`** (core): silent no-op default
+  (`application/port/out/null_diagnostics_adapter.py`). Wiring this adapter
+  guarantees diagnostics can never reach the replay channel by construction.
+- **`StructlogDiagnosticsAdapter`** (common): `structlog`-backed implementation in
+  `packages/common`; supports logback-style text output (default) and JSON output
+  (`--log-format json`). Rotates daily with 7-day retention; never raises (R5
+  contract).
+- **Trace-style entry/exit logging** (core): every meaningful operation in
+  `CachedMlExecutionService`, `PurgeService`, `RunMlGatewayService`,
+  `RunMlExecutionService`, `AccessRegistry`, `migration`, and `discover` now logs
+  ENTER, EXIT with `duration_ms`, and FAILED on unexpected exceptions.
+- **`--log-file` / `--log-format` / `--log-level` flags** (cli): all `gmlcache`
+  subcommands accept these flags to enable and configure the diagnostics log.
+  `doctor` and `models` pass the live adapter to `schema_version` and `probe_all` /
+  `list_models_all`.
+- **Daemon diagnostics wiring** (daemon): `app.py` reads `LOG_FILE`, `LOG_FORMAT`,
+  and `LOG_LEVEL` environment variables and wires the `StructlogDiagnosticsAdapter`
+  at startup.
+- **`structlog>=21` dependency** (cli, daemon): added to both packages for
+  Python 3.9+ compatibility.
+
 ## [0.18.0] - 2026-06-27
 
 ### Added
