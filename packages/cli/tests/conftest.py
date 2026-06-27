@@ -17,7 +17,6 @@ from typing import List
 import pytest
 
 from generic_ml_cache_cli import register
-from generic_ml_cache_core.adapter.out.api import register_api_adapter
 from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
     AbstractManagedLocalAdapter,
@@ -64,11 +63,15 @@ class FakeAdapter(AbstractManagedLocalAdapter):
         ]
 
 
+class _FakeApiAdapter(StubApiClientAdapter):
+    name = "fake-api"
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _register_fake_adapter():
     register(FakeAdapter())
     register(FakeStdinAdapter())
-    register_api_adapter("fake-api", lambda _: StubApiClientAdapter())
+    register(_FakeApiAdapter())
 
 
 class FakeStdinAdapter(AbstractManagedLocalAdapter):

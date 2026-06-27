@@ -31,6 +31,8 @@ File shape::
     store = /path/to/store
     timeout = 120
     trust_scan = false
+    # adapters = *            ← all adapters active (the default)
+    # adapters = claude, cursor  ← only these two
 
     [executables]
     claude = /opt/claude/bin/claude
@@ -63,7 +65,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, FrozenSet, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
@@ -113,6 +115,12 @@ trust_scan = false
 # Optional age cap. Off by default. When set (e.g. 30d, 12h, 2w), the daemon
 # periodically soft-purges executions not accessed within this window.
 # max_age = 30d
+
+# Optional: restrict which adapters are active. Default (* / omit) means all installed
+# adapters are available. List adapter names to enable only those; any session that
+# references a disabled adapter fails immediately with a clear error.
+# adapters = *
+# adapters = claude, cursor
 
 # Optional: pin a client's executable (off-PATH installs, or a specific build).
 # [executables]
@@ -175,6 +183,8 @@ class FileConfig:
     trust_scan: Optional[bool] = None
     max_size: Optional[int] = None
     max_age: Optional[float] = None
+    #: ``None`` means all adapters active; a frozenset restricts to the named set.
+    adapters: Optional[FrozenSet[str]] = None
     executables: Dict[str, str] = field(default_factory=dict)
     source: Optional[Path] = None
 
@@ -231,6 +241,23 @@ def _parse_bool(raw: str, where: str) -> bool:
     raise ConfigError(f"invalid boolean {raw!r} {where}; expected true or false")
 
 
+def _parse_adapters(raw: str, where: str) -> Optional[FrozenSet[str]]:
+    """Parse ``adapters = *`` (all) or ``adapters = claude, cursor`` (named filter).
+
+    Returns ``None`` for the wildcard (meaning all adapters active), or a
+    ``frozenset`` of the named adapter identifiers.
+    """
+    text = raw.strip()
+    if text == "*":
+        return None
+    names = frozenset(name.strip() for name in text.split(",") if name.strip())
+    if not names:
+        raise ConfigError(
+            f"invalid adapters {raw!r} {where}; expected '*' or a comma-separated list of names"
+        )
+    return names
+
+
 def load(path: Optional[Path] = None) -> FileConfig:
     """Read the config file if it exists; a missing file yields empty defaults."""
     p = path or resolve_config_path()
@@ -268,6 +295,9 @@ def load(path: Optional[Path] = None) -> FileConfig:
     max_age_raw = get("max_age")
     max_age = _parse_age(max_age_raw, f"in {p}") if max_age_raw else None
 
+    adapters_raw = get("adapters")
+    adapters = _parse_adapters(adapters_raw, f"in {p}") if adapters_raw is not None else None
+
     # [executables]: client name -> path/command. Kept verbatim and leniently
     # (unknown client keys are not an error -- the adapter registry is
     # extensible, and a key is only ever consulted when that client is run).
@@ -285,6 +315,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
         trust_scan=trust_scan,
         max_size=max_size,
         max_age=max_age,
+        adapters=adapters,
         executables=executables,
         source=p,
     )

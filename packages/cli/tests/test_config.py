@@ -232,6 +232,134 @@ def test_max_age_default_is_none(tmp_path):
     assert settings["max_age"] == (None, "default")
 
 
+# --- adapters whitelist (0.16.0) -------------------------------------------
+
+
+def test_adapters_omitted_yields_none(tmp_path):
+    cfg = config.load(tmp_path / "absent.ini")
+    assert cfg.adapters is None
+
+
+def test_adapters_wildcard_yields_none(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = *\n")
+    assert config.load(p).adapters is None
+
+
+def test_adapters_single_name(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = claude\n")
+    assert config.load(p).adapters == frozenset({"claude"})
+
+
+def test_adapters_multiple_names(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = claude, cursor, codex\n")
+    assert config.load(p).adapters == frozenset({"claude", "cursor", "codex"})
+
+
+def test_adapters_names_are_stripped(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters =  claude ,  cursor \n")
+    assert config.load(p).adapters == frozenset({"claude", "cursor"})
+
+
+def test_adapters_empty_string_raises(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = \n")
+    with pytest.raises(ConfigError):
+        config.load(p)
+
+
+def test_adapters_default_in_file_cfg_is_none(tmp_path):
+    assert config.load(tmp_path / "absent.ini").adapters is None
+
+
+def test_adapters_named_in_file_cfg(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = claude, cursor\n")
+    assert config.load(p).adapters == frozenset({"claude", "cursor"})
+
+
+def test_adapters_wildcard_in_file_cfg_is_none(tmp_path):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = *\n")
+    assert config.load(p).adapters is None
+
+
+# --- adapters whitelist wired end-to-end (0.16.0) --------------------------
+
+
+def test_doctor_respects_adapter_whitelist(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["doctor"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "fake" in out
+    assert "fake_stdin" not in out
+
+
+def test_doctor_excludes_all_when_unknown_whitelist(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = nonexistent-adapter\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["doctor"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "no client adapters" in out
+
+
+# --- status command: adapter whitelist display (0.16.0) --------------------
+
+
+def test_status_json_adapters_null_when_not_configured(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(tmp_path / "absent.ini"))
+    rc = main(["status", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["adapters"] is None
+
+
+def test_status_json_adapters_sorted_list_when_configured(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake_stdin, fake\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["status", "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["adapters"] == ["fake", "fake_stdin"]
+
+
+def test_status_text_shows_all_active_when_not_configured(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(tmp_path / "absent.ini"))
+    rc = main(["status"])
+    assert rc == 0
+    assert "* (all active)" in capsys.readouterr().out
+
+
+def test_status_text_shows_named_adapters_when_configured(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["status"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "fake" in out and "from config" in out
+
+
+# --- run / alias: excluded adapter → clear error (0.16.0) ------------------
+
+
+def test_run_excluded_adapter_returns_error_4(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake_stdin\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi"])
+    assert rc == 4
+    assert "fake" in capsys.readouterr().err
+
+
+def test_alias_excluded_adapter_returns_error_4(tmp_path, monkeypatch, capsys):
+    p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake_stdin\n")
+    monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
+    rc = main(["alias", "fake", "--", "-c", "print('hi')"])
+    assert rc == 4
+    assert "fake" in capsys.readouterr().err
+
+
+# --- init ------------------------------------------------------------------
+
+
 def test_init_writes_config_and_is_idempotent(tmp_path):
     target = tmp_path / "cfg" / "config.ini"
     path, created = config.write_default_config(target)

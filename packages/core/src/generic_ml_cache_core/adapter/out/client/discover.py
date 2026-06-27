@@ -13,16 +13,20 @@ caller *what is here*; deciding *what to use* stays with the caller.
 from __future__ import annotations
 
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
-from generic_ml_cache_core.adapter.out.client.registry import get_adapter, registered_names
+from generic_ml_cache_core.adapter.registry import (
+    get_adapter,
+    registered_local_names as registered_names,
+)
 from generic_ml_cache_core.application.domain.model.client_status import (
     ClientStatus as ClientStatus,
 )
 from generic_ml_cache_core.application.domain.model.model_listing import (
     ModelListing as ModelListing,
 )
-from generic_ml_cache_core.common.errors import ClientNotFound
+from generic_ml_cache_core.application.port.out.base import ClientAdapter
+from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
 
 def _probe_version(argv: List[str], timeout: float) -> Tuple[Optional[str], Optional[str]]:
@@ -50,26 +54,39 @@ def probe(name: str, executable: Optional[str] = None, timeout: float = 10.0) ->
 
 
 def probe_all(
-    timeout: float = 10.0, executables: Optional[Dict[str, str]] = None
+    timeout: float = 10.0,
+    executables: Optional[Dict[str, str]] = None,
+    whitelist: Optional[FrozenSet[str]] = None,
 ) -> List[ClientStatus]:
     """Probe every registered client, in name order.
 
     ``executables`` optionally maps a client name to the executable to probe
     (e.g. from the ``[executables]`` config); a client absent from the mapping
     falls back to its adapter's own ``PATH`` lookup.
+    ``whitelist`` restricts which adapters are considered active.
     """
     exe = executables or {}
-    return [probe(name, executable=exe.get(name), timeout=timeout) for name in registered_names()]
+    return [
+        probe(name, executable=exe.get(name), timeout=timeout)
+        for name in registered_names(whitelist=whitelist)
+    ]
 
 
-def list_models(name: str, executable: Optional[str] = None, timeout: float = 30.0) -> ModelListing:
+def list_models(
+    name: str,
+    executable: Optional[str] = None,
+    timeout: float = 30.0,
+    whitelist: Optional[FrozenSet[str]] = None,
+) -> ModelListing:
     """List one client's models by relaying its own listing command.
 
     Never raises for an absent client or a client that cannot enumerate; both
     are reported in the result. A relayed list reflects what the *authenticated*
     client can reach, which is why it is preferred over any static catalog.
     """
-    adapter = get_adapter(name)
+    adapter = get_adapter(name, whitelist=whitelist)
+    if not isinstance(adapter, ClientAdapter):
+        raise UnknownClient(f"not a local managed adapter: {name!r}")
     try:
         exe = adapter.resolve_executable(executable)
     except ClientNotFound as exc:
@@ -107,15 +124,19 @@ def list_models(name: str, executable: Optional[str] = None, timeout: float = 30
 
 
 def list_models_all(
-    timeout: float = 30.0, executables: Optional[Dict[str, str]] = None
+    timeout: float = 30.0,
+    executables: Optional[Dict[str, str]] = None,
+    whitelist: Optional[FrozenSet[str]] = None,
 ) -> List[ModelListing]:
     """List models for every registered client, in name order.
 
     ``executables`` optionally maps a client name to the executable to use
     (e.g. from the ``[executables]`` config); a client absent from the mapping
     falls back to its adapter's own ``PATH`` lookup.
+    ``whitelist`` restricts which adapters are considered active.
     """
     exe = executables or {}
     return [
-        list_models(name, executable=exe.get(name), timeout=timeout) for name in registered_names()
+        list_models(name, executable=exe.get(name), timeout=timeout, whitelist=whitelist)
+        for name in registered_names(whitelist=whitelist)
     ]

@@ -14,6 +14,7 @@ from typing import List, Optional
 from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
     AbstractManagedLocalAdapter,
 )
+from generic_ml_cache_core.adapter.registry import adapter
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
 from generic_ml_cache_core.application.port.out.base import (
@@ -23,6 +24,7 @@ from generic_ml_cache_core.application.port.out.base import (
 )
 
 
+@adapter
 class CursorAdapter(AbstractManagedLocalAdapter):
     name = "cursor"
     default_executable = "cursor-agent"

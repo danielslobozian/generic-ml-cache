@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import FrozenSet, Optional
 
 import uvicorn
 
@@ -38,6 +38,14 @@ def _parse_age(raw: str) -> Optional[float]:
     return float(number) * factor if factor else None
 
 
+def _parse_adapters(raw: str) -> Optional[FrozenSet[str]]:
+    """Parse GMLCACHE_ADAPTERS: '*'/empty → None (all); 'claude,cursor' → frozenset."""
+    text = raw.strip()
+    if not text or text == "*":
+        return None
+    return frozenset(name.strip() for name in text.split(",") if name.strip())
+
+
 def main() -> None:
     store_root = Path(os.environ.get("GMLCACHE_STORE", str(Path.home() / ".gmlcache")))
     session_id = os.environ.get("GMLCACHE_SESSION") or None
@@ -52,6 +60,9 @@ def main() -> None:
     interval_raw = os.environ.get("GMLCACHE_EVICTION_INTERVAL", "")
     eviction_interval = float(interval_raw) if interval_raw else 3600.0
 
+    adapters_raw = os.environ.get("GMLCACHE_ADAPTERS", "")
+    whitelist = _parse_adapters(adapters_raw) if adapters_raw else None
+
     application = create_app(
         store_root,
         session_id=session_id,
@@ -59,6 +70,7 @@ def main() -> None:
         max_size=max_size,
         max_age=max_age,
         eviction_interval=eviction_interval,
+        whitelist=whitelist,
     )
     uvicorn.run(application, host=_DEFAULT_HOST, port=_DEFAULT_PORT)
 

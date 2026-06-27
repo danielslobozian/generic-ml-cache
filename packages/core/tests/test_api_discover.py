@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for api_discover.list_api_models and the api_registry."""
+"""Tests for api_discover.list_api_models and the unified adapter registry."""
 
 from __future__ import annotations
 
@@ -9,11 +9,7 @@ from typing import List
 import pytest
 
 from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models
-from generic_ml_cache_core.adapter.out.api.api_registry import (
-    get_api_adapter,
-    register_api_adapter,
-    registered_api_names,
-)
+from generic_ml_cache_core.adapter.registry import get_adapter, register, registered_names
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
@@ -60,31 +56,31 @@ class _FailingListAdapter(ApiClientPort, ModelListingPort):
 
 
 # ---------------------------------------------------------------------------
-# api_registry
+# unified registry
 # ---------------------------------------------------------------------------
 
 
-def test_register_and_get_api_adapter():
-    register_api_adapter("_test_listing", lambda k: _ListingAdapter())
-    adapter = get_api_adapter("_test_listing")
+def test_register_and_get_adapter():
+    register(_ListingAdapter())
+    adapter = get_adapter("_listing")
     assert isinstance(adapter, _ListingAdapter)
 
 
 def test_get_unknown_adapter_raises_unknown_client():
-    with pytest.raises(UnknownClient, match="unknown API provider"):
-        get_api_adapter("__no_such_provider__")
+    with pytest.raises(UnknownClient, match="unknown adapter"):
+        get_adapter("__no_such_provider__")
 
 
-def test_registered_api_names_includes_registered():
-    register_api_adapter("_test_z", lambda k: _NonListingAdapter())
-    assert "_test_z" in registered_api_names()
+def test_registered_names_includes_registered():
+    register(_NonListingAdapter())
+    assert "_non-listing" in registered_names()
 
 
-def test_gemini_is_registered_by_default():
-    # The api package __init__ eagerly registers "gemini".
-    import generic_ml_cache_core.adapter.out.api  # noqa: F401 — triggers registration
-
-    assert "gemini" in registered_api_names()
+def test_builtins_registered_via_scanner():
+    # The scanner discovers @adapter-decorated classes automatically.
+    assert "gemini" in registered_names()
+    assert "anthropic" in registered_names()
+    assert "openai" in registered_names()
 
 
 # ---------------------------------------------------------------------------
@@ -106,23 +102,11 @@ def test_unknown_provider_returns_not_present():
 
 
 def test_listing_adapter_returns_models():
-    register_api_adapter("_test_api_list", lambda k: _ListingAdapter())
-    ml = list_api_models("_test_api_list")
+    register(_ListingAdapter())
+    ml = list_api_models("_listing")
     assert ml.present is True
     assert ml.supported is True
     assert [m.id for m in ml.models] == ["model-a", "model-b"]
-
-
-def test_listing_adapter_passes_api_key_to_factory():
-    received = {}
-
-    def factory(api_key):
-        received["key"] = api_key
-        return _ListingAdapter()
-
-    register_api_adapter("_test_api_key", factory)
-    list_api_models("_test_api_key", api_key="my-secret")
-    assert received["key"] == "my-secret"
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +115,8 @@ def test_listing_adapter_passes_api_key_to_factory():
 
 
 def test_non_listing_adapter_returns_supported_false():
-    register_api_adapter("_test_no_list", lambda k: _NonListingAdapter())
-    ml = list_api_models("_test_no_list")
+    register(_NonListingAdapter())
+    ml = list_api_models("_non-listing")
     assert ml.present is True
     assert ml.supported is False
     assert ml.models is None
@@ -144,10 +128,10 @@ def test_non_listing_adapter_returns_supported_false():
 
 
 def test_failing_list_adapter_returns_reason():
-    register_api_adapter("_test_fail_list", lambda k: _FailingListAdapter())
-    ml = list_api_models("_test_fail_list")
+    register(_FailingListAdapter())
+    ml = list_api_models("_fail-listing")
     assert ml.present is True
-    assert ml.supported is True  # provider is there; listing just failed
+    assert ml.supported is True
     assert ml.models is None
     assert "connection refused" in (ml.reason or "")
 
@@ -163,3 +147,28 @@ def test_listing_adapter_implements_model_listing_port():
 
 def test_non_listing_adapter_does_not_implement_model_listing_port():
     assert not isinstance(_NonListingAdapter(), ModelListingPort)
+
+
+# ---------------------------------------------------------------------------
+# whitelist filtering (0.16.0)
+# ---------------------------------------------------------------------------
+
+
+def test_list_api_models_whitelist_excludes_disabled_provider():
+    register(_ListingAdapter())
+    ml = list_api_models("_listing", whitelist=frozenset({"other"}))
+    assert ml.present is False
+    assert "unknown adapter" in (ml.reason or "").lower()
+
+
+def test_list_api_models_whitelist_allows_included_provider():
+    register(_ListingAdapter())
+    ml = list_api_models("_listing", whitelist=frozenset({"_listing"}))
+    assert ml.present is True
+    assert ml.supported is True
+
+
+def test_list_api_models_none_whitelist_allows_all():
+    register(_ListingAdapter())
+    ml = list_api_models("_listing", whitelist=None)
+    assert ml.present is True

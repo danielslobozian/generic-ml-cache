@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, FrozenSet, Optional
 
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -37,7 +37,6 @@ from generic_ml_cache_core.adapter.out.gateway.http_gateway_forward_adapter impo
 )
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
-from generic_ml_cache_core.common.errors import UnknownClient
 
 _BLOBS_DIRNAME = "blobs"
 _EXECUTIONS_DB = "executions.sqlite3"
@@ -78,17 +77,13 @@ def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> Bl
     return EncryptingBlobStore(blob_store, cipher, data_key)
 
 
-def resolve_execution_kind(client: str) -> ExecutionKind:
-    """Return the execution kind for ``client`` by checking both registries."""
-    from generic_ml_cache_core.adapter.out.client.registry import registered_names
-    from generic_ml_cache_core.adapter.out.api.api_registry import registered_api_names
+def resolve_execution_kind(
+    client: str, whitelist: Optional[FrozenSet[str]] = None
+) -> ExecutionKind:
+    """Return the execution kind for ``client`` via the unified adapter registry."""
+    from generic_ml_cache_core.adapter.registry import get_adapter
 
-    if client in registered_names():
-        return ExecutionKind.LOCAL_MANAGED
-    if client in registered_api_names():
-        return ExecutionKind.API
-    known = sorted(set(registered_names()) | set(registered_api_names()))
-    raise UnknownClient(f"unknown client {client!r}; registered: {', '.join(known) or '(none)'}")
+    return get_adapter(client, whitelist=whitelist).execution_kind
 
 
 def _build_runners(
@@ -97,15 +92,16 @@ def _build_runners(
     executable_override: Optional[ExecutableOverride],
     timeout: Optional[float],
     stream_path: Optional[str],
+    whitelist: Optional[FrozenSet[str]] = None,
 ) -> Dict[ExecutionKind, MlRunnerPort]:
     """Build the runners dict for the given client and kind."""
     if kind is ExecutionKind.LOCAL_MANAGED:
-        from generic_ml_cache_core.adapter.out.client.registry import get_adapter
+        from generic_ml_cache_core.adapter.registry import get_adapter
         from generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter import (
             AbstractPassthroughLocalAdapter,
         )
 
-        registered = get_adapter(client)
+        registered = get_adapter(client, whitelist=whitelist)
         cls = type(registered)
         exe_override = executable_override(client) if executable_override else None
         managed = cls(executable_override=exe_override, timeout=timeout, stream_path=stream_path)
@@ -115,9 +111,9 @@ def _build_runners(
             ExecutionKind.LOCAL_PASSTHROUGH: passthrough,
         }
     if kind is ExecutionKind.API:
-        from generic_ml_cache_core.adapter.out.api import get_api_adapter
+        from generic_ml_cache_core.adapter.registry import get_adapter
 
-        return {ExecutionKind.API: get_api_adapter(client)}
+        return {ExecutionKind.API: get_adapter(client, whitelist=whitelist)}
     # client=None: provide a stub API runner so cache-replay and management commands
     # can still serve API-kind executions from the store without a real provider.
     from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
@@ -133,6 +129,7 @@ def build_use_cases(
     stream_path: Optional[str] = None,
     client: Optional[str] = None,
     max_size: Optional[int] = None,
+    whitelist: Optional[FrozenSet[str]] = None,
 ) -> WiredUseCases:
     store_root = Path(store_root)
     _recover_store(store_root)
@@ -141,8 +138,10 @@ def build_use_cases(
     repository = SqliteExecutionRepository(store_root / _EXECUTIONS_DB, clock)
     metrics = JournalMetrics(AccessRegistry(store_root))
     file_fingerprint = FilesystemFileFingerprint()
-    kind = resolve_execution_kind(client) if client is not None else None
-    runners = _build_runners(client, kind, executable_override, timeout, stream_path)
+    kind = resolve_execution_kind(client, whitelist=whitelist) if client is not None else None
+    runners = _build_runners(
+        client, kind, executable_override, timeout, stream_path, whitelist=whitelist
+    )
     purge = PurgeService(repository, blob_store, metrics)
     gateway_forward = HttpGatewayForwardAdapter()
     run_gateway = RunMlGatewayService(

@@ -10,15 +10,19 @@ passed explicitly.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import FrozenSet, Optional
 
-from generic_ml_cache_core.adapter.out.api.api_registry import get_api_adapter
+from generic_ml_cache_core.adapter.registry import get_adapter
 from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
 
-def list_api_models(provider: str, api_key: Optional[str] = None) -> ModelListing:
+def list_api_models(
+    provider: str,
+    api_key: Optional[str] = None,
+    whitelist: Optional[FrozenSet[str]] = None,
+) -> ModelListing:
     """List models for a registered API provider.
 
     Returns a :class:`ModelListing` in all cases — never raises for an absent or
@@ -28,9 +32,12 @@ def list_api_models(provider: str, api_key: Optional[str] = None) -> ModelListin
     * provider registered but adapter does not implement ModelListingPort →
       ``supported=False``
     * provider listed → ``supported=True`` and ``models`` populated
+
+    ``api_key`` is accepted for backward compatibility; adapters resolve their
+    key from the environment when it is not passed.
     """
     try:
-        adapter = get_api_adapter(provider, api_key)
+        adapter = get_adapter(provider, whitelist=whitelist)
     except UnknownClient as exc:
         return ModelListing(name=provider, present=False, supported=False, reason=str(exc))
 

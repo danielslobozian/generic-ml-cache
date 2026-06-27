@@ -9,8 +9,7 @@ from typing import List
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from generic_ml_cache_core.adapter.out.api.api_registry import registered_api_names
-from generic_ml_cache_core.adapter.out.client.registry import registered_names
+from generic_ml_cache_core.adapter.registry import registered_names
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.metrics import is_prometheus_available
@@ -49,7 +48,8 @@ def get_info(request: Request) -> InfoResponse:
     """Return daemon version, store path, active adapters, and bound session."""
     store_root: str = str(request.app.state.store_root)
     session_id: str | None = request.app.state.session_id
-    all_adapter_names: List[str] = sorted(set(registered_names()) | set(registered_api_names()))
+    whitelist = request.app.state.whitelist
+    all_adapter_names: List[str] = registered_names(whitelist=whitelist)
     stats = request.app.state.eviction_stats
     return InfoResponse(
         version=__version__,
