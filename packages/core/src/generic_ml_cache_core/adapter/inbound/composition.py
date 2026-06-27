@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
 from typing import Callable, Dict, FrozenSet, Optional, cast
@@ -26,6 +26,10 @@ from generic_ml_cache_core.application.port.out.blob_store_port import BlobStore
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
 )
+from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
+    NullDiagnosticsAdapter,
+)
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
@@ -71,6 +75,7 @@ class WiredUseCases:
     repository: ExecutionRepositoryPort
     metrics: MetricsPort
     run_gateway: RunMlGatewayService
+    diag: DiagnosticsPort = field(default_factory=NullDiagnosticsAdapter)
 
 
 def _recover_store(store_root: Path) -> None:
@@ -157,26 +162,29 @@ def build_use_cases(
     client: Optional[str] = None,
     max_size: Optional[int] = None,
     whitelist: Optional[FrozenSet[str]] = None,
+    diag: Optional[DiagnosticsPort] = None,
 ) -> WiredUseCases:
     store_root = Path(store_root)
+    _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
     _recover_store(store_root)
     clock = SystemClock()
     blob_store = _resolve_blob_store(store_root, encryption_token)
-    run_migrations(conn_factory)
+    run_migrations(conn_factory, _diag)
     repository = SqliteExecutionRepository(conn_factory, clock)
-    metrics = JournalMetrics(AccessRegistry(conn_factory))
+    metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
     kind = resolve_execution_kind(client, whitelist=whitelist) if client is not None else None
     runners = _build_runners(
         client, kind, executable_override, timeout, stream_path, whitelist=whitelist
     )
-    purge = PurgeService(repository, blob_store, metrics)
+    purge = PurgeService(repository, blob_store, metrics, diag=_diag)
     gateway_forward = HttpGatewayForwardAdapter()
     run_gateway = RunMlGatewayService(
         blob_store=blob_store,
         gateway_forward_port=gateway_forward,
         repository=repository,
         metrics=metrics,
+        diag=_diag,
     )
     return WiredUseCases(
         run_ml=RunMlExecutionService(
@@ -187,6 +195,7 @@ def build_use_cases(
             metrics,
             purge_service=purge,
             max_size=max_size,
+            diag=_diag,
         ),
         probe=ProbeService(file_fingerprint, repository),
         purge=purge,
@@ -194,6 +203,7 @@ def build_use_cases(
         repository=repository,
         metrics=metrics,
         run_gateway=run_gateway,
+        diag=_diag,
     )
 
 

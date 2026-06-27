@@ -29,6 +29,7 @@ dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
+  "structlog>=26",
 ]
 
 [project.urls]

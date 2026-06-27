@@ -84,6 +84,10 @@ DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "persist": "cache", "time
 
 _MODES = {m.value for m in CacheMode}
 _DEPTHS = {d.value for d in PersistenceDepth}
+_LOG_LEVELS = {"DEBUG", "INFO", "WARN", "ERROR"}
+#: Name of the diagnostic log file written inside the store directory.
+#: Defined here so there is exactly one authoritative place for this name.
+LOG_FILE_NAME = "gmlcache.log"
 
 #: written by ``gmlcache init`` (and only then); ``{store}`` is filled with the
 #: resolved per-user default so the user can see and edit where the store lives.
@@ -126,6 +130,10 @@ trust_scan = false
 # [executables]
 # claude = /opt/claude/bin/claude
 # codex  = /usr/local/bin/codex
+
+# Optional: technical diagnostic logging. Off by default.
+# log_level = INFO       # DEBUG / INFO / WARN / ERROR
+# log_file = /var/log/gmlcache/gmlcache.log   # default: <store>/gmlcache.log
 """
 
 
@@ -187,6 +195,8 @@ class FileConfig:
     adapters: Optional[FrozenSet[str]] = None
     executables: Dict[str, str] = field(default_factory=dict)
     source: Optional[Path] = None
+    log_level: Optional[str] = None
+    log_file: Optional[str] = None
 
 
 def _parse_timeout(raw: str, where: str) -> float:
@@ -298,6 +308,16 @@ def load(path: Optional[Path] = None) -> FileConfig:
     adapters_raw = get("adapters")
     adapters = _parse_adapters(adapters_raw, f"in {p}") if adapters_raw is not None else None
 
+    log_level = get("log_level")
+    if log_level is not None and log_level.upper() not in _LOG_LEVELS:
+        raise ConfigError(
+            f"invalid log_level {log_level!r} in {p}; expected one of {sorted(_LOG_LEVELS)}"
+        )
+    if log_level is not None:
+        log_level = log_level.upper()
+
+    log_file = get("log_file")
+
     # [executables]: client name -> path/command. Kept verbatim and leniently
     # (unknown client keys are not an error -- the adapter registry is
     # extensible, and a key is only ever consulted when that client is run).
@@ -318,6 +338,8 @@ def load(path: Optional[Path] = None) -> FileConfig:
         adapters=adapters,
         executables=executables,
         source=p,
+        log_level=log_level,
+        log_file=log_file,
     )
 
 
@@ -355,6 +377,8 @@ def resolve_settings(
     mode_flag: Optional[str] = None,
     persist_flag: Optional[str] = None,
     timeout_flag: Optional[float] = None,
+    log_level_flag: Optional[str] = None,
+    log_file_flag: Optional[str] = None,
 ) -> Dict[str, Tuple[object, str]]:
     """Resolve each setting to ``(value, source)`` by the documented precedence.
 
@@ -393,13 +417,29 @@ def resolve_settings(
     max_age_env_raw = env.get("GMLCACHE_MAX_AGE")
     max_age_env = _parse_age(max_age_env_raw, "in GMLCACHE_MAX_AGE") if max_age_env_raw else None
 
+    log_level_env = env.get("GMLCACHE_LOG_LEVEL")
+    if log_level_env is not None and log_level_env.upper() not in _LOG_LEVELS:
+        raise ConfigError(
+            f"invalid GMLCACHE_LOG_LEVEL {log_level_env!r}; expected one of {sorted(_LOG_LEVELS)}"
+        )
+    if log_level_env is not None:
+        log_level_env = log_level_env.upper()
+    if log_level_flag is not None:
+        log_level_flag = log_level_flag.upper()
+
+    log_file_env = env.get("GMLCACHE_LOG_FILE") or None
+
+    # Resolve store first; log_file defaults to <store>/LOG_FILE_NAME.
+    store_setting = _pick(None, None, file_cfg.store, str(default_store_path()))
+    default_log_file = str(Path(str(store_setting[0])) / LOG_FILE_NAME)
+
     return {
         "mode": _pick(mode_flag, mode_env, file_cfg.mode, DEFAULTS["mode"]),
         # persist: per-call depth (meter/cache/dataset), same precedence as mode.
         "persist": _pick(persist_flag, persist_env, file_cfg.persist, DEFAULTS["persist"]),
         # store: config file or built-in per-user default only. No flag, no env --
         # a per-call store override would fork the cache and defeat reuse.
-        "store": _pick(None, None, file_cfg.store, str(default_store_path())),
+        "store": store_setting,
         "timeout": _pick(timeout_flag, timeout_env, file_cfg.timeout, DEFAULTS["timeout"]),
         # trust_scan has no CLI flag -- a standing, deliberate choice only.
         "trust_scan": _pick(None, trust_env, file_cfg.trust_scan, False),
@@ -409,6 +449,10 @@ def resolve_settings(
         # max_age: off (None) by default = no time-based eviction. Standing policy,
         # config/env only, no per-call flag. Value is seconds since last access.
         "max_age": _pick(None, max_age_env, file_cfg.max_age, None),
+        # log_level: off (None) by default. Enabled via flag, env, or config key.
+        "log_level": _pick(log_level_flag, log_level_env, file_cfg.log_level, None),
+        # log_file: flag > env > config > <store>/gmlcache.log.
+        "log_file": _pick(log_file_flag, log_file_env, file_cfg.log_file, default_log_file),
     }
 
 
