@@ -436,12 +436,20 @@ return blob_path.read_bytes()
   tool report. "I removed all of X" without the search that proves it is how a stray
   name from a deleted feature survives. Evidence first, claim second.
 - **Green means both linters and all coverage gates.** A change is not green until
-  all five checks pass:
+  all seven checks pass:
   1. `ruff check packages/`
   2. `ruff format --check packages/`
   3. `python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-fail-under=80 --cov-report=xml:packages/core/coverage.xml`
   4. `python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-fail-under=80 --cov-report=xml:packages/cli/coverage.xml`
   5. `python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-fail-under=80 --cov-report=xml:packages/daemon/coverage.xml`
+  6. `lint-imports` — enforces the hexagonal import contracts declared in `.importlinter`.
+     Both contracts must be KEPT: the application ring must not import adapters, and
+     driver packages (CLI, daemon) must not reach past the composition root into
+     `adapter.out`. A BROKEN contract is an architecture defect, not a style issue.
+  7. `pyright` — static type checking (basic mode) against `pyrightconfig.json`.
+     Zero errors required. `# type: ignore` is acceptable only for provably safe casts
+     that cannot be expressed in the type system; a comment must be present explaining
+     why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
 
   Running only the linters, or skipping coverage, is a partial check, not a pass.
   The XMLs produced by (3), (4), and (5) are the exact files Sonar ingests — running
