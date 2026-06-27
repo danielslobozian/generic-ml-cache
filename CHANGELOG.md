@@ -15,6 +15,74 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-06-27
+
+### Added
+
+- **Unified SQLite database** (core, cli, daemon): `executions.sqlite3` and
+  `registry.sqlite3` are merged into one file. All tables — `call_identities`,
+  `executions`, `artifacts`, `token_usage`, `execution_tags`, `access_events`,
+  `session_tags`, `session_specs` — live in a single database owned by the CLI or
+  daemon caller.
+- **Schema migration runner** (core): `adapter/inbound/migration.py` provides
+  `run_migrations(conn_factory)` and `schema_version(conn_factory)`. Migrations are
+  pure SQL files in `core/migrations/`, tracked with SQLite's built-in
+  `PRAGMA user_version` (no external dependency). Each migration is applied
+  atomically inside a single `BEGIN EXCLUSIVE / COMMIT` block.
+- **`packages/common`** (internal): shared `datasource.py` with a
+  `sqlite_connection_factory(path)` helper used by both CLI and daemon to build the
+  injected `conn_factory`.
+- **`FilesystemStoreLock`** (core): replaces `SqliteStoreLock`. Renamed to reflect
+  that SQLite is the locking mechanism (OS-level file lock via `BEGIN EXCLUSIVE`),
+  not the subject of the lock. Behaviour is unchanged.
+- **`gmlcache doctor` shows schema version** (cli): the `doctor` command now prints
+  how many migrations are applied and the latest migration ID; `--json` includes a
+  `"schema"` key.
+- **`tools/gateway-probe/probe.py`**: standalone HTTP probe server for manual
+  gateway integration testing.
+- **`tools/claude-code/settings.json`**: committed Claude Code settings template
+  (status-bar wiring); the `format-status-line.py` script moved from `scripts/` to
+  `tools/claude-code/`.
+
+### Changed
+
+- **`build_use_cases` signature** (core, cli, daemon): first parameter is now
+  `conn_factory: Callable[[], Connection]` instead of `store_root: Path`. Core no
+  longer calls `sqlite3.connect()` internally — connection ownership belongs to the
+  caller.
+- **`SqliteExecutionRepository`** (core): accepts `conn_factory` instead of a file
+  path; removed the self-contained `_ensure_schema()` setup call.
+- **`AccessRegistry`** (core): accepts `conn_factory` instead of `root: Path`;
+  removed `_ensure_*` guards (schema is guaranteed by `run_migrations`).
+
+### Removed
+
+- **`yoyo-migrations` dependency** (core): replaced by the built-in
+  `PRAGMA user_version` migration tracker. Eliminates a runtime dependency that
+  called `socket.getfqdn()` on every first migration run — a 30+ second hang on
+  macOS-15/26 GitHub Actions runners (upstream: actions/setup-python#1223).
+- **`sqlite_store_lock.py`** (core): renamed to `filesystem_store_lock.py`.
+
+## [0.17.0] - 2026-06-27
+
+### Added
+
+- **`py.typed` markers** (core, cli): both packages now ship `py.typed`; consumers
+  get IDE type inference and type-safe imports without extra stubs.
+- **`import-linter` hexagonal contracts** (quality): four contracts enforced in CI —
+  application-ring isolation (core may not import from `adapter`), driver-package
+  isolation (cli/daemon may not import `adapter.out` directly), domain purity, and
+  adapter isolation. Zero violations at release.
+- **`pyright` type-checking gate** (quality): all 51 pre-existing type errors resolved;
+  pyright now runs clean as a hard CI gate.
+- **Pre-commit hooks** (quality): `pre-commit` config adds `ruff`, `lint-imports`, and
+  `pyright` hooks; `AGENTS.md` documents the green definition.
+- **Claude Code status-bar script** (`tools/claude-code/format-status-line.py`):
+  two-line status bar with git branch, CI/PR state, store quota, and auto-refresh;
+  hyperlinked PR numbers via OSC 8 terminal escape.
+- **README quality badges and adapter matrix** (docs): CI, PyPI, and licence badges;
+  table of supported adapters and storage backends.
+
 ## [0.16.0] - 2026-06-27
 
 ### Added
