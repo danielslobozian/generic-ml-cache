@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
+from sqlite3 import Connection
 from typing import Callable, Dict, List, Optional, Tuple
 
 try:
@@ -70,6 +72,19 @@ from generic_ml_cache_core.common.errors import (
 )
 
 from . import __version__, config
+
+_DB_NAME = "executions.sqlite3"
+
+
+def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
+    db_path = store_root / _DB_NAME
+
+    def _connect() -> Connection:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(str(db_path))
+
+    return _connect
+
 
 #: capabilities a caller may open with --grant, sourced from the adapter seam so
 #: the CLI choices, the help, and what the adapters implement can never drift.
@@ -322,6 +337,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 4
     execution, error = _run_cached_execution(
         lambda: build_use_cases(
+            _db_conn_factory(store_root),
             store_root,
             _spec_executable_override(spec),
             spec["timeout"],
@@ -380,6 +396,7 @@ def _cmd_alias(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     execution, error = _run_cached_execution(
         lambda: build_use_cases(
+            _db_conn_factory(store_root),
             store_root,
             lambda _client: executable,
             float(settings["timeout"][0]) if settings["timeout"][0] is not None else None,  # type: ignore[arg-type]
@@ -449,6 +466,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                 # spawner), never from disk; a public store ignores it.
                 token = os.environ.get("GMLCACHE_TOKEN") or None
                 wired = build_use_cases(
+                    _db_conn_factory(store_root),
                     store_root,
                     _spec_executable_override(spec),
                     spec["timeout"],
@@ -574,7 +592,7 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
         return 4
     token = _resolve_token(args)
     try:
-        wired = build_use_cases(store_root, encryption_token=token)
+        wired = build_use_cases(_db_conn_factory(store_root), store_root, encryption_token=token)
         execution = wired.repository.find_current(key)
         if execution is None:
             print(
@@ -733,7 +751,7 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
     token = _resolve_token(args)
     output_dir = Path(args.output_dir)
     try:
-        wired = build_use_cases(store_root, encryption_token=token)
+        wired = build_use_cases(_db_conn_factory(store_root), store_root, encryption_token=token)
         execution = wired.repository.find_current(key)
         if execution is None:
             print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
@@ -784,7 +802,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
         client_args=list(getattr(args, "client_arg", None) or []),
         grants=list(getattr(args, "grant", None) or []),
     )
-    report = build_use_cases(store_root).probe.execute(command)
+    report = build_use_cases(_db_conn_factory(store_root), store_root).probe.execute(command)
     execution = report.execution
     usage = execution.token_usage if execution is not None else None
     file_count = (
@@ -838,7 +856,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    matches = build_use_cases(store_root).repository.find_current_by_key_prefix(args.execution)
+    matches = build_use_cases(_db_conn_factory(store_root), store_root).repository.find_current_by_key_prefix(args.execution)
     if not matches:
         print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
         return 4
@@ -1205,7 +1223,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         if settings["max_size"][0] is not None
         else None
     )
-    wired = build_use_cases(Path(str(settings["store"][0])))
+    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
     summaries = wired.repository.current_execution_summaries()
     store_bytes = wired.repository.total_stored_bytes()
     access = wired.metrics.event_counts()
@@ -1309,7 +1327,7 @@ def _cmd_purge(args: argparse.Namespace) -> int:
             )
             return 4
 
-    wired = build_use_cases(Path(str(settings["store"][0])))
+    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
     svc = wired.purge
 
     if key:
@@ -1363,7 +1381,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(Path(str(settings["store"][0])))
+    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
     hit_counts = wired.metrics.hit_counts_by_key()
     entries = [
         {
@@ -1423,7 +1441,7 @@ def _cmd_tags(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    wired = build_use_cases(Path(str(settings["store"][0])))
+    wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
     counts: dict = {}
     for summary in wired.repository.current_execution_summaries():
         for tag in wired.repository.tags_for(summary.execution_key):
@@ -1515,7 +1533,9 @@ def _cmd_export(args: argparse.Namespace) -> int:
     skipped_no_input = 0
     try:
         wired = build_use_cases(
-            Path(str(settings["store"][0])), encryption_token=_resolve_token(args)
+            _db_conn_factory(Path(str(settings["store"][0]))),
+            Path(str(settings["store"][0])),
+            encryption_token=_resolve_token(args),
         )
         for summary in wired.repository.current_execution_summaries():
             tags = wired.repository.tags_for(summary.execution_key)
@@ -1689,7 +1709,7 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
         return 2
     if tags or spec:
         settings = config.resolve_settings(config.load())
-        wired = build_use_cases(Path(str(settings["store"][0])))
+        wired = build_use_cases(_db_conn_factory(Path(str(settings["store"][0]))), Path(str(settings["store"][0])))
         for tag in tags:
             wired.metrics.add_session_tag(session_id, tag)
         if spec is not None:
@@ -1712,7 +1732,7 @@ def _cmd_session_update(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    wired = build_use_cases(store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root)
     wired.metrics.set_session_spec(args.session_id, spec)
     if not args.json:
         print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
@@ -1739,7 +1759,7 @@ def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    wired = build_use_cases(store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root)
     wired.metrics.clear_session_spec(args.session_id)
     if not args.json:
         print(f"spec cleared for session {args.session_id}")
@@ -1848,7 +1868,7 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     if not session_id and not tag:
         print("gmlc: provide a session id or --tag <tag>", file=sys.stderr)
         return 1
-    wired = build_use_cases(store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root)
 
     if tag:
         return _cmd_session_report_by_tag(wired, tag, args.json)
@@ -1914,7 +1934,7 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4
-    wired = build_use_cases(store_root)
+    wired = build_use_cases(_db_conn_factory(store_root), store_root)
     for tag in args.add:
         wired.metrics.add_session_tag(args.session_id, tag)
     for tag in args.remove:

@@ -2,7 +2,8 @@
   "include": [
     "packages/core/src",
     "packages/cli/src",
-    "packages/daemon/src"
+    "packages/daemon/src",
+    "packages/common/src"
   ],
   "pythonVersion": "3.9",
   "typeCheckingMode": "basic",

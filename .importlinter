@@ -47,7 +47,7 @@ ignore_imports =
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.encrypting_blob_store
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.store_encryptor
-    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.persistence.filesystem_store_lock
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.storage.filesystem_blob_store
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.gateway.http_gateway_forward_adapter
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher

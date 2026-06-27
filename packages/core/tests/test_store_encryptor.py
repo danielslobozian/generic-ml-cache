@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import pytest
 
 pytest.importorskip("cryptography")
@@ -14,8 +15,8 @@ from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_sto
     FilesystemEncryptionManifestStore,
 )
 from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor  # noqa: E402
-from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import (  # noqa: E402
-    SqliteStoreLock,
+from generic_ml_cache_core.adapter.out.persistence.filesystem_store_lock import (  # noqa: E402
+    FilesystemStoreLock,
 )
 from generic_ml_cache_core.adapter.out.storage.filesystem_blob_store import (  # noqa: E402
     FilesystemBlobStore,
@@ -39,7 +40,7 @@ def _seed(store, items):
 
 def _encryptor(store):
     return StoreEncryptor(
-        store, FilesystemEncryptionManifestStore(store), SqliteStoreLock(store), AesGcmCipher()
+        store, FilesystemEncryptionManifestStore(store), FilesystemStoreLock(store), AesGcmCipher()
     )
 
 
@@ -51,8 +52,18 @@ def _token():
     return AesGcmCipher().generate_token()
 
 
+def _db_factory(store):
+    db_path = store / "executions.sqlite3"
+
+    def _connect():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(str(db_path))
+
+    return _connect
+
+
 def _read_decrypted(store, token, key):
-    return build_use_cases(store, encryption_token=token).blob_store.get(key)
+    return build_use_cases(_db_factory(store), store, encryption_token=token).blob_store.get(key)
 
 
 def _raw(store, key):
@@ -102,7 +113,7 @@ def test_rotate_swaps_token_without_re_encrypting_blobs(tmp_path):
     assert _raw(store, "k") == raw_before  # blob bytes unchanged (data key unchanged)
     assert _read_decrypted(store, new, "k") == b"secret"  # new token reads
     with pytest.raises(WrongEncryptionToken):
-        build_use_cases(store, encryption_token=old)  # old token rejected
+        build_use_cases(_db_factory(store), store, encryption_token=old)  # old token rejected
 
 
 # --- invalidate --------------------------------------------------------------

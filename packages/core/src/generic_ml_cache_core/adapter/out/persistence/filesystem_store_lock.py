@@ -1,12 +1,16 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""SqliteStoreLock: an exclusive store lock built on SQLite's own locking.
+"""FilesystemStoreLock: an exclusive store lock for whole-store operations.
 
-SQLite's ``BEGIN EXCLUSIVE`` takes an OS-level file lock, which gives us two
-properties for free and cross-platform (Linux/macOS/Windows): a second holder is
-rejected, and the lock is **released automatically when the process dies** — so a
-crashed migration never leaves a stale lock. ``timeout=0`` makes acquisition
-fail fast instead of blocking.
+Uses SQLite's ``BEGIN EXCLUSIVE`` as the locking mechanism — it acquires an
+OS-level file lock that is cross-platform (Linux/macOS/Windows) and is
+**released automatically when the process dies**, so a crashed encryption
+migration never leaves a stale lock. ``timeout=0`` makes acquisition fail fast
+instead of blocking.
+
+SQLite is the *mechanism* here, not the subject of the lock. This lock guards
+the store as a whole (e.g. during encrypt/decrypt migrations). Per-job worker
+lifecycle locks are a separate concern at the CLI layer.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from generic_ml_cache_core.common.errors import StoreLocked
 _FILENAME = "store.lock"
 
 
-class SqliteStoreLock(StoreLockPort):
+class FilesystemStoreLock(StoreLockPort):
     """Whole-store exclusive lock over ``<store>/store.lock``."""
 
     def __init__(self, store_root: Path) -> None:

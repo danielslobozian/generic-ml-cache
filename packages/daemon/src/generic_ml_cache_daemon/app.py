@@ -5,13 +5,27 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import FrozenSet, Optional
+from sqlite3 import Connection
+from typing import Callable, FrozenSet, Optional
 
 from fastapi import FastAPI
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+
+_DB_NAME = "executions.sqlite3"
+
+
+def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
+    db_path = store_root / _DB_NAME
+
+    def _connect() -> Connection:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return sqlite3.connect(str(db_path), check_same_thread=False)
+
+    return _connect
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
@@ -55,7 +69,7 @@ def create_app(
         A fully wired FastAPI application. Routes are mounted by this function;
         callers should not mount additional routes after construction.
     """
-    wired_use_cases = build_use_cases(store_root, client="claude")
+    wired_use_cases = build_use_cases(_db_conn_factory(store_root), store_root, client="claude")
 
     eviction_stats = EvictionStats(
         max_size=max_size,
