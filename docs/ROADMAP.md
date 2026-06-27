@@ -415,7 +415,7 @@ separate file.
 - No automatic backup — the store is local and single-user; docs recommend a manual
   copy before upgrading from `0.x`.
 
-### 0.19.0 — Technical diagnostics logging
+### 0.19.0 — Technical diagnostics logging *(released 2026-06-28)*
 
 A second, distinct observability subsystem — technical diagnostics — added as a pure
 hexagonal outbound port. The journal (product observability) is untouched and
