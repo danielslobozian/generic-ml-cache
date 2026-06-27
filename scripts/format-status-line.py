@@ -375,10 +375,14 @@ def pr_section() -> str:
     else:
         return ""
 
-    try:
-        _PR_CACHE.write_text(json.dumps({"ts": time.time(), "line": line}))
-    except OSError:
-        pass
+    # Only cache when we have check data — an empty checks result is transient
+    # (PR just opened, CI not yet queued) and not worth freezing for 30 s.
+    has_checks = any(c in line for c in ("✓", "✗", "⋯"))
+    if has_checks:
+        try:
+            _PR_CACHE.write_text(json.dumps({"ts": time.time(), "line": line}))
+        except OSError:
+            pass
     return line
 
 
