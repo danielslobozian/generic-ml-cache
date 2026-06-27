@@ -31,14 +31,12 @@ except ImportError:  # completion is a convenience; never let its absence break 
     argcomplete = None
 
 from generic_ml_cache_core.adapter.inbound.composition import (
+    build_store_encryptor,
     build_use_cases,
+    get_encryption_state,
+    load_cipher,
     resolve_execution_kind,
 )
-from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (
-    FilesystemEncryptionManifestStore,
-)
-from generic_ml_cache_core.adapter.out.crypto.store_encryptor import StoreEncryptor
-from generic_ml_cache_core.adapter.out.persistence.sqlite_store_lock import SqliteStoreLock
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
@@ -399,7 +397,7 @@ def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
     # worker through its environment (never to disk), the same exposure as a sync call holding
     # the token for the run's duration. So require it here, and gate on the store's actual
     # encryption state — not on whether a token happened to be passed.
-    encrypted = FilesystemEncryptionManifestStore(store_root).state() is EncryptionState.ENCRYPTED
+    encrypted = get_encryption_state(store_root) is EncryptionState.ENCRYPTED
     if encrypted and token is None:
         print(
             "gmlc: the store is encrypted — provide the token to detach (--token or GMLCACHE_TOKEN)",
@@ -979,7 +977,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     path = config.resolve_config_path()
     loaded = file_cfg.source is not None
-    encryption = FilesystemEncryptionManifestStore(Path(str(settings["store"][0]))).state().value
+    encryption = get_encryption_state(Path(str(settings["store"][0]))).value
 
     adapters_whitelist = sorted(file_cfg.adapters) if file_cfg.adapters is not None else None
 
@@ -1555,24 +1553,11 @@ def _resolve_token(args: argparse.Namespace) -> Optional[str]:
 
 
 def _load_cipher():
-    """Build the cipher, with a friendly error if the optional extra is missing."""
-    try:
-        from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
-    except ImportError as exc:  # pragma: no cover - exercised only without the extra
-        raise SystemExit(
-            "error: encryption needs an optional dependency — install with "
-            '`pip install "generic-ml-cache-core[encryption]"`'
-        ) from exc
-    return AesGcmCipher()
+    return load_cipher()
 
 
-def _store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
-    return StoreEncryptor(
-        store_root,
-        FilesystemEncryptionManifestStore(store_root),
-        SqliteStoreLock(store_root),
-        cipher,
-    )
+def _store_encryptor(store_root: Path, cipher=None):
+    return build_store_encryptor(store_root, cipher)
 
 
 def _store_root() -> Optional[Path]:

@@ -15,6 +15,7 @@ from generic_ml_cache_core.adapter.out.client.discover import (
     list_models_all,
     probe_all,
 )
+from generic_ml_cache_core.application.domain.model.encryption.encryption_state import EncryptionState
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.execution_repository_port import ExecutionRepositoryPort
@@ -174,4 +175,35 @@ def build_use_cases(
         repository=repository,
         metrics=metrics,
         run_gateway=run_gateway,
+    )
+
+
+# -- Encryption helpers -------------------------------------------------------
+# Exposed here so driver packages (CLI, daemon) can manage store encryption
+# without importing adapter.out types directly.
+
+def get_encryption_state(store_root: Path) -> EncryptionState:
+    """Return the current encryption state of the store at ``store_root``."""
+    return FilesystemEncryptionManifestStore(store_root).state()
+
+
+def load_cipher():
+    """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
+    try:
+        from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
+    except ImportError as exc:  # pragma: no cover
+        raise SystemExit(
+            "error: encryption needs an optional dependency — install with "
+            '`pip install "generic-ml-cache-core[encryption]"`'
+        ) from exc
+    return AesGcmCipher()
+
+
+def build_store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
+    """Construct a StoreEncryptor for the store at ``store_root``."""
+    return StoreEncryptor(
+        store_root,
+        FilesystemEncryptionManifestStore(store_root),
+        SqliteStoreLock(store_root),
+        cipher,
     )
