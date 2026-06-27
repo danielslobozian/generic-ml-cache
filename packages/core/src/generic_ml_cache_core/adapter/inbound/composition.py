@@ -11,6 +11,8 @@ from typing import Callable, Dict, FrozenSet, Optional
 from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.out.execution_repository_port import ExecutionRepositoryPort
+from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
@@ -50,8 +52,8 @@ class WiredUseCases:
     probe: ProbeService
     purge: PurgeService
     blob_store: BlobStorePort
-    repository: SqliteExecutionRepository
-    metrics: JournalMetrics
+    repository: ExecutionRepositoryPort
+    metrics: MetricsPort
     run_gateway: RunMlGatewayService
 
 
