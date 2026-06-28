@@ -14,7 +14,7 @@ from generic_ml_cache_core.application.usecase.session_report import (
     build_session_report,
 )
 
-from generic_ml_cache_daemon.models.session import (
+from generic_ml_cache_daemon.presenters.session import (
     ModelUsageBody,
     SessionCreateBody,
     SessionListResponse,

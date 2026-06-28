@@ -36,6 +36,39 @@ import sys
 import time
 
 
+def _process_directive(verb: str, parts: list, system: str) -> tuple:
+    """Execute one directive line; return (acted, exit_code_or_None, terminate)."""
+    if verb == "STDOUT" and len(parts) >= 2:
+        sys.stdout.write(parts[1] + ("" if len(parts) < 3 else " " + parts[2]) + "\n")
+        return True, None, False
+    if verb == "STDERR" and len(parts) >= 2:
+        sys.stderr.write(parts[1] + ("" if len(parts) < 3 else " " + parts[2]) + "\n")
+        return True, None, False
+    if verb == "WRITE" and len(parts) == 3:
+        relpath, b64 = parts[1], parts[2]
+        data = base64.b64decode(b64.encode("ascii"))
+        os.makedirs(os.path.dirname(relpath) or ".", exist_ok=True)
+        with open(relpath, "wb") as fh:
+            fh.write(data)
+        return True, None, False
+    if verb == "EXIT" and len(parts) >= 2:
+        return True, int(parts[1]), False
+    if verb == "SLEEP" and len(parts) >= 2:
+        # Sleep far longer than any test timeout so the only way the call ends
+        # in time is by being killed -- used to exercise the timeout path.
+        time.sleep(float(parts[1]))
+        return True, None, False
+    if verb == "OUTSIDE" and len(parts) >= 2:
+        if "PRIME DIRECTIVE" in system:
+            sys.stderr.write("refusing to touch path outside the folder\n")
+            return True, 9, True
+        # non-compliant fallback (not exercised by the happy-path tests)
+        with open(parts[1], "w", encoding="utf-8") as fh:
+            fh.write("escaped")
+        return True, None, False
+    return False, None, False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -64,36 +97,13 @@ def main() -> int:
 
     for line in directives:
         parts = line.split(" ", 2)
-        verb = parts[0]
-        if verb == "STDOUT" and len(parts) >= 2:
-            sys.stdout.write(parts[1] + ("" if len(parts) < 3 else " " + parts[2]) + "\n")
+        did_act, code, terminate = _process_directive(parts[0], parts, system)
+        if did_act:
             acted = True
-        elif verb == "STDERR" and len(parts) >= 2:
-            sys.stderr.write(parts[1] + ("" if len(parts) < 3 else " " + parts[2]) + "\n")
-            acted = True
-        elif verb == "WRITE" and len(parts) == 3:
-            relpath, b64 = parts[1], parts[2]
-            data = base64.b64decode(b64.encode("ascii"))
-            os.makedirs(os.path.dirname(relpath) or ".", exist_ok=True)
-            with open(relpath, "wb") as fh:
-                fh.write(data)
-            acted = True
-        elif verb == "EXIT" and len(parts) >= 2:
-            exit_code = int(parts[1])
-            acted = True
-        elif verb == "SLEEP" and len(parts) >= 2:
-            # Sleep far longer than any test timeout so the only way the call ends
-            # in time is by being killed -- used to exercise the timeout path.
-            time.sleep(float(parts[1]))
-            acted = True
-        elif verb == "OUTSIDE" and len(parts) >= 2:
-            acted = True
-            if "PRIME DIRECTIVE" in system:
-                sys.stderr.write("refusing to touch path outside the folder\n")
-                return 9
-            # non-compliant fallback (not exercised by the happy-path tests)
-            with open(parts[1], "w", encoding="utf-8") as fh:
-                fh.write("escaped")
+        if terminate:
+            return code
+        if code is not None:
+            exit_code = code
 
     if not acted:
         with open("output.txt", "w", encoding="utf-8") as fh:

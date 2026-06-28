@@ -14,7 +14,7 @@ from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command impor
     RunMlGatewayCommand,
 )
 
-from generic_ml_cache_daemon.models.gateway import MessagesRequest
+from generic_ml_cache_daemon.presenters.gateway import MessagesRequest
 
 router = APIRouter(prefix="/gateway/claude")
 

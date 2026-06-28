@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Request  # noqa: F401
 
-from generic_ml_cache_daemon.models.execution import (
+from generic_ml_cache_daemon.presenters.execution import (
     ExecutionListResponse,
     ExecutionSummaryResponse,
     GlobalStatsResponse,

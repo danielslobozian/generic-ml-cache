@@ -18,6 +18,7 @@ from typing import List
 import pytest
 
 from generic_ml_cache_cli import cli
+import generic_ml_cache_cli.controllers.run as run_ctrl
 from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.common.errors import RunInterrupted
 from generic_ml_cache_core.adapter.out.client.isolation import record_real_call
@@ -79,6 +80,6 @@ def test_cli_run_maps_interruption_to_a_distinct_exit_code(monkeypatch):
     class _Wired:
         run_ml = _RaisingService()
 
-    monkeypatch.setattr(cli, "build_use_cases", lambda *args, **kwargs: _Wired())
+    monkeypatch.setattr(run_ctrl, "build_use_cases", lambda *args, **kwargs: _Wired())
     code = cli.main(["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi"])
     assert code == 130

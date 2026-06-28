@@ -193,14 +193,14 @@ def test_render_banner_color_is_opt_in():
 
 def test_paint_colours_only_when_enabled(monkeypatch):
     """gmlcache's UI is coloured only on a real TTY; piped/NO_COLOR output is plain."""
-    import generic_ml_cache_cli.cli as climod
+    from generic_ml_cache_cli.presenters import shared
 
-    monkeypatch.setattr(climod, "_use_color", lambda: True)
-    painted = climod._paint("hit", climod._GREEN)
+    monkeypatch.setattr(shared, "_use_color", lambda: True)
+    painted = shared._paint("hit", shared._GREEN)
     assert painted.startswith("\x1b[") and painted.endswith("\x1b[0m") and "hit" in painted
 
-    monkeypatch.setattr(climod, "_use_color", lambda: False)
-    assert climod._paint("hit", climod._GREEN) == "hit"  # no escape codes when off
+    monkeypatch.setattr(shared, "_use_color", lambda: False)
+    assert shared._paint("hit", shared._GREEN) == "hit"  # no escape codes when off
 
 
 def test_bare_invocation_prints_help_not_an_error(capsys):
@@ -290,12 +290,12 @@ def test_list_json(tmp_path, monkeypatch, capsys):
 
 
 def test_main_offers_the_parser_to_argcomplete(monkeypatch):
-    import generic_ml_cache_cli.cli as cli
+    import generic_ml_cache_cli.infrastructure.entry as entry
 
-    if cli.argcomplete is None:
+    if entry.argcomplete is None:
         pytest.skip("argcomplete not installed")
     seen = []
-    monkeypatch.setattr(cli.argcomplete, "autocomplete", lambda parser: seen.append(parser))
+    monkeypatch.setattr(entry.argcomplete, "autocomplete", lambda parser: seen.append(parser))
     main([])  # a normal run must still work; autocomplete is a no-op here
     assert len(seen) == 1
 

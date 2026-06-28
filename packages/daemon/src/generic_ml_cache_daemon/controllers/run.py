@@ -22,7 +22,7 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
     RunMlExecutionCommand,
 )
 
-from generic_ml_cache_daemon.models.run import RunBody, RunResponse
+from generic_ml_cache_daemon.presenters.run import RunBody, RunResponse
 
 router = APIRouter()
 

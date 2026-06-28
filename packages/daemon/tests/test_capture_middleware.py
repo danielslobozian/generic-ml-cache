@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from generic_ml_cache_daemon.middleware.capture import GatewayCaptureMiddleware
+from generic_ml_cache_daemon.infrastructure.capture import GatewayCaptureMiddleware
 
 
 # ---------------------------------------------------------------------------

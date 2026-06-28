@@ -122,12 +122,12 @@ def create_app(
     application.state.whitelist = whitelist
 
     from generic_ml_cache_daemon.jobs import JobRegistry
-    from generic_ml_cache_daemon.routes.executions import router as executions_router
-    from generic_ml_cache_daemon.routes.gateway import router as gateway_router
-    from generic_ml_cache_daemon.routes.health import router as health_router
-    from generic_ml_cache_daemon.routes.jobs import router as jobs_router
-    from generic_ml_cache_daemon.routes.run import router as run_router
-    from generic_ml_cache_daemon.routes.sessions import router as sessions_router
+    from generic_ml_cache_daemon.controllers.executions import router as executions_router
+    from generic_ml_cache_daemon.controllers.gateway import router as gateway_router
+    from generic_ml_cache_daemon.controllers.health import router as health_router
+    from generic_ml_cache_daemon.controllers.jobs import router as jobs_router
+    from generic_ml_cache_daemon.controllers.run import router as run_router
+    from generic_ml_cache_daemon.controllers.sessions import router as sessions_router
 
     application.state.job_registry = JobRegistry()
     application.include_router(health_router)
@@ -139,7 +139,7 @@ def create_app(
 
     capture_path = _resolve_capture_path(store_root)
     if capture_path is not None:
-        from generic_ml_cache_daemon.middleware.capture import GatewayCaptureMiddleware  # noqa: PLC0415
+        from generic_ml_cache_daemon.infrastructure.capture import GatewayCaptureMiddleware  # noqa: PLC0415
 
         application.add_middleware(GatewayCaptureMiddleware, capture_path=capture_path)
 
