@@ -67,6 +67,27 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _print_model_listing(ml) -> None:
+    if not ml.present:
+        print(f"  {ml.name:<8} absent   {ml.reason or ''}")
+        return
+    if not ml.supported:
+        print(f"  {ml.name:<8} —        {ml.reason or 'model listing not supported'}")
+        return
+    if ml.models is None:
+        print(f"  {ml.name:<8} —        {ml.reason or 'could not list models'}")
+        return
+    print(f"  {ml.name:<8} {len(ml.models)} model(s) (advisory; relayed from the client):")
+    for m in ml.models:
+        if m.default:
+            marker = " (default)"
+        elif m.current:
+            marker = " (current)"
+        else:
+            marker = ""
+        print(f"      {m.id:<34} {m.name}{marker}")
+
+
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
@@ -115,20 +136,30 @@ def _cmd_models(args: argparse.Namespace) -> int:
         return 0
 
     for ml in listings:
-        if not ml.present:
-            print(f"  {ml.name:<8} absent   {ml.reason or ''}")
-            continue
-        if not ml.supported:
-            print(f"  {ml.name:<8} —        {ml.reason or 'model listing not supported'}")
-            continue
-        if ml.models is None:
-            print(f"  {ml.name:<8} —        {ml.reason or 'could not list models'}")
-            continue
-        print(f"  {ml.name:<8} {len(ml.models)} model(s) (advisory; relayed from the client):")
-        for m in ml.models:
-            marker = " (default)" if m.default else (" (current)" if m.current else "")
-            print(f"      {m.id:<34} {m.name}{marker}")
+        _print_model_listing(ml)
     return 0
+
+
+def _print_status_text(settings, file_cfg, path, loaded, encryption, adapters_whitelist) -> None:
+    print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
+    print(f"encryption  : {encryption}")
+    print("effective settings (no run flags applied):")
+    for key in ("mode", "persist", "store", "timeout", "trust_scan", "max_size", "max_age"):
+        value, source = settings[key]
+        shown = "none" if value is None else value
+        if isinstance(shown, bool):
+            shown = "true" if shown else "false"
+        print(f"  {key:<10} {str(shown):<14} (from {source})")
+    if adapters_whitelist is None:
+        print("adapters    : * (all active)")
+    else:
+        print(f"adapters    : {', '.join(adapters_whitelist)} (from config)")
+    if file_cfg.executables:
+        print("executables (from config; --executable still overrides per call):")
+        for client, exe in file_cfg.executables.items():
+            print(f"  {client:<8} {exe}")
+    else:
+        print("executables : none configured (clients resolved on PATH)")
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
@@ -142,7 +173,6 @@ def _cmd_status(args: argparse.Namespace) -> int:
     path = config.resolve_config_path()
     loaded = file_cfg.source is not None
     encryption = get_encryption_state(Path(str(settings["store"][0]))).value
-
     adapters_whitelist = sorted(file_cfg.adapters) if file_cfg.adapters is not None else None
 
     if args.json:
@@ -163,29 +193,11 @@ def _cmd_status(args: argparse.Namespace) -> int:
         )
         return 0
 
-    print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
-    print(f"encryption  : {encryption}")
-    print("effective settings (no run flags applied):")
-    for key in ("mode", "persist", "store", "timeout", "trust_scan", "max_size", "max_age"):
-        value, source = settings[key]
-        shown = "none" if value is None else value
-        if isinstance(shown, bool):
-            shown = "true" if shown else "false"
-        print(f"  {key:<10} {str(shown):<14} (from {source})")
-    if adapters_whitelist is None:
-        print("adapters    : * (all active)")
-    else:
-        print(f"adapters    : {', '.join(adapters_whitelist)} (from config)")
-    if file_cfg.executables:
-        print("executables (from config; --executable still overrides per call):")
-        for client, exe in file_cfg.executables.items():
-            print(f"  {client:<8} {exe}")
-    else:
-        print("executables : none configured (clients resolved on PATH)")
+    _print_status_text(settings, file_cfg, path, loaded, encryption, adapters_whitelist)
     return 0
 
 
-def _cmd_init(args: argparse.Namespace) -> int:
+def _cmd_init(_args: argparse.Namespace) -> int:
     try:
         path, created = config.write_default_config()
     except OSError as exc:

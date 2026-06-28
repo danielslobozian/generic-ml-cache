@@ -64,6 +64,10 @@ from generic_ml_cache_cli.controllers.store import (
 )
 from generic_ml_cache_cli.presenters.shared import _use_color, render_banner
 
+_JSON_HELP = "emit machine-readable JSON"
+_TOKEN_HELP = "encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
+_JOB_ID_HELP = "the execution id"
+
 
 class _BannerParser(argparse.ArgumentParser):
     """An ArgumentParser whose full help is fronted by the banner, so the banner
@@ -327,7 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=GRANT_CHOICES,
         help="open a capability (net/read/write/shell/web-search), keyed into the call, to probe a granted launch (repeatable)",
     )
-    check.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    check.add_argument("--json", action="store_true", help=_JSON_HELP)
     check.set_defaults(func=_cmd_check)
 
     doctor = sub.add_parser(
@@ -337,7 +341,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--timeout", type=float, default=10.0, help="seconds before a version check is killed"
     )
-    doctor.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    doctor.add_argument("--json", action="store_true", help=_JSON_HELP)
     doctor.set_defaults(func=_cmd_doctor)
 
     models = sub.add_parser(
@@ -353,14 +357,14 @@ def build_parser() -> argparse.ArgumentParser:
     models.add_argument(
         "--timeout", type=float, default=30.0, help="seconds before the listing call is killed"
     )
-    models.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    models.add_argument("--json", action="store_true", help=_JSON_HELP)
     models.set_defaults(func=_cmd_models)
 
     status = sub.add_parser(
         "status",
         help="show the resolved configuration (which file loaded, effective settings)",
     )
-    status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    status.add_argument("--json", action="store_true", help=_JSON_HELP)
     status.set_defaults(func=_cmd_status)
 
     stats = sub.add_parser(
@@ -368,7 +372,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="show how many executions are stored, their total size split by client/model, "
         "and access counts",
     )
-    stats.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    stats.add_argument("--json", action="store_true", help=_JSON_HELP)
     stats.set_defaults(func=_cmd_stats)
 
     purgep = sub.add_parser(
@@ -394,7 +398,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--confirm",
         help='confirmation phrase required for --all (soft: "purge all"; hard: "hard delete all")',
     )
-    purgep.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    purgep.add_argument("--json", action="store_true", help=_JSON_HELP)
     purgep.set_defaults(func=_cmd_purge)
 
     listp = sub.add_parser(
@@ -423,14 +427,14 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAG",
         help="only executions from sessions carrying this tag (repeatable; match-any)",
     )
-    listp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    listp.add_argument("--json", action="store_true", help=_JSON_HELP)
     listp.set_defaults(func=_cmd_list)
 
     tagsp = sub.add_parser(
         "tags",
         help="list the distinct tags in use across current executions, with counts (read-only)",
     )
-    tagsp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    tagsp.add_argument("--json", action="store_true", help=_JSON_HELP)
     tagsp.set_defaults(func=_cmd_tags)
 
     exportp = sub.add_parser(
@@ -458,9 +462,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="write JSONL to FILE instead of stdout (a per-record summary still goes to stderr)",
     )
-    exportp.add_argument(
-        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
-    )
+    exportp.add_argument("--token", help=_TOKEN_HELP)
     exportp.set_defaults(func=_cmd_export)
 
     encryptp = sub.add_parser(
@@ -520,15 +522,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="EFFORT",
         help="effort for the new spec (empty string for Cursor)",
     )
-    session_update.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_update.add_argument("--json", action="store_true", help=_JSON_HELP)
     session_update.set_defaults(func=_cmd_session_update)
     session_clear_spec = session_sub.add_parser(
         "clear-spec", help="remove the execution spec from an existing session"
     )
     session_clear_spec.add_argument("session_id", help="the session id to clear the spec from")
-    session_clear_spec.add_argument(
-        "--json", action="store_true", help="emit machine-readable JSON"
-    )
+    session_clear_spec.add_argument("--json", action="store_true", help=_JSON_HELP)
     session_clear_spec.set_defaults(func=_cmd_session_clear_spec)
     session_tag_cmd = session_sub.add_parser(
         "tag", help="add or remove tags on an existing session"
@@ -548,7 +548,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAG",
         help="tag to detach (repeatable)",
     )
-    session_tag_cmd.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_tag_cmd.add_argument("--json", action="store_true", help=_JSON_HELP)
     session_tag_cmd.set_defaults(func=_cmd_session_tag)
     session_report = session_sub.add_parser("report", help="summarise a session's activity")
     session_report.add_argument(
@@ -561,7 +561,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TAG",
         help="aggregate all sessions sharing this tag",
     )
-    session_report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    session_report.add_argument("--json", action="store_true", help=_JSON_HELP)
     session_report.set_defaults(func=_cmd_session_report)
     session.set_defaults(func=_cmd_session)
 
@@ -569,32 +569,28 @@ def build_parser() -> argparse.ArgumentParser:
     execution_sub = execution.add_subparsers(dest="execution_command")
     exec_status = execution_sub.add_parser("status", help="show a detached job's state")
     exec_status.add_argument("job_id", help="the execution id printed by `run --detach`")
-    exec_status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    exec_status.add_argument("--json", action="store_true", help=_JSON_HELP)
     exec_status.set_defaults(func=_cmd_execution_status)
     exec_result = execution_sub.add_parser("result", help="print a finished job's output")
-    exec_result.add_argument("job_id", help="the execution id")
-    exec_result.add_argument(
-        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
-    )
+    exec_result.add_argument("job_id", help=_JOB_ID_HELP)
+    exec_result.add_argument("--token", help=_TOKEN_HELP)
     exec_result.set_defaults(func=_cmd_execution_result)
     exec_watch = execution_sub.add_parser(
         "watch", help="replay a job's event log, following it live if still running"
     )
-    exec_watch.add_argument("job_id", help="the execution id")
+    exec_watch.add_argument("job_id", help=_JOB_ID_HELP)
     exec_watch.set_defaults(func=_cmd_execution_watch)
     exec_mat = execution_sub.add_parser(
         "materialize", help="write a finished job's generated files to a directory"
     )
-    exec_mat.add_argument("job_id", help="the execution id")
+    exec_mat.add_argument("job_id", help=_JOB_ID_HELP)
     exec_mat.add_argument(
         "--output-dir", required=True, help="directory to write the generated files into"
     )
-    exec_mat.add_argument(
-        "--token", help="encryption token if the store is encrypted (or set GMLCACHE_TOKEN)"
-    )
+    exec_mat.add_argument("--token", help=_TOKEN_HELP)
     exec_mat.set_defaults(func=_cmd_execution_materialize)
     exec_list = execution_sub.add_parser("list", help="list detached jobs and their states")
-    exec_list.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    exec_list.add_argument("--json", action="store_true", help=_JSON_HELP)
     exec_list.set_defaults(func=_cmd_execution_list)
     execution.set_defaults(func=_cmd_execution)
 
@@ -621,7 +617,7 @@ def build_parser() -> argparse.ArgumentParser:
     daemon_status.add_argument(
         "--port", type=int, default=_daemon_host_port["port"], metavar="PORT"
     )
-    daemon_status.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    daemon_status.add_argument("--json", action="store_true", help=_JSON_HELP)
     daemon_status.set_defaults(func=_cmd_daemon_status)
 
     daemon_stop = daemon_sub.add_parser("stop", help="send SIGTERM to a running daemon")

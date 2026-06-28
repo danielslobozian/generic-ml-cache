@@ -13,7 +13,7 @@ from generic_ml_cache_cli import config
 from generic_ml_cache_cli.composition import _store_root
 
 
-def _cmd_daemon(args: argparse.Namespace) -> int:
+def _cmd_daemon(_args: argparse.Namespace) -> int:
     print("usage: gmlcache daemon {start,stop,status}", file=sys.stderr)
     return 1
 
@@ -138,6 +138,6 @@ def _cmd_status_line(args: argparse.Namespace) -> int:
     try:
         with urllib.request.urlopen(stats_url, timeout=2) as response:  # noqa: S310
             print(response.read().decode())
-    except (urllib.error.URLError, OSError):
+    except OSError:
         pass
-    return 0
+    return 0  # NOSONAR — always 0 by design: daemon absence is not an error for the status bar

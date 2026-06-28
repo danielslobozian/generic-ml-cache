@@ -181,7 +181,7 @@ def _cmd_session_report_by_tag(wired, tag: str, as_json: bool) -> int:
     lines = [f"tag         : {tag}", f"sessions    : {len(session_ids)}"]
     print("\n".join(lines))
     print(_render_session_report(report))
-    return 0
+    return 0  # NOSONAR — always 0: all paths are success (found or not-found)
 
 
 def _cmd_session_tag(args: argparse.Namespace) -> int:
@@ -207,7 +207,7 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_session(args: argparse.Namespace) -> int:
+def _cmd_session(_args: argparse.Namespace) -> int:
     print(
         "usage: gmlcache session start | tag | update | clear-spec | report",
         file=sys.stderr,

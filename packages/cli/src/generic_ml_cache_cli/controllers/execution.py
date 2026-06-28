@@ -367,7 +367,7 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_execution(args: argparse.Namespace) -> int:
+def _cmd_execution(_args: argparse.Namespace) -> int:
     print(
         "usage: gmlcache execution status <id> | result <id> | watch <id> | "
         "materialize <id> --output-dir <path> | list",

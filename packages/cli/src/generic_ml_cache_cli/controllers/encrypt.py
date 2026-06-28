@@ -21,7 +21,7 @@ from generic_ml_cache_cli.composition import (
 )
 
 
-def _cmd_encrypt(args: argparse.Namespace) -> int:
+def _cmd_encrypt(_args: argparse.Namespace) -> int:
     store_root = _store_root()
     if store_root is None:
         return 4

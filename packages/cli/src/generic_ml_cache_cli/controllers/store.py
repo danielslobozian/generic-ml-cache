@@ -50,6 +50,30 @@ _INPUT_FIELD_BY_TYPE = {
 }
 
 
+def _print_check_result(report, args, execution, usage, file_count) -> None:
+    from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
+
+    status_styles = {
+        ProbeStatus.HIT: (_GREEN, _BOLD),
+        ProbeStatus.MISS: (_AMBER, _BOLD),
+        ProbeStatus.NON_CACHEABLE: (_GREY,),
+    }
+    print(f"status  : {_paint(report.status.value, *status_styles.get(report.status, ()))}")
+    print(f"client  : {args.client}")
+    print(f"model   : {args.model}")
+    print(f"effort  : {args.effort}")
+    print(f"key     : {report.execution_key}")
+    if report.status is ProbeStatus.HIT and execution is not None:
+        print(f"files   : {file_count}")
+        if usage is None:
+            print("usage   : (none captured)")
+        else:
+            print(f"usage   : {_usage_summary(usage)}")
+    elif report.status is ProbeStatus.NON_CACHEABLE:
+        print("note    : declares allow-path folders the cache cannot fingerprint, so this")
+        print("          call always runs fresh and is never cached.")
+
+
 def _cmd_check(args: argparse.Namespace) -> int:
     import json
 
@@ -105,25 +129,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
         print(json.dumps(payload, indent=2))
         return 0
 
-    status_styles = {
-        ProbeStatus.HIT: (_GREEN, _BOLD),
-        ProbeStatus.MISS: (_AMBER, _BOLD),
-        ProbeStatus.NON_CACHEABLE: (_GREY,),
-    }
-    print(f"status  : {_paint(report.status.value, *status_styles.get(report.status, ()))}")
-    print(f"client  : {args.client}")
-    print(f"model   : {args.model}")
-    print(f"effort  : {args.effort}")
-    print(f"key     : {report.execution_key}")
-    if report.status is ProbeStatus.HIT and execution is not None:
-        print(f"files   : {file_count}")
-        if usage is None:
-            print("usage   : (none captured)")
-        else:
-            print(f"usage   : {_usage_summary(usage)}")
-    elif report.status is ProbeStatus.NON_CACHEABLE:
-        print("note    : declares allow-path folders the cache cannot fingerprint, so this")
-        print("          call always runs fresh and is never cached.")
+    _print_check_result(report, args, execution, usage, file_count)
     return 0
 
 
@@ -347,6 +353,23 @@ def _keys_for_session_tags(wired, wanted_session_tags: list) -> set:
     return allowed
 
 
+def _print_list_text(entries) -> None:
+    if not entries:
+        print("no current executions")
+        return
+    print(f"executions : {_paint(str(len(entries)), _TEAL, _BOLD)}")
+    for entry in sorted(entries, key=lambda item: (item["client"], item["model"], item["key"])):
+        hits = entry["hits"]
+        hits_text = _paint(str(hits), _GREEN) if hits else _paint(str(hits), _GREY)
+        line = (
+            f"  {entry['client']:<8} {entry['model']:<20} {entry['kind']:<18} "
+            f"{_paint(entry['key'][:12], _GREY)}  hits:{hits_text}"
+        )
+        if entry["tags"]:
+            line += "  tags:" + _paint(",".join(entry["tags"]), _TEAL)
+        print(line)
+
+
 def _cmd_list(args: argparse.Namespace) -> int:
     import json
 
@@ -387,21 +410,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
         print(json.dumps({"executions": entries}, indent=2))
         return 0
 
-    if not entries:
-        print("no current executions")
-        return 0
-
-    print(f"executions : {_paint(str(len(entries)), _TEAL, _BOLD)}")
-    for entry in sorted(entries, key=lambda item: (item["client"], item["model"], item["key"])):
-        hits = entry["hits"]
-        hits_text = _paint(str(hits), _GREEN) if hits else _paint(str(hits), _GREY)
-        line = (
-            f"  {entry['client']:<8} {entry['model']:<20} {entry['kind']:<18} "
-            f"{_paint(entry['key'][:12], _GREY)}  hits:{hits_text}"
-        )
-        if entry["tags"]:
-            line += "  tags:" + _paint(",".join(entry["tags"]), _TEAL)
-        print(line)
+    _print_list_text(entries)
     return 0
 
 
@@ -484,9 +493,27 @@ def _export_record(summary, execution, tags, blob_store) -> dict:
     }
 
 
-def _cmd_export(args: argparse.Namespace) -> int:
+def _collect_export_lines(wired, include, exclude) -> tuple:
     import json
 
+    lines = []
+    skipped_no_input = 0
+    for summary in wired.repository.current_execution_summaries():
+        tags = wired.repository.tags_for(summary.execution_key)
+        if include and not include & set(tags):
+            continue
+        if exclude and exclude & set(tags):
+            continue
+        execution = wired.repository.find_current(summary.execution_key)
+        # Only DATASET-depth entries carry the input side of the corpus.
+        if execution is None or not execution.input_persisted:
+            skipped_no_input += 1
+            continue
+        lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+    return lines, skipped_no_input
+
+
+def _cmd_export(args: argparse.Namespace) -> int:
     try:
         settings = config.resolve_settings(config.load())
     except ConfigError as exc:
@@ -496,8 +523,6 @@ def _cmd_export(args: argparse.Namespace) -> int:
     include = set(getattr(args, "tag", None) or [])
     exclude = set(getattr(args, "exclude_tag", None) or [])
 
-    lines = []
-    skipped_no_input = 0
     store_root = Path(str(settings["store"][0]))
     try:
         wired = build_use_cases(
@@ -506,18 +531,7 @@ def _cmd_export(args: argparse.Namespace) -> int:
             encryption_token=_resolve_token(args),
             diag=_make_diag(args),
         )
-        for summary in wired.repository.current_execution_summaries():
-            tags = wired.repository.tags_for(summary.execution_key)
-            if include and not include & set(tags):
-                continue
-            if exclude and exclude & set(tags):
-                continue
-            execution = wired.repository.find_current(summary.execution_key)
-            # Only DATASET-depth entries carry the input side of the corpus.
-            if execution is None or not execution.input_persisted:
-                skipped_no_input += 1
-                continue
-            lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+        lines, skipped_no_input = _collect_export_lines(wired, include, exclude)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return 4
