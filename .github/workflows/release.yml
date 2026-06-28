@@ -50,7 +50,7 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build packages/${{ matrix.package }} --outdir dist
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.package }}
           path: dist/
