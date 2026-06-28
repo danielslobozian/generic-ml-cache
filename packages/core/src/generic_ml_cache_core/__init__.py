@@ -13,7 +13,23 @@ caller. Wire it with :func:`build_use_cases`, or construct the adapters and use
 cases directly. The CLI / a daemon / an embedding app are inbound drivers that
 supply the data source and map their surface onto this library.
 
-**Public API** (stable within a minor version):
+**Stability contract (from 1.0.0 onwards):**
+
+The symbols listed in ``__all__`` (see below) are the public, stable API surface.
+Under SemVer:
+
+- **Patch releases (1.x.Y)** — no breaking changes, no new symbols required by
+  callers.
+- **Minor releases (1.X.0)** — backwards-compatible additions only; existing call
+  sites continue to work without changes.
+- **Major releases (2.0.0)** — may remove or rename public symbols; a migration
+  guide will be published with the release.
+
+Anything *not* listed in ``__all__`` — including all sub-modules under
+``adapter/``, ``application/``, ``common/``, and ``migrations/`` — is internal.
+Internal paths may change in any release, including patch releases.
+
+**Public API (``__all__``):**
 
 - :func:`build_use_cases` / :class:`WiredUseCases` — composition root
 - :class:`RunMlExecutionCommand` — inbound command value object
@@ -22,9 +38,6 @@ supply the data source and map their surface onto this library.
 - Error hierarchy rooted at :class:`CacheError`
 - Checksum utilities: :func:`checksum_input_data`, :func:`text_checksum`,
   :func:`file_content_fingerprint`
-
-Everything else (``adapter/``, ``application/``, ``common/``, ``migrations/``)
-is internal and may change between minor versions.
 """
 
 from __future__ import annotations
