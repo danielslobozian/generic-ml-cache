@@ -67,7 +67,7 @@ def _cmd_daemon_status(args: argparse.Namespace) -> int:
 
     host: str = args.host
     port: int = args.port
-    url = f"http://{host}:{port}/health"
+    url = f"http://{host}:{port}/health"  # NOSONAR — localhost daemon, plain HTTP is correct
     try:
         with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310
             data = _json.loads(resp.read())
@@ -94,7 +94,7 @@ def _cmd_daemon_stop(args: argparse.Namespace) -> int:
 
     host: str = args.host
     port: int = args.port
-    health_url = f"http://{host}:{port}/health"
+    health_url = f"http://{host}:{port}/health"  # NOSONAR — localhost daemon, plain HTTP is correct
     try:
         urllib.request.urlopen(health_url, timeout=3)  # noqa: S310
     except urllib.error.URLError:
