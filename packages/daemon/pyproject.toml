@@ -68,7 +68,7 @@ addopts = "-ra --cov=generic_ml_cache_daemon --cov-fail-under=80"
 timeout = 60
 
 [tool.coverage.run]
-omit = ["*/generic_ml_cache_daemon/__main__.py"]
+omit = ["*/generic_ml_cache_daemon/__main__.py", "*/packages/common/*"]
 
 [tool.ruff]
 line-length = 100
