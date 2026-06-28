@@ -10,6 +10,7 @@ from __future__ import annotations
 import subprocess
 
 from generic_ml_cache_cli import cli
+import generic_ml_cache_cli.controllers.run as run_ctrl
 
 
 def test_cli_maps_timeout_to_124(monkeypatch):
@@ -20,7 +21,7 @@ def test_cli_maps_timeout_to_124(monkeypatch):
     class _Wired:
         run_ml = _TimingOutService()
 
-    monkeypatch.setattr(cli, "build_use_cases", lambda *args, **kwargs: _Wired())
+    monkeypatch.setattr(run_ctrl, "build_use_cases", lambda *args, **kwargs: _Wired())
     code = cli.main(
         ["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi", "--timeout", "0.5"]
     )

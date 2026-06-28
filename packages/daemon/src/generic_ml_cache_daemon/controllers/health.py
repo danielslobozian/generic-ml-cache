@@ -13,7 +13,7 @@ from generic_ml_cache_core.adapter.registry import registered_names
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.metrics import is_prometheus_available
-from generic_ml_cache_daemon.models.health import (
+from generic_ml_cache_daemon.presenters.health import (
     EvictionInfo,
     HealthResponse,
     InfoResponse,
