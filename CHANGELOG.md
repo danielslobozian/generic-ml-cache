@@ -15,6 +15,18 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-06-28
+
+### Added
+
+- **Compatibility policy** (`docs/compatibility.md`): written policy covering what is
+  stable at 1.0.0 (CLI surface, public Python API, adapter contract, execution-record
+  schema, configuration keys), the Python version support range and drop cadence
+  (CPython 3.9–3.13, dropped no sooner than EOL), the 1.x schema promise (additive-only
+  within 1.x, automatic migration on startup), the adapter contract promise
+  (`adapter_contract_version = "1"` stable across all 1.x releases), and the migration
+  path from any 0.17.0+ store to 1.0.0 (one binary run, no manual SQL).
+
 ## [0.23.0] - 2026-06-28
 
 ### Added
