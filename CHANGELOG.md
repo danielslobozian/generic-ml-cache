@@ -15,6 +15,40 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-06-28
+
+### Added
+
+- **Extended `gmlcache doctor`** (cli): text and `--json` output now include Python
+  version, OS, config file path, store path, store permissions (exists / readable /
+  writable), and daemon reachability (HTTP `/health` probe). `--json` carries all new
+  fields alongside the existing `clients`, `schema`, and `adapter_extensions` keys.
+- **`gmlcache doctor --bundle`** (cli): writes the full diagnostic payload to a
+  timestamped `gmlcache-bundle-<ts>.json` file in the current directory; no credentials
+  are included in the payload. `--bundle` and `--json` are mutually exclusive.
+- **`--host` / `--port` on `doctor`** (cli): controls where the daemon reachability
+  probe connects; defaults match `daemon start` (`127.0.0.1:8765`).
+- **PII scrubbing structlog processor** (common): a `_scrub_processor` runs in the
+  structlog chain after exception tracebacks are rendered. Redacts e-mail addresses
+  (`[email]`), bearer/API token header values (`[token]`), long opaque strings that
+  look like API keys or encryption tokens (`[secret]`), and values stored under
+  sensitive key names (`token`, `password`, `api_key`, etc.) (`[redacted]`). Pure
+  lowercase-hex strings (SHA-256 content-addressed keys) are intentionally preserved.
+
+### Fixed
+
+- **Daemon encryption token wiring** (daemon): `create_app()` now reads `GMLCACHE_TOKEN`
+  from the daemon's own environment and passes it to `build_use_cases()`. Previously the
+  token was ignored, making gateway mode and store encryption mutually exclusive.
+  The token is never included in the gateway URL — it stays in the daemon's process
+  environment and is never visible to the proxied client.
+
+### Changed
+
+- **`docs/compatibility.md`** (docs): clarified the `--json` row in the stability table
+  — lists the 15 reporting commands that support it and explicitly calls out that
+  write-and-action commands (`run`, `encrypt`, `daemon start`, etc.) do not.
+
 ## [0.24.0] - 2026-06-28
 
 ### Added

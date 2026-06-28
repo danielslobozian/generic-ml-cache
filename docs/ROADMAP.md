@@ -547,7 +547,7 @@ Documents:
 - The migration promise: what a user must do to move from any `0.x` store to 1.0.0
   (one run of the new binary; see 0.17.0).
 
-### 0.25.0 — Doctor diagnostic bundle
+### 0.25.0 — Doctor diagnostic bundle *(released 2026-06-28)*
 
 Strengthen `gmlcache doctor` from a client-availability check into a full operational
 diagnostic surface.
@@ -559,6 +559,10 @@ diagnostic surface.
 - **`gmlcache doctor --bundle`**: writes the full diagnostic to a timestamped file
   for support purposes; any sensitive value (token, API keys) is redacted before
   writing.
+- **PII scrubbing**: structlog processor scrubs e-mails, bearer tokens, long opaque
+  secrets, and sensitive key names from all diagnostic log output.
+- **Daemon encryption wiring**: gateway mode and store encryption are no longer mutually
+  exclusive; the daemon reads `GMLCACHE_TOKEN` from its own environment.
 
 ### 0.26.0 — Configuration schema versioning and validation
 
