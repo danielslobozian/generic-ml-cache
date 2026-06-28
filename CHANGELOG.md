@@ -15,6 +15,27 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-06-28
+
+### Added
+
+- **`gmlcache.adapters` entry point group** (core): third-party adapter packages
+  declare an entry point in this group and their adapter is discovered at runtime
+  without any change to core — the Python `ServiceLoader` equivalent of the existing
+  `@adapter` built-in scanner. Install the package, and the adapter is available.
+- **Adapter contract version** (core): `ADAPTER_CONTRACT_VERSION = "1"` constant
+  introduced. Third-party adapters may declare `adapter_contract_version = "1"` as a
+  class attribute to assert compatibility; a mismatch emits a `warnings.warn` and the
+  adapter is skipped. Absence of the attribute is treated as compatible.
+- **`adapter_sources(whitelist)`** (core): new registry function returning
+  `{name: "package version"}` for installed entry-point adapters only. Built-in
+  adapters and programmatically registered adapters are omitted.
+- **`gmlcache doctor` — adapter extensions section** (cli): the doctor command now
+  shows an "installed adapter extensions" section listing each entry-point adapter and
+  the package that contributed it. The `--json` path gains an `"adapter_extensions"`
+  key. Both are empty/absent when no third-party adapters are installed (no change to
+  existing output).
+
 ## [0.20.0] - 2026-06-28
 
 ### Added
