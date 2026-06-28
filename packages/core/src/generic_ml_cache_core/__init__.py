@@ -5,13 +5,26 @@
 Record a real ML client (or API) call once, replay it forever by its content key.
 
 This is a stateless library: it holds the domain model, the use cases, the port
-contracts, AND the default outbound adapters (SQLite execution repository,
+contracts, AND the default outbound adapters (execution repository,
 filesystem blob store, local client runner, API client, metrics, clock,
 fingerprint). It bakes in *structure* (table names, blob naming, schema) but no
 *location* -- the data source (store path) and configuration are injected by the
 caller. Wire it with :func:`build_use_cases`, or construct the adapters and use
 cases directly. The CLI / a daemon / an embedding app are inbound drivers that
 supply the data source and map their surface onto this library.
+
+**Public API** (stable within a minor version):
+
+- :func:`build_use_cases` / :class:`WiredUseCases` — composition root
+- :class:`RunMlExecutionCommand` — inbound command value object
+- :class:`ClientAdapter` / :class:`MlRunnerPort` — adapter contracts
+- :func:`register` / :func:`get_adapter` — adapter registry
+- Error hierarchy rooted at :class:`CacheError`
+- Checksum utilities: :func:`checksum_input_data`, :func:`text_checksum`,
+  :func:`file_content_fingerprint`
+
+Everything else (``adapter/``, ``application/``, ``common/``, ``migrations/``)
+is internal and may change between minor versions.
 """
 
 from __future__ import annotations
@@ -32,33 +45,61 @@ from generic_ml_cache_core.adapter.registry import (  # noqa: E402  # fmt: skip
     get_adapter,
     register,
 )
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402  # fmt: skip
+    RunMlExecutionCommand,
+)
 from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: E402  # fmt: skip
+from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
     file_content_fingerprint,
     text_checksum,
 )
 from generic_ml_cache_core.common.errors import (  # noqa: E402  # fmt: skip
+    ArtifactBlobMissing,
     CacheError,
     CacheMiss,
     ClientNotFound,
+    CommandLineTooLong,
+    ConfigError,
+    EncryptionStateError,
+    EncryptionTokenRequired,
+    InputFileError,
     RunInterrupted,
+    StoreLocked,
     UnknownClient,
+    WrongEncryptionToken,
 )
 
 __all__ = [
     "__version__",
+    # Composition root
     "build_use_cases",
     "WiredUseCases",
+    # Inbound port
+    "RunMlExecutionCommand",
+    # Outbound port contracts
+    "ClientAdapter",
+    "MlRunnerPort",
+    # Adapter registry
     "register",
     "get_adapter",
-    "ClientAdapter",
+    # Checksum utilities
     "checksum_input_data",
     "text_checksum",
     "file_content_fingerprint",
+    # Error hierarchy
     "CacheError",
     "CacheMiss",
-    "ClientNotFound",
-    "RunInterrupted",
     "UnknownClient",
+    "ConfigError",
+    "ClientNotFound",
+    "CommandLineTooLong",
+    "InputFileError",
+    "ArtifactBlobMissing",
+    "WrongEncryptionToken",
+    "EncryptionTokenRequired",
+    "EncryptionStateError",
+    "StoreLocked",
+    "RunInterrupted",
 ]
