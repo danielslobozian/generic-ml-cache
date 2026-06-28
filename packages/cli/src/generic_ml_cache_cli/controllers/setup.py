@@ -18,7 +18,11 @@ from generic_ml_cache_cli.composition import _db_conn_factory, _make_diag
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache_core.adapter.inbound.composition import probe_all, schema_version
+    from generic_ml_cache_core.adapter.inbound.composition import (
+        adapter_sources,
+        probe_all,
+        schema_version,
+    )
 
     try:
         file_cfg = config.load()
@@ -37,11 +41,21 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         whitelist=file_cfg.adapters,
         diag=_diag,
     )
+    ep_sources = adapter_sources(whitelist=file_cfg.adapters)
 
     if args.json:
         import json
 
-        print(json.dumps({"clients": [asdict(s) for s in statuses], "schema": applied}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "clients": [asdict(s) for s in statuses],
+                    "schema": applied,
+                    "adapter_extensions": ep_sources,
+                },
+                indent=2,
+            )
+        )
         return 0
 
     if not statuses:
@@ -55,6 +69,12 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
                 )
             else:
                 print(f"  {s.name:<8} missing  {s.detail or ''}")
+
+    if ep_sources:
+        print()
+        print("installed adapter extensions:")
+        for ep_name, ep_source in sorted(ep_sources.items()):
+            print(f"  {ep_name:<8} {ep_source}")
 
     print()
     if applied:
