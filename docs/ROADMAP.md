@@ -503,7 +503,7 @@ decomposes it into a `commands/` package and enforces a complexity ceiling in CI
 - **`gmlcache doctor`** reports entry-point adapters alongside built-ins, with their
   source package noted.
 
-### 0.22.0 — Error taxonomy: machine-readable codes
+### 0.22.0 — Error taxonomy: machine-readable codes *(released 2026-06-28)*
 
 The exception hierarchy in `common/errors.py` is well-structured. This milestone adds
 machine-readable `code` attributes to enable programmatic handling by library consumers

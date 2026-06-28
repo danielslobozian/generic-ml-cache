@@ -15,6 +15,38 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-06-28
+
+### Added
+
+- **Machine-readable error codes** (core): each `CacheError` subclass now carries a
+  stable `code: ClassVar[str]` attribute — e.g. `"cache.miss"`, `"store.locked"`,
+  `"crypto.wrong_token"`. The code is accessible on both the class and any raised
+  instance. `RunInterrupted` (not a fault) has no code.
+- **Daemon unified error handler** (daemon): a single `@exception_handler(CacheError)`
+  registered in `create_app()` maps every error code to its HTTP status and returns a
+  consistent JSON body `{"code": "…", "detail": "…"}`. Per-controller ad-hoc
+  `HTTPException` wrapping is gone.
+- **README badge redesign**: replaced the combined CLI/API adapter badges and the
+  pyright/import-linter badges with six individual per-adapter badges — each badge links
+  directly to the adapter's source file in the repository.
+
+### Error code → HTTP status table
+
+| Code | Status | Meaning |
+|---|---|---|
+| `cache.miss` | 404 | Offline mode: no stored execution matches |
+| `adapter.unknown` | 400 | No adapter registered for the requested client name |
+| `adapter.not_found` | 400 | Client executable not on PATH |
+| `adapter.command_too_long` | 400 | Assembled argv exceeds OS limit |
+| `config.invalid` | 422 | Config file or env var value is invalid |
+| `input.file_error` | 422 | Declared input file unreadable |
+| `store.blob_missing` | 404 | Artifact record exists but bytes are gone |
+| `crypto.wrong_token` | 401 | Token cannot decrypt the store's wrapped data key |
+| `crypto.token_required` | 401 | Encrypted store but no token supplied |
+| `crypto.state_error` | 409 | Encryption operation conflicts with store state |
+| `store.locked` | 409 | Another process holds the exclusive store lock |
+
 ## [0.21.0] - 2026-06-28
 
 ### Added
