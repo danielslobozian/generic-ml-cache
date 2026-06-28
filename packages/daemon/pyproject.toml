@@ -45,6 +45,7 @@ metrics = ["prometheus-client>=0.20"]
 dev = [
   "pytest>=7",
   "pytest-cov",
+  "pytest-timeout",
   "coverage>=7",
   "ruff>=0.15",
   "httpx>=0.27",
@@ -64,6 +65,7 @@ packages = ["src/generic_ml_cache_daemon"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+timeout = 60
 
 [tool.coverage.run]
 omit = ["*/generic_ml_cache_daemon/__main__.py"]
