@@ -634,9 +634,62 @@ behaviour.
   publish jobs.
 - Coverage floor enforced in CI with `--cov-fail-under` thresholds.
 
+### 0.28.0 — Hexagonal split: `generic-ml-cache-adapters`
+
+Architectural correction. Core was shipping its own concrete adapter implementations
+(SQLite repository, filesystem blob store, AES-GCM cipher, ML client runners, API
+adapters, metrics, clock, gateway) alongside its domain model and port contracts —
+mixing the hexagonal kernel with infrastructure. 0.28.0 extracts all concrete
+outbound adapters into a dedicated fourth package and leaves `core` as a pure
+hexagonal kernel with zero infrastructure dependencies.
+
+**New package: `generic-ml-cache-adapters`**
+- Publishes to PyPI as `generic-ml-cache-adapters` (same version lockstep).
+- Contains every concrete outbound port implementation previously in `core`:
+  SQLite execution repository and schema migrations, filesystem blob store,
+  AES-GCM cipher and encryption helpers, all six ML client/API adapters
+  (claude, codex, cursor-agent, anthropic, openai, gemini), system clock,
+  filesystem file fingerprint, journal metrics, HTTP gateway forward adapter.
+- Also absorbs `NullDiagnosticsAdapter`, `StructlogDiagnosticsAdapter`, and
+  `sqlite_connection_factory` from the private `_common` folder — the `_common`
+  symlink infrastructure is fully decommissioned.
+- Declares the six ML client adapters via the `gmlcache.adapters` entry-point
+  group so the core registry discovers them without any import of `adapters` from
+  `core`.
+
+**Core becomes a pure hexagonal kernel**
+- `generic-ml-cache-core` retains only: domain model, use case implementations,
+  inbound/outbound port interfaces (ABCs and Protocols), error hierarchy, checksum
+  utilities, `DbConnection`/`DbCursor` Protocols, `WiredUseCases` container, and
+  the adapter registry mechanism.
+- Zero concrete implementations. Zero infrastructure imports. Zero database driver
+  imports. The `encryption` optional dependency moves to `adapters`.
+
+**Composition moves to the driver applications**
+- `build_use_cases()` (renamed; see below) dissolves from `core`. Each driver
+  (CLI, daemon) owns a private `_compose` module that imports from `core` and
+  `adapters` and wires its own dependency graph.
+- `WiredUseCases` remains in `core` as a typed container of use-case interface
+  references — it has no infrastructure dependency.
+
+**Naming**
+- `build_use_cases` was a misnomer; the function assembles adapters, not use cases.
+  The private composition functions in CLI and daemon are named descriptively for
+  their own context.
+
+**Dependency graph after 0.28.0**
+```
+generic-ml-cache-core        (pure hexagonal kernel, zero deps)
+       ↑
+generic-ml-cache-adapters    (all concrete implementations; depends on core)
+       ↑           ↑
+generic-ml-cache-cli    generic-ml-cache-daemon
+(imports core + adapters)   (imports core + adapters)
+```
+
 ### 1.0.0 — Stable, feature-rich cache
 
-Everything from 0.27.0 is a prerequisite. Remaining semantic changes at the stable tag:
+Everything from 0.28.0 is a prerequisite. Remaining semantic changes at the stable tag:
 
 - Alpha tag removed; development status classifiers updated to `5 - Production/Stable`
   in all three `pyproject.toml` files and README badges.
