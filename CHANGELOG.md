@@ -15,6 +15,28 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-06-28
+
+### Added
+
+- **Public API boundary** (core): `generic_ml_cache_core.__init__` now declares an
+  explicit `__all__`. The stable public surface is: `build_use_cases`, `WiredUseCases`,
+  `RunMlExecutionCommand`, `ClientAdapter`, `MlRunnerPort`, `register`, `get_adapter`,
+  the full `CacheError` hierarchy (`CacheMiss`, `UnknownClient`, `ConfigError`,
+  `ClientNotFound`, `CommandLineTooLong`, `InputFileError`, `ArtifactBlobMissing`,
+  `WrongEncryptionToken`, `EncryptionTokenRequired`, `EncryptionStateError`,
+  `StoreLocked`, `RunInterrupted`), and the checksum utilities (`checksum_input_data`,
+  `text_checksum`, `file_content_fingerprint`). Everything else (`adapter/`,
+  `application/`, `common/`, `migrations/`) is internal and may change between minor
+  versions.
+- **DB-agnostic SQL layer** (core): `DbConnection` / `DbCursor` Protocols (PEP 249)
+  replace all `sqlite3.Connection` imports in core. SQLite-specific constructs
+  removed: `INSERT OR IGNORE` → `WHERE NOT EXISTS`, `ON CONFLICT DO UPDATE` →
+  UPDATE + rowcount check, `PRAGMA user_version` → `schema_version` table,
+  `BEGIN EXCLUSIVE` file lock → `fcntl`/`msvcrt` OS-level lock. A new import-linter
+  contract (Rule 5) permanently enforces that `sqlite3` may not be imported anywhere
+  inside `generic_ml_cache_core`.
+
 ## [0.22.0] - 2026-06-28
 
 ### Added
