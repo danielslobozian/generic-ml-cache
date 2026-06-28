@@ -16,13 +16,13 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-185FA5?style=for-the-badge&labelColor=403E3A)](LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-BA7517?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
 
-[![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/core/src/generic_ml_cache_core/adapter/out/client/claude.py)
-[![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/core/src/generic_ml_cache_core/adapter/out/client/codex.py)
-[![CLI adapter: cursor-agent](https://img.shields.io/badge/cli-cursor--agent-534AB7?style=for-the-badge&labelColor=3C3489)](packages/core/src/generic_ml_cache_core/adapter/out/client/cursor.py)
+[![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/client/claude.py)
+[![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/client/codex.py)
+[![CLI adapter: cursor-agent](https://img.shields.io/badge/cli-cursor--agent-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/client/cursor.py)
 
-[![API adapter: anthropic](https://img.shields.io/badge/api-anthropic-0F6E56?style=for-the-badge&labelColor=085041)](packages/core/src/generic_ml_cache_core/adapter/out/api/anthropic_direct_adapter.py)
-[![API adapter: openai](https://img.shields.io/badge/api-openai-0F6E56?style=for-the-badge&labelColor=085041)](packages/core/src/generic_ml_cache_core/adapter/out/api/openai_direct_adapter.py)
-[![API adapter: gemini](https://img.shields.io/badge/api-gemini-0F6E56?style=for-the-badge&labelColor=085041)](packages/core/src/generic_ml_cache_core/adapter/out/api/gemini_direct_adapter.py)
+[![API adapter: anthropic](https://img.shields.io/badge/api-anthropic-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/api/anthropic_direct_adapter.py)
+[![API adapter: openai](https://img.shields.io/badge/api-openai-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/api/openai_direct_adapter.py)
+[![API adapter: gemini](https://img.shields.io/badge/api-gemini-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/api/gemini_direct_adapter.py)
 
 <br>
 
@@ -67,23 +67,27 @@ It is **not** a gateway, **not** a multi-user router, and **not** a way to make 
 
 <br>
 
-## Three packages
+## Four packages
 
 `gmlcache` — the terminal client — is the face most people use. Behind it sits a **reusable engine** you can embed in your own application, and an optional **HTTP daemon** that exposes the same cache as a local REST API.
 
 | Package | What it is | Install |
 |---|---|---|
 | [`generic-ml-cache-cli`](packages/cli) | the `gmlcache` terminal client | `pip install generic-ml-cache-cli` |
-| [`generic-ml-cache-core`](packages/core) | the engine — domain, use cases, ports, and the default adapters; **stateless** | `pip install generic-ml-cache-core` |
+| [`generic-ml-cache-core`](packages/core) | the hexagonal kernel — domain model, use cases, and port contracts; **zero runtime dependencies** | `pip install generic-ml-cache-core` |
+| [`generic-ml-cache-adapters`](packages/adapters) | concrete port implementations — SQLite, filesystem, ML clients, API adapters, encryption | `pip install generic-ml-cache-adapters` |
 | [`generic-ml-cache-daemon`](packages/daemon) | local HTTP API over the cache store; Claude gateway proxy | `pip install generic-ml-cache-daemon` |
 
-The CLI and the daemon are both inbound drivers over the same engine. The engine ships everything but the user interface and the data source — to embed it, depend on the core and inject your own data source:
+The CLI and the daemon are both inbound drivers over the same engine. The dependency arrow is strictly `adapters → core`; the core itself has no runtime dependencies and knows nothing about concrete infrastructure. To embed the engine, depend on `generic-ml-cache-core` for the ports and use cases, and on `generic-ml-cache-adapters` for the shipped infrastructure — then wire them together:
 
 ```python
-from generic_ml_cache_core import build_use_cases
+from generic_ml_cache_core import WiredUseCases
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+    RunMlExecutionCommand,
+)
 
-wired = build_use_cases(store_root="/path/you/choose")   # you provide the data source
-result = wired.run_managed.execute(command)              # the engine does the rest
+# wired: WiredUseCases — constructed by your composition root
+result = wired.run_ml.execute(command)
 ```
 
 <br>

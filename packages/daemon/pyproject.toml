@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Daniel Slobozian" }]
 keywords = ["cache", "llm", "ai", "daemon", "http", "fastapi", "gateway", "proxy"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
@@ -25,8 +25,8 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "generic-ml-cache-core>=0.27.0",
-  "generic-ml-cache-adapters>=0.27.0",
+  "generic-ml-cache-core>=0.28.0",
+  "generic-ml-cache-adapters>=0.28.0",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
