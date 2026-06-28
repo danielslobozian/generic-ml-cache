@@ -580,15 +580,76 @@ diagnostic surface.
 - **Cross-package doc cleanup**: CLI and daemon READMEs no longer reference each
   other; each package is self-contained.
 
+### 0.27.0 — Release-hygiene hardening
+
+Packaging defects, stale metadata, and CI gaps identified before the 1.0.0 tag. All
+items are release-blocking; none add or change user-visible behaviour.
+
+- **Daemon `__version__`**: hardcoded `"0.15.0"` replaced with `importlib.metadata`
+  dynamic lookup — the same pattern core and CLI already use. The stale string surfaces
+  in `/health`, the FastAPI OpenAPI version, and `daemon status`.
+- **Daemon wheel compliance**: `packages/daemon/pyproject.toml` was missing the
+  `readme` field (PyPI page would be blank) and referenced `LICENSE`/`NOTICE` files
+  that did not exist in the daemon directory — the built wheel shipped zero license
+  files, a compliance gap for Apache-2.0. Both fixed.
+- **CLI README API example**: the "Built on a reusable engine" code snippet showed
+  `build_use_cases(store_root=…)` (wrong signature) and `wired.run_managed` (removed
+  field). Corrected to the real signature and `wired.run_ml`.
+- **Daemon README version label**: the gateway limitation note was labelled
+  `(0.13.0)` — stale version tag in a currently-shipped document. Removed.
+- **`common` collision fix**: `generic_ml_cache_common` was bundled under an
+  identical top-level name in both the CLI and daemon wheels. Installing both packages
+  simultaneously caused pip RECORD conflicts — uninstalling either broke the other.
+  Renamed to a private sub-package in each distribution:
+  `generic_ml_cache_cli._common` (CLI) and `generic_ml_cache_daemon._common`
+  (daemon). Import paths updated accordingly; no user-visible change.
+- **`pytest-timeout` config drift**: `timeout = 60` was set in `[tool.pytest]` for
+  CLI and daemon `pyproject.toml` files but the `pytest-timeout` plugin was absent in
+  daemon and core — producing a silent "Unknown config option: timeout" warning. Added
+  the plugin to daemon and core dev dependencies.
+- **Starlette/httpx deprecation**: daemon tests emitted
+  `StarletteDeprecationWarning: Using httpx with starlette.testclient is deprecated;
+  install httpx2`. Migrated to `httpx2` before locking the 1.0.0 dependency set.
+
 ### 1.0.0 — Stable, feature-rich cache
 
-- Everything above shipped and productionised.
-- Alpha tag removed.
-- Stable CLI surface under a compatibility policy.
-- Stable execution-record schema and compatibility policy.
-- Stable adapter contract — including verifying the per-client read-permission mechanism
-  currently confirmed only for Claude.
-- Public documentation aligned with actual behaviour.
+Everything from 0.27.0 is a prerequisite. Remaining work before the stable tag:
+
+**Packaging and versioning**
+- Inter-package version floors tightened: CLI and daemon constrain core to
+  `>=1.0.0,<2` instead of the current `>=0.18.0`.
+- Development status classifiers updated from `3 - Alpha` to `5 - Production/Stable`
+  in all three `pyproject.toml` files.
+- `Status: Alpha` badge in CLI and root READMEs flipped to `Stable`.
+
+**CI quality gates**
+- `pyright` and `import-linter` promoted from local pre-commit hooks to required CI
+  jobs — currently bypassable with `--no-verify`.
+- Release workflow gains `twine check` and a wheel smoke-install step before the
+  publish jobs (validates metadata and import paths against built artifacts, not
+  editable source).
+- Coverage floor enforced in CI with `--cov-fail-under` thresholds.
+
+**Documentation accuracy**
+- Stale two-package wording removed from `README.md`, `docs/README.md`,
+  `SECURITY.md`, and `CONTRIBUTING.md` — the project has three packages plus common.
+- `docs/reference/cli.md` disclaimer ("intended command surface — exact syntax may
+  differ") removed; reference docs become the authoritative stability contract.
+- `SECURITY.md` supported-versions table updated for a post-1.0 support policy.
+- Stale `CHANGELOG.md` alpha-disclaimer header updated.
+
+**Exit codes**
+- CLI exit codes frozen and documented in a table in `docs/reference/cli.md`.
+- Tests asserting specific exit values for each documented code.
+
+**Public API stability contract**
+- Written stability statement alongside `generic_ml_cache_core.__all__`: what is
+  guaranteed stable across 1.x, what is internal, and what SemVer means for this
+  library.
+
+**1.0.0 CHANGELOG entry**
+- Documents what is stable, the migration path from any 0.x store, known limitations,
+  and security notes (local daemon, subprocess execution, stored outputs).
 
 ## After 1.0.0
 
