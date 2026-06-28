@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import base64
-
 import pytest
 
 
@@ -16,9 +14,3 @@ def _isolate_config(monkeypatch, tmp_path):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "localappdata"))
     for var in ("GMLCACHE_MODE", "GMLCACHE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-
-
-def write_directive(relpath: str, content: str) -> str:
-    """Build a WRITE directive line for the fake client."""
-    b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
-    return f"WRITE {relpath} {b64}"
