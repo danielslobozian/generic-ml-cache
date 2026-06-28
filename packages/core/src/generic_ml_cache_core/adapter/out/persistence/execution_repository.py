@@ -1,13 +1,14 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""SqliteExecutionRepository: the durable, append-only execution store."""
+"""ExecutionRepository: the durable, append-only execution store."""
 
 from __future__ import annotations
 
 import json
 from datetime import datetime
-from sqlite3 import Connection
 from typing import Callable, List, Optional
+
+from generic_ml_cache_core.common.db import DbConnection
 
 from generic_ml_cache_core.adapter.out.persistence.call_identity_serialization import (
     SerializedIdentity,
@@ -39,8 +40,8 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
 
 
-class SqliteExecutionRepository(ExecutionRepositoryPort):
-    """A durable, append-only execution store over SQLite.
+class ExecutionRepository(ExecutionRepositoryPort):
+    """A durable, append-only execution store over any DBAPI2-compliant connection.
 
     The hybrid identity persistence (domain-model §3): the queryable fields are
     real columns; the divergent identity fields ride in a JSON column. Executions
@@ -50,11 +51,11 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
     dehydrated (content is None). The clock is injected and stamps supersession.
     """
 
-    def __init__(self, conn_factory: Callable[[], Connection], clock: ClockPort) -> None:
+    def __init__(self, conn_factory: Callable[[], DbConnection], clock: ClockPort) -> None:
         self._conn_factory = conn_factory
         self._clock = clock
 
-    def _connect(self) -> Connection:
+    def _connect(self) -> DbConnection:
         return self._conn_factory()
 
     # -- reads ------------------------------------------------------------
@@ -137,12 +138,14 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _upsert_identity(
-        connection: Connection, execution_key: str, identity: CallIdentity
+        connection: DbConnection, execution_key: str, identity: CallIdentity
     ) -> None:
         serialized = serialize_identity(identity)
         connection.execute(
-            "INSERT OR IGNORE INTO call_identities "
-            "(execution_key, kind, client, model, effort, identity_json) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO call_identities "
+            "(execution_key, kind, client, model, effort, identity_json) "
+            "SELECT ?, ?, ?, ?, ?, ? "
+            "WHERE NOT EXISTS (SELECT 1 FROM call_identities WHERE execution_key = ?)",
             (
                 execution_key,
                 serialized.kind,
@@ -150,12 +153,13 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
                 serialized.model,
                 serialized.effort,
                 serialized.identity_json,
+                execution_key,
             ),
         )
 
     @staticmethod
     def _supersede_prior_current(
-        connection: Connection, execution_key: str, stamped_at: datetime
+        connection: DbConnection, execution_key: str, stamped_at: datetime
     ) -> None:
         connection.execute(
             "UPDATE executions SET superseded_at = ? WHERE execution_key = ? "
@@ -165,7 +169,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_execution(
-        connection: Connection,
+        connection: DbConnection,
         execution_key: str,
         execution: MlExecution,
         stamped_at: datetime,
@@ -191,7 +195,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_artifacts(
-        connection: Connection, execution_id: int, artifacts: List[Artifact]
+        connection: DbConnection, execution_id: int, artifacts: List[Artifact]
     ) -> None:
         for artifact in artifacts:
             connection.execute(
@@ -209,7 +213,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_token_usage(
-        connection: Connection, execution_id: int, token_usage: Optional[TokenUsage]
+        connection: DbConnection, execution_id: int, token_usage: Optional[TokenUsage]
     ) -> None:
         if token_usage is None:
             return
@@ -231,7 +235,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
     # -- tags (a separate annotation; never rewrites an execution) --------
 
     @staticmethod
-    def _current_execution_id(connection: Connection, execution_key: str) -> Optional[int]:
+    def _current_execution_id(connection: DbConnection, execution_key: str) -> Optional[int]:
         row = connection.execute(
             "SELECT id FROM executions WHERE execution_key = ? AND state = ? "
             "AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id DESC LIMIT 1",
@@ -249,8 +253,10 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
                 return
             for tag in tags:
                 connection.execute(
-                    "INSERT OR IGNORE INTO execution_tags (execution_id, tag) VALUES (?, ?)",
-                    (execution_id, tag),
+                    "INSERT INTO execution_tags (execution_id, tag) "
+                    "SELECT ?, ? WHERE NOT EXISTS "
+                    "(SELECT 1 FROM execution_tags WHERE execution_id = ? AND tag = ?)",
+                    (execution_id, tag, execution_id, tag),
                 )
             connection.commit()
         finally:
@@ -294,7 +300,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
 
     # -- reconstruction ---------------------------------------------------
 
-    def _load_execution(self, connection: Connection, row: tuple) -> MlExecution:
+    def _load_execution(self, connection: DbConnection, row: tuple) -> MlExecution:
         (
             execution_id,
             execution_key,
@@ -329,7 +335,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         )
 
     @staticmethod
-    def _load_identity(connection: Connection, execution_key: str) -> CallIdentity:
+    def _load_identity(connection: DbConnection, execution_key: str) -> CallIdentity:
         kind, client, model, effort, identity_json = connection.execute(
             "SELECT kind, client, model, effort, identity_json FROM call_identities "
             "WHERE execution_key = ?",
@@ -342,7 +348,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         )
 
     @staticmethod
-    def _load_artifacts(connection: Connection, execution_id: int) -> List[Artifact]:
+    def _load_artifacts(connection: DbConnection, execution_id: int) -> List[Artifact]:
         rows = connection.execute(
             "SELECT artifact_type, name, encoding, blob_key, size_bytes FROM artifacts "
             "WHERE execution_id = ? ORDER BY id",
@@ -361,7 +367,7 @@ class SqliteExecutionRepository(ExecutionRepositoryPort):
         ]
 
     @staticmethod
-    def _load_token_usage(connection: Connection, execution_id: int) -> Optional[TokenUsage]:
+    def _load_token_usage(connection: DbConnection, execution_id: int) -> Optional[TokenUsage]:
         row = connection.execute(
             "SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
             "reasoning_tokens, cost_usd, raw_json FROM token_usage WHERE execution_id = ?",

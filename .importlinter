@@ -3,6 +3,7 @@ root_packages =
     generic_ml_cache_core
     generic_ml_cache_cli
     generic_ml_cache_daemon
+include_external_packages = True
 
 # Rule 1 — the application ring is independent of the adapter layer.
 # Domain, use cases, and ports may not import from any adapter (inbound or outbound).
@@ -43,7 +44,7 @@ ignore_imports =
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.metrics.access_registry
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.metrics.journal_metrics
-    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.persistence.sqlite_execution_repository
+    generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.persistence.execution_repository
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.encrypting_blob_store
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store
     generic_ml_cache_core.adapter.inbound.composition -> generic_ml_cache_core.adapter.out.crypto.store_encryptor
@@ -70,6 +71,17 @@ source_modules =
     generic_ml_cache_core.application.domain
 forbidden_modules =
     generic_ml_cache_core.application.usecase
+
+# Rule 5 — core must not import any specific database driver.
+# Core is driver-agnostic: it accepts a DBAPI2 connection injected by the caller.
+# Importing sqlite3 (or psycopg2, etc.) here would lock the data layer to one driver.
+[importlinter:contract:no-db-driver-in-core]
+name = Core must not import a database driver
+type = forbidden
+source_modules =
+    generic_ml_cache_core
+forbidden_modules =
+    sqlite3
 
 # Rule 4 — driven adapter isolation.
 # Individual adapter.out sub-packages must not depend on each other. Each adapter

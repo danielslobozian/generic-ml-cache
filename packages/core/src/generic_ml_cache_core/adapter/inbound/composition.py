@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from sqlite3 import Connection
+from generic_ml_cache_core.common.db import DbConnection
 from typing import Callable, Dict, FrozenSet, Optional, cast
 
 from generic_ml_cache_core.adapter.inbound.migration import run_migrations as run_migrations
@@ -38,8 +38,8 @@ from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint i
 )
 from generic_ml_cache_core.adapter.out.metrics.access_registry import AccessRegistry
 from generic_ml_cache_core.adapter.out.metrics.journal_metrics import JournalMetrics
-from generic_ml_cache_core.adapter.out.persistence.sqlite_execution_repository import (
-    SqliteExecutionRepository,
+from generic_ml_cache_core.adapter.out.persistence.execution_repository import (
+    ExecutionRepository,
 )
 from generic_ml_cache_core.adapter.out.crypto.encrypting_blob_store import (
     EncryptingBlobStore,
@@ -154,7 +154,7 @@ def _build_runners(
 
 
 def build_use_cases(
-    conn_factory: Callable[[], Connection],
+    conn_factory: Callable[[], DbConnection],
     store_root: Path,
     executable_override: Optional[ExecutableOverride] = None,
     timeout: Optional[float] = None,
@@ -171,7 +171,7 @@ def build_use_cases(
     clock = SystemClock()
     blob_store = _resolve_blob_store(store_root, encryption_token)
     run_migrations(conn_factory, _diag)
-    repository = SqliteExecutionRepository(conn_factory, clock)
+    repository = ExecutionRepository(conn_factory, clock)
     metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
     kind = resolve_execution_kind(client, whitelist=whitelist) if client is not None else None

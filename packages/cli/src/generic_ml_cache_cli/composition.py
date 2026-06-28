@@ -8,13 +8,13 @@ import argparse
 import os
 import sqlite3
 from pathlib import Path
-from sqlite3 import Connection
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, cast
 
 from generic_ml_cache_core.adapter.inbound.composition import (
     build_store_encryptor,
     load_cipher,
 )
+from generic_ml_cache_core.common.db import DbConnection
 from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
@@ -27,12 +27,12 @@ from . import config
 _DB_NAME = "executions.sqlite3"
 
 
-def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
+def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
     db_path = store_root / _DB_NAME
 
-    def _connect() -> Connection:
+    def _connect() -> DbConnection:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(str(db_path))
+        return cast(DbConnection, sqlite3.connect(str(db_path)))
 
     return _connect
 
