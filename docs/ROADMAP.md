@@ -530,7 +530,7 @@ import any internal path and receive a silent breakage on upgrade.
 - Internal module paths (`adapter/out/…`, `adapter/inbound/…`, persistence internals)
   documented as internal in the architecture docs.
 
-### 0.24.0 — Compatibility policy
+### 0.24.0 — Compatibility policy *(released 2026-06-28)*
 
 A written compatibility policy is required for 1.0.0 to be a promise rather than a label.
 
