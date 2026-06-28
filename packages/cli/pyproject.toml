@@ -49,12 +49,15 @@ path = "../../VERSION"
 pattern = "^(?P<version>[^\\n]+)"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/generic_ml_cache_cli", "src/generic_ml_cache_common"]
+packages = ["src/generic_ml_cache_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -v"
+addopts = "-ra -v --cov=generic_ml_cache_cli --cov-fail-under=80"
 timeout = 60
+
+[tool.coverage.run]
+omit = ["*/packages/common/*"]
 
 [tool.ruff]
 line-length = 100

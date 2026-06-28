@@ -580,15 +580,70 @@ diagnostic surface.
 - **Cross-package doc cleanup**: CLI and daemon READMEs no longer reference each
   other; each package is self-contained.
 
+### 0.27.0 — Release-hygiene hardening
+
+Packaging defects, stale metadata, CI gaps, and documentation inaccuracies identified
+before the 1.0.0 tag. All items are release-blocking; none add or change user-visible
+behaviour.
+
+**Packaging fixes**
+- **Daemon `__version__`**: hardcoded `"0.15.0"` replaced with `importlib.metadata`
+  dynamic lookup — the same pattern core and CLI already use. The stale string surfaces
+  in `/health`, the FastAPI OpenAPI version, and `daemon status`.
+- **Daemon wheel compliance**: `packages/daemon/pyproject.toml` was missing the
+  `readme` field (PyPI page would be blank) and referenced `LICENSE`/`NOTICE` files
+  that did not exist in the daemon directory — the built wheel shipped zero license
+  files, a compliance gap for Apache-2.0. Both fixed.
+- **`common` collision fix**: `generic_ml_cache_common` was bundled under an
+  identical top-level name in both the CLI and daemon wheels. Installing both packages
+  simultaneously caused pip RECORD conflicts — uninstalling either broke the other.
+  Renamed to a private sub-package in each distribution:
+  `generic_ml_cache_cli._common` (CLI) and `generic_ml_cache_daemon._common`
+  (daemon). Import paths updated accordingly; no user-visible change.
+- **Inter-package version floors tightened**: CLI and daemon constrain core to
+  `>=0.27.0,<2` instead of the stale `>=0.18.0`. At 1.0.0 this becomes `>=1.0.0,<2`.
+
+**Dev-dependency consistency**
+- **`pytest-timeout` config drift**: `timeout = 60` was set in `[tool.pytest]` for
+  the CLI but the `pytest-timeout` plugin was absent in daemon and core, producing a
+  silent "Unknown config option: timeout" warning. Added the plugin to both and aligned
+  the timeout setting across all three packages.
+
+**Documentation accuracy**
+- **CLI README API example**: the "Built on a reusable engine" code snippet showed
+  `build_use_cases(store_root=…)` (wrong signature) and `wired.run_managed` (removed
+  field). Corrected to the real signature and `wired.run_ml`.
+- **Daemon README version label**: the gateway limitation note was labelled
+  `(0.13.0)` — stale version tag in a currently-shipped document. Removed.
+- **Stale two-package wording**: `README.md`, `docs/README.md`, `SECURITY.md`, and
+  `CONTRIBUTING.md` still described a two-package architecture. Updated to reflect the
+  real three-package structure (core + cli + daemon).
+- **`docs/reference/cli.md` disclaimer**: "intended command surface — exact syntax may
+  differ by release" removed; the reference docs are the authoritative stability
+  contract as of this release.
+- **Exit codes frozen and documented**: CLI exit codes documented in a table in
+  `docs/reference/cli.md` with tests asserting specific exit values.
+- **Public API stability statement**: written alongside `generic_ml_cache_core.__all__`
+  documenting what is guaranteed stable across 1.x, what is internal, and what SemVer
+  means for this library.
+
+**CI quality gates**
+- `pyright` and `import-linter` promoted from local pre-commit hooks to required CI
+  jobs — previously bypassable with `--no-verify`.
+- Release workflow gains `twine check` and a wheel smoke-install step before the
+  publish jobs.
+- Coverage floor enforced in CI with `--cov-fail-under` thresholds.
+
 ### 1.0.0 — Stable, feature-rich cache
 
-- Everything above shipped and productionised.
-- Alpha tag removed.
-- Stable CLI surface under a compatibility policy.
-- Stable execution-record schema and compatibility policy.
-- Stable adapter contract — including verifying the per-client read-permission mechanism
-  currently confirmed only for Claude.
-- Public documentation aligned with actual behaviour.
+Everything from 0.27.0 is a prerequisite. Remaining semantic changes at the stable tag:
+
+- Alpha tag removed; development status classifiers updated to `5 - Production/Stable`
+  in all three `pyproject.toml` files and README badges.
+- Inter-package version floors finalized: `>=1.0.0,<2`.
+- `SECURITY.md` supported-versions table updated for a post-1.0 support policy.
+- `CHANGELOG.md` alpha-disclaimer header updated; 1.0.0 entry documents what is
+  stable, the migration path from any 0.x store, known limitations, and security notes.
 
 ## After 1.0.0
 

@@ -14,13 +14,12 @@ A guided entry point for the design, specification, usage, architecture, referen
 
 ---
 
-> [!IMPORTANT]
-> **These docs are being aligned to the v0.x hexagonal, two-package architecture.**
-> The codebase moved to ports-and-adapters, split across `packages/core` (the library)
-> and `packages/cli` (the `gmlcache` client), and the old on-disk record format was
-> retired — records are now *executions* in a SQLite store plus a content-addressed
-> blob store. Some pages may still lag the code; treat the source
-> under `packages/` and [`domain-model.md`](domain-model.md) as the ground truth.
+> [!NOTE]
+> The codebase is organized as three packages: `packages/core` (the library),
+> `packages/cli` (the `gmlcache` client), and `packages/daemon` (the local HTTP
+> daemon). Records are *executions* stored in a SQLite store with a content-addressed
+> blob store. The architecture is hexagonal (ports-and-adapters); treat
+> [`domain-model.md`](domain-model.md) as the normative domain reference.
 
 ## Overview
 

@@ -1,11 +1,10 @@
 # Contributing
 
-Thanks for your interest in `generic-ml-cache`. This repository is a monorepo of two
-Apache-2.0 packages — the library [`generic-ml-cache-core`](packages/core) and the
-terminal client [`generic-ml-cache-cli`](packages/cli) — and contributions are
-welcome: bug reports, documentation, tests, and code alike. It is early, alpha
-software (`0.x`), so the most valuable contributions right now are the ones that
-harden the core and the adapters.
+Thanks for your interest in `generic-ml-cache`. This repository is a monorepo of three
+Apache-2.0 packages — the library [`generic-ml-cache-core`](packages/core), the
+terminal client [`generic-ml-cache-cli`](packages/cli), and the local HTTP daemon
+[`generic-ml-cache-daemon`](packages/daemon) — and contributions are welcome: bug
+reports, documentation, tests, and code alike.
 
 By participating you agree to abide by the [Code of Conduct](CODE_OF_CONDUCT.md), and
 all code is held to the standard in [`AGENTS.md`](AGENTS.md).

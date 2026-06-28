@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "generic-ml-cache-daemon"
 dynamic = ["version"]
 description = "Local HTTP daemon for generic-ml-cache: REST API, gateway proxy, and session transport. A thin inbound driver over generic-ml-cache-core."
+readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -44,6 +45,7 @@ metrics = ["prometheus-client>=0.20"]
 dev = [
   "pytest>=7",
   "pytest-cov",
+  "pytest-timeout",
   "coverage>=7",
   "ruff>=0.15",
   "httpx>=0.27",
@@ -58,14 +60,15 @@ path = "../../VERSION"
 pattern = "^(?P<version>[^\\n]+)"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/generic_ml_cache_daemon", "src/generic_ml_cache_common"]
+packages = ["src/generic_ml_cache_daemon"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --cov=generic_ml_cache_daemon --cov-fail-under=80"
+timeout = 60
 
 [tool.coverage.run]
-omit = ["*/generic_ml_cache_daemon/__main__.py"]
+omit = ["*/generic_ml_cache_daemon/__main__.py", "*/packages/common/*"]
 
 [tool.ruff]
 line-length = 100

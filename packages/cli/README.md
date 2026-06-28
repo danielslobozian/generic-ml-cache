@@ -245,9 +245,16 @@ client = anthropic.Anthropic(api_key="…", base_url="http://127.0.0.1:8765/gate
 Embed it directly instead of driving it from a terminal:
 
 ```python
+import sqlite3
+from pathlib import Path
 from generic_ml_cache_core import build_use_cases
 
-wired = build_use_cases(store_root="/path/you/choose")
+store = Path("/path/you/choose")
+store.mkdir(parents=True, exist_ok=True)
+wired = build_use_cases(
+    lambda: sqlite3.connect(str(store / "executions.sqlite3")),
+    store,
+)
 execution = wired.run_ml.execute(command)
 ```
 

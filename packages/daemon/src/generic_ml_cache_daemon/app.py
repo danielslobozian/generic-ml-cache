@@ -19,7 +19,7 @@ from generic_ml_cache_core.common.errors import CacheError
 from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
-from generic_ml_cache_common.diagnostics_adapter import StructlogDiagnosticsAdapter
+from generic_ml_cache_daemon._common.diagnostics_adapter import StructlogDiagnosticsAdapter
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 

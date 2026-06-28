@@ -26,8 +26,8 @@
 
 ---
 
-This reference contains the intended command surface. Exact syntax may differ by
-release; use `gmlcache --help` for the installed version.
+This reference is the authoritative command surface. Use `gmlcache --help` or
+`gmlcache <command> --help` for inline option descriptions.
 
 ## Current commands
 
@@ -297,6 +297,24 @@ A replay reproduces the native call's stdout, stderr and exit code. Unlike a man
 written by the live call only — there is nothing to materialize on a hit. Alias mode is
 for users who want native client behavior plus basic caching; reach for `run` when you
 want input fingerprinting, generated-file replay, grants, or detached execution.
+
+---
+
+## Exit codes
+
+These exit codes are stable and covered by the compatibility policy.
+
+| Code | Meaning |
+|---:|---|
+| `0` | Success — command completed; cache hit or miss (for `run`/`alias`). |
+| `1` | Runtime error — unexpected failure; stderr contains the message. |
+| `2` | Usage or validation error — invalid arguments, unknown session, or missing required input. |
+| `3` | Cache miss in offline or check mode — the requested execution is not in the store. |
+| `4` | Encryption error — token required, wrong token, or store locked. |
+| `124` | Timeout — the client call was killed after the configured timeout. |
+| `130` | Interrupted — `SIGINT` / `KeyboardInterrupt` received. |
+
+argparse usage errors (unknown flags, wrong argument count) exit `2` via stdlib convention.
 
 ---
 

@@ -34,9 +34,9 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-report=xml:packages/core/coverage.xml
-          python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-report=xml:packages/cli/coverage.xml
-          python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-report=xml:packages/daemon/coverage.xml
+          python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-config=packages/core/pyproject.toml   --cov-report=xml:packages/core/coverage.xml
+          python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-config=packages/cli/pyproject.toml    --cov-report=xml:packages/cli/coverage.xml
+          python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-config=packages/daemon/pyproject.toml --cov-report=xml:packages/daemon/coverage.xml
 
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@v8
