@@ -580,7 +580,7 @@ diagnostic surface.
 - **Cross-package doc cleanup**: CLI and daemon READMEs no longer reference each
   other; each package is self-contained.
 
-### 0.27.0 — Release-hygiene hardening
+### 0.27.0 — Release-hygiene hardening ✅ released 2026-06-28
 
 Packaging defects, stale metadata, CI gaps, and documentation inaccuracies identified
 before the 1.0.0 tag. All items are release-blocking; none add or change user-visible
