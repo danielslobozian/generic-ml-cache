@@ -118,7 +118,7 @@ def _cmd_daemon_stop(args: argparse.Namespace) -> int:
         return 1
 
 
-def _cmd_status_line(args: argparse.Namespace) -> int:
+def _cmd_status_line(args: argparse.Namespace) -> int:  # NOSONAR — always 0 by design
     """Emit live session stats as JSON for status-bar integrations.
 
     Designed to be called repeatedly by a status-bar formatter script.  Exits 0

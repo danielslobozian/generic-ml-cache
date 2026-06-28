@@ -153,7 +153,9 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_session_report_by_tag(wired, tag: str, as_json: bool) -> int:
+def _cmd_session_report_by_tag(  # NOSONAR — always 0 by design
+    wired, tag: str, as_json: bool
+) -> int:
     session_ids = wired.metrics.session_ids_for_tag(tag)
     if not session_ids:
         print(f"no sessions tagged {tag!r}")
