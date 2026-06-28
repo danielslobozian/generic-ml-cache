@@ -488,6 +488,16 @@ return blob_path.read_bytes()
   Create the branch before touching any file. `main` is only ever updated via a merged
   PR. An agent that edits files while on `main` has violated this rule; the correct
   recovery is `git checkout -b <branch>` immediately (staged changes carry over).
+- **Release branch checklist.** A release branch commit must touch exactly three files —
+  no more, no less. A PR diff that omits any of the three is wrong and must not merge:
+  1. `VERSION` — bumped to the new version string.
+  2. `CHANGELOG.md` — the `[Unreleased]` section replaced with `[X.Y.Z] - YYYY-MM-DD`
+     and the release notes written under it.
+  3. `docs/ROADMAP.md` — the milestone heading for the released version gains
+     `*(released YYYY-MM-DD)*` appended after the title.
+  *Failing case: a release PR that updates `VERSION` and `CHANGELOG.md` but leaves the
+  roadmap milestone without a release date — the roadmap then silently misrepresents the
+  milestone as unshipped.*
 - This file evolves with the project. When a new structural decision is made, it is
   recorded here as an enforceable line with its failing case, so the standard and
   the code never drift.
