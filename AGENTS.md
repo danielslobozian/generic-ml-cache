@@ -478,6 +478,16 @@ return blob_path.read_bytes()
   The XMLs are written inside the repo tree so the Docker mount (`$(pwd):/usr/src`)
   makes them visible to the scanner at the paths declared in `sonar-project.properties`.
   They are not committed — `.gitignore` excludes `coverage.xml` at every depth.
+- **No AI attribution in commits or pull requests.** Commit messages and PR
+  titles/bodies must never contain any reference to the AI tool that produced them.
+  Specifically forbidden:
+  - `Co-Authored-By: Claude …` or any other `Co-Authored-By` trailer pointing to an AI
+  - Footers or lines of the form `Generated with Claude Code`, `🤖 Generated with …`,
+    or any equivalent self-identification phrase
+  - Any mention of the AI assistant's name in the commit subject or body
+  The commit and PR history must read as if written by the human author.
+  *Failing case: a PR body ending with `🤖 Generated with [Claude Code](…)` — that
+  line must be absent.*
 - **Never work directly on `main`.** Every change — no matter how small — is made on
   a dedicated branch. Branch naming:
   - `feature/<scope>` — user-facing capability
