@@ -487,7 +487,7 @@ decomposes it into a `commands/` package and enforces a complexity ceiling in CI
   `packages/core/tests/` and `packages/cli/tests/`; the duplicate removed, canonical
   location retained.
 
-### 0.21.0 — Third-party adapter entry points
+### 0.21.0 — Third-party adapter entry points *(released 2026-06-28)*
 
 0.16.0 shipped the `@adapter` decorator and built-in scanner for adapters within
 `generic_ml_cache_core`. Third-party adapters — packages such as
