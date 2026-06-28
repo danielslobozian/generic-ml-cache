@@ -13,13 +13,50 @@ from typing import Callable, FrozenSet, Optional, cast
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
-from generic_ml_cache_core.common.db import DbConnection
-from generic_ml_cache_core.common.errors import CacheError
-from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
+from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
+from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (
+    EncryptingBlobStore,
+    TokenRequiredBlobStore,
+)
+from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (
+    FilesystemEncryptionManifestStore,
+)
+from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import StoreEncryptor
+from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
-from generic_ml_cache_daemon._common.diagnostics_adapter import StructlogDiagnosticsAdapter
+from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
+    StructlogDiagnosticsAdapter,
+)
+from generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint import (
+    FilesystemFileFingerprint,
+)
+from generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter import (
+    HttpGatewayForwardAdapter,
+)
+from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
+from generic_ml_cache_adapters.adapter.out.metrics.journal_metrics import JournalMetrics
+from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
+    ExecutionRepository,
+)
+from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
+    FilesystemStoreLock,
+)
+from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
+from generic_ml_cache_adapters.migration_runner import run_migrations
+from generic_ml_cache_core.adapter.registry import get_adapter, resolve_execution_kind
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
+from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.usecase.probe_service import ProbeService
+from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
+    RunMlExecutionService,
+)
+from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
+from generic_ml_cache_adapters.db import DbConnection
+from generic_ml_cache_core.common.errors import CacheError
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 
@@ -98,12 +135,73 @@ def create_app(
         _diag = StructlogDiagnosticsAdapter(log_file, level=log_level)
     else:
         _diag = NullDiagnosticsAdapter()
-    wired_use_cases = build_use_cases(
-        _db_conn_factory(store_root),
-        store_root,
-        client="claude",
+    _conn_factory = _db_conn_factory(store_root)
+    _encryption_token = os.environ.get("GMLCACHE_TOKEN") or None
+    _blob_dir = store_root / "blobs"
+    _raw_store: BlobStorePort = FilesystemBlobStore(_blob_dir)
+    _manifest = FilesystemEncryptionManifestStore(store_root).load()
+    if _manifest is None:
+        _blob_store: BlobStorePort = _raw_store
+    elif _encryption_token is None:
+        _blob_store = TokenRequiredBlobStore(_raw_store)
+    else:
+        from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: PLC0415
+
+        _cipher = AesGcmCipher()
+        _data_key = _cipher.open_envelope(_encryption_token, _manifest)
+        _blob_store = EncryptingBlobStore(_raw_store, _cipher, _data_key)
+    StoreEncryptor(
+        store_root, FilesystemEncryptionManifestStore(store_root), FilesystemStoreLock(store_root)
+    ).recover()
+    _clock = SystemClock()
+    run_migrations(_conn_factory, _diag)
+    _repository = ExecutionRepository(_conn_factory, _clock)
+    _metrics = JournalMetrics(AccessRegistry(_conn_factory, diag=_diag))
+    _file_fingerprint = FilesystemFileFingerprint()
+    _kind = resolve_execution_kind("claude")
+    from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
+        AbstractManagedLocalAdapter,
+    )  # noqa: PLC0415
+    from generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter import (
+        AbstractPassthroughLocalAdapter,
+    )  # noqa: PLC0415
+    from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: PLC0415
+
+    _registered = get_adapter("claude")
+    _cls = cast(type[AbstractManagedLocalAdapter], type(_registered))
+    _managed = _cls(executable_override=None, timeout=None, stream_path=None)
+    _passthrough = AbstractPassthroughLocalAdapter(cast(ClientAdapter, _registered), None, None)
+    _runners: dict[ExecutionKind, MlRunnerPort] = {
+        ExecutionKind.LOCAL_MANAGED: _managed,
+        ExecutionKind.LOCAL_PASSTHROUGH: _passthrough,
+    }
+    _purge = PurgeService(_repository, _blob_store, _metrics, diag=_diag)
+    _gateway_forward = HttpGatewayForwardAdapter()
+    _run_gateway = RunMlGatewayService(
+        blob_store=_blob_store,
+        gateway_forward_port=_gateway_forward,
+        repository=_repository,
+        metrics=_metrics,
         diag=_diag,
-        encryption_token=os.environ.get("GMLCACHE_TOKEN") or None,
+    )
+    wired_use_cases = WiredUseCases(
+        run_ml=RunMlExecutionService(
+            _file_fingerprint,
+            _runners,
+            _blob_store,
+            _repository,
+            _metrics,
+            purge_service=_purge,
+            max_size=max_size,
+            diag=_diag,
+        ),
+        probe=ProbeService(_file_fingerprint, _repository),
+        purge=_purge,
+        blob_store=_blob_store,
+        repository=_repository,
+        metrics=_metrics,
+        run_gateway=_run_gateway,
+        diag=_diag,
     )
 
     eviction_stats = EvictionStats(

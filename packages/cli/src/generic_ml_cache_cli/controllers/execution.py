@@ -9,7 +9,7 @@ import os
 import sys
 from pathlib import Path
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.common.errors import (
     EncryptionTokenRequired,

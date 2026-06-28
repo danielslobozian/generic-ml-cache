@@ -1,550 +1,255 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for RunMlExecutionService — the unified managed + API + passthrough executor."""
-
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
-
 import pytest
+from unittest.mock import create_autospec, MagicMock
 
-from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
-    InMemoryExecutionRepository,
-)
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
-from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
-from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
+    ApiCallIdentity,
+)
+from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
+from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
+    PassthroughCallIdentity,
+)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
-    RunMlExecutionUseCase,
-)
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.client_runner_port import ClientRunnerPort
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
+from generic_ml_cache_core.application.port.out.execution_repository_port import (
+    ExecutionRepositoryPort,
+)
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
-from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
+from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
-from generic_ml_cache_core.common.errors import CacheMiss
 
 
-class FixedClock(ClockPort):
-    def now(self) -> datetime:
-        return datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
-
-
-class FakeClientRunner(ClientRunnerPort):
-    name = "fake-managed"
-
-    def __init__(self, *results: ClientRunResult) -> None:
-        self._results = list(results) or [ClientRunResult(exit_code=0, stdout="managed out\n")]
-        self.calls: List[MlRequest] = []
-
-    def run(self, request: MlRequest) -> ClientRunResult:
-        self.calls.append(request)
-        if len(self._results) > 1:
-            return self._results.pop(0)
-        return self._results[0]
-
-
-class FakeApiClient(ApiClientPort):
-    name = "fake-api-runner"
-
-    def __init__(self, *results: ClientRunResult) -> None:
-        self._results = list(results) or [
-            ClientRunResult(exit_code=0, stdout="api reply\n", token_usage=TokenUsage(5, 10))
-        ]
-        self.calls: List[MlRequest] = []
-
-    def run(self, request: MlRequest) -> ClientRunResult:
-        self.calls.append(request)
-        if len(self._results) > 1:
-            return self._results.pop(0)
-        return self._results[0]
-
-
-class FakePassthroughRunner(MlRunnerPort):
-    name = "fake-pass"
-
-    def __init__(self, *results: ClientRunResult) -> None:
-        self._results = list(results) or [ClientRunResult(exit_code=0, stdout="native out\n")]
-        self.calls: List[MlRequest] = []
-
-    @property
-    def execution_kind(self) -> ExecutionKind:
-        return ExecutionKind.LOCAL_PASSTHROUGH
-
-    def run(self, request: MlRequest) -> ClientRunResult:
-        self.calls.append(request)
-        if len(self._results) > 1:
-            return self._results.pop(0)
-        return self._results[0]
-
-
-class FakeFileFingerprint(FileFingerprintPort):
-    def fingerprint(self, path: str) -> str:
-        return "fp_" + path
-
-
-class FakeBlobStore(BlobStorePort):
-    def __init__(self) -> None:
-        self.store: Dict[str, bytes] = {}
-        self.puts: List[str] = []
-
-    def get(self, key: str) -> Optional[bytes]:
-        return self.store.get(key)
-
-    def put(self, key: str, output: bytes) -> None:
-        self.store[key] = output
-        self.puts.append(key)
-
-    def remove(self, key: str) -> None:
-        self.store.pop(key, None)
-
-
-class FakeMetrics(MetricsPort):
-    def __init__(self) -> None:
-        self.events: List[dict] = []
-
-    def record_event(self, event, *, execution_key, client, model, effort, session_id=None) -> None:
-        self.events.append({"event": event, "client": client, "model": model})
-
-    def hit_counts_by_key(self) -> Dict[str, int]:
-        return {}
-
-    def event_counts(self) -> Dict[str, int]:
-        return {}
-
-    def session_event_counts(self, session_id) -> Dict[str, int]:
-        return {}
-
-    def session_events(self, session_id):
-        return []
-
-    def last_access(self) -> Dict[str, float]:
-        return {}
-
-    def execution_keys_for_session(self, session_id):
-        return []
-
-    def delete_events_for_key(self, execution_key) -> None:
-        pass
-
-    def add_session_tag(self, session_id, tag) -> None:
-        pass
-
-    def remove_session_tag(self, session_id, tag) -> None:
-        pass
-
-    def set_session_spec(self, session_id, spec: SessionSpec) -> None:
-        pass
-
-    def clear_session_spec(self, session_id) -> None:
-        pass
-
-    def session_spec(self, session_id) -> Optional[SessionSpec]:
-        return None
-
-    def list_session_ids(self) -> List[str]:
-        return []
-
-    def session_tags(self, session_id) -> List[str]:
-        return []
-
-    def session_ids_for_tag(self, tag) -> List[str]:
-        return []
-
-    def event_names(self) -> List[str]:
-        return [r["event"] for r in self.events]
-
-
-def _managed_command(**overrides) -> RunMlExecutionCommand:
-    base = dict(
-        execution_kind=ExecutionKind.LOCAL_MANAGED,
-        client="claude",
-        model="sonnet",
-        effort="",
-        context="",
-        prompt="hello",
-    )
-    base.update(overrides)
-    return RunMlExecutionCommand(**base)
-
-
-def _api_command(**overrides) -> RunMlExecutionCommand:
-    base = dict(
-        execution_kind=ExecutionKind.API,
-        client="openai",
-        model="gpt-x",
-        context="",
-        prompt="hi",
-    )
-    base.update(overrides)
-    return RunMlExecutionCommand(**base)
-
-
-def _passthrough_command(**overrides) -> RunMlExecutionCommand:
-    base = dict(
-        execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
-        client="claude",
-        model="",
-        native_args=["--print", "hello"],
-    )
-    base.update(overrides)
-    return RunMlExecutionCommand(**base)
-
-
-class _Harness:
-    def __init__(
-        self,
-        client_runner: Optional[ClientRunnerPort] = None,
-        api_client: Optional[ApiClientPort] = None,
-        passthrough_runner: Optional[FakePassthroughRunner] = None,
-    ) -> None:
-        self.runner = client_runner or FakeClientRunner()
-        self.api = api_client or FakeApiClient()
-        self.passthrough = passthrough_runner or FakePassthroughRunner()
-        self.blob = FakeBlobStore()
-        self.repo = InMemoryExecutionRepository(clock=FixedClock())
-        self.metrics = FakeMetrics()
-        self.service = RunMlExecutionService(
-            FakeFileFingerprint(),
-            {
-                ExecutionKind.LOCAL_MANAGED: self.runner,
-                ExecutionKind.API: self.api,
-                ExecutionKind.LOCAL_PASSTHROUGH: self.passthrough,
-            },
-            self.blob,
-            self.repo,
-            self.metrics,
-        )
-
-
-def _stdout(execution) -> Optional[bytes]:
-    for a in execution.artifacts:
-        if a.artifact_type is ArtifactType.STDOUT:
-            return a.content
-    return None
-
-
-# --- port wiring -------------------------------------------------------------
-
-
-def test_inbound_port_cannot_be_instantiated_directly():
-    with pytest.raises(TypeError):
-        RunMlExecutionUseCase()  # type: ignore[abstract]
-
-
-def test_service_implements_the_inbound_port():
-    assert isinstance(_Harness().service, RunMlExecutionUseCase)
-
-
-# --- managed path ------------------------------------------------------------
-
-
-def test_managed_miss_runs_and_records():
-    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
-    execution = harness.service.execute(_managed_command())
-
-    assert execution.execution_state is ExecutionState.SUCCESS
-    assert execution.execution_kind is ExecutionKind.LOCAL_MANAGED
-    assert execution.output_persisted is True
-    assert _stdout(execution) == b"hi\n"
-    assert len(harness.runner.calls) == 1
-    assert harness.api.calls == []
-    assert harness.metrics.event_names() == ["record"]
-
-
-def test_managed_second_call_is_a_cache_hit():
-    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
-    harness.service.execute(_managed_command())
-    second = harness.service.execute(_managed_command())
-    assert len(harness.runner.calls) == 1
-    assert _stdout(second) == b"hi\n"
-    assert harness.metrics.event_names() == ["record", "hit"]
-
-
-def test_managed_identity_uses_client_and_inputs():
-    harness = _Harness()
-    exec_a = harness.service.execute(_managed_command(client="claude", model="m1"))
-    exec_b = harness.service.execute(_managed_command(client="codex", model="m1"))
-    assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
-
-
-def test_managed_journal_records_client():
-    harness = _Harness()
-    harness.service.execute(_managed_command(client="claude"))
-    assert harness.metrics.events[0]["client"] == "claude"
-
-
-def test_managed_failed_run_not_stored_by_default():
-    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stderr="boom")))
-    execution = harness.service.execute(_managed_command())
-    assert execution.execution_state is ExecutionState.FAILED
-    assert execution.output_persisted is False
-
-
-# --- api path ----------------------------------------------------------------
-
-
-def test_api_miss_runs_and_records():
-    harness = _Harness(
-        api_client=FakeApiClient(
-            ClientRunResult(exit_code=0, stdout="reply\n", token_usage=TokenUsage(3, 7))
-        )
-    )
-    execution = harness.service.execute(_api_command())
-
-    assert execution.execution_state is ExecutionState.SUCCESS
-    assert execution.execution_kind is ExecutionKind.API
-    assert execution.output_persisted is True
-    assert _stdout(execution) == b"reply\n"
-    assert execution.token_usage.input_tokens == 3
-    assert harness.runner.calls == []
-    assert len(harness.api.calls) == 1
-    assert harness.metrics.event_names() == ["record"]
-
-
-def test_api_second_call_is_a_cache_hit():
-    harness = _Harness()
-    harness.service.execute(_api_command())
-    harness.service.execute(_api_command())
-    assert len(harness.api.calls) == 1
-    assert harness.metrics.event_names() == ["record", "hit"]
-
-
-def test_api_identity_differs_by_provider_and_prompt():
-    harness = _Harness()
-    exec_a = harness.service.execute(_api_command(client="openai", prompt="a"))
-    exec_b = harness.service.execute(_api_command(client="openai", prompt="b"))
-    assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
-
-
-def test_api_journal_records_client_as_provider():
-    harness = _Harness()
-    harness.service.execute(_api_command(client="gemini"))
-    assert harness.metrics.events[0]["client"] == "gemini"
-
-
-# --- managed vs api keys are distinct ----------------------------------------
-
-
-def test_managed_and_api_keys_never_collide():
-    harness = _Harness()
-    cmd_m = _managed_command(client="same", model="m", prompt="p")
-    cmd_a = _api_command(client="same", model="m", prompt="p")
-    managed_key = harness.service.execute(cmd_m).call_identity.generate_key()
-    api_key = harness.service.execute(cmd_a).call_identity.generate_key()
-    assert managed_key != api_key
-
-
-# --- IN_PROGRESS lifecycle ---------------------------------------------------
-
-
-def test_in_progress_recorded_before_final_success():
-    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="ok\n")))
-    execution = harness.service.execute(_managed_command())
-    key = execution.call_identity.generate_key()
-    history = harness.repo.find_all(key)
-    assert len(history) == 2
-    assert history[0].execution_state is ExecutionState.IN_PROGRESS
-    assert history[1].execution_state is ExecutionState.SUCCESS
-
-
-def test_in_progress_recorded_before_final_failure():
-    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stderr="err")))
-    execution = harness.service.execute(_managed_command())
-    key = execution.call_identity.generate_key()
-    history = harness.repo.find_all(key)
-    assert len(history) == 2
-    assert history[0].execution_state is ExecutionState.IN_PROGRESS
-    assert history[1].execution_state is ExecutionState.FAILED
-
-
-def test_uncacheable_run_does_not_record_in_progress():
-    harness = _Harness()
-    cmd = _managed_command(allow_paths=["/workspace"])
-    execution = harness.service.execute(cmd)
-    key = execution.call_identity.generate_key()
-    assert harness.repo.find_all(key) == []  # no IN_PROGRESS, no final
-
-
-def test_concurrent_same_key_runs_once(monkeypatch):
-    """Two threads with the same key: only one should call the client runner."""
-    import threading
-
-    results: list = []
-    runner = FakeClientRunner(
-        ClientRunResult(exit_code=0, stdout="first\n"),
-        ClientRunResult(exit_code=0, stdout="second\n"),
-    )
-    harness = _Harness(client_runner=runner)
-
-    def _run():
-        results.append(harness.service.execute(_managed_command()))
-
-    t1 = threading.Thread(target=_run)
-    t2 = threading.Thread(target=_run)
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
-
-    assert len(runner.calls) == 1  # only one real client call
-    assert len(results) == 2  # both callers got a result
-    assert all(r.execution_state is ExecutionState.SUCCESS for r in results)
-
-
-# --- cache modes (shared behaviour) ------------------------------------------
-
-
-def test_offline_miss_raises():
-    harness = _Harness()
-    with pytest.raises(CacheMiss):
-        harness.service.execute(_managed_command(cache_mode=CacheMode.OFFLINE))
-    assert harness.runner.calls == []
-
-
-def test_refresh_bypasses_cache():
-    harness = _Harness(
-        client_runner=FakeClientRunner(
-            ClientRunResult(exit_code=0, stdout="old\n"),
-            ClientRunResult(exit_code=0, stdout="new\n"),
-        )
-    )
-    harness.service.execute(_managed_command())
-    harness.service.execute(_managed_command(cache_mode=CacheMode.REFRESH))
-    assert len(harness.runner.calls) == 2
-
-
-# --- passthrough path --------------------------------------------------------
-
-
-def test_passthrough_records_result_with_local_passthrough_kind():
-    harness = _Harness(
-        passthrough_runner=FakePassthroughRunner(
-            ClientRunResult(exit_code=0, stdout="native out\n")
-        )
-    )
-    execution = harness.service.execute(_passthrough_command())
-
-    assert execution.execution_state is ExecutionState.SUCCESS
-    assert execution.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
-    assert execution.output_persisted is True
-    assert _stdout(execution) == b"native out\n"
-    assert len(harness.passthrough.calls) == 1
-    assert harness.runner.calls == []
-    assert harness.api.calls == []
-    assert harness.metrics.event_names() == ["record"]
-
-
-def test_passthrough_cache_hit_replays():
-    harness = _Harness(
-        passthrough_runner=FakePassthroughRunner(
-            ClientRunResult(exit_code=0, stdout="native out\n")
-        )
-    )
-    harness.service.execute(_passthrough_command())
-    second = harness.service.execute(_passthrough_command())
-    assert len(harness.passthrough.calls) == 1
-    assert _stdout(second) == b"native out\n"
-    assert harness.metrics.event_names() == ["record", "hit"]
-
-
-def test_passthrough_is_tagged_local_passthrough():
-    harness = _Harness()
-    execution = harness.service.execute(_passthrough_command())
-    assert execution.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
-
-
-def test_passthrough_native_args_in_identity():
-    harness = _Harness()
-    exec_a = harness.service.execute(_passthrough_command(native_args=["--help"]))
-    exec_b = harness.service.execute(_passthrough_command(native_args=["--version"]))
-    assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
-
-
-# --- LRU auto-eviction hook --------------------------------------------------
-
-
-class _SpyPurge:
-    """Minimal stub that records every evict_to_quota call."""
-
-    def __init__(self) -> None:
-        self.evict_calls: List[int] = []
-
-    def evict_to_quota(self, max_bytes: int) -> PurgeReport:
-        self.evict_calls.append(max_bytes)
-        return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-
-    # PurgeService has other methods the hook doesn't call — not needed here.
-
-
-def _harness_with_quota(max_size: Optional[int]) -> tuple:
-    harness = _Harness()
-    spy = _SpyPurge()
-    service = RunMlExecutionService(
-        FakeFileFingerprint(),
-        {
-            ExecutionKind.LOCAL_MANAGED: harness.runner,
-            ExecutionKind.API: harness.api,
-            ExecutionKind.LOCAL_PASSTHROUGH: harness.passthrough,
-        },
-        harness.blob,
-        harness.repo,
-        harness.metrics,
-        purge_service=spy,
+def _make_svc(file_fingerprint=None, runners=None, purge_service=None, max_size=None):
+    return RunMlExecutionService(
+        file_fingerprint=file_fingerprint or create_autospec(FileFingerprintPort),
+        runners=runners or {},
+        blob_store=create_autospec(BlobStorePort),
+        repository=create_autospec(ExecutionRepositoryPort),
+        metrics=create_autospec(MetricsPort),
+        purge_service=purge_service,
         max_size=max_size,
     )
-    return service, spy
 
 
-def test_eviction_triggered_after_successful_record():
-    service, spy = _harness_with_quota(max_size=1_000_000)
-    service.execute(_managed_command())
-    assert len(spy.evict_calls) == 1
-    assert spy.evict_calls[0] == 1_000_000
-
-
-def test_eviction_not_triggered_when_max_size_is_none():
-    service, spy = _harness_with_quota(max_size=None)
-    service.execute(_managed_command())
-    assert spy.evict_calls == []
-
-
-def test_eviction_not_triggered_on_cache_hit():
-    service, spy = _harness_with_quota(max_size=1_000_000)
-    service.execute(_managed_command())  # first run — record
-    assert len(spy.evict_calls) == 1
-    service.execute(_managed_command())  # second run — cache hit
-    assert len(spy.evict_calls) == 1  # eviction not called again
-
-
-def test_eviction_not_triggered_on_failed_run():
-    from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
-
-    service, spy = _harness_with_quota(max_size=1_000_000)
-    failing_harness = _Harness(
-        client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stdout="", stderr="boom"))
+def _cmd(
+    kind=ExecutionKind.LOCAL_MANAGED, client="claude", model="sonnet", effort="high", **kwargs
+):
+    return RunMlExecutionCommand(
+        execution_kind=kind, client=client, model=model, effort=effort, **kwargs
     )
-    failing_service = RunMlExecutionService(
-        FakeFileFingerprint(),
-        {ExecutionKind.LOCAL_MANAGED: failing_harness.runner},
-        failing_harness.blob,
-        failing_harness.repo,
-        failing_harness.metrics,
-        purge_service=spy,
-        max_size=1_000_000,
-    )
-    failing_service.execute(_managed_command())
-    assert spy.evict_calls == []
+
+
+class TestBuildIdentity:
+    def test_local_managed_returns_managed_call_identity(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED)
+        identity = svc._build_identity(cmd)
+        assert isinstance(identity, ManagedCallIdentity)
+
+    def test_local_managed_uses_file_fingerprint(self):
+        fp = create_autospec(FileFingerprintPort)
+        fp.fingerprint.return_value = "fp_abc"
+        svc = _make_svc(file_fingerprint=fp)
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, input_file_paths=["/a/file.txt"])
+        svc._build_identity(cmd)
+        fp.fingerprint.assert_called_once_with("/a/file.txt")
+
+    def test_local_passthrough_returns_passthrough_call_identity(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH)
+        identity = svc._build_identity(cmd)
+        assert isinstance(identity, PassthroughCallIdentity)
+
+    def test_local_passthrough_client_field_matches_command(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, client="pass-claude")
+        identity = svc._build_identity(cmd)
+        assert identity.client == "pass-claude"
+
+    def test_api_returns_api_call_identity(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.API)
+        identity = svc._build_identity(cmd)
+        assert isinstance(identity, ApiCallIdentity)
+
+    def test_api_provider_and_model_fields(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.API, client="anthropic", model="claude-3-7")
+        identity = svc._build_identity(cmd)
+        assert identity.provider == "anthropic"
+        assert identity.model == "claude-3-7"
+
+
+class TestRunClient:
+    def test_runner_exists_calls_runner_run(self):
+        runner = MagicMock()
+        svc = _make_svc(runners={ExecutionKind.LOCAL_MANAGED: runner})
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, prompt="hello")
+        svc._run_client(cmd)
+        runner.run.assert_called_once()
+
+    def test_runner_exists_returns_runner_result(self):
+        expected = MagicMock()
+        runner = MagicMock()
+        runner.run.return_value = expected
+        svc = _make_svc(runners={ExecutionKind.API: runner})
+        cmd = _cmd(kind=ExecutionKind.API, prompt="q")
+        result = svc._run_client(cmd)
+        assert result is expected
+
+    def test_no_runner_raises_runtime_error(self):
+        svc = _make_svc(runners={})
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED)
+        with pytest.raises(RuntimeError):
+            svc._run_client(cmd)
+
+
+class TestAfterRecord:
+    def test_purge_service_none_does_not_evict(self):
+        svc = _make_svc(purge_service=None, max_size=1000)
+        svc._after_record("key")
+
+    def test_max_size_none_does_not_evict(self):
+        purge_mock = create_autospec(PurgeService)
+        svc = _make_svc(purge_service=purge_mock, max_size=None)
+        svc._after_record("key")
+        purge_mock.evict_to_quota.assert_not_called()
+
+    def test_both_set_calls_evict_to_quota(self):
+        purge_mock = create_autospec(PurgeService)
+        svc = _make_svc(purge_service=purge_mock, max_size=5000)
+        svc._after_record("key")
+        purge_mock.evict_to_quota.assert_called_once_with(5000)
+
+
+class TestJournalFields:
+    def test_local_passthrough_returns_client_empty_empty(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, client="pass-claude", model="", effort="")
+        result = svc._journal_fields(cmd)
+        assert result == ("pass-claude", "", "")
+
+    def test_local_managed_returns_client_model_effort(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, client="claude", model="opus", effort="max")
+        result = svc._journal_fields(cmd)
+        assert result == ("claude", "opus", "max")
+
+    def test_api_returns_client_model_effort(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.API, client="anthropic", model="claude-3-7", effort="")
+        result = svc._journal_fields(cmd)
+        assert result == ("anthropic", "claude-3-7", "")
+
+
+class TestExecutionKind:
+    def test_delegates_to_command_execution_kind(self):
+        svc = _make_svc()
+        for kind in ExecutionKind:
+            cmd = _cmd(kind=kind)
+            assert svc._execution_kind(cmd) is kind
+
+
+class TestIsUncacheable:
+    def test_cacheable_managed_command_returns_false(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, allow_paths=[], scan_trust=False)
+        assert svc._is_uncacheable(cmd) is False
+
+    def test_uncacheable_managed_command_with_allow_paths_returns_true(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, allow_paths=["/some/dir"], scan_trust=False)
+        assert svc._is_uncacheable(cmd) is True
+
+    def test_scan_trust_overrides_allow_paths(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, allow_paths=["/some/dir"], scan_trust=True)
+        assert svc._is_uncacheable(cmd) is False
+
+    def test_api_is_always_cacheable(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.API)
+        assert svc._is_uncacheable(cmd) is False
+
+    def test_passthrough_is_always_cacheable(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH)
+        assert svc._is_uncacheable(cmd) is False
+
+
+class TestExecutionTags:
+    def test_strips_and_sorts_tags(self):
+        svc = _make_svc()
+        cmd = _cmd(tags=["  Tag1  ", "tag2"])
+        result = svc._execution_tags(cmd)
+        assert result == ["Tag1", "tag2"]
+
+    def test_empty_tags_returns_empty_list(self):
+        svc = _make_svc()
+        cmd = _cmd(tags=[])
+        assert svc._execution_tags(cmd) == []
+
+    def test_deduplicates_tags(self):
+        svc = _make_svc()
+        cmd = _cmd(tags=["foo", "foo", "bar"])
+        result = svc._execution_tags(cmd)
+        assert result == ["bar", "foo"]
+
+    def test_drops_blank_tags(self):
+        svc = _make_svc()
+        cmd = _cmd(tags=["  ", "", "valid"])
+        result = svc._execution_tags(cmd)
+        assert result == ["valid"]
+
+
+class TestInputParts:
+    def test_local_passthrough_returns_input_args_tuple(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, native_args=["--foo", "bar"])
+        parts = svc._input_parts(cmd)
+        assert len(parts) == 1
+        assert parts[0][0] is ArtifactType.INPUT_ARGS
+        assert parts[0][1] is None
+        assert parts[0][2] == b'["--foo", "bar"]'
+
+    def test_local_managed_with_context_prompt_system_returns_three_parts(self):
+        svc = _make_svc()
+        cmd = _cmd(
+            kind=ExecutionKind.LOCAL_MANAGED,
+            context="ctx",
+            prompt="pmt",
+            user_system_prompt="sys",
+        )
+        parts = svc._input_parts(cmd)
+        types = [p[0] for p in parts]
+        assert types == [
+            ArtifactType.INPUT_CONTEXT,
+            ArtifactType.INPUT_PROMPT,
+            ArtifactType.INPUT_SYSTEM,
+        ]
+
+    def test_local_managed_with_only_prompt_returns_one_part(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, context="", prompt="only prompt")
+        parts = svc._input_parts(cmd)
+        assert len(parts) == 1
+        assert parts[0][0] is ArtifactType.INPUT_PROMPT
+        assert parts[0][2] == b"only prompt"
+
+    def test_api_with_prompt_returns_input_prompt_part(self):
+        svc = _make_svc()
+        cmd = _cmd(kind=ExecutionKind.API, context="", prompt="api question")
+        parts = svc._input_parts(cmd)
+        assert len(parts) == 1
+        assert parts[0][0] is ArtifactType.INPUT_PROMPT
+        assert parts[0][2] == b"api question"

@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from generic_ml_cache_cli.cli import main
-from generic_ml_cache_core.adapter.out.client.discover import (
+from generic_ml_cache_adapters.adapter.out.client.discover import (
     list_models,
     list_models_all,
     probe,

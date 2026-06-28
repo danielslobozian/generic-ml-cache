@@ -1,7 +1,7 @@
 name: Release to PyPI
 
-# Publishes all three packages to PyPI on a version tag (e.g. v0.19.0), via PyPI Trusted
-# Publishing (OIDC — no API token is stored). The three packages are versioned in
+# Publishes all four packages to PyPI on a version tag (e.g. v0.28.0), via PyPI Trusted
+# Publishing (OIDC — no API token is stored). The four packages are versioned in
 # lockstep from the root VERSION file; bump VERSION, update CHANGELOG, then tag.
 
 on:
@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   # Fail fast if the tag does not match the root VERSION file, so a mistagged release
-  # (e.g. v0.20.0 pointing at a commit still on 0.19.0) never builds and publishes the
-  # wrong version. All three packages read their version from VERSION (dynamic hatchling).
+  # (e.g. v0.28.0 pointing at a commit still on 0.27.0) never builds and publishes the
+  # wrong version. All four packages read their version from VERSION (dynamic hatchling).
   guard:
     name: Tag matches version
     runs-on: ubuntu-latest
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [core, cli, daemon]
+        package: [core, adapters, cli, daemon]
     steps:
       - uses: actions/checkout@v7
 
@@ -73,6 +73,10 @@ jobs:
           path: dist/
       - uses: actions/download-artifact@v8
         with:
+          name: dist-adapters
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
           name: dist-cli
           path: dist/
       - uses: actions/download-artifact@v8
@@ -88,20 +92,21 @@ jobs:
       - name: Smoke install from wheels
         run: |
           pip install dist/generic_ml_cache_core-*.whl
+          pip install dist/generic_ml_cache_adapters-*.whl
           pip install dist/generic_ml_cache_cli-*.whl
           pip install dist/generic_ml_cache_daemon-*.whl
           gmlcache --version
           python -m generic_ml_cache_daemon --help
-          python -c "import generic_ml_cache_core, generic_ml_cache_cli, generic_ml_cache_daemon"
+          python -c "import generic_ml_cache_core, generic_ml_cache_adapters, generic_ml_cache_cli, generic_ml_cache_daemon"
 
-  # core is published first: the cli depends on it, so it must exist on PyPI first.
+  # core is published first: all other packages depend on it.
   publish-core:
     name: Publish generic-ml-cache-core
     needs: verify
     runs-on: ubuntu-latest
     # Per-package environment: a pending publisher is unique on
-    # (owner, repo, workflow, environment), so the two packages need distinct
-    # environments to both register from this one workflow (PyPI monorepo quirk).
+    # (owner, repo, workflow, environment), so each package needs a distinct
+    # environment to register from this one workflow (PyPI monorepo quirk).
     environment: pypi-core
     permissions:
       id-token: write # OIDC token for Trusted Publishing
@@ -112,9 +117,26 @@ jobs:
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
+  # adapters depends on core, so core must be on PyPI first.
+  publish-adapters:
+    name: Publish generic-ml-cache-adapters
+    needs: publish-core
+    runs-on: ubuntu-latest
+    environment: pypi-adapters
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-adapters
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # cli and daemon both depend on adapters, so adapters must be on PyPI first.
+  # cli and daemon have no dependency on each other and can publish in parallel.
   publish-cli:
     name: Publish generic-ml-cache-cli
-    needs: publish-core
+    needs: publish-adapters
     runs-on: ubuntu-latest
     environment: pypi-cli
     permissions:
@@ -126,11 +148,9 @@ jobs:
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
-  # daemon depends on core, so core must be on PyPI first; cli has no dependency
-  # on daemon so publish-cli and publish-daemon can run in parallel after publish-core.
   publish-daemon:
     name: Publish generic-ml-cache-daemon
-    needs: publish-core
+    needs: publish-adapters
     runs-on: ubuntu-latest
     environment: pypi-daemon
     permissions:

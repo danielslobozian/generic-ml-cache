@@ -19,9 +19,6 @@ from generic_ml_cache_core.application.domain.model.identity.call_identity impor
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
-from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
-    NullDiagnosticsAdapter,
-)
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
@@ -75,7 +72,7 @@ class CachedMlExecutionService(ABC):
         self._blob_store = blob_store
         self._repository = repository
         self._metrics = metrics
-        self._diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
+        self._diag: Optional[DiagnosticsPort] = diag
         self._key_locks: Dict[str, threading.Lock] = {}
         self._key_locks_guard = threading.Lock()
 
@@ -84,76 +81,85 @@ class CachedMlExecutionService(ABC):
         call_identity = self._build_identity(command)
         execution_key = call_identity.generate_key()
 
-        self._diag.debug("execute ENTER", key=execution_key, mode=command.cache_mode.value)
+        if self._diag:
+            self._diag.debug("execute ENTER", key=execution_key, mode=command.cache_mode.value)
 
         try:
             if self._is_uncacheable(command):
-                self._diag.debug("uncacheable — bypassing cache", key=execution_key)
+                if self._diag:
+                    self._diag.debug("uncacheable — bypassing cache", key=execution_key)
                 result = self._run_uncacheable(command, call_identity, execution_key)
-                self._diag.debug(
-                    _EXECUTE_EXIT,
-                    key=execution_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                    outcome="uncacheable",
-                )
+                if self._diag:
+                    self._diag.debug(
+                        _EXECUTE_EXIT,
+                        key=execution_key,
+                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                        outcome="uncacheable",
+                    )
                 return result
 
             if command.cache_mode is CacheMode.OFFLINE:
                 result = self._serve_offline(command, execution_key)
-                self._diag.debug(
-                    _EXECUTE_EXIT,
-                    key=execution_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                    outcome="offline-hit",
-                )
+                if self._diag:
+                    self._diag.debug(
+                        _EXECUTE_EXIT,
+                        key=execution_key,
+                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                        outcome="offline-hit",
+                    )
                 return result
 
             if not command.persistence_depth.stores_output:
                 # METER: never replays — always run, store nothing, but record whether
                 # the call *would* have hit a stored entry (would-be hit/miss).
                 result = self._run_metered(command, call_identity, execution_key)
-                self._diag.debug(
-                    _EXECUTE_EXIT,
-                    key=execution_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                    outcome="metered",
-                )
+                if self._diag:
+                    self._diag.debug(
+                        _EXECUTE_EXIT,
+                        key=execution_key,
+                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                        outcome="metered",
+                    )
                 return result
 
             if command.cache_mode is CacheMode.CACHE:
                 current_execution = self._repository.find_current(execution_key)
                 if current_execution is not None:
                     result = self._serve_hit(command, execution_key, current_execution)
-                    self._diag.debug(
-                        _EXECUTE_EXIT,
-                        key=execution_key,
-                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                        outcome="hit",
-                    )
+                    if self._diag:
+                        self._diag.debug(
+                            _EXECUTE_EXIT,
+                            key=execution_key,
+                            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                            outcome="hit",
+                        )
                     return result
 
             result = self._run_fresh(command, call_identity, execution_key, allow_store=True)
-            self._diag.debug(
-                "execute EXIT",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                outcome="fresh-run",
-            )
+            if self._diag:
+                self._diag.debug(
+                    "execute EXIT",
+                    key=execution_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    outcome="fresh-run",
+                )
             return result
         except CacheMiss:
-            self._diag.debug(
-                "execute EXIT — cache-miss",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            )
+            if self._diag:
+                self._diag.debug(
+                    "execute EXIT — cache-miss",
+                    key=execution_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                )
             raise
         except Exception as exc:
-            self._diag.error(
-                "execute FAILED",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                exc=exc,
-            )
+            if self._diag:
+                self._diag.error(
+                    "execute FAILED",
+                    key=execution_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    exc=exc,
+                )
             raise
 
     # -- kind-specific hooks ----------------------------------------------
@@ -200,38 +206,43 @@ class CachedMlExecutionService(ABC):
 
     def _serve_offline(self, command: CacheableExecutionCommand, execution_key: str) -> MlExecution:
         _t = time.perf_counter()
-        self._diag.debug("serve-offline ENTER", key=execution_key)
+        if self._diag:
+            self._diag.debug("serve-offline ENTER", key=execution_key)
         current_execution = self._repository.find_current(execution_key)
         if current_execution is None:
-            self._diag.warn(
-                "offline miss — no stored execution",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            )
+            if self._diag:
+                self._diag.warn(
+                    "offline miss — no stored execution",
+                    key=execution_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                )
             self._record_event(journal_events.MISS, execution_key, command)
             raise CacheMiss(f"offline miss: no stored execution for key {execution_key}")
         result = self._serve_hit(command, execution_key, current_execution)
-        self._diag.debug(
-            "serve-offline EXIT",
-            key=execution_key,
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-        )
+        if self._diag:
+            self._diag.debug(
+                "serve-offline EXIT",
+                key=execution_key,
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+            )
         return result
 
     def _serve_hit(
         self, command: CacheableExecutionCommand, execution_key: str, current_execution: MlExecution
     ) -> MlExecution:
         _t = time.perf_counter()
-        self._diag.info("cache HIT", key=execution_key)
+        if self._diag:
+            self._diag.info("cache HIT", key=execution_key)
         hydrated_execution = self._hydrate(current_execution)
         self._record_event(journal_events.HIT, execution_key, command)
         self._apply_tags(execution_key, command)
         self._accumulate_input(command, execution_key, current_execution)
-        self._diag.debug(
-            "serve-hit EXIT",
-            key=execution_key,
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-        )
+        if self._diag:
+            self._diag.debug(
+                "serve-hit EXIT",
+                key=execution_key,
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+            )
         return hydrated_execution
 
     def _accumulate_input(
@@ -299,19 +310,21 @@ class CachedMlExecutionService(ABC):
         """Run the client under a per-key lock, bookending the call with
         IN_PROGRESS and the final execution record in the repository."""
         _t = time.perf_counter()
-        self._diag.debug("run-fresh-locked ENTER", key=execution_key)
+        if self._diag:
+            self._diag.debug("run-fresh-locked ENTER", key=execution_key)
         with self._acquire_key_lock(execution_key):
             # Another thread holding this lock may have just completed this key.
             if command.cache_mode is CacheMode.CACHE:
                 current = self._repository.find_current(execution_key)
                 if current is not None:
                     result = self._serve_hit(command, execution_key, current)
-                    self._diag.debug(
-                        "run-fresh-locked EXIT",
-                        key=execution_key,
-                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                        stored=False,
-                    )
+                    if self._diag:
+                        self._diag.debug(
+                            "run-fresh-locked EXIT",
+                            key=execution_key,
+                            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                            stored=False,
+                        )
                     return result
 
             # Write the IN_PROGRESS marker before the client is called so that
@@ -327,7 +340,8 @@ class CachedMlExecutionService(ABC):
                 )
             )
 
-            self._diag.info("cache MISS — running client", key=execution_key)
+            if self._diag:
+                self._diag.info("cache MISS — running client", key=execution_key)
             client_run_result = self._run_client(command)
             should_store = command.should_persist(client_run_result.succeeded)
             artifacts = self._build_artifacts(client_run_result, store=should_store)
@@ -347,23 +361,26 @@ class CachedMlExecutionService(ABC):
             # Always resolve the IN_PROGRESS record with the final execution.
             self._repository.save(execution)
             if should_store:
-                self._diag.info("cached RECORD", key=execution_key)
+                if self._diag:
+                    self._diag.info("cached RECORD", key=execution_key)
                 self._record_event(journal_events.RECORD, execution_key, command)
                 self._apply_tags(execution_key, command)
                 self._after_record(execution_key)
             else:
-                self._diag.info(
-                    "client run complete — not stored",
-                    key=execution_key,
-                    succeeded=client_run_result.succeeded,
-                )
+                if self._diag:
+                    self._diag.info(
+                        "client run complete — not stored",
+                        key=execution_key,
+                        succeeded=client_run_result.succeeded,
+                    )
                 self._record_event(journal_events.RUN, execution_key, command)
-            self._diag.debug(
-                "run-fresh-locked EXIT",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                stored=should_store,
-            )
+            if self._diag:
+                self._diag.debug(
+                    "run-fresh-locked EXIT",
+                    key=execution_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    stored=should_store,
+                )
             return execution
 
     def _run_metered(
@@ -374,7 +391,8 @@ class CachedMlExecutionService(ABC):
         have saved N runs") without the cache ever serving or storing anything."""
         _t = time.perf_counter()
         would_hit = self._repository.find_current(execution_key) is not None
-        self._diag.debug("METER run", key=execution_key, would_hit=would_hit)
+        if self._diag:
+            self._diag.debug("METER run", key=execution_key, would_hit=would_hit)
         client_run_result = self._run_client(command)
         execution = MlExecution(
             call_identity=call_identity,
@@ -388,12 +406,13 @@ class CachedMlExecutionService(ABC):
         )
         event = journal_events.WOULD_HIT if would_hit else journal_events.WOULD_MISS
         self._record_event(event, execution_key, command)
-        self._diag.debug(
-            "METER run EXIT",
-            key=execution_key,
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            would_hit=would_hit,
-        )
+        if self._diag:
+            self._diag.debug(
+                "METER run EXIT",
+                key=execution_key,
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                would_hit=would_hit,
+            )
         return execution
 
     # -- artifacts --------------------------------------------------------
@@ -454,11 +473,12 @@ class CachedMlExecutionService(ABC):
     def _hydrate_artifact(self, artifact: Artifact) -> Artifact:
         content_bytes = self._blob_store.get(artifact.blob_key)
         if content_bytes is None:
-            self._diag.error(
-                "blob missing — artifact cannot be hydrated",
-                blob_key=artifact.blob_key,
-                artifact_type=artifact.artifact_type.value,
-            )
+            if self._diag:
+                self._diag.error(
+                    "blob missing — artifact cannot be hydrated",
+                    blob_key=artifact.blob_key,
+                    artifact_type=artifact.artifact_type.value,
+                )
             raise ArtifactBlobMissing(
                 f"blob {artifact.blob_key} for a {artifact.artifact_type.value} "
                 "artifact is missing from the blob store"

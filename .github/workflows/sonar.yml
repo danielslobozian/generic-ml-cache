@@ -23,20 +23,20 @@ jobs:
         with:
           python-version: "3.13"
 
-      # core is dependency-free; install it first so cli and daemon build against
-      # the in-repo version rather than a PyPI release.
       - name: Install packages (with dev extras)
         run: |
           python -m pip install --upgrade pip
           pip install -e "packages/core[dev]"
+          pip install -e "packages/adapters[dev,encryption]"
           pip install -e "packages/cli[dev]"
           pip install -e "packages/daemon[dev]"
 
       - name: Run tests with coverage
         run: |
-          python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-config=packages/core/pyproject.toml   --cov-report=xml:packages/core/coverage.xml
-          python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-config=packages/cli/pyproject.toml    --cov-report=xml:packages/cli/coverage.xml
-          python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-config=packages/daemon/pyproject.toml --cov-report=xml:packages/daemon/coverage.xml
+          python -m pytest packages/core/tests    --cov=generic_ml_cache_core    --cov-config=packages/core/pyproject.toml    --cov-report=xml:packages/core/coverage.xml
+          python -m pytest packages/adapters/tests --cov=generic_ml_cache_adapters --cov-config=packages/adapters/pyproject.toml --cov-report=xml:packages/adapters/coverage.xml
+          python -m pytest packages/cli/tests     --cov=generic_ml_cache_cli     --cov-config=packages/cli/pyproject.toml     --cov-report=xml:packages/cli/coverage.xml
+          python -m pytest packages/daemon/tests  --cov=generic_ml_cache_daemon  --cov-config=packages/daemon/pyproject.toml  --cov-report=xml:packages/daemon/coverage.xml
 
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@v8

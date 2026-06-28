@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from generic_ml_cache_core.adapter.inbound.composition import resolve_execution_kind
+from generic_ml_cache_core.adapter.registry import resolve_execution_kind
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_state import (
     ExecutionState,

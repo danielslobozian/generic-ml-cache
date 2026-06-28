@@ -10,11 +10,8 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
-from generic_ml_cache_core.adapter.inbound.composition import (
-    build_use_cases,
-    get_encryption_state,
-    resolve_execution_kind,
-)
+from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
+from generic_ml_cache_core.adapter.registry import resolve_execution_kind
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )

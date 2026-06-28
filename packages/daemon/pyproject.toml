@@ -7,7 +7,7 @@ name = "generic-ml-cache-daemon"
 dynamic = ["version"]
 description = "Local HTTP daemon for generic-ml-cache: REST API, gateway proxy, and session transport. A thin inbound driver over generic-ml-cache-core."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Daniel Slobozian" }]
@@ -18,7 +18,6 @@ classifiers = [
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -26,11 +25,11 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "generic-ml-cache-core>=0.18.0",
+  "generic-ml-cache-core>=0.27.0",
+  "generic-ml-cache-adapters>=0.27.0",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
-  "structlog>=21",
 ]
 
 [project.urls]
@@ -68,11 +67,11 @@ addopts = "-ra --cov=generic_ml_cache_daemon --cov-fail-under=80"
 timeout = 60
 
 [tool.coverage.run]
-omit = ["*/generic_ml_cache_daemon/__main__.py", "*/packages/common/*"]
+omit = ["*/generic_ml_cache_daemon/__main__.py"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 extend-select = ["C901"]

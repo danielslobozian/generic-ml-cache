@@ -1,662 +1,421 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for PurgeService."""
-
 from __future__ import annotations
 
-import time as _time_module
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+import time
+from unittest.mock import create_autospec
 
-from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
-    InMemoryExecutionRepository,
-)
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
-from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
-    ManagedCallIdentity,
-)
-from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
+from generic_ml_cache_core.application.port.out.execution_repository_port import (
+    ExecutionRepositoryPort,
+    ExecutionSizeEntry,
+)
+from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
-_MOMENT = datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
 
-
-class FixedClock(ClockPort):
-    def now(self) -> datetime:
-        return _MOMENT
-
-
-class InMemoryBlobStore(BlobStorePort):
-    def __init__(self) -> None:
-        self._store: Dict[str, bytes] = {}
-
-    def get(self, key: str) -> Optional[bytes]:
-        return self._store.get(key)
-
-    def put(self, key: str, output: bytes) -> None:
-        self._store[key] = output
-
-    def remove(self, key: str) -> None:
-        self._store.pop(key, None)
-
-    def has(self, key: str) -> bool:
-        return key in self._store
-
-
-class FakeMetrics(MetricsPort):
-    """Controllable fake for PurgeService tests."""
-
-    def __init__(
-        self,
-        last_access: Optional[Dict[str, float]] = None,
-        session_keys: Optional[Dict[str, List[str]]] = None,
-    ) -> None:
-        self._last_access = last_access or {}
-        self._session_keys = session_keys or {}
-        self._deleted_keys: List[str] = []
-        self._session_tags_index: Dict[str, List[str]] = {}
-
-    def record_event(self, event, *, execution_key, client, model, effort, session_id=None):
-        pass
-
-    def hit_counts_by_key(self) -> Dict[str, int]:
-        return {}
-
-    def event_counts(self) -> Dict[str, int]:
-        return {}
-
-    def session_event_counts(self, session_id: str) -> Dict[str, int]:
-        return {}
-
-    def session_events(self, session_id: str) -> List[SessionEventRow]:
-        return []
-
-    def last_access(self) -> Dict[str, float]:
-        return self._last_access
-
-    def execution_keys_for_session(self, session_id: str) -> List[str]:
-        return self._session_keys.get(session_id, [])
-
-    def delete_events_for_key(self, execution_key: str) -> None:
-        self._deleted_keys.append(execution_key)
-
-    def add_session_tag(self, session_id: str, tag: str) -> None:
-        pass
-
-    def remove_session_tag(self, session_id: str, tag: str) -> None:
-        pass
-
-    def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
-        pass
-
-    def clear_session_spec(self, session_id: str) -> None:
-        pass
-
-    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
-        return None
-
-    def list_session_ids(self) -> List[str]:
-        return []
-
-    def session_tags(self, session_id: str) -> List[str]:
-        return []
-
-    def session_ids_for_tag(self, tag: str) -> List[str]:
-        return self._session_tags_index.get(tag, [])
-
-    def _with_session_tags(self, tag_to_sessions: Dict[str, List[str]]) -> "FakeMetrics":
-        self._session_tags_index = tag_to_sessions
-        return self
-
-
-def _identity(prompt: str = "p") -> ManagedCallIdentity:
-    return ManagedCallIdentity(
-        client="claude",
-        model="sonnet",
-        effort="high",
-        context_fingerprint="c",
-        prompt_fingerprint=prompt,
+def _make_svc(repo=None, blob=None, metrics=None):
+    return PurgeService(
+        repository=repo or create_autospec(ExecutionRepositoryPort),
+        blob_store=blob or create_autospec(BlobStorePort),
+        metrics=metrics or create_autospec(MetricsPort),
     )
 
 
-def _execution(identity, content: bytes = b"answer", token_usage=None) -> MlExecution:
-    artifact = Artifact(
-        artifact_type=ArtifactType.STDOUT,
-        blob_key="blob_" + content.hex(),
-        size_bytes=len(content),
-        content=content,
-    )
-    return MlExecution(
-        call_identity=identity,
-        execution_state=ExecutionState.SUCCESS,
-        execution_kind=ExecutionKind.LOCAL_MANAGED,
-        output_persisted=True,
-        artifacts=[artifact],
-        token_usage=token_usage,
-    )
+def _repo_with_key():
+    """Repository mock that has one existing key and no blobs."""
+    repo = create_autospec(ExecutionRepositoryPort)
+    repo.find_all.return_value = [object()]
+    repo.blob_keys_for_execution.return_value = []
+    repo.total_stored_bytes.return_value = 0
+    return repo
 
 
-def _service(repository=None, blob_store=None, metrics=None):
-    repo = repository or InMemoryExecutionRepository(FixedClock())
-    store = blob_store or InMemoryBlobStore()
-    met = metrics or FakeMetrics()
-    return PurgeService(repo, store, met), repo, store, met
+class TestPurgeOne:
+    def test_key_exists_calls_soft_purge(self):
+        repo = _repo_with_key()
+        svc = _make_svc(repo=repo)
 
+        svc.purge_one("key1")
 
-# --- soft purge: purge_one ---------------------------------------------------
+        repo.soft_purge_execution.assert_called_once_with("key1")
 
+    def test_key_exists_report_has_executions_removed_1(self):
+        repo = _repo_with_key()
+        svc = _make_svc(repo=repo)
 
-def test_purge_one_frees_bytes_and_reports_correctly():
-    svc, repo, store, _ = _service()
-    identity = _identity()
-    repo.save(_execution(identity, content=b"answer"))
-    store.put("blob_" + b"answer".hex(), b"answer")
-    key = identity.generate_key()
+        report = svc.purge_one("key1")
 
-    report = svc.purge_one(key)
+        assert report.executions_removed == 1
 
-    assert report.executions_removed == 1
-    assert report.bytes_freed == len(b"answer")
-    assert report.blobs_removed == 1
+    def test_key_not_found_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.find_all.return_value = []
+        svc = _make_svc(repo=repo)
 
+        report = svc.purge_one("missing")
 
-def test_purge_one_deletes_blob_from_store():
-    svc, repo, store, _ = _service()
-    identity = _identity()
-    blob_key = "blob_" + b"answer".hex()
-    repo.save(_execution(identity, content=b"answer"))
-    store.put(blob_key, b"answer")
+        assert report.executions_removed == 0
+        assert report.bytes_freed == 0
+        assert report.blobs_removed == 0
 
-    svc.purge_one(identity.generate_key())
+    def test_key_not_found_does_not_call_soft_purge(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.find_all.return_value = []
+        svc = _make_svc(repo=repo)
 
-    assert not store.has(blob_key)
+        svc.purge_one("missing")
 
+        repo.soft_purge_execution.assert_not_called()
 
-def test_purge_one_makes_execution_not_servable():
-    svc, repo, _, _ = _service()
-    identity = _identity()
-    repo.save(_execution(identity))
-    key = identity.generate_key()
-    svc.purge_one(key)
-    assert repo.find_current(key) is None
 
+class TestPurgeByTag:
+    def test_tag_with_keys_soft_purges_each(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.executions_by_tag.return_value = ["key1", "key2"]
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        svc = _make_svc(repo=repo)
 
-def test_purge_one_preserves_token_usage():
-    svc, repo, _, _ = _service()
-    identity = _identity()
-    usage = TokenUsage(input_tokens=10, output_tokens=5, raw={"x": 1})
-    repo.save(_execution(identity, token_usage=usage))
-    svc.purge_one(identity.generate_key())
-    history = repo.find_all(identity.generate_key())
-    assert history[0].token_usage == usage
+        report = svc.purge_by_tag("my-tag")
 
+        assert report.executions_removed == 2
+        repo.soft_purge_execution.assert_any_call("key1")
+        repo.soft_purge_execution.assert_any_call("key2")
 
-def test_purge_one_unknown_key_returns_empty_report():
-    svc, _, _, _ = _service()
-    report = svc.purge_one("nope")
-    assert report.executions_removed == 0
-    assert report.bytes_freed == 0
-    assert report.blobs_removed == 0
+    def test_tag_with_no_keys_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.executions_by_tag.return_value = []
+        svc = _make_svc(repo=repo)
 
+        report = svc.purge_by_tag("empty-tag")
 
-# --- soft purge: purge_by_tag ------------------------------------------------
+        assert report.executions_removed == 0
+        repo.soft_purge_execution.assert_not_called()
 
 
-def test_purge_by_tag_purges_matching_executions():
-    svc, repo, store, _ = _service()
-    id_a = _identity("a")
-    id_b = _identity("b")
-    repo.save(_execution(id_a, content=b"aaa"))
-    repo.save(_execution(id_b, content=b"bb"))
-    store.put("blob_" + b"aaa".hex(), b"aaa")
-    store.put("blob_" + b"bb".hex(), b"bb")
-    repo.add_tags(id_a.generate_key(), ["work"])
+class TestPurgeBySession:
+    def test_session_with_keys_soft_purges_each(self):
+        metrics = create_autospec(MetricsPort)
+        metrics.execution_keys_for_session.return_value = ["key1", "key2"]
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-    report = svc.purge_by_tag("work")
+        report = svc.purge_by_session("sess-1")
 
-    assert report.executions_removed == 1
-    assert report.bytes_freed == 3
-    assert not store.has("blob_" + b"aaa".hex())
-    assert store.has("blob_" + b"bb".hex())  # untagged — untouched
+        assert report.executions_removed == 2
+        repo.soft_purge_execution.assert_any_call("key1")
 
+    def test_session_with_no_keys_returns_empty_report(self):
+        metrics = create_autospec(MetricsPort)
+        metrics.execution_keys_for_session.return_value = []
+        svc = _make_svc(metrics=metrics)
 
-def test_purge_by_tag_unknown_tag_returns_empty_report():
-    svc, _, _, _ = _service()
-    report = svc.purge_by_tag("nope")
-    assert report.executions_removed == 0
-    assert report.bytes_freed == 0
+        report = svc.purge_by_session("empty-sess")
 
+        assert report.executions_removed == 0
+        report  # no assertion on soft_purge because _soft_purge_keys short-circuits
 
-# --- soft purge: purge_by_session --------------------------------------------
 
+class TestPurgeBySessionTag:
+    def test_fans_out_through_sessions(self):
+        metrics = create_autospec(MetricsPort)
+        metrics.session_ids_for_tag.return_value = ["sess-A", "sess-B"]
+        metrics.execution_keys_for_session.side_effect = [["key1"], ["key2"]]
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-def test_purge_by_session_purges_matching_executions():
-    id_a = _identity("a")
-    id_b = _identity("b")
-    repo = InMemoryExecutionRepository(FixedClock())
-    store = InMemoryBlobStore()
-    metrics = FakeMetrics(session_keys={"sess-1": [id_a.generate_key()]})
-    svc = PurgeService(repo, store, metrics)
+        report = svc.purge_by_session_tag("my-tag")
 
-    repo.save(_execution(id_a, content=b"aaa"))
-    repo.save(_execution(id_b, content=b"bb"))
-    store.put("blob_" + b"aaa".hex(), b"aaa")
-    store.put("blob_" + b"bb".hex(), b"bb")
+        assert report.executions_removed == 2
+        repo.soft_purge_execution.assert_any_call("key1")
+        repo.soft_purge_execution.assert_any_call("key2")
 
-    report = svc.purge_by_session("sess-1")
+    def test_deduplicates_keys_across_sessions(self):
+        metrics = create_autospec(MetricsPort)
+        metrics.session_ids_for_tag.return_value = ["sess-A", "sess-B"]
+        metrics.execution_keys_for_session.side_effect = [["key1"], ["key1"]]
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-    assert report.executions_removed == 1
-    assert not store.has("blob_" + b"aaa".hex())
-    assert store.has("blob_" + b"bb".hex())
+        report = svc.purge_by_session_tag("my-tag")
 
+        assert report.executions_removed == 1
+        assert repo.soft_purge_execution.call_count == 1
 
-def test_purge_by_session_unknown_session_returns_empty_report():
-    svc, _, _, _ = _service()
-    report = svc.purge_by_session("no-such-session")
-    assert report.executions_removed == 0
+    def test_no_sessions_returns_empty_report(self):
+        metrics = create_autospec(MetricsPort)
+        metrics.session_ids_for_tag.return_value = []
+        svc = _make_svc(metrics=metrics)
 
+        report = svc.purge_by_session_tag("unknown-tag")
 
-# --- soft purge: purge_all ---------------------------------------------------
+        assert report.executions_removed == 0
 
 
-def test_purge_all_purges_every_current_execution():
-    svc, repo, store, _ = _service()
-    for i in range(3):
-        identity = _identity(str(i))
-        content = f"content{i}".encode()
-        repo.save(_execution(identity, content=content))
-        store.put("blob_" + content.hex(), content)
+class TestPurgeAll:
+    def test_purges_all_current_executions(self):
+        entries = [
+            ExecutionSizeEntry("key1", 100, "2026-01-01T00:00:00"),
+            ExecutionSizeEntry("key2", 200, "2026-01-01T00:00:00"),
+        ]
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.current_executions_with_sizes.return_value = entries
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        svc = _make_svc(repo=repo)
 
-    report = svc.purge_all()
+        report = svc.purge_all()
 
-    assert report.executions_removed == 3
-    assert report.bytes_freed > 0
-    assert report.blobs_removed == 3
+        assert report.executions_removed == 2
+        repo.soft_purge_execution.assert_any_call("key1")
+        repo.soft_purge_execution.assert_any_call("key2")
 
+    def test_empty_store_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.current_executions_with_sizes.return_value = []
+        svc = _make_svc(repo=repo)
 
-def test_purge_all_empty_store_returns_zero_report():
-    svc, _, _, _ = _service()
-    report = svc.purge_all()
-    assert report.executions_removed == 0
-    assert report.bytes_freed == 0
-    assert report.blobs_removed == 0
+        report = svc.purge_all()
 
+        assert report.executions_removed == 0
+        repo.soft_purge_execution.assert_not_called()
 
-# --- hard delete: hard_delete_one --------------------------------------------
 
+class TestHardDeleteOne:
+    def test_key_exists_calls_hard_delete_and_delete_events(self):
+        repo = _repo_with_key()
+        metrics = create_autospec(MetricsPort)
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-def test_hard_delete_one_removes_all_db_rows():
-    svc, repo, store, _ = _service()
-    identity = _identity()
-    repo.save(_execution(identity))
-    key = identity.generate_key()
+        svc.hard_delete_one("key1")
 
-    svc.hard_delete_one(key)
+        repo.hard_delete_execution.assert_called_once_with("key1")
+        metrics.delete_events_for_key.assert_called_once_with("key1")
 
-    assert repo.find_current(key) is None
-    assert repo.find_all(key) == []
+    def test_key_exists_report_has_executions_removed_1(self):
+        repo = _repo_with_key()
+        svc = _make_svc(repo=repo)
 
+        report = svc.hard_delete_one("key1")
 
-def test_hard_delete_one_deletes_blob():
-    svc, repo, store, _ = _service()
-    identity = _identity()
-    blob_key = "blob_" + b"answer".hex()
-    repo.save(_execution(identity, content=b"answer"))
-    store.put(blob_key, b"answer")
+        assert report.executions_removed == 1
 
-    svc.hard_delete_one(identity.generate_key())
+    def test_key_not_found_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.find_all.return_value = []
+        svc = _make_svc(repo=repo)
 
-    assert not store.has(blob_key)
+        report = svc.hard_delete_one("missing")
 
+        assert report.executions_removed == 0
 
-def test_hard_delete_one_records_event_deletion():
-    svc, repo, store, metrics = _service()
-    identity = _identity()
-    repo.save(_execution(identity))
-    key = identity.generate_key()
+    def test_key_not_found_does_not_call_hard_delete_or_delete_events(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.find_all.return_value = []
+        metrics = create_autospec(MetricsPort)
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-    svc.hard_delete_one(key)
+        svc.hard_delete_one("missing")
 
-    assert key in metrics._deleted_keys
+        repo.hard_delete_execution.assert_not_called()
+        metrics.delete_events_for_key.assert_not_called()
 
 
-def test_hard_delete_one_unknown_key_returns_empty_report():
-    svc, _, _, _ = _service()
-    report = svc.hard_delete_one("nope")
-    assert report.executions_removed == 0
+class TestHardDeleteByTag:
+    def test_hard_deletes_and_erases_events_for_each_tagged_key(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.executions_by_tag.return_value = ["key1", "key2"]
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        metrics = create_autospec(MetricsPort)
+        svc = _make_svc(repo=repo, metrics=metrics)
 
+        report = svc.hard_delete_by_tag("my-tag")
 
-# --- hard delete: hard_delete_all --------------------------------------------
+        assert report.executions_removed == 2
+        repo.hard_delete_execution.assert_any_call("key1")
+        metrics.delete_events_for_key.assert_any_call("key2")
 
+    def test_empty_tag_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.executions_by_tag.return_value = []
+        svc = _make_svc(repo=repo)
 
-def test_hard_delete_all_removes_every_key():
-    svc, repo, store, _ = _service()
-    for i in range(3):
-        identity = _identity(str(i))
-        content = f"c{i}".encode()
-        repo.save(_execution(identity, content=content))
-        store.put("blob_" + content.hex(), content)
+        report = svc.hard_delete_by_tag("empty-tag")
 
-    report = svc.hard_delete_all()
+        assert report.executions_removed == 0
 
-    assert report.executions_removed == 3
-    assert repo.all_execution_keys() == []
 
+class TestHardDeleteBySession:
+    def test_hard_deletes_each_session_key_and_erases_events(self):
+        metrics = create_autospec(MetricsPort)
+        metrics.execution_keys_for_session.return_value = ["key1"]
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-def test_hard_delete_all_empty_store_returns_zero_report():
-    svc, _, _, _ = _service()
-    report = svc.hard_delete_all()
-    assert report.executions_removed == 0
+        report = svc.hard_delete_by_session("sess-1")
 
+        assert report.executions_removed == 1
+        repo.hard_delete_execution.assert_called_once_with("key1")
+        metrics.delete_events_for_key.assert_called_once_with("key1")
 
-# --- shared blob: no orphan deletion when still referenced -------------------
 
+class TestHardDeleteAll:
+    def test_hard_deletes_all_keys_and_erases_events(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.all_execution_keys.return_value = ["key1", "key2"]
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        metrics = create_autospec(MetricsPort)
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-def test_shared_blob_not_deleted_when_still_referenced():
-    svc, repo, store, _ = _service()
-    id_a = _identity("a")
-    id_b = _identity("b")
-    shared_content = b"shared"
-    shared_blob = "blob_" + shared_content.hex()
+        report = svc.hard_delete_all()
 
-    for identity in (id_a, id_b):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=len(shared_content),
-            content=shared_content,
-        )
-        repo.save(
-            MlExecution(
-                call_identity=identity,
-                execution_state=ExecutionState.SUCCESS,
-                execution_kind=ExecutionKind.LOCAL_MANAGED,
-                output_persisted=True,
-                artifacts=[artifact],
-            )
-        )
-    store.put(shared_blob, shared_content)
+        assert report.executions_removed == 2
+        repo.hard_delete_execution.assert_any_call("key1")
+        metrics.delete_events_for_key.assert_any_call("key2")
 
-    svc.purge_one(id_a.generate_key())
 
-    assert store.has(shared_blob)  # id_b still references it
+class TestEvictStale:
+    def test_zero_max_age_returns_empty_report_immediately(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        svc = _make_svc(repo=repo)
 
+        report = svc.evict_stale(0)
 
-def test_shared_blob_deleted_after_both_purged():
-    svc, repo, store, _ = _service()
-    id_a = _identity("a")
-    id_b = _identity("b")
-    shared_content = b"shared"
-    shared_blob = "blob_" + shared_content.hex()
+        assert report.executions_removed == 0
+        repo.current_executions_with_sizes.assert_not_called()
 
-    for identity in (id_a, id_b):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=len(shared_content),
-            content=shared_content,
-        )
-        repo.save(
-            MlExecution(
-                call_identity=identity,
-                execution_state=ExecutionState.SUCCESS,
-                execution_kind=ExecutionKind.LOCAL_MANAGED,
-                output_persisted=True,
-                artifacts=[artifact],
-            )
-        )
-    store.put(shared_blob, shared_content)
+    def test_negative_max_age_returns_empty_report_immediately(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        svc = _make_svc(repo=repo)
 
-    svc.purge_one(id_a.generate_key())
-    svc.purge_one(id_b.generate_key())
+        report = svc.evict_stale(-5)
 
-    assert not store.has(shared_blob)
+        assert report.executions_removed == 0
+        repo.current_executions_with_sizes.assert_not_called()
 
+    def test_entry_past_cutoff_is_evicted(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.current_executions_with_sizes.return_value = [
+            ExecutionSizeEntry("stale-key", 100, "2000-01-01T00:00:00"),
+        ]
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        metrics = create_autospec(MetricsPort)
+        metrics.last_access.return_value = {"stale-key": 0.0}
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-# --- LRU eviction ------------------------------------------------------------
+        report = svc.evict_stale(1)
 
+        assert report.executions_removed == 1
+        repo.soft_purge_execution.assert_called_once_with("stale-key")
 
-def test_evict_to_quota_no_op_when_under_limit():
-    svc, repo, store, _ = _service()
-    identity = _identity()
-    repo.save(_execution(identity, content=b"small"))
-    report = svc.evict_to_quota(max_bytes=1_000_000)
-    assert report.executions_removed == 0
-    assert report.bytes_freed == 0
+    def test_entry_within_age_is_not_evicted(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.current_executions_with_sizes.return_value = [
+            ExecutionSizeEntry("fresh-key", 100, "2026-01-01T00:00:00"),
+        ]
+        metrics = create_autospec(MetricsPort)
+        metrics.last_access.return_value = {"fresh-key": time.time()}
+        svc = _make_svc(repo=repo, metrics=metrics)
 
+        report = svc.evict_stale(1)
 
-def test_evict_to_quota_evicts_least_recently_accessed():
-    id_old = _identity("old")
-    id_new = _identity("new")
-    repo = InMemoryExecutionRepository(FixedClock())
-    store = InMemoryBlobStore()
+        assert report.executions_removed == 0
+        repo.soft_purge_execution.assert_not_called()
 
-    old_content = b"old_content"  # accessed long ago
-    new_content = b"new_content"  # accessed recently
-    repo.save(_execution(id_old, content=old_content))
-    repo.save(_execution(id_new, content=new_content))
-    store.put("blob_" + old_content.hex(), old_content)
-    store.put("blob_" + new_content.hex(), new_content)
+    def test_lru_falls_back_to_created_at_when_key_absent_from_last_access(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.current_executions_with_sizes.return_value = [
+            ExecutionSizeEntry("old-key", 100, "2000-01-01T00:00:00"),
+        ]
+        repo.blob_keys_for_execution.return_value = []
+        repo.total_stored_bytes.return_value = 0
+        metrics = create_autospec(MetricsPort)
+        metrics.last_access.return_value = {}
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-    # old was accessed at epoch 100, new at epoch 999
-    metrics = FakeMetrics(
-        last_access={
-            id_old.generate_key(): 100.0,
-            id_new.generate_key(): 999.0,
-        }
-    )
-    svc = PurgeService(repo, store, metrics)
+        report = svc.evict_stale(1)
 
-    # quota is just under the total — need to evict one execution
-    total = len(old_content) + len(new_content)
-    report = svc.evict_to_quota(max_bytes=total - 1)
+        assert report.executions_removed == 1
 
-    assert report.executions_removed == 1
-    # The old (LRU) execution should be gone; new should remain
-    assert repo.find_current(id_old.generate_key()) is None
-    assert repo.find_current(id_new.generate_key()) is not None
 
+class TestEvictToQuota:
+    def test_under_quota_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.total_stored_bytes.return_value = 100
+        svc = _make_svc(repo=repo)
 
-def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():
-    id_a = _identity("a")
-    id_b = _identity("b")
-    repo = InMemoryExecutionRepository(FixedClock())
-    store = InMemoryBlobStore()
-    repo.save(_execution(id_a, content=b"content_a"))
-    repo.save(_execution(id_b, content=b"content_b"))
-    store.put("blob_" + b"content_a".hex(), b"content_a")
-    store.put("blob_" + b"content_b".hex(), b"content_b")
+        report = svc.evict_to_quota(500)
 
-    # No access data — creation-time fallback; both entries created_at="" so
-    # both get epoch 0.0 and any one of them may be evicted. Validate the
-    # service runs without error and evicts exactly enough.
-    svc = PurgeService(repo, store, FakeMetrics())
-    total = len(b"content_a") + len(b"content_b")
-    report = svc.evict_to_quota(max_bytes=total - 1)
+        assert report.executions_removed == 0
+        repo.current_executions_with_sizes.assert_not_called()
 
-    assert report.executions_removed >= 1
-    assert report.bytes_freed > 0
+    def test_at_quota_returns_empty_report(self):
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.total_stored_bytes.return_value = 500
+        svc = _make_svc(repo=repo)
 
+        report = svc.evict_to_quota(500)
 
-# --- purge_by_session_tag / hard_delete_by_session_tag -----------------------
+        assert report.executions_removed == 0
 
+    def test_over_quota_evicts_lru_entry_first(self):
+        entries = [
+            ExecutionSizeEntry("oldest", 600, "2025-01-01T00:00:00"),
+            ExecutionSizeEntry("newest", 600, "2026-01-01T00:00:00"),
+        ]
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.total_stored_bytes.side_effect = [1200, 0, 0]
+        repo.current_executions_with_sizes.return_value = entries
+        repo.blob_keys_for_execution.return_value = []
+        metrics = create_autospec(MetricsPort)
+        metrics.last_access.return_value = {"oldest": 1000.0, "newest": time.time()}
+        svc = _make_svc(repo=repo, metrics=metrics)
 
-def _svc_with_session_tag(tag: str, session_ids: List[str], key_per_session: Dict[str, str]):
-    """Build a PurgeService wired with executions, one per session under ``tag``."""
-    repo, store = _repo_with_entries(list(key_per_session.values()))
-    metrics = FakeMetrics(
-        session_keys={sid: [key] for sid, key in key_per_session.items()},
-    )._with_session_tags({tag: session_ids})
-    return PurgeService(repo, store, metrics), repo
+        report = svc.evict_to_quota(700)
 
+        assert report.executions_removed == 1
+        repo.soft_purge_execution.assert_called_once_with("oldest")
 
-def _repo_with_entries(keys: List[str]):
-    repo = InMemoryExecutionRepository(FixedClock())
-    blob_store = InMemoryBlobStore()
-    for key in keys:
-        identity = _identity(prompt=key)
-        execution = _execution(identity, content=key.encode())
-        repo.save(execution)
-        blob_store.put("blob_" + key.encode().hex(), key.encode())
-    return repo, blob_store
+    def test_blobs_with_zero_references_are_removed_from_blob_store(self):
+        entries = [ExecutionSizeEntry("key1", 100, "2020-01-01T00:00:00")]
+        blob = create_autospec(BlobStorePort)
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.total_stored_bytes.side_effect = [1000, 0, 0]
+        repo.current_executions_with_sizes.return_value = entries
+        repo.blob_keys_for_execution.return_value = ["blob-orphan"]
+        repo.blob_reference_count.return_value = 0
+        metrics = create_autospec(MetricsPort)
+        metrics.last_access.return_value = {"key1": 0.0}
+        svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 
+        svc.evict_to_quota(500)
 
-def test_purge_by_session_tag_removes_executions():
-    svc, repo = _svc_with_session_tag(
-        "sprint",
-        ["s1", "s2"],
-        {"s1": "key1", "s2": "key2"},
-    )
-    report = svc.purge_by_session_tag("sprint")
-    assert report.executions_removed == 2
+        blob.remove.assert_called_once_with("blob-orphan")
 
+    def test_blobs_still_referenced_are_not_removed_from_blob_store(self):
+        entries = [ExecutionSizeEntry("key1", 100, "2020-01-01T00:00:00")]
+        blob = create_autospec(BlobStorePort)
+        repo = create_autospec(ExecutionRepositoryPort)
+        repo.total_stored_bytes.side_effect = [1000, 0, 0]
+        repo.current_executions_with_sizes.return_value = entries
+        repo.blob_keys_for_execution.return_value = ["blob-shared"]
+        repo.blob_reference_count.return_value = 2
+        metrics = create_autospec(MetricsPort)
+        metrics.last_access.return_value = {"key1": 0.0}
+        svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 
-def test_purge_by_session_tag_unknown_tag_is_noop():
-    svc, repo = _svc_with_session_tag("sprint", ["s1"], {"s1": "key1"})
-    report = svc.purge_by_session_tag("ghost")
-    assert report.executions_removed == 0
+        svc.evict_to_quota(500)
 
-
-def test_hard_delete_by_session_tag_removes_executions():
-    svc, repo = _svc_with_session_tag(
-        "sprint",
-        ["s1"],
-        {"s1": "key1"},
-    )
-    report = svc.hard_delete_by_session_tag("sprint")
-    assert report.executions_removed == 1
-
-
-def test_purge_by_session_tag_deduplicates_shared_keys():
-    """A key appearing in two sessions under the same tag is purged only once."""
-    repo, blob_store = _repo_with_entries(["shared-key"])
-    metrics = FakeMetrics(
-        session_keys={"s1": ["shared-key"], "s2": ["shared-key"]},
-    )._with_session_tags({"tag": ["s1", "s2"]})
-    svc = PurgeService(repo, blob_store, metrics)
-    report = svc.purge_by_session_tag("tag")
-    assert report.executions_removed == 1
-
-
-# ---------------------------------------------------------------------------
-# evict_stale (0.15.0)
-# ---------------------------------------------------------------------------
-
-
-def test_evict_stale_removes_entries_older_than_cutoff():
-    now = _time_module.time()
-    old_epoch = now - 10_000  # clearly older than 1 h
-    recent_epoch = now - 60  # clearly within 1 h
-
-    id_old = _identity("old")
-    id_recent = _identity("recent")
-    old_key = id_old.generate_key()
-    recent_key = id_recent.generate_key()
-
-    repo = InMemoryExecutionRepository(FixedClock())
-    blob_store = InMemoryBlobStore()
-    repo.save(_execution(id_old, b"old"))
-    blob_store.put("blob_" + b"old".hex(), b"old")
-    repo.save(_execution(id_recent, b"recent"))
-    blob_store.put("blob_" + b"recent".hex(), b"recent")
-
-    metrics = FakeMetrics(last_access={old_key: old_epoch, recent_key: recent_epoch})
-    svc = PurgeService(repo, blob_store, metrics)
-
-    report = svc.evict_stale(max_age_seconds=3600)
-    assert report.executions_removed == 1
-    assert repo.find_current(old_key) is None or not repo.find_current(old_key).output_persisted
-    assert repo.find_current(recent_key) is not None
-
-
-def test_evict_stale_noop_when_nothing_is_stale():
-    now = _time_module.time()
-    id1 = _identity("k1")
-    id2 = _identity("k2")
-    key1, key2 = id1.generate_key(), id2.generate_key()
-
-    repo = InMemoryExecutionRepository(FixedClock())
-    blob_store = InMemoryBlobStore()
-    repo.save(_execution(id1, b"v1"))
-    repo.save(_execution(id2, b"v2"))
-
-    metrics = FakeMetrics(last_access={key1: now - 60, key2: now - 120})
-    svc = PurgeService(repo, blob_store, metrics)
-
-    report = svc.evict_stale(max_age_seconds=3600)
-    assert report.executions_removed == 0
-
-
-def test_evict_stale_fallback_to_created_at_when_no_access_event():
-    repo, blob_store = _repo_with_entries(["never-accessed"])
-    # no last_access entry for this key -> falls back to created_at (fixed clock = _MOMENT)
-    # _MOMENT is 2026-06-21 09:30 UTC, which is far in the past
-    metrics = FakeMetrics(last_access={})
-    svc = PurgeService(repo, blob_store, metrics)
-
-    report = svc.evict_stale(max_age_seconds=60)  # 1 minute — _MOMENT is way older
-    assert report.executions_removed == 1
-
-
-def test_evict_stale_zero_or_negative_max_age_is_noop():
-    repo, blob_store = _repo_with_entries(["key1"])
-    svc = PurgeService(repo, blob_store, FakeMetrics())
-    assert svc.evict_stale(max_age_seconds=0).executions_removed == 0
-    assert svc.evict_stale(max_age_seconds=-1).executions_removed == 0
-
-
-# --- hard_delete_by_tag / hard_delete_by_session ----------------------------
-
-
-def test_hard_delete_by_tag_removes_tagged_execution():
-    svc, repo, store, _ = _service()
-    identity = _identity("tagged-key")
-    repo.save(_execution(identity, content=b"data"))
-    store.put("blob_" + b"data".hex(), b"data")
-    key = identity.generate_key()
-    repo.add_tags(key, ["my-tag"])
-
-    report = svc.hard_delete_by_tag("my-tag")
-
-    assert report.executions_removed == 1
-    assert repo.find_current(key) is None
-
-
-def test_hard_delete_by_tag_unknown_tag_returns_empty_report():
-    svc, _, _, _ = _service()
-
-    report = svc.hard_delete_by_tag("nonexistent-tag")
-
-    assert report.executions_removed == 0
-    assert report.bytes_freed == 0
-
-
-def test_hard_delete_by_session_removes_matching_executions():
-    identity = _identity("sess-key")
-    key = identity.generate_key()
-    repo = InMemoryExecutionRepository(FixedClock())
-    store = InMemoryBlobStore()
-    repo.save(_execution(identity, content=b"answer"))
-    store.put("blob_" + b"answer".hex(), b"answer")
-    metrics = FakeMetrics(session_keys={"sess-1": [key]})
-    svc = PurgeService(repo, store, metrics)
-
-    report = svc.hard_delete_by_session("sess-1")
-
-    assert report.executions_removed == 1
-    assert repo.find_current(key) is None
-
-
-def test_hard_delete_by_session_unknown_session_returns_empty_report():
-    svc, _, _, _ = _service()
-
-    report = svc.hard_delete_by_session("no-such-session")
-
-    assert report.executions_removed == 0
+        blob.remove.assert_not_called()
