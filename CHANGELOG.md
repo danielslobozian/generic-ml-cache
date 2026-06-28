@@ -15,6 +15,42 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-06-28
+
+### Added
+
+- **`gmlcache config validate`** (cli): parses and validates the config file
+  without executing anything; safe for CI. Collects all errors and warnings
+  instead of raising on the first issue. Errors: invalid enum values
+  (`mode`, `persist`, `log_level`), bad type conversions (`timeout`,
+  `max_size`, `max_age`, `trust_scan`), unparseable file. Warnings: unknown
+  keys, unknown sections, `version` key mismatch. Exits 0 when clean or
+  warnings-only; exits 4 on any error. `--json` emits a structured
+  `{config_path, present, valid, issues[]}` payload.
+- **`gmlcache config show`** (cli): displays the fully resolved configuration
+  — every key, its current value, and the source that set it
+  (`default` / `file` / `env`). `--resolved` flag accepted for
+  discoverability. `--json` emits structured output including executables.
+  Distinct from `gmlcache status`, which shows runtime and store state.
+- **`version` key** (cli): optional `[defaults]` key `version = 1` in the
+  config file declares the config schema version. The current schema version
+  is `1`. A mismatch produces a warning from `config validate`. The value is
+  read into `FileConfig.version` by `load()` for future use.
+- **Complete configuration reference** (`docs/reference/configuration.md`):
+  expanded to document all 11 `[defaults]` keys (`mode`, `persist`, `store`,
+  `timeout`, `trust_scan`, `max_size`, `max_age`, `adapters`, `log_level`,
+  `log_file`, `version`), the `[executables]` section, the `version` key
+  semantics, the full precedence order, default config-file and store
+  locations per OS, and the `config validate` / `config show` commands.
+
+### Changed
+
+- **CLI and daemon READMEs** (docs): removed all cross-package references.
+  `packages/cli/README.md` no longer installs or links to the daemon package.
+  `packages/daemon/README.md` no longer documents `gmlcache` CLI commands —
+  direct launch via `python -m generic_ml_cache_daemon` is the only
+  documented start method.
+
 ## [0.25.0] - 2026-06-28
 
 ### Added
