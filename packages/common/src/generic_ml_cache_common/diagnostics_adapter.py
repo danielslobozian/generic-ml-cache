@@ -8,6 +8,13 @@ Writes structured diagnostic lines to a rotating log file. Each line carries:
 Format is human-readable text (logback convention) by default; pass
 ``fmt="json"`` for newline-delimited JSON suitable for log aggregators.
 
+All string values — including rendered exception tracebacks — are passed through
+a PII scrubbing processor before being written. The scrubber redacts:
+  - E-mail addresses  →  [email]
+  - Bearer / API tokens in Authorization-style headers  →  [token]
+  - Long opaque strings that look like secrets (base64/hex ≥ 32 chars)  →  [secret]
+  - Values stored under sensitive key names (token, secret, password, …)  →  [redacted]
+
 Usage (composition root in CLI or daemon):
 
     from generic_ml_cache_common.diagnostics_adapter import StructlogDiagnosticsAdapter
@@ -17,6 +24,7 @@ Usage (composition root in CLI or daemon):
 
 from __future__ import annotations
 
+import re
 import sys
 import threading
 import traceback
@@ -41,6 +49,73 @@ class DiagnosticsLevel(str, Enum):
     INFO = "INFO"
     WARN = "WARN"
     ERROR = "ERROR"
+
+
+# ---------------------------------------------------------------------------
+# PII scrubbing
+# ---------------------------------------------------------------------------
+
+# Key names whose values must never appear in logs regardless of their shape.
+_SENSITIVE_KEYS = frozenset(
+    {
+        "token",
+        "secret",
+        "password",
+        "passwd",
+        "api_key",
+        "apikey",
+        "authorization",
+        "auth",
+        "credential",
+        "key_material",
+        "private_key",
+        "access_token",
+        "refresh_token",
+    }
+)
+
+# Patterns applied to every string value (and to rendered traceback text).
+_PII_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # E-mail addresses
+    (re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), "[email]"),
+    # Authorization / Bearer header values
+    (
+        re.compile(r"(?i)(bearer|token|api[-_]?key)\s+[A-Za-z0-9\-._~+/=]{8,}"),
+        r"\1 [token]",
+    ),
+    # Long opaque strings ≥ 32 chars that look like API keys or encryption tokens.
+    # Requires at least one uppercase letter or base64 special char (+/) so that
+    # pure-lowercase-hex strings (SHA-256 content-addressed keys) are left intact.
+    (
+        re.compile(r"[a-z0-9]*[A-Z+/][A-Za-z0-9+/\-_]{30,}={0,2}"),
+        "[secret]",
+    ),
+]
+
+
+def _scrub_string(value: str) -> str:
+    for pattern, replacement in _PII_PATTERNS:
+        value = pattern.sub(replacement, value)
+    return value
+
+
+def _scrub_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _scrub_string(value)
+    return value
+
+
+def _scrub_processor(
+    logger: WrappedLogger, method: str, event_dict: EventDict
+) -> EventDict:
+    """Redact PII from every string field before the event reaches the renderer."""
+    scrubbed: EventDict = {}
+    for k, v in event_dict.items():
+        if isinstance(k, str) and k.lower() in _SENSITIVE_KEYS:
+            scrubbed[k] = "[redacted]"
+        else:
+            scrubbed[k] = _scrub_value(v)
+    return scrubbed
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +235,7 @@ class StructlogDiagnosticsAdapter(DiagnosticsPort):
             _caller_info_processor,
             _exc_processor,
             structlog.processors.format_exc_info,
+            _scrub_processor,  # runs after exc is rendered to a string
             renderer,
         ]
         self._log_file = log_file
