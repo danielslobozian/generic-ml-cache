@@ -564,7 +564,7 @@ diagnostic surface.
 - **Daemon encryption wiring**: gateway mode and store encryption are no longer mutually
   exclusive; the daemon reads `GMLCACHE_TOKEN` from its own environment.
 
-### 0.26.0 — Configuration schema versioning and validation
+### 0.26.0 — Configuration schema versioning and validation *(released 2026-06-28)*
 
 - **`gmlcache config validate`**: parses and validates the config file without
   executing anything; reports all errors and warnings and exits non-zero on any
@@ -577,6 +577,8 @@ diagnostic surface.
   schema changes check it to detect stale files and emit a clear migration message.
 - Documentation covers the config schema exhaustively: every key, accepted values,
   default, and resolution order.
+- **Cross-package doc cleanup**: CLI and daemon READMEs no longer reference each
+  other; each package is self-contained.
 
 ### 1.0.0 — Stable, feature-rich cache
 
