@@ -18,6 +18,7 @@ from generic_ml_cache_core.adapter.out.client.discover import (
     list_models_all as list_models_all,
     probe_all as probe_all,
 )
+from generic_ml_cache_core.adapter.registry import adapter_sources as adapter_sources
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )

@@ -6,22 +6,45 @@ Adapters are discovered at runtime by scanning the built-in adapter packages
 and collecting every class decorated with :func:`adapter`.  Adding a new
 adapter to the package is sufficient — no explicit registration list anywhere.
 
-Third-party code and the test suite can inject additional adapters via
-:func:`register`.  Registered instances shadow any scanned adapter with the
-same name and persist for the lifetime of the process.
+Third-party adapters declare themselves via the ``gmlcache.adapters`` entry
+point group.  Installing a third-party package (e.g.
+``generic-ml-cache-adapter-ollama``) makes its adapter available without any
+change to core.  The whitelist applies uniformly to built-in and entry-point
+adapters alike.
+
+Third-party code and the test suite can also inject additional adapters via
+:func:`register`.  Registered instances shadow any scanned or entry-point
+adapter with the same name.
 """
 
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
 import pkgutil
+import sys
+import warnings
 from typing import Dict, FrozenSet, List, Optional, Type
 
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
+ADAPTER_CONTRACT_VERSION = "1"
+"""The adapter contract generation this core version implements.
+
+Third-party adapters may declare ``adapter_contract_version = "1"`` as a class
+attribute to assert they target this contract generation.  A mismatch causes
+the loader to skip the adapter and emit a :mod:`warnings` warning.  Absence of
+the attribute is treated as compatible (no assertion).
+"""
+
+_ENTRYPOINT_GROUP = "gmlcache.adapters"
+
 _ADAPTER_CLASSES: List[Type[MlRunnerPort]] = []
 _EXTRA: Dict[str, MlRunnerPort] = {}
+_ENTRYPOINTS_LOADED: bool = False
+_ENTRYPOINT_INSTANCES: Dict[str, MlRunnerPort] = {}
+_ENTRYPOINT_SOURCES: Dict[str, str] = {}
 
 _BUILTIN_PACKAGES = (
     "generic_ml_cache_core.adapter.out.client",
@@ -63,20 +86,99 @@ def _scan_builtins() -> None:
             importlib.import_module(f"{pkg_name}.{info.name}")
 
 
+def _entry_points_for_group() -> list:
+    """Return entry points for the gmlcache.adapters group, Python 3.9-safe."""
+    if sys.version_info >= (3, 10):
+        return list(importlib.metadata.entry_points(group=_ENTRYPOINT_GROUP))
+    return list(importlib.metadata.entry_points().get(_ENTRYPOINT_GROUP, []))  # type: ignore[union-attr]
+
+
+def _describe_ep_source(ep: object) -> str:
+    """Return a human-readable source description for an entry-point object."""
+    dist = getattr(ep, "dist", None)
+    if dist is None:
+        return getattr(ep, "value", str(ep))
+    pkg_name: str = dist.metadata.get("Name", "") or ""
+    pkg_version: str = dist.metadata.get("Version", "") or ""
+    if pkg_name and pkg_version:
+        return f"{pkg_name} {pkg_version}"
+    return pkg_name or getattr(ep, "value", str(ep))
+
+
+def _load_entry_points() -> None:
+    """Discover and instantiate adapters from the ``gmlcache.adapters`` entry point group.
+
+    Each adapter class is inspected for an optional ``adapter_contract_version``
+    attribute.  If present and incompatible with :data:`ADAPTER_CONTRACT_VERSION`,
+    the adapter is skipped with a :mod:`warnings` warning.  Any load or
+    instantiation failure is also warned and skipped — broken third-party code
+    must never crash core.
+
+    Results are cached in :data:`_ENTRYPOINT_INSTANCES`; subsequent calls are
+    no-ops.
+    """
+    global _ENTRYPOINTS_LOADED
+    if _ENTRYPOINTS_LOADED:
+        return
+    _ENTRYPOINTS_LOADED = True
+
+    for ep in _entry_points_for_group():
+        ep_key: str = getattr(ep, "name", str(ep))
+        try:
+            cls = ep.load()
+        except Exception as exc:  # noqa: BLE001
+            warnings.warn(
+                f"gmlcache: could not load entry-point adapter {ep_key!r}: {exc}",
+                stacklevel=2,
+            )
+            continue
+
+        declared_version = getattr(cls, "adapter_contract_version", None)
+        if declared_version is not None and declared_version != ADAPTER_CONTRACT_VERSION:
+            warnings.warn(
+                f"gmlcache: entry-point adapter {ep_key!r} declares contract version "
+                f"{declared_version!r} but this core requires {ADAPTER_CONTRACT_VERSION!r}; "
+                "skipping",
+                stacklevel=2,
+            )
+            continue
+
+        adapter_name: Optional[str] = getattr(cls, "name", None)
+        if not adapter_name:
+            warnings.warn(
+                f"gmlcache: entry-point adapter {ep_key!r} has no 'name' class attribute; skipping",
+                stacklevel=2,
+            )
+            continue
+
+        try:
+            instance: MlRunnerPort = cls()
+        except Exception as exc:  # noqa: BLE001
+            warnings.warn(
+                f"gmlcache: could not instantiate entry-point adapter {ep_key!r}: {exc}",
+                stacklevel=2,
+            )
+            continue
+
+        _ENTRYPOINT_INSTANCES[adapter_name] = instance
+        _ENTRYPOINT_SOURCES[adapter_name] = _describe_ep_source(ep)
+
+
 def load_adapters(
     whitelist: Optional[FrozenSet[str]] = None,
 ) -> Dict[str, MlRunnerPort]:
     """Return every available adapter, optionally filtered by *whitelist*.
 
-    Built-in adapters are discovered by scanning the adapter packages and
-    collecting ``@adapter``-decorated classes.  They are then merged with
-    instances registered via :func:`register`; registered instances take
-    precedence over scanned adapters with the same name.
+    Discovery order (later entries win on name collision):
+    1. Built-in adapters scanned via ``@adapter`` in the built-in packages.
+    2. Entry-point adapters from the ``gmlcache.adapters`` group.
+    3. Instances injected via :func:`register` (tests / programmatic use).
 
     ``whitelist=None`` returns all discovered adapters.  A non-``None``
     whitelist restricts the result to the named adapters only.
     """
     _scan_builtins()
+    _load_entry_points()
     result: Dict[str, MlRunnerPort] = {}
     for cls in _ADAPTER_CLASSES:
         name = getattr(cls, "name", None)
@@ -85,10 +187,30 @@ def load_adapters(
         if whitelist is not None and name not in whitelist:
             continue
         result[name] = cls()
+    for name, instance in _ENTRYPOINT_INSTANCES.items():
+        if whitelist is None or name in whitelist:
+            result[name] = instance
     for name, instance in _EXTRA.items():
         if whitelist is None or name in whitelist:
             result[name] = instance
     return result
+
+
+def adapter_sources(
+    whitelist: Optional[FrozenSet[str]] = None,
+) -> Dict[str, str]:
+    """Return a mapping of entry-point adapter name → source package description.
+
+    Only entry-point adapters are included.  Built-in adapters and
+    programmatically registered adapters (tests, embedding apps) are omitted.
+    The result is empty when no third-party adapter packages are installed.
+
+    Intended for ``gmlcache doctor`` to show which packages contributed adapters.
+    """
+    load_adapters(whitelist)
+    if whitelist is None:
+        return dict(_ENTRYPOINT_SOURCES)
+    return {name: src for name, src in _ENTRYPOINT_SOURCES.items() if name in whitelist}
 
 
 def get_adapter(
