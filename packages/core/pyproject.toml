@@ -45,7 +45,7 @@ packages = ["src/generic_ml_cache_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=generic_ml_cache_core --cov-fail-under=60"
+addopts = "-ra --cov=generic_ml_cache_core --cov-fail-under=85"
 timeout = 60
 
 [tool.ruff]
