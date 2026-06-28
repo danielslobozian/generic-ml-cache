@@ -13,13 +13,16 @@
 
 <br>
 
-[![Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=for-the-badge)](LICENSE)
-[![Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=for-the-badge)](docs/ROADMAP.md)
-[![CLI adapters](https://img.shields.io/badge/CLI%20adapters-claude%20%C2%B7%20codex%20%C2%B7%20cursor--agent-7c3aed?style=for-the-badge)](docs/concepts/adapters.md)
-[![API adapters](https://img.shields.io/badge/API%20adapters-anthropic%20%C2%B7%20openai%20%C2%B7%20gemini-0891b2?style=for-the-badge)](docs/concepts/adapters.md)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-185FA5?style=for-the-badge&labelColor=403E3A)](LICENSE)
+[![Status: Alpha](https://img.shields.io/badge/status-alpha-BA7517?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
 
-[![pyright](https://img.shields.io/badge/pyright-passing-059669?style=for-the-badge)](pyrightconfig.json)
-[![import-linter](https://img.shields.io/badge/import--linter-4%20contracts-4f46e5?style=for-the-badge)](.importlinter)
+[![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/core/src/generic_ml_cache_core/adapter/out/client/claude.py)
+[![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/core/src/generic_ml_cache_core/adapter/out/client/codex.py)
+[![CLI adapter: cursor-agent](https://img.shields.io/badge/cli-cursor--agent-534AB7?style=for-the-badge&labelColor=3C3489)](packages/core/src/generic_ml_cache_core/adapter/out/client/cursor.py)
+
+[![API adapter: anthropic](https://img.shields.io/badge/api-anthropic-0F6E56?style=for-the-badge&labelColor=085041)](packages/core/src/generic_ml_cache_core/adapter/out/api/anthropic_direct_adapter.py)
+[![API adapter: openai](https://img.shields.io/badge/api-openai-0F6E56?style=for-the-badge&labelColor=085041)](packages/core/src/generic_ml_cache_core/adapter/out/api/openai_direct_adapter.py)
+[![API adapter: gemini](https://img.shields.io/badge/api-gemini-0F6E56?style=for-the-badge&labelColor=085041)](packages/core/src/generic_ml_cache_core/adapter/out/api/gemini_direct_adapter.py)
 
 <br>
 
