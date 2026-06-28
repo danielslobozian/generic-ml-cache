@@ -459,6 +459,25 @@ return blob_path.read_bytes()
   Running only the linters, or skipping coverage, is a partial check, not a pass.
   The XMLs produced by (3), (4), and (5) are the exact files Sonar ingests — running
   them locally shows the number Sonar will report before any push.
+
+  **Local Sonar scan** — reproduce the full Sonar gate before pushing:
+
+  ```bash
+  # 1. Generate the three coverage XMLs (already gitignored via coverage.xml in .gitignore)
+  python -m pytest packages/core/tests   --cov=generic_ml_cache_core   --cov-report=xml:packages/core/coverage.xml
+  python -m pytest packages/cli/tests    --cov=generic_ml_cache_cli    --cov-report=xml:packages/cli/coverage.xml
+  python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-report=xml:packages/daemon/coverage.xml
+
+  # 2. Run the scanner (mounts the repo root; finds the XMLs via sonar-project.properties)
+  docker run --rm \
+    -e SONAR_TOKEN \
+    -v "$(pwd):/usr/src" \
+    sonarsource/sonar-scanner-cli
+  ```
+
+  The XMLs are written inside the repo tree so the Docker mount (`$(pwd):/usr/src`)
+  makes them visible to the scanner at the paths declared in `sonar-project.properties`.
+  They are not committed — `.gitignore` excludes `coverage.xml` at every depth.
 - **Never work directly on `main`.** Every change — no matter how small — is made on
   a dedicated branch. Branch naming:
   - `feature/<scope>` — user-facing capability
