@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from generic_ml_cache_common.datasource import sqlite_connection_factory
+from generic_ml_cache_cli._common.datasource import sqlite_connection_factory
 
 
 def test_factory_returns_callable(tmp_path):

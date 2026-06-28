@@ -49,7 +49,7 @@ path = "../../VERSION"
 pattern = "^(?P<version>[^\\n]+)"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/generic_ml_cache_cli", "src/generic_ml_cache_common"]
+packages = ["src/generic_ml_cache_cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
