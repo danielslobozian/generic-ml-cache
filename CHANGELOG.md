@@ -15,6 +15,62 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-06-28
+
+### Fixed
+
+- **`common` pip RECORD collision** (cli, daemon): renamed the shared internal
+  folder from the top-level `generic_ml_cache_common` namespace to
+  `generic_ml_cache_cli._common` and `generic_ml_cache_daemon._common`
+  respectively. Both wheels previously shipped a `generic_ml_cache_common`
+  top-level package; pip's RECORD entries collided, so uninstalling either
+  package silently removed the other's shared code.
+- **Daemon `__version__` stale** (daemon): `__version__` was hardcoded as
+  `"0.15.0"`. Replaced with `importlib.metadata.version("generic-ml-cache-daemon")`
+  to match the pattern used by core and CLI.
+- **Daemon wheel missing license files** (daemon): `LICENSE` and `NOTICE`
+  were absent from the built wheel. Added symlinks into the package tree and
+  registered them via `license-files` in `pyproject.toml`.
+- **Daemon wheel missing README** (daemon): `readme = "README.md"` was
+  absent from `pyproject.toml`, leaving the PyPI page blank.
+- **CLI README API example wrong** (cli): `build_use_cases` call used a
+  wrong keyword argument and incorrect method name. Corrected to match the
+  actual public API.
+- **Daemon README version label** (daemon): removed the stale `(0.13.0)`
+  label from the gateway limitations note.
+
+### Added
+
+- **CI: pyright type-checking job** (ci): new `typecheck` job runs `pyright`
+  in basic mode on Python 3.13 across all three packages on every push and PR.
+- **CI: import-linter architecture contracts job** (ci): new `import-contracts`
+  job runs `lint-imports` to enforce the five hexagonal-architecture contracts
+  on every push and PR.
+- **CI: coverage floors** (core, cli, daemon): pytest addopts now include
+  `--cov` and `--cov-fail-under` (90% core, 80% cli, 80% daemon); the gate
+  is applied in every test run including the matrix and Sonar workflows.
+- **CI: release artifact verification** (ci): new `verify` job between `build`
+  and `publish` runs `twine check` on every wheel/sdist and smoke-installs all
+  three packages from the built artifacts before any upload.
+- **Exit code reference and stability tests** (cli, docs): `docs/reference/cli.md`
+  now contains an authoritative exit code table (0/1/2/3/4/124/130) declared
+  stable under the compatibility policy. Eleven regression tests in
+  `packages/cli/tests/test_exit_codes.py` guard every documented code.
+- **Public API stability contract** (core): `generic_ml_cache_core/__init__.py`
+  docstring now explicitly states the SemVer guarantees for the `__all__` surface
+  — what patch, minor, and major releases may and may not change.
+
+### Changed
+
+- **Docs: two-package wording removed** (docs): `README.md`, `docs/README.md`,
+  `SECURITY.md`, and `CONTRIBUTING.md` updated from two-package to three-package
+  descriptions; removed "early, alpha software" framing from `CONTRIBUTING.md`.
+- **`docs/reference/cli.md` disclaimer** (docs): replaced the "exact syntax may
+  differ" hedge with an authoritative statement; the reference is now the
+  normative command surface.
+- **pytest-timeout added** (core, daemon): `pytest-timeout` added to dev
+  dependencies; `timeout = 60` set in pytest options for both packages.
+
 ## [0.26.0] - 2026-06-28
 
 ### Added
