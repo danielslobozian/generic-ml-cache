@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from generic_ml_cache_common.diagnostics_adapter import StructlogDiagnosticsAdapter
+import pytest
+
+from generic_ml_cache_common.diagnostics_adapter import (
+    StructlogDiagnosticsAdapter,
+    _scrub_string,
+)
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
 
@@ -114,6 +119,79 @@ def test_error_passes_at_warn_level(tmp_path: Path) -> None:
 def test_info_filtered_at_error_level(tmp_path: Path) -> None:
     _adapter(tmp_path, level="ERROR").info("should be dropped")
     assert not (tmp_path / "gmlcache.log").exists()
+
+
+# ---------------------------------------------------------------------------
+# PII scrubbing — _scrub_string unit tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        # E-mail addresses
+        ("user@example.com", "[email]"),
+        ("error for john.doe@company.org in request", "error for [email] in request"),
+        # Bearer / Authorization header values
+        ("Bearer sk-abc123defgh456ijklmno", "Bearer [token]"),
+        ("token abcdefghijklmnopqrstuvwx", "token [token]"),
+        # Long opaque secrets (≥ 32 chars, mixed-case / base64 — real token shape).
+        # The non-secret prefix (sk-ant-api03-) is left intact; the secret portion is scrubbed.
+        ("sk-ant-api03-" + "AbCdEfGh" * 5, "sk-ant-api03-[secret]"),
+        # Pure lowercase hex (SHA-256 content key) must NOT be scrubbed
+        ("a" * 64, "a" * 64),
+        # Short values are left alone
+        ("abc123", "abc123"),
+        ("hello world", "hello world"),
+        # Multiple occurrences in one string
+        (
+            "contact user@a.com or user@b.com",
+            "contact [email] or [email]",
+        ),
+    ],
+)
+def test_scrub_string(raw: str, expected: str) -> None:
+    assert _scrub_string(raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# PII scrubbing — integration through the adapter
+# ---------------------------------------------------------------------------
+
+
+def test_sensitive_key_is_redacted(tmp_path: Path) -> None:
+    _adapter(tmp_path).info("msg", token="super-secret-value")
+    assert "super-secret-value" not in (tmp_path / "gmlcache.log").read_text()
+    assert "[redacted]" in (tmp_path / "gmlcache.log").read_text()
+
+
+def test_email_in_value_is_redacted(tmp_path: Path) -> None:
+    _adapter(tmp_path).info("msg", detail="sent to alice@example.com")
+    log = (tmp_path / "gmlcache.log").read_text()
+    assert "alice@example.com" not in log
+    assert "[email]" in log
+
+
+def test_email_in_traceback_is_redacted(tmp_path: Path) -> None:
+    exc = ValueError("request failed for user@secret.com")
+    _adapter(tmp_path).error("err", exc=exc)
+    log = (tmp_path / "gmlcache.log").read_text()
+    assert "user@secret.com" not in log
+    assert "[email]" in log
+
+
+def test_non_sensitive_key_is_not_redacted(tmp_path: Path) -> None:
+    _adapter(tmp_path).info("msg", execution_key="abc123", session="uuid-xyz")
+    log = (tmp_path / "gmlcache.log").read_text()
+    assert "abc123" in log
+    assert "uuid-xyz" in log
+
+
+def test_password_key_is_redacted(tmp_path: Path) -> None:
+    _adapter(tmp_path).warn("auth failed", password="hunter2")
+    log = (tmp_path / "gmlcache.log").read_text()
+    assert "hunter2" not in log
+    assert "[redacted]" in log
 
 
 # ---------------------------------------------------------------------------
