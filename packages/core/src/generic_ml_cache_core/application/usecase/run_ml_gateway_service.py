@@ -27,9 +27,6 @@ from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command impor
 from generic_ml_cache_core.application.port.inbound.run_ml_gateway_use_case import (
     RunMlGatewayUseCase,
 )
-from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
-    NullDiagnosticsAdapter,
-)
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
@@ -63,19 +60,21 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         self._gateway_forward_port = gateway_forward_port
         self._repository = repository
         self._metrics = metrics
-        self._diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
+        self._diag: Optional[DiagnosticsPort] = diag
 
     def execute(self, command: RunMlGatewayCommand) -> GatewayResponse:
         """Return a cached response on hit, or forward and record the upstream response."""
         _t = time.perf_counter()
-        self._diag.debug("gateway execute ENTER", session=command.session_id)
+        if self._diag:
+            self._diag.debug("gateway execute ENTER", session=command.session_id)
         cached_response = self.load_cached_response(command)
         if cached_response is not None:
-            self._diag.debug(
-                "gateway execute EXIT",
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                cache_hit=True,
-            )
+            if self._diag:
+                self._diag.debug(
+                    "gateway execute EXIT",
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    cache_hit=True,
+                )
             return cached_response
         forwarded = self._gateway_forward_port.forward(
             command.gateway_request,
@@ -84,11 +83,12 @@ class RunMlGatewayService(RunMlGatewayUseCase):
             command.forward_headers,
         )
         result = self.record_forwarded_response(command, forwarded)
-        self._diag.debug(
-            "gateway execute EXIT",
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            cache_hit=False,
-        )
+        if self._diag:
+            self._diag.debug(
+                "gateway execute EXIT",
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                cache_hit=False,
+            )
         return result
 
     def load_cached_response(self, command: RunMlGatewayCommand) -> GatewayResponse | None:
@@ -97,28 +97,32 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         if not command.gateway_request.is_cacheable():
             return None
         cache_key = command.gateway_request.generate_cache_key()
-        self._diag.debug("load-cached-response ENTER", key=cache_key)
+        if self._diag:
+            self._diag.debug("load-cached-response ENTER", key=cache_key)
         cached_bytes = self._blob_store.get(cache_key)
         if cached_bytes is not None:
-            self._diag.debug("gateway HIT", key=cache_key)
+            if self._diag:
+                self._diag.debug("gateway HIT", key=cache_key)
             self._record_hit(cache_key, command)
-            self._diag.debug(
-                "load-cached-response EXIT",
-                key=cache_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                hit=True,
-            )
+            if self._diag:
+                self._diag.debug(
+                    "load-cached-response EXIT",
+                    key=cache_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    hit=True,
+                )
             return GatewayResponse(
                 response_body_bytes=cached_bytes,
                 status_code=_SUCCESS_STATUS,
                 cache_hit=True,
             )
-        self._diag.debug(
-            "load-cached-response EXIT",
-            key=cache_key,
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            hit=False,
-        )
+        if self._diag:
+            self._diag.debug(
+                "load-cached-response EXIT",
+                key=cache_key,
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                hit=False,
+            )
         return None
 
     def record_forwarded_response(
@@ -127,30 +131,34 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         """Store and journal a forwarded response when it is successful and cacheable."""
         _t = time.perf_counter()
         cache_key = command.gateway_request.generate_cache_key()
-        self._diag.debug(
-            "record-forwarded-response ENTER", key=cache_key, status=forwarded.status_code
-        )
+        if self._diag:
+            self._diag.debug(
+                "record-forwarded-response ENTER", key=cache_key, status=forwarded.status_code
+            )
         if forwarded.status_code == _SUCCESS_STATUS:
             if command.gateway_request.is_cacheable():
-                self._diag.info(
-                    "gateway MISS — forwarded and cached",
-                    key=cache_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                )
+                if self._diag:
+                    self._diag.info(
+                        "gateway MISS — forwarded and cached",
+                        key=cache_key,
+                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    )
                 self._blob_store.put(cache_key, forwarded.body_bytes)
                 self._record_miss(cache_key, command, forwarded)
         else:
-            self._diag.warn(
-                "gateway upstream error — response not cached",
-                status=forwarded.status_code,
+            if self._diag:
+                self._diag.warn(
+                    "gateway upstream error — response not cached",
+                    status=forwarded.status_code,
+                    key=cache_key,
+                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                )
+        if self._diag:
+            self._diag.debug(
+                "record-forwarded-response EXIT",
                 key=cache_key,
                 duration_ms=round((time.perf_counter() - _t) * 1000, 1),
             )
-        self._diag.debug(
-            "record-forwarded-response EXIT",
-            key=cache_key,
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-        )
         return GatewayResponse(
             response_body_bytes=forwarded.body_bytes,
             status_code=forwarded.status_code,

@@ -16,10 +16,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
-    NullDiagnosticsAdapter,
-)
-from generic_ml_cache_core.common.db import DbConnection
+from generic_ml_cache_adapters.db import DbConnection
 
 # Every cache resolution appends one event; HIT is the one queried for hit-rate.
 HIT = "hit"
@@ -36,13 +33,14 @@ class AccessRegistry:
         diag: Optional[DiagnosticsPort] = None,
     ) -> None:
         self._conn_factory = conn_factory
-        self._diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
+        self._diag: Optional[DiagnosticsPort] = diag
 
     def _connect(self) -> DbConnection:
         return self._conn_factory()
 
     def _warn_db_error(self, operation: str, exc: Exception) -> None:
-        self._diag.warn(f"access registry DB error — {operation}", exc=exc)
+        if self._diag:
+            self._diag.warn(f"access registry DB error — {operation}", exc=exc)
 
     def record(
         self,
@@ -337,5 +335,8 @@ class AccessRegistry:
             try:
                 out[key] = datetime.fromisoformat(ts).timestamp()
             except Exception as exc:
-                self._diag.debug("last_access: skipping unparseable timestamp", key=key, exc=exc)
+                if self._diag:
+                    self._diag.debug(
+                        "last_access: skipping unparseable timestamp", key=key, exc=exc
+                    )
         return out

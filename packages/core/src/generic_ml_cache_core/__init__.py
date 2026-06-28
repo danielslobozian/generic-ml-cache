@@ -9,7 +9,7 @@ contracts, AND the default outbound adapters (execution repository,
 filesystem blob store, local client runner, API client, metrics, clock,
 fingerprint). It bakes in *structure* (table names, blob naming, schema) but no
 *location* -- the data source (store path) and configuration are injected by the
-caller. Wire it with :func:`build_use_cases`, or construct the adapters and use
+caller. Wire it using a driver application's private composition root or construct the adapters and use
 cases directly. The CLI / a daemon / an embedding app are inbound drivers that
 supply the data source and map their surface onto this library.
 
@@ -31,7 +31,7 @@ Internal paths may change in any release, including patch releases.
 
 **Public API (``__all__``):**
 
-- :func:`build_use_cases` / :class:`WiredUseCases` — composition root
+- :class:`WiredUseCases` — typed container of wired use-case references
 - :class:`RunMlExecutionCommand` — inbound command value object
 - :class:`ClientAdapter` / :class:`MlRunnerPort` — adapter contracts
 - :func:`register` / :func:`get_adapter` — adapter registry
@@ -50,9 +50,8 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from generic_ml_cache_core.adapter.inbound.composition import (  # noqa: E402  # fmt: skip
+from generic_ml_cache_core.application.port.inbound.wired_use_cases import (  # noqa: E402  # fmt: skip
     WiredUseCases,
-    build_use_cases,
 )
 from generic_ml_cache_core.adapter.registry import (  # noqa: E402  # fmt: skip
     get_adapter,
@@ -87,7 +86,6 @@ from generic_ml_cache_core.common.errors import (  # noqa: E402  # fmt: skip
 __all__ = [
     "__version__",
     # Composition root
-    "build_use_cases",
     "WiredUseCases",
     # Inbound port
     "RunMlExecutionCommand",

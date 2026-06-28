@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.api._gemini_thinking import (
+from generic_ml_cache_adapters.adapter.out.api._gemini_thinking import (
     GeminiEffortType,
     GeminiThinkingConfig,
     _effort_type_for_model,
@@ -165,7 +165,7 @@ def test_is_budget_true_for_budget_type():
 
 
 def test_adapter_build_body_uses_thinking_level_for_3x(monkeypatch):
-    from generic_ml_cache_core.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
+    from generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
     from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 
     adapter = GeminiDirectAdapter(api_key="test")
@@ -176,7 +176,7 @@ def test_adapter_build_body_uses_thinking_level_for_3x(monkeypatch):
 
 
 def test_adapter_build_body_uses_thinking_budget_for_25(monkeypatch):
-    from generic_ml_cache_core.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
+    from generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
     from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 
     adapter = GeminiDirectAdapter(api_key="test")
@@ -187,7 +187,7 @@ def test_adapter_build_body_uses_thinking_budget_for_25(monkeypatch):
 
 
 def test_adapter_build_body_no_effort_omits_generation_config():
-    from generic_ml_cache_core.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
+    from generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
     from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 
     adapter = GeminiDirectAdapter(api_key="test")

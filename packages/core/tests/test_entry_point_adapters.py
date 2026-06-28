@@ -19,7 +19,7 @@ from generic_ml_cache_core.adapter.registry import (
     adapter_sources,
     load_adapters,
 )
-from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
+from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 
 
 def _make_ep(

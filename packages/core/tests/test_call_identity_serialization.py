@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.persistence.call_identity_serialization import (
+from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
     SerializedIdentity,
     deserialize_identity,
     serialize_identity,

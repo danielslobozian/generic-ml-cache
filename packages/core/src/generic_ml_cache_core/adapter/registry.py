@@ -2,30 +2,25 @@
 # SPDX-License-Identifier: Apache-2.0
 """Unified adapter registry with automatic discovery.
 
-Adapters are discovered at runtime by scanning the built-in adapter packages
-and collecting every class decorated with :func:`adapter`.  Adding a new
-adapter to the package is sufficient — no explicit registration list anywhere.
-
-Third-party adapters declare themselves via the ``gmlcache.adapters`` entry
-point group.  Installing a third-party package (e.g.
-``generic-ml-cache-adapter-ollama``) makes its adapter available without any
-change to core.  The whitelist applies uniformly to built-in and entry-point
-adapters alike.
+Adapters declare themselves via the ``gmlcache.adapters`` entry-point group.
+Installing ``generic-ml-cache-adapters`` (or any third-party adapter package)
+registers its adapters without any change to core.  The whitelist applies
+uniformly to all adapters.
 
 Third-party code and the test suite can also inject additional adapters via
-:func:`register`.  Registered instances shadow any scanned or entry-point
-adapter with the same name.
+:func:`register`.  Registered instances shadow any entry-point adapter with
+the same name.
 """
 
 from __future__ import annotations
 
 import importlib
 import importlib.metadata
-import pkgutil
 import sys
 import warnings
 from typing import Dict, FrozenSet, List, Optional, Type
 
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
@@ -45,11 +40,6 @@ _EXTRA: Dict[str, MlRunnerPort] = {}
 _ENTRYPOINTS_LOADED: bool = False
 _ENTRYPOINT_INSTANCES: Dict[str, MlRunnerPort] = {}
 _ENTRYPOINT_SOURCES: Dict[str, str] = {}
-
-_BUILTIN_PACKAGES = (
-    "generic_ml_cache_core.adapter.out.client",
-    "generic_ml_cache_core.adapter.out.api",
-)
 
 
 def adapter(cls: Type[MlRunnerPort]) -> Type[MlRunnerPort]:
@@ -71,19 +61,6 @@ def register(instance: MlRunnerPort) -> None:
     Registered instances shadow any scanned adapter with the same name.
     """
     _EXTRA[instance.name] = instance
-
-
-def _scan_builtins() -> None:
-    """Import every module in the built-in adapter packages.
-
-    This triggers the ``@adapter`` decorator on each adapter class, populating
-    ``_ADAPTER_CLASSES``.  Already-imported modules are skipped (Python caches
-    imports in ``sys.modules``), so repeated calls are cheap.
-    """
-    for pkg_name in _BUILTIN_PACKAGES:
-        pkg = importlib.import_module(pkg_name)
-        for info in pkgutil.iter_modules(pkg.__path__):
-            importlib.import_module(f"{pkg_name}.{info.name}")
 
 
 def _entry_points_for_group() -> list:
@@ -170,23 +147,14 @@ def load_adapters(
     """Return every available adapter, optionally filtered by *whitelist*.
 
     Discovery order (later entries win on name collision):
-    1. Built-in adapters scanned via ``@adapter`` in the built-in packages.
-    2. Entry-point adapters from the ``gmlcache.adapters`` group.
-    3. Instances injected via :func:`register` (tests / programmatic use).
+    1. Entry-point adapters from the ``gmlcache.adapters`` group.
+    2. Instances injected via :func:`register` (tests / programmatic use).
 
     ``whitelist=None`` returns all discovered adapters.  A non-``None``
     whitelist restricts the result to the named adapters only.
     """
-    _scan_builtins()
     _load_entry_points()
     result: Dict[str, MlRunnerPort] = {}
-    for cls in _ADAPTER_CLASSES:
-        name = getattr(cls, "name", None)
-        if not name:
-            continue
-        if whitelist is not None and name not in whitelist:
-            continue
-        result[name] = cls()
     for name, instance in _ENTRYPOINT_INSTANCES.items():
         if whitelist is None or name in whitelist:
             result[name] = instance
@@ -246,3 +214,10 @@ def registered_local_names(whitelist: Optional[FrozenSet[str]] = None) -> list[s
         for name, a in load_adapters(whitelist).items()
         if getattr(a, "execution_kind", None) is ExecutionKind.LOCAL_MANAGED
     )
+
+
+def resolve_execution_kind(
+    client: str, whitelist: Optional[FrozenSet[str]] = None
+) -> ExecutionKind:
+    """Return the execution kind for *client* via the unified adapter registry."""
+    return get_adapter(client, whitelist=whitelist).execution_kind

@@ -17,8 +17,8 @@ from typing import List
 import pytest
 
 from generic_ml_cache_cli import register
-from generic_ml_cache_core.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
+from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
     AbstractManagedLocalAdapter,
 )
 

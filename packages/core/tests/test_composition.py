@@ -11,10 +11,8 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-from generic_ml_cache_core.adapter.inbound.composition import (
-    build_use_cases,
-    resolve_execution_kind,
-)
+from generic_ml_cache_cli._compose import build_use_cases
+from generic_ml_cache_core.adapter.registry import resolve_execution_kind
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState

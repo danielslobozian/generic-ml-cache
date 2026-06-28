@@ -8,7 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from generic_ml_cache_core.adapter.inbound.composition import get_encryption_state
+from generic_ml_cache_cli._compose import get_encryption_state
 from generic_ml_cache_core.common.errors import ConfigError, UnknownClient
 
 from generic_ml_cache_cli import config
@@ -34,11 +34,9 @@ def _doctor_payload(args: argparse.Namespace) -> dict:
     import platform  # noqa: PLC0415
     from dataclasses import asdict  # noqa: PLC0415
 
-    from generic_ml_cache_core.adapter.inbound.composition import (  # noqa: PLC0415
-        adapter_sources,
-        probe_all,
-        schema_version,
-    )
+    from generic_ml_cache_core.adapter.registry import adapter_sources  # noqa: PLC0415
+    from generic_ml_cache_adapters.adapter.out.client.discover import probe_all  # noqa: PLC0415
+    from generic_ml_cache_adapters.migration_runner import schema_version  # noqa: PLC0415
 
     file_cfg = config.load()
     settings = config.resolve_settings(file_cfg)
@@ -178,11 +176,8 @@ def _print_model_listing(ml) -> None:
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache_core.adapter.inbound.composition import (
-        list_api_models,
-        list_models,
-        list_models_all,
-    )
+    from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
+    from generic_ml_cache_adapters.adapter.out.client.discover import list_models, list_models_all
 
     try:
         file_cfg = config.load()

@@ -9,7 +9,7 @@ from typing import List
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
+from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType

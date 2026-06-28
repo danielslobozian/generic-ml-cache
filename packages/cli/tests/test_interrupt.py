@@ -21,7 +21,7 @@ from generic_ml_cache_cli import cli
 import generic_ml_cache_cli.controllers.run as run_ctrl
 from generic_ml_cache_core.application.port.out.base import ClientAdapter
 from generic_ml_cache_core.common.errors import RunInterrupted
-from generic_ml_cache_core.adapter.out.client.isolation import record_real_call
+from generic_ml_cache_adapters.adapter.out.client.isolation import record_real_call
 
 
 class _SleepAdapter(ClientAdapter):

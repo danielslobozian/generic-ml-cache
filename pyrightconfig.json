@@ -3,7 +3,7 @@
     "packages/core/src",
     "packages/cli/src",
     "packages/daemon/src",
-    "packages/common/src"
+    "packages/adapters/src"
   ],
   "pythonVersion": "3.9",
   "typeCheckingMode": "basic",

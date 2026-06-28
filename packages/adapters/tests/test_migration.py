@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Callable, cast
 
-from generic_ml_cache_core.adapter.inbound.migration import run_migrations, schema_version
+from generic_ml_cache_adapters.db import DbConnection
+from generic_ml_cache_adapters.migration_runner import run_migrations, schema_version
 
 
-def _factory(db_path: Path):
-    def _connect():
-        return sqlite3.connect(str(db_path))
+def _factory(db_path: Path) -> Callable[[], DbConnection]:
+    def _connect() -> DbConnection:
+        return cast(DbConnection, sqlite3.connect(str(db_path)))
 
     return _connect
 
@@ -20,7 +22,10 @@ def test_migration_creates_all_execution_tables(tmp_path: Path) -> None:
     run_migrations(factory)
     conn = factory()
     try:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
     finally:
         conn.close()
     expected = {
@@ -39,7 +44,10 @@ def test_migration_creates_all_registry_tables(tmp_path: Path) -> None:
     run_migrations(factory)
     conn = factory()
     try:
-        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
     finally:
         conn.close()
     expected = {"access_events", "session_tags", "session_specs"}
@@ -68,7 +76,10 @@ def test_migration_creates_indexes(tmp_path: Path) -> None:
     run_migrations(factory)
     conn = factory()
     try:
-        indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+        indexes = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
+        }
     finally:
         conn.close()
     assert "idx_executions_key" in indexes
@@ -105,7 +116,7 @@ def test_migration_rollback_on_failure(tmp_path: Path) -> None:
     factory = _factory(tmp_path / "gmlcache.sqlite3")
     # Patch _CURRENT_VERSION to a version whose SQL file doesn't exist so
     # migration fails inside the transaction and triggers ROLLBACK + error log.
-    import generic_ml_cache_core.adapter.inbound.migration as _m
+    import generic_ml_cache_adapters.migration_runner as _m
 
     original = _m._CURRENT_VERSION
     try:

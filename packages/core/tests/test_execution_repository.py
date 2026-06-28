@@ -7,8 +7,8 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from generic_ml_cache_core.adapter.inbound.migration import run_migrations
-from generic_ml_cache_core.adapter.out.persistence.execution_repository import (
+from generic_ml_cache_adapters.migration_runner import run_migrations
+from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
     ExecutionRepository,
 )
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (

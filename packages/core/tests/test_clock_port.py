@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.clock.system_clock import SystemClock
+from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 
 

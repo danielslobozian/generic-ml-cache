@@ -28,7 +28,7 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
     ExecutionSizeEntry,
     ExecutionSummary,
 )
-from generic_ml_cache_core.common.db import DbConnection
+from generic_ml_cache_adapters.db import DbConnection
 
 from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
     SerializedIdentity,

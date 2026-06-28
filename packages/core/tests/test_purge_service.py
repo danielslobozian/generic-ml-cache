@@ -8,7 +8,7 @@ import time as _time_module
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from generic_ml_cache_core.adapter.out.persistence.in_memory_execution_repository import (
+from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType

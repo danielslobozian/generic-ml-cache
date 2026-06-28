@@ -9,9 +9,9 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases  # noqa: E402
-from generic_ml_cache_core.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
-from generic_ml_cache_core.adapter.out.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
+from generic_ml_cache_cli._compose import build_use_cases  # noqa: E402
+from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
+from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
     FilesystemEncryptionManifestStore,
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import (  # noqa: E402

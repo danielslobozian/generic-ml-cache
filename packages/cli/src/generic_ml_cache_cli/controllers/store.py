@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
     ArtifactType,

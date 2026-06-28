@@ -8,7 +8,7 @@ import hashlib
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.fingerprint.filesystem_file_fingerprint import (
+from generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
 )
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort

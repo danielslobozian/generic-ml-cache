@@ -26,9 +26,9 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-    "generic-ml-cache-core>=0.18.0",
+    "generic-ml-cache-core>=0.27.0",
+    "generic-ml-cache-adapters>=0.27.0",
     "argcomplete>=3,<4",
-    "structlog>=21",
 ]
 
 [project.urls]
@@ -56,8 +56,6 @@ testpaths = ["tests"]
 addopts = "-ra -v --cov=generic_ml_cache_cli --cov-fail-under=80"
 timeout = 60
 
-[tool.coverage.run]
-omit = ["*/packages/common/*"]
 
 [tool.ruff]
 line-length = 100

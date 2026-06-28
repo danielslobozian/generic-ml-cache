@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_core.adapter.inbound.composition import resolve_execution_kind
+from generic_ml_cache_core.adapter.registry import resolve_execution_kind
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.common.errors import UnknownClient
 

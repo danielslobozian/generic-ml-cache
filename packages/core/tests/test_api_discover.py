@@ -8,7 +8,7 @@ from typing import List
 
 import pytest
 
-from generic_ml_cache_core.adapter.out.api.api_discover import list_api_models
+from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
 from generic_ml_cache_core.adapter.registry import get_adapter, register, registered_names
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult

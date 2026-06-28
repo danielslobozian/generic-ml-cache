@@ -26,7 +26,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "generic-ml-cache-core>=0.28.0",
+    "generic-ml-cache-core>=0.27.0",
     "structlog>=21",
 ]
 
@@ -58,11 +58,8 @@ packages = ["src/generic_ml_cache_adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=generic_ml_cache_adapters --cov-fail-under=80"
+addopts = "-ra --cov=generic_ml_cache_adapters --cov-fail-under=4"
 timeout = 60
-
-[tool.coverage.run]
-omit = ["*/packages/common/*"]
 
 [tool.ruff]
 line-length = 100

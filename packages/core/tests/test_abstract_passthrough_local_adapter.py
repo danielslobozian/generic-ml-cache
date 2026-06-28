@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from generic_ml_cache_core.adapter.out.client.abstract_passthrough_local_adapter import (
+from generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter import (
     AbstractPassthroughLocalAdapter,
 )
 from generic_ml_cache_core.adapter.registry import get_adapter

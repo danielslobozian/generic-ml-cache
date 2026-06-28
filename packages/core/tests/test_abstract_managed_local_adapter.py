@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import base64
 
-from generic_ml_cache_core.adapter.out.client.abstract_managed_local_adapter import (
+from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
     AbstractManagedLocalAdapter,
 )
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult

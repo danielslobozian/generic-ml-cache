@@ -92,21 +92,23 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
         _t = time.perf_counter()
         runner = self._runners.get(command.execution_kind)
         if runner is None:
-            self._diag.error(
-                "no runner registered for execution kind",
-                kind=str(command.execution_kind),
-                client=command.client,
-            )
+            if self._diag:
+                self._diag.error(
+                    "no runner registered for execution kind",
+                    kind=str(command.execution_kind),
+                    client=command.client,
+                )
             raise RuntimeError(
                 f"No runner registered for {command.execution_kind!r}; "
                 "pass client= to build_use_cases or wire a runner for this kind"
             )
-        self._diag.debug(
-            "invoking client",
-            client=command.client,
-            kind=str(command.execution_kind),
-            model=command.model or "",
-        )
+        if self._diag:
+            self._diag.debug(
+                "invoking client",
+                client=command.client,
+                kind=str(command.execution_kind),
+                model=command.model or "",
+            )
         if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             request = MlRequest(
                 model="",
@@ -128,13 +130,14 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
                 grants=frozenset(command.grants),
             )
         result = runner.run(request)
-        self._diag.debug(
-            "invoking client EXIT",
-            client=command.client,
-            kind=str(command.execution_kind),
-            model=command.model or "",
-            duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-        )
+        if self._diag:
+            self._diag.debug(
+                "invoking client EXIT",
+                client=command.client,
+                kind=str(command.execution_kind),
+                model=command.model or "",
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+            )
         return result
 
     def _after_record(self, execution_key: str) -> None:

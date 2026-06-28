@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for sqlite_connection_factory (bundled from packages/common)."""
+"""Tests for sqlite_connection_factory."""
 
 from __future__ import annotations
 
-from generic_ml_cache_cli._common.datasource import sqlite_connection_factory
+from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 
 
 def test_factory_returns_callable(tmp_path):
