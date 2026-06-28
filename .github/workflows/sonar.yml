@@ -39,6 +39,6 @@ jobs:
           python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-report=xml:packages/daemon/coverage.xml
 
       - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
