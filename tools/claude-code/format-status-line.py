@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""format-status-line.py — default gmlcache status-bar formatter.
+"""format-status-line.py — readable Claude Code status-line formatter.
 
-Assembles a single status line from five independent sections:
+Design goals:
+  - Understandable without a legend/documentation.
+  - Stable in two modes:
+      1. without a gmlcache session
+      2. with a gmlcache session
+  - Optional PR/MR line appears only when a PR/MR exists.
+  - Optional cache/model lines appear only when gmlcache reports a session.
+  - Long branch names, paths, tags, model names, etc. are clipped predictably.
 
-  1. git    — ⎇  repo name, branch, HEAD hash, dirty-file count
-  2. cache  — gmlcache session ID, calls/hits, per-model token usage
-  3. pr     — ⤴  PR/MR number, CI check counts (✓/✗/⋯), comment count, URL
-              Uses `gh` for GitHub repos, `glab` for GitLab. Silently
-              omitted if neither CLI is available or no PR/MR is open.
-              Results are cached for 30 s to avoid hitting the API on
-              every status-bar refresh.
-  4. cwd    — 📁  abbreviated current working directory
-  5. quota  — ⏱  Claude 5-hour rolling window usage + time to reset
+Output shape:
 
-Each section is independent — if a source is unavailable it is silently
-omitted. Output is two lines:
+  Without session:
+    git <repo>/<branch> <hash> dirty:<n>  │  📁 <cwd>  │  quota 5h <pct>/<reset> · wk <pct>/<reset>
+    PR #123  ✗1 ✓12 …2 💬4                 # only if a PR/MR exists
 
-  Line 1: git  │  cache  │  cwd  │  quota
-  Line 2: PR/CI (sits directly below the branch name for easy scanning)
-
-CUSTOMISE: comment out any section you don't need, rearrange the order in
-main(), or change the icon/format variables at the top of each section.
+  With session:
+    git <repo>/<branch> <hash> dirty:<n>  │  📁 <cwd>  │  quota 5h <pct>/<reset> · wk <pct>/<reset>
+    PR #123  ✗1 ✓12 …2 💬4                 # only if a PR/MR exists
+    cache <session> [tags] hits <hits>/<calls> <pct>%
+      model <name> in:<tokens> out:<tokens> cache-r:<tokens> cache-w:<tokens> think:<tokens>
 
 Usage — copy tools/claude-code/settings.json to .claude/settings.json, or add
 manually:
@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import ssl
 import subprocess
@@ -48,10 +49,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _SEP = "  │  "
-
-# Resolve the gmlcache binary: prefer the repo .venv so the dev version is
-# used instead of whatever (possibly older) version is on the system PATH.
 _GMLCACHE_BIN = "gmlcache"
+
+# Width budgets. These are deliberately conservative because the Claude Code
+# status area is narrow and constantly refreshed.
+MAX_REPO = 24
+MAX_BRANCH = 42
+MAX_CWD = 56
+MAX_TAGS = 30
+MAX_MODEL = 18
+MAX_SESSION_ID = 10
+MAX_FINAL_LINE = 180
 
 
 # ---------------------------------------------------------------------------
@@ -70,8 +78,21 @@ def _run(cmd: list[str], timeout: int = 2) -> str:
         return ""
 
 
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI/OSC sequences for rough width calculations."""
+    # OSC 8 hyperlinks and similar: ESC ] ... BEL or ESC ] ... ESC \\
+    text = re.sub(r"\x1b\].*?(?:\x07|\x1b\\\\)", "", text)
+    # CSI colours etc.
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+
+
+def _visible_len(text: str) -> int:
+    """Approximate visible width. Good enough for ASCII-heavy status text."""
+    return len(_strip_ansi(text))
+
+
 def _hyperlink(url: str, text: str) -> str:
-    """Wrap text in an OSC 8 terminal hyperlink. Renders as coloured, clickable text."""
+    """Wrap text in an OSC 8 terminal hyperlink."""
     return f"\033]8;;{url}\033\\{text}\033]8;;\033\\"
 
 
@@ -92,13 +113,81 @@ def _abbrev_home(path: str) -> str:
     return path
 
 
+def _clip_end(text: str, max_len: int) -> str:
+    """Clip text at the end: very-long-name -> very-long-na…."""
+    if not text or _visible_len(text) <= max_len:
+        return text
+    if max_len <= 1:
+        return "…"
+    return _strip_ansi(text)[: max_len - 1] + "…"
+
+
+def _clip_middle(text: str, max_len: int) -> str:
+    """Clip text in the middle: feature/foo/bar -> feature/…/bar."""
+    plain = _strip_ansi(text)
+    if not plain or len(plain) <= max_len:
+        return text
+    if max_len <= 1:
+        return "…"
+    left = (max_len - 1) // 2
+    right = max_len - 1 - left
+    return plain[:left] + "…" + plain[-right:]
+
+
+def _clip_path(path: str, max_len: int = MAX_CWD) -> str:
+    """Keep the useful tail of a path while preserving ~ or / when possible."""
+    path = _abbrev_home(path)
+    if len(path) <= max_len:
+        return path
+
+    sep = os.sep
+    if path.startswith("~"):
+        prefix = "~"
+        rest = path[2:] if path.startswith("~/") else path[1:]
+    elif path.startswith(sep):
+        prefix = sep
+        rest = path[1:]
+    else:
+        prefix = ""
+        rest = path
+
+    parts = [part for part in rest.split(sep) if part]
+    if not parts:
+        return _clip_middle(path, max_len)
+
+    tail: list[str] = []
+    best = ""
+    for part in reversed(parts):
+        candidate_tail = sep.join([part] + tail)
+        if prefix == "~":
+            candidate = f"~/…/{candidate_tail}"
+        elif prefix == sep:
+            candidate = f"/…/{candidate_tail}"
+        else:
+            candidate = f"…/{candidate_tail}"
+
+        if len(candidate) > max_len:
+            break
+        tail.insert(0, part)
+        best = candidate
+
+    return best or _clip_middle(path, max_len)
+
+
+def _fit_line(line: str, max_width: int = MAX_FINAL_LINE) -> str:
+    """Emergency final guard. Per-field budgets should do most of the work."""
+    if _visible_len(line) <= max_width:
+        return line
+    return _clip_end(line, max_width)
+
+
 # ---------------------------------------------------------------------------
 # Section 1: git context
 # ---------------------------------------------------------------------------
 
 
 def git_section() -> str:
-    """Return e.g. '⎇ generic-ml-cache  main  a3b7c8  ±4'."""
+    """Return e.g. 'git generic-ml-cache/main a3b7c8 dirty:4'."""
     branch = _run(["git", "branch", "--show-current"])
     if not branch:
         return ""
@@ -112,17 +201,16 @@ def git_section() -> str:
         len([ln for ln in porcelain.splitlines() if ln.strip()]) if porcelain else 0
     )
 
-    parts = ["⎇"]
-    if repo_name:
-        parts.append(repo_name)
-    if branch:
-        parts.append(branch)
+    repo_label = _clip_end(repo_name, MAX_REPO) if repo_name else "?"
+    branch_label = _clip_middle(branch, MAX_BRANCH)
+
+    parts = [f"git {repo_label}/{branch_label}"]
     if short_hash:
         parts.append(short_hash)
     if dirty_count > 0:
-        parts.append(f"±{dirty_count}")
+        parts.append(f"dirty:{dirty_count}")
 
-    return "  ".join(parts)
+    return " ".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -131,13 +219,13 @@ def git_section() -> str:
 
 
 def cwd_section(cc_data: dict) -> str:
-    """Return e.g. '📁 ~/my-work/python/generic-ml-cache'."""
+    """Return e.g. '📁 ~/…/generic-ml-cache/src'."""
     cwd = (
         (cc_data.get("workspace") or {}).get("current_dir")
         or cc_data.get("cwd")
         or os.getcwd()
     )
-    return "📁  " + _abbrev_home(cwd)
+    return "📁 " + _clip_path(cwd)
 
 
 # ---------------------------------------------------------------------------
@@ -145,52 +233,81 @@ def cwd_section(cc_data: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def cache_section() -> str:
-    """Return e.g. 'abc123ef  [ci]  ▶42 ✓18 43%  sonnet  ↑12.3k ↓8.1k ⚡2.0k ✎500'."""
+def _session_label(session_id: str) -> str:
+    """Short but recognizable session ID."""
+    if not session_id:
+        return "?"
+    if "-" in session_id:
+        return _clip_end(session_id.split("-")[0] + "-…", MAX_SESSION_ID)
+    return _clip_end(session_id, MAX_SESSION_ID)
+
+
+def _fmt_tags(tags: list[str]) -> str:
+    if not tags:
+        return ""
+    return "[" + _clip_end(", ".join(tags), MAX_TAGS) + "] "
+
+
+def _model_label(model: str) -> str:
+    """Normalize common Claude model names; clip unknown provider names."""
+    model = model or "?"
+    lower = model.lower()
+    if "opus" in lower:
+        return "opus"
+    if "sonnet" in lower:
+        return "sonnet"
+    if "haiku" in lower:
+        return "haiku"
+    return _clip_end(model, MAX_MODEL)
+
+
+def cache_sections() -> tuple[str, list[str]]:
+    """Return (cache headline, model detail lines). Empty headline means no session."""
     raw = _run([_GMLCACHE_BIN, "status-line"], timeout=3)
     if not raw:
-        return ""
+        return "", []
 
     try:
         data: dict = json.loads(raw)
     except json.JSONDecodeError:
-        return ""
+        return "", []
 
     session_id: str = data.get("session_id", "")
-    # Show first UUID segment + ellipsis so it's recognisable against --resume output
-    short_id = (session_id.split("-")[0] + "-…") if "-" in session_id else session_id[:8]
     tags: list[str] = data.get("tags", [])
     calls: int = data.get("calls", 0)
     hits: int = data.get("hits", 0)
     hit_rate: float = data.get("hit_rate", 0.0)
     by_model: list[dict] = data.get("by_model", [])
 
-    tag_str = f"[{', '.join(tags)}]  " if tags else ""
     hit_pct = int(hit_rate * 100)
-    headline = f"{short_id}  {tag_str}▶{calls} ✓{hits} {hit_pct}%"
+    headline = (
+        f"cache {_session_label(session_id)} "
+        f"{_fmt_tags(tags)}hits {hits}/{calls} {hit_pct}%"
+    )
 
-    model_parts: list[str] = []
+    model_lines: list[str] = []
     for row in by_model:
-        label = row.get("model", "?")
+        label = _model_label(row.get("model", "?"))
         spent_in = row.get("spent_input", 0)
         spent_out = row.get("spent_output", 0)
         cache_read = row.get("cache_read_tokens", 0)
         cache_write = row.get("cache_write_tokens", 0)
         reasoning = row.get("reasoning_tokens", 0)
 
-        tokens = f"↑{_fmt_k(spent_in)} ↓{_fmt_k(spent_out)}"
+        token_parts = [
+            f"in:{_fmt_k(spent_in)}",
+            f"out:{_fmt_k(spent_out)}",
+        ]
         if cache_read > 0:
-            tokens += f" ⚡{_fmt_k(cache_read)}"
+            token_parts.append(f"cache-r:{_fmt_k(cache_read)}")
         if cache_write > 0:
-            tokens += f" ✎{_fmt_k(cache_write)}"
+            token_parts.append(f"cache-w:{_fmt_k(cache_write)}")
         if reasoning > 0:
-            tokens += f" ∿{_fmt_k(reasoning)}"
+            token_parts.append(f"think:{_fmt_k(reasoning)}")
 
-        model_parts.append(f"{label}  {tokens}")
+        model_lines.append(f"  model {label} " + " ".join(token_parts))
 
-    if model_parts:
-        return headline + "  │  " + "  │  ".join(model_parts)
-    return headline
+    return headline, model_lines
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +369,10 @@ def _fmt_reset_ts(epoch: float) -> str:
     return f"{h}h{m:02d}m" if h else f"{m}m"
 
 
+def _fmt_quota_part(label: str, pct: int, reset: str) -> str:
+    return f"{label} {pct}%/{reset}" if reset else f"{label} {pct}%"
+
+
 def _quota_section_api() -> str:
     """Fallback: fetch rate-limit data from the Anthropic usage API.
     Results are cached for 60 s so the API is not called on every refresh.
@@ -279,16 +400,13 @@ def _quota_section_api() -> str:
     five = data.get("five_hour") or {}
     seven = data.get("seven_day") or {}
 
-    p5, r5 = _pct(five), _fmt_reset(five.get("resets_at", ""))
-    p7, r7 = _pct(seven), _fmt_reset(seven.get("resets_at", ""))
-
     parts = []
     if five:
-        parts.append(f"{p5}% : {r5}" if r5 else f"{p5}%")
+        parts.append(_fmt_quota_part("5h", _pct(five), _fmt_reset(five.get("resets_at", ""))))
     if seven:
-        parts.append(f"{p7}% {r7}" if r7 else f"{p7}%")
+        parts.append(_fmt_quota_part("wk", _pct(seven), _fmt_reset(seven.get("resets_at", ""))))
 
-    line = "⏱  " + "  ·  ".join(parts)
+    line = "quota " + " · ".join(parts) if parts else ""
     try:
         _QUOTA_CACHE.write_text(json.dumps({"ts": time.time(), "line": line}))
     except OSError:
@@ -297,7 +415,7 @@ def _quota_section_api() -> str:
 
 
 def quota_section(cc_data: dict) -> str:
-    """Return e.g. '⏱ 3% : 4h45m  ·  65% 1d4h'.
+    """Return e.g. 'quota 5h 12%/3h59m · wk 6%/6d7h'.
 
     Reads from Claude Code's stdin JSON first — instant, no HTTP, no OAuth.
     Falls back to the Anthropic usage API for older Claude Code versions or
@@ -312,12 +430,12 @@ def quota_section(cc_data: dict) -> str:
         if five:
             p5 = round(five.get("used_percentage", 0) or 0)
             r5 = _fmt_reset_ts(five.get("resets_at", 0))
-            parts.append(f"{p5}% : {r5}" if r5 else f"{p5}%")
+            parts.append(_fmt_quota_part("5h", p5, r5))
         if seven:
             p7 = round(seven.get("used_percentage", 0) or 0)
             r7 = _fmt_reset_ts(seven.get("resets_at", 0))
-            parts.append(f"{p7}% {r7}" if r7 else f"{p7}%")
-        return "⏱  " + "  ·  ".join(parts) if parts else ""
+            parts.append(_fmt_quota_part("wk", p7, r7))
+        return "quota " + " · ".join(parts) if parts else ""
 
     return _quota_section_api()
 
@@ -366,19 +484,19 @@ def _github_pr_section() -> str:
         and not c.get("conclusion")
     )
 
-    _RED    = "\033[91m"
-    _GREEN  = "\033[92m"
-    _YELLOW = "\033[93m"
-    _RESET  = "\033[0m"
+    red = "\033[91m"
+    green = "\033[92m"
+    yellow = "\033[93m"
+    reset = "\033[0m"
 
     label = _hyperlink(url, f"#{number}") if url else f"#{number}"
-    parts: list[str] = [f"⤴  {label}"]
+    parts: list[str] = [f"PR {label}"]
     if failed:
-        parts.append(f"{_RED}✗{failed}{_RESET}")
+        parts.append(f"{red}✗{failed}{reset}")
     if passed:
-        parts.append(f"{_GREEN}✓{passed}{_RESET}")
+        parts.append(f"{green}✓{passed}{reset}")
     if pending:
-        parts.append(f"{_YELLOW}⋯ {pending}{_RESET}")
+        parts.append(f"{yellow}…{pending}{reset}")
     if comments:
         parts.append(f"💬{len(comments)}")
 
@@ -403,11 +521,11 @@ def _gitlab_mr_section() -> str:
 
     check_icon = {"success": "✓", "failed": "✗", "canceled": "✗"}.get(
         pipeline_status,
-        "⋯" if pipeline_status in ("running", "pending", "waiting_for_resource") else "",
+        "…" if pipeline_status in ("running", "pending", "waiting_for_resource") else "",
     )
 
     label = _hyperlink(url, f"!{number}") if url else f"!{number}"
-    parts: list[str] = [f"⤴  {label}"]
+    parts: list[str] = [f"MR {label}"]
     if check_icon:
         parts.append(check_icon)
     if notes:
@@ -433,8 +551,8 @@ def pr_section() -> str:
         return ""
 
     # Only cache when we have check data — an empty checks result is transient
-    # (PR just opened, CI not yet queued) and not worth freezing for 30 s.
-    has_checks = any(c in line for c in ("✓", "✗", "⋯"))
+    # (PR just opened, CI not yet queued) and not worth freezing for _PR_TTL.
+    has_checks = any(c in line for c in ("✓", "✗", "…"))
     if has_checks:
         try:
             _PR_CACHE.write_text(json.dumps({"ts": time.time(), "line": line}))
@@ -454,18 +572,25 @@ def main() -> None:
     except (json.JSONDecodeError, ValueError):
         cc_data = {}
 
-    # Line 1: project context + session health
+    # Line 1: always-visible project context.
     line1: list[str] = []
-    for seg in (git_section(), cache_section(), cwd_section(cc_data), quota_section(cc_data)):
+    for seg in (git_section(), cwd_section(cc_data), quota_section(cc_data)):
         if seg:
             line1.append(seg)
     if line1:
-        print(_SEP.join(line1))
+        print(_fit_line(_SEP.join(line1)))
 
-    # Line 2: PR/CI — sits directly below the git branch for easy scanning
+    # Line 2: PR/MR only when a PR/MR exists.
     pr = pr_section()
     if pr:
-        print(pr)
+        print(_fit_line(pr))
+
+    # Lines 3+: cache/session only when gmlcache reports a session.
+    cache_headline, model_lines = cache_sections()
+    if cache_headline:
+        print(_fit_line(cache_headline))
+        for model_line in model_lines:
+            print(_fit_line(model_line))
 
 
 if __name__ == "__main__":
