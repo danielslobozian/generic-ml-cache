@@ -49,7 +49,7 @@ following surfaces are locked under the promise described in the sections below:
 
 | Surface | Stable element |
 |---|---|
-| **CLI** | All command names, flag names, positional arguments, and exit codes documented in [`docs/reference/cli.md`](reference/cli.md). Output formats for `--json` flags. |
+| **CLI** | All command names, flag names, positional arguments, and exit codes documented in [`docs/reference/cli.md`](reference/cli.md). Output format of `--json` on commands that support it (reporting commands only — `check`, `doctor`, `models`, `status`, `stats`, `list`, `purge`, `tags`, `session *`, `exec status`, `exec list`, `daemon status`). Write-and-action commands (`run`, `encrypt`, `daemon start`, etc.) have no `--json` flag. |
 | **Python API** | Every name in `generic_ml_cache_core.__all__` — its signature, its semantics, and its exception contract. |
 | **Adapter contract** | The `MlRunnerPort` / `ClientAdapter` / `ApiClientPort` interfaces, the `@register` / `get_adapter` registry API, the `gmlcache.adapters` entry-point group, and the `adapter_contract_version` compatibility check. |
 | **Execution-record schema** | The logical record format (fields, types, relationships) as documented in [`docs/storage.md`](storage.md). The physical SQLite DDL is an implementation detail and may be migrated transparently. |
