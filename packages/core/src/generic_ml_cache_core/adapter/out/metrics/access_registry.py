@@ -12,8 +12,9 @@ without it. Schema is owned by the yoyo migration ``0001.unified-schema``.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlite3 import Connection
 from typing import Callable, Dict, List, Optional, Tuple
+
+from generic_ml_cache_core.common.db import DbConnection
 
 from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
@@ -32,13 +33,13 @@ class AccessRegistry:
 
     def __init__(
         self,
-        conn_factory: Callable[[], Connection],
+        conn_factory: Callable[[], DbConnection],
         diag: Optional[DiagnosticsPort] = None,
     ) -> None:
         self._conn_factory = conn_factory
         self._diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
 
-    def _connect(self) -> Connection:
+    def _connect(self) -> DbConnection:
         return self._conn_factory()
 
     def _warn_db_error(self, operation: str, exc: Exception) -> None:
@@ -254,13 +255,17 @@ class AccessRegistry:
         try:
             conn = self._connect()
             try:
-                conn.execute(
-                    "INSERT INTO session_specs (session_id, client, model, effort) "
-                    "VALUES (?, ?, ?, ?) "
-                    "ON CONFLICT(session_id) DO UPDATE SET "
-                    "client=excluded.client, model=excluded.model, effort=excluded.effort",
-                    (session_id, spec.client, spec.model, spec.effort),
+                cursor = conn.execute(
+                    "UPDATE session_specs SET client=?, model=?, effort=? WHERE session_id=?",
+                    (spec.client, spec.model, spec.effort, session_id),
                 )
+                if cursor.rowcount == 0:
+                    conn.execute(
+                        "INSERT INTO session_specs (session_id, client, model, effort) "
+                        "SELECT ?, ?, ?, ? WHERE NOT EXISTS "
+                        "(SELECT 1 FROM session_specs WHERE session_id = ?)",
+                        (session_id, spec.client, spec.model, spec.effort, session_id),
+                    )
                 conn.commit()
             finally:
                 conn.close()

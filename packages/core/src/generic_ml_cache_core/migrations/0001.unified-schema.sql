@@ -14,7 +14,7 @@ CREATE TABLE call_identities (
 );
 
 CREATE TABLE executions (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    id                INTEGER PRIMARY KEY ,
     execution_key     TEXT NOT NULL,
     kind              TEXT NOT NULL,
     state             TEXT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE executions (
 CREATE INDEX idx_executions_key ON executions(execution_key);
 
 CREATE TABLE artifacts (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    id            INTEGER PRIMARY KEY ,
     execution_id  INTEGER NOT NULL,
     artifact_type TEXT NOT NULL,
     name          TEXT,
@@ -58,7 +58,7 @@ CREATE TABLE execution_tags (
 -- ── access registry subsystem ─────────────────────────────────────────────────
 
 CREATE TABLE access_events (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    id         INTEGER PRIMARY KEY ,
     ts         TEXT NOT NULL,
     event      TEXT NOT NULL,
     match_key  TEXT,
@@ -69,7 +69,7 @@ CREATE TABLE access_events (
 );
 
 CREATE TABLE session_tags (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    id         INTEGER PRIMARY KEY ,
     session_id TEXT NOT NULL,
     tag        TEXT NOT NULL
 );

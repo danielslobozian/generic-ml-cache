@@ -8,13 +8,13 @@ import os
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
-from sqlite3 import Connection
-from typing import Callable, FrozenSet, Optional
+from typing import Callable, FrozenSet, Optional, cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_core.common.db import DbConnection
 from generic_ml_cache_core.common.errors import CacheError
 from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
@@ -41,12 +41,12 @@ _CACHE_ERROR_HTTP: dict[str, int] = {
 _LOG_FILE_NAME = "gmlcache.log"
 
 
-def _db_conn_factory(store_root: Path) -> Callable[[], Connection]:
+def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
     db_path = store_root / _DB_NAME
 
-    def _connect() -> Connection:
+    def _connect() -> DbConnection:
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(str(db_path), check_same_thread=False)
+        return cast(DbConnection, sqlite3.connect(str(db_path), check_same_thread=False))
 
     return _connect
 

@@ -29,6 +29,7 @@ def test_migration_creates_all_execution_tables(tmp_path: Path) -> None:
         "artifacts",
         "token_usage",
         "execution_tags",
+        "schema_version",
     }
     assert expected <= tables
 
@@ -56,7 +57,7 @@ def test_migration_records_applied_migration(tmp_path: Path) -> None:
     run_migrations(factory)
     conn = factory()
     try:
-        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
     finally:
         conn.close()
     assert version == 1
