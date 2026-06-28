@@ -65,7 +65,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, FrozenSet, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
@@ -197,6 +197,38 @@ class FileConfig:
     source: Optional[Path] = None
     log_level: Optional[str] = None
     log_file: Optional[str] = None
+    #: Optional config schema version declared by the file (e.g. ``"1"``).
+    version: Optional[str] = None
+
+
+#: All valid key names in the [defaults] section.
+_KNOWN_DEFAULTS_KEYS = frozenset(
+    {
+        "mode",
+        "persist",
+        "store",
+        "timeout",
+        "trust_scan",
+        "max_size",
+        "max_age",
+        "adapters",
+        "log_level",
+        "log_file",
+        "version",
+    }
+)
+
+#: Current config schema version. Bumped only with a breaking schema change.
+CONFIG_SCHEMA_VERSION = "1"
+
+
+@dataclass
+class ConfigIssue:
+    """A single validation finding from :func:`validate`."""
+
+    severity: str  # "error" | "warning"
+    key: Optional[str]
+    message: str
 
 
 def _parse_timeout(raw: str, where: str) -> float:
@@ -340,6 +372,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
         source=p,
         log_level=log_level,
         log_file=log_file,
+        version=get("version"),
     )
 
 
@@ -358,6 +391,120 @@ def write_default_config(path: Optional[Path] = None) -> Tuple[Path, bool]:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(_DEFAULT_CONFIG_TEMPLATE.format(store=default_store_path()), encoding="utf-8")
     return p, True
+
+
+def _check_enum_keys(sec: "configparser.SectionProxy", issues: List[ConfigIssue]) -> None:
+    """Validate enum-valued keys and the version key; append issues in-place."""
+    mode = sec.get("mode")
+    if mode is not None and mode not in _MODES:
+        issues.append(
+            ConfigIssue(
+                "error", "mode", f"invalid value {mode!r}; expected one of {sorted(_MODES)}"
+            )
+        )
+
+    persist = sec.get("persist")
+    if persist is not None and persist not in _DEPTHS:
+        issues.append(
+            ConfigIssue(
+                "error", "persist", f"invalid value {persist!r}; expected one of {sorted(_DEPTHS)}"
+            )
+        )
+
+    log_level = sec.get("log_level")
+    if log_level is not None and log_level.upper() not in _LOG_LEVELS:
+        issues.append(
+            ConfigIssue(
+                "error",
+                "log_level",
+                f"invalid value {log_level!r}; expected one of {sorted(_LOG_LEVELS)}",
+            )
+        )
+
+    version_raw = sec.get("version")
+    if version_raw is not None and version_raw.strip() != CONFIG_SCHEMA_VERSION:
+        issues.append(
+            ConfigIssue(
+                "warning",
+                "version",
+                f"config schema version {version_raw!r} does not match "
+                f"the current schema version {CONFIG_SCHEMA_VERSION!r}; the file may be stale",
+            )
+        )
+
+
+def _validate_defaults_section(sec: "configparser.SectionProxy") -> List[ConfigIssue]:
+    """Validate every key in the [defaults] section; return all issues found."""
+    issues: List[ConfigIssue] = []
+
+    for key in sec:
+        if key not in _KNOWN_DEFAULTS_KEYS:
+            issues.append(
+                ConfigIssue("warning", key, f"unknown key {key!r} in [{SECTION}] — will be ignored")
+            )
+
+    _check_enum_keys(sec, issues)
+
+    for key, parser_fn in (
+        ("timeout", _parse_timeout),
+        ("max_size", _parse_size),
+        ("max_age", _parse_age),
+    ):
+        raw = sec.get(key)
+        if raw is not None:
+            try:
+                parser_fn(raw, "")  # type: ignore[operator]
+            except ConfigError as exc:
+                issues.append(ConfigIssue("error", key, str(exc)))
+
+    trust_raw = sec.get("trust_scan")
+    if trust_raw is not None:
+        try:
+            _parse_bool(trust_raw, "")
+        except ConfigError:
+            issues.append(
+                ConfigIssue(
+                    "error", "trust_scan", f"invalid boolean {trust_raw!r}; expected true or false"
+                )
+            )
+
+    return issues
+
+
+def validate(path: Optional[Path] = None) -> List[ConfigIssue]:
+    """Parse the config file and return all validation issues without raising.
+
+    A missing file is not an error — it yields an empty list. Issues are
+    returned in document order; callers should inspect ``severity`` to decide
+    whether to exit non-zero.
+    """
+    p = path or resolve_config_path()
+    issues: List[ConfigIssue] = []
+
+    if not p.is_file():
+        return issues
+
+    parser = configparser.ConfigParser()
+    try:
+        parser.read(p, encoding="utf-8")
+    except configparser.Error as exc:
+        issues.append(ConfigIssue(severity="error", key=None, message=f"cannot parse file: {exc}"))
+        return issues
+
+    for sect in parser.sections():
+        if sect not in {SECTION, EXECUTABLES_SECTION}:
+            issues.append(
+                ConfigIssue(
+                    severity="warning",
+                    key=None,
+                    message=f"unknown section [{sect}] — will be ignored",
+                )
+            )
+
+    if parser.has_section(SECTION):
+        issues.extend(_validate_defaults_section(parser[SECTION]))
+
+    return issues
 
 
 def _pick(flag, env, file_value, default) -> Tuple[object, str]:

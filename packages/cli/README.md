@@ -22,7 +22,6 @@ call once, replay it forever by its content key, offline and byte-for-byte.
 
 ```bash
 pip install generic-ml-cache-cli          # gmlcache command + the engine
-pip install generic-ml-cache-daemon       # optional: HTTP API (gmlcache daemon)
 ```
 
 ---
@@ -107,7 +106,7 @@ gmlcache session report --tag sprint-3                     # aggregate across al
 
 ### Session exec spec and tag management (0.13.0)
 
-Pin an adapter, model, and effort to a session — the daemon gateway inherits it.
+Pin an adapter, model, and effort to a session.
 Add and remove tags at any time.
 
 ```bash
@@ -226,8 +225,6 @@ client = anthropic.Anthropic(api_key="…", base_url="http://127.0.0.1:8765/gate
      width="760">
 </p>
 
-Full HTTP endpoint reference: [`packages/daemon/README.md`](https://github.com/danielslobozian/generic-ml-cache/blob/main/packages/daemon/README.md)
-
 ---
 
 ## Command overview — `--help`
@@ -257,7 +254,6 @@ execution = wired.run_ml.execute(command)
 ## Links
 
 - **Repository & docs:** <https://github.com/danielslobozian/generic-ml-cache>
-- **Daemon HTTP API:** [`packages/daemon/README.md`](https://github.com/danielslobozian/generic-ml-cache/blob/main/packages/daemon/README.md)
 - **Changelog:** [`CHANGELOG.md`](https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md)
 - **Security policy:** [`SECURITY.md`](https://github.com/danielslobozian/generic-ml-cache/blob/main/SECURITY.md)
 

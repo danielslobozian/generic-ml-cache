@@ -47,6 +47,11 @@ from generic_ml_cache_cli.controllers.session import (
     _cmd_session_tag,
     _cmd_session_update,
 )
+from generic_ml_cache_cli.controllers.config import (
+    _cmd_config,
+    _cmd_config_show,
+    _cmd_config_validate,
+)
 from generic_ml_cache_cli.controllers.setup import (
     _cmd_doctor,
     _cmd_init,
@@ -611,6 +616,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="create the config file in the default location (if absent), then show the store",
     )
     init.set_defaults(func=_cmd_init)
+
+    cfg = sub.add_parser("config", help="validate or inspect the resolved configuration")
+    cfg_sub = cfg.add_subparsers(dest="config_command")
+
+    cfg_validate = cfg_sub.add_parser(
+        "validate",
+        help="parse and validate the config file; exit non-zero on any error",
+    )
+    cfg_validate.add_argument("--json", action="store_true", help=_JSON_HELP)
+    cfg_validate.set_defaults(func=_cmd_config_validate)
+
+    cfg_show = cfg_sub.add_parser(
+        "show",
+        help="display the fully resolved configuration (default → file → env)",
+    )
+    cfg_show.add_argument(
+        "--resolved",
+        action="store_true",
+        help="show each value with its source (always on; flag accepted for discoverability)",
+    )
+    cfg_show.add_argument("--json", action="store_true", help=_JSON_HELP)
+    cfg_show.set_defaults(func=_cmd_config_show)
+
+    cfg.set_defaults(func=_cmd_config)
 
     daemon = sub.add_parser("daemon", help="manage the generic-ml-cache HTTP daemon")
     daemon_sub = daemon.add_subparsers(dest="daemon_command")
