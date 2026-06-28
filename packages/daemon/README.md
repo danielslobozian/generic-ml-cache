@@ -106,7 +106,7 @@ A cache-transparent proxy for the Anthropic Messages API. Requests that hit the
 cache are returned without a network call to Anthropic. The response shape matches
 the Anthropic Messages API exactly, with one extra field: `x_cache_hit: bool`.
 
-**Limitations (0.13.0):** single-turn conversations only (one `role: user` message,
+**Limitations:** single-turn conversations only (one `role: user` message,
 no prior assistant turns). Multi-turn support is planned.
 
 **Example:**
