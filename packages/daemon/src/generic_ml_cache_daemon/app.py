@@ -11,9 +11,11 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import Callable, FrozenSet, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from generic_ml_cache_core.adapter.inbound.composition import build_use_cases
+from generic_ml_cache_core.common.errors import CacheError
 from generic_ml_cache_core.application.port.out.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
@@ -22,6 +24,20 @@ from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
 
 _DB_NAME = "executions.sqlite3"
+
+_CACHE_ERROR_HTTP: dict[str, int] = {
+    "cache.miss": 404,
+    "adapter.unknown": 400,
+    "adapter.not_found": 400,
+    "adapter.command_too_long": 400,
+    "config.invalid": 422,
+    "input.file_error": 422,
+    "store.blob_missing": 404,
+    "crypto.wrong_token": 401,
+    "crypto.token_required": 401,
+    "crypto.state_error": 409,
+    "store.locked": 409,
+}
 _LOG_FILE_NAME = "gmlcache.log"
 
 
@@ -113,6 +129,11 @@ def create_app(
         redoc_url="/redoc",
         lifespan=lifespan,
     )
+
+    @application.exception_handler(CacheError)
+    async def _cache_error_handler(request: Request, exc: CacheError) -> JSONResponse:
+        status = _CACHE_ERROR_HTTP.get(exc.code, 500)
+        return JSONResponse(status_code=status, content={"code": exc.code, "detail": str(exc)})
 
     application.state.wired = wired_use_cases
     application.state.store_root = store_root
