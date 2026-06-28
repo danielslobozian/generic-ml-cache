@@ -1,8 +1,9 @@
 # Security Policy
 
-`generic-ml-cache` takes security seriously. It ships as three packages —
-`generic-ml-cache-core` (library), `generic-ml-cache-cli` (terminal client), and
-`generic-ml-cache-daemon` (local HTTP daemon) — and this policy covers all three.
+`generic-ml-cache` takes security seriously. It ships as four packages —
+`generic-ml-cache-core` (hexagonal kernel), `generic-ml-cache-adapters` (infrastructure
+adapters), `generic-ml-cache-cli` (terminal client), and `generic-ml-cache-daemon`
+(local HTTP daemon) — and this policy covers all four.
 Thank you for helping keep it and its users safe.
 
 ## Supported versions

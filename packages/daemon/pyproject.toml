@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Daniel Slobozian" }]
 keywords = ["cache", "llm", "ai", "daemon", "http", "fastapi", "gateway", "proxy"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
@@ -47,7 +47,7 @@ dev = [
   "pytest-timeout",
   "coverage>=7",
   "ruff>=0.15",
-  "httpx>=0.27",
+  "httpx2>=2.0",
   "prometheus-client>=0.20",
   "import-linter>=2",
   "pyright>=1.1",

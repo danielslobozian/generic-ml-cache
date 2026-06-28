@@ -12,13 +12,13 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
 
-The reusable **engine** behind
+The reusable **hexagonal kernel** behind
 [`gmlcache`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/cli):
 record a real ML client (or API) call once, replay it by its content key. It contains
-the domain model, the use cases, the port contracts, **and the default outbound
-adapters** (SQLite execution repository, filesystem blob store, the
-claude/codex/cursor client runner, the API client, metrics, clock, fingerprinting) —
-plus the `build_use_cases` composition factory.
+the domain model, the use cases, and the port contracts — **zero runtime dependencies**.
+Concrete infrastructure (SQLite, filesystem blob store, ML client runners, API adapters,
+metrics, clock, fingerprinting) lives in
+[`generic-ml-cache-adapters`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/adapters).
 
 Pure Python and **stateless**: it bakes in *structure*
 (table names, blob naming, schema) but no *location* — you inject the data source.
@@ -35,25 +35,26 @@ pip install generic-ml-cache-core
 
 ## Embed it
 
-Hand the library a data source and it wires the engine for you:
+`generic-ml-cache-core` provides the ports and use cases. Pair it with
+[`generic-ml-cache-adapters`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/adapters)
+for the shipped infrastructure, then wire them in your composition root:
 
 ```python
-from generic_ml_cache_core import build_use_cases
-from generic_ml_cache_core.application.port.inbound.run_managed_local_execution_command import (
-    RunManagedLocalExecutionCommand,
+from generic_ml_cache_core import WiredUseCases
+from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+    RunMlExecutionCommand,
 )
 
-wired = build_use_cases(store_root="/path/you/choose")   # you provide the data source
-command = RunManagedLocalExecutionCommand(
-    client="claude", model="sonnet", effort="", context="", prompt="…",
+# wired: WiredUseCases — constructed by your composition root (see adapters package)
+command = RunMlExecutionCommand(
+    execution_kind=ExecutionKind.LOCAL_MANAGED,
+    client="claude", model="claude-sonnet-4-5", effort="", context="", prompt="…",
 )
-execution = wired.run_managed.execute(command)           # records on a miss, replays on a hit
+execution = wired.run_ml.execute(command)   # records on a miss, replays on a hit
 ```
 
-You reuse the shipped adapters by injecting a data source — you never reimplement them
-(the **Spring Batch** model: the framework ships the writers, you provide the
-connection). Need a different store? Construct the use cases yourself against the
-ports and pass your own adapter.
+Need a different store? Implement the ports from `generic_ml_cache_core.application.port`
+and pass your own adapters. The core never imports any concrete implementation.
 
 ## What's inside
 
@@ -61,9 +62,10 @@ ports and pass your own adapter.
 - **Use cases** — managed-local / passthrough / API runs, and probe (check).
 - **Ports** (`application/port/...`) — client runner, blob store, execution repository,
   metrics, clock, fingerprint, API client.
-- **Default adapters** (`adapter/out/...`) + the `build_use_cases` composition factory.
-- **`generic_ml_cache_core.testing.InMemoryExecutionRepository`** — an in-memory
-  reference adapter to test your code against the ports.
+- **Adapter registry** — discovers and registers adapters declared via the
+  `gmlcache.adapters` entry-point group at runtime.
+- **`WiredUseCases`** — typed container of wired use-case references (constructed by
+  the composition root in the adapters or CLI package).
 
 Inbound drivers —
 [`gmlcache`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/cli)
