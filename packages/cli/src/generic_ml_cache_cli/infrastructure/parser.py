@@ -341,7 +341,19 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument(
         "--timeout", type=float, default=10.0, help="seconds before a version check is killed"
     )
-    doctor.add_argument("--json", action="store_true", help=_JSON_HELP)
+    doctor.add_argument(
+        "--host", default="127.0.0.1", metavar="HOST", help="daemon host for reachability check"
+    )
+    doctor.add_argument(
+        "--port", type=int, default=8765, metavar="PORT", help="daemon port for reachability check"
+    )
+    _doctor_output = doctor.add_mutually_exclusive_group()
+    _doctor_output.add_argument("--json", action="store_true", help=_JSON_HELP)
+    _doctor_output.add_argument(
+        "--bundle",
+        action="store_true",
+        help="write full diagnostic to a timestamped file (sensitive values redacted)",
+    )
     doctor.set_defaults(func=_cmd_doctor)
 
     models = sub.add_parser(

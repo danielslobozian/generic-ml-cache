@@ -15,26 +15,37 @@ from generic_ml_cache_cli import config
 from generic_ml_cache_cli.composition import _db_conn_factory, _make_diag
 
 
-def _cmd_doctor(args: argparse.Namespace) -> int:
-    from dataclasses import asdict
+def _probe_daemon(host: str, port: int) -> bool:
+    """Return True if the daemon /health endpoint responds with HTTP 200."""
+    import urllib.error  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
 
-    from generic_ml_cache_core.adapter.inbound.composition import (
+    url = f"http://{host}:{port}/health"  # NOSONAR — localhost daemon, plain HTTP is correct
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310
+            return int(resp.status) == 200
+    except Exception:
+        return False
+
+
+def _doctor_payload(args: argparse.Namespace) -> dict:
+    """Collect the full diagnostic payload (no credentials included)."""
+    import os  # noqa: PLC0415
+    import platform  # noqa: PLC0415
+    from dataclasses import asdict  # noqa: PLC0415
+
+    from generic_ml_cache_core.adapter.inbound.composition import (  # noqa: PLC0415
         adapter_sources,
         probe_all,
         schema_version,
     )
 
-    try:
-        file_cfg = config.load()
-    except ConfigError as exc:
-        print(f"gmlc: {exc}", file=sys.stderr)
-        return 4
-
+    file_cfg = config.load()
     settings = config.resolve_settings(file_cfg)
     store_root = Path(str(settings["store"][0]))
     _diag = _make_diag(args)
-    applied = schema_version(_db_conn_factory(store_root), diag=_diag)
 
+    applied = schema_version(_db_conn_factory(store_root), diag=_diag)
     statuses = probe_all(
         timeout=args.timeout,
         executables=file_cfg.executables,
@@ -43,33 +54,63 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     )
     ep_sources = adapter_sources(whitelist=file_cfg.adapters)
 
-    if args.json:
-        import json
+    host = getattr(args, "host", "127.0.0.1")
+    port = getattr(args, "port", 8765)
+    store_exists = store_root.exists()
 
-        print(
-            json.dumps(
-                {
-                    "clients": [asdict(s) for s in statuses],
-                    "schema": applied,
-                    "adapter_extensions": ep_sources,
-                },
-                indent=2,
-            )
-        )
-        return 0
+    return {
+        "python": sys.version,
+        "os": f"{platform.system()} {platform.release()}",
+        "config_path": str(config.resolve_config_path()),
+        "store_path": str(store_root),
+        "store_permissions": {
+            "exists": store_exists,
+            "readable": os.access(store_root, os.R_OK) if store_exists else False,
+            "writable": os.access(store_root, os.W_OK) if store_exists else False,
+        },
+        "daemon": {
+            "host": host,
+            "port": port,
+            "reachable": _probe_daemon(host, port),
+        },
+        "clients": [asdict(s) for s in statuses],
+        "schema": applied,
+        "adapter_extensions": ep_sources,
+    }
 
-    if not statuses:
+
+def _print_doctor_text(payload: dict) -> None:
+    import platform  # noqa: PLC0415
+
+    py_short = sys.version.split()[0]
+    print(f"python      : {py_short}  ({platform.system()} {platform.release()})")
+    print(f"config file : {payload['config_path']}")
+    print(f"store path  : {payload['store_path']}")
+    perms = payload["store_permissions"]
+    if perms["exists"]:
+        rw = ("r" if perms["readable"] else "") + ("w" if perms["writable"] else "")
+        print(f"store perms : {rw or 'none'}")
+    else:
+        print("store perms : (not initialised)")
+    d = payload["daemon"]
+    reach = "reachable" if d["reachable"] else "not running"
+    print(f"daemon      : {reach}  ({d['host']}:{d['port']})")
+    print()
+
+    statuses_raw = payload["clients"]
+    if not statuses_raw:
         print("no client adapters are registered")
     else:
         print("configured clients (advisory — discovery never chooses or gates a run):")
-        for s in statuses:
-            if s.present:
+        for s in statuses_raw:
+            if s["present"]:
                 print(
-                    f"  {s.name:<8} present  {(s.version or 'version unknown'):<28}  {s.executable}"
+                    f"  {s['name']:<8} present  {(s.get('version') or 'version unknown'):<28}  {s.get('executable', '')}"
                 )
             else:
-                print(f"  {s.name:<8} missing  {s.detail or ''}")
+                print(f"  {s['name']:<8} missing  {s.get('detail') or ''}")
 
+    ep_sources = payload["adapter_extensions"]
     if ep_sources:
         print()
         print("installed adapter extensions:")
@@ -77,6 +118,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             print(f"  {ep_name:<8} {ep_source}")
 
     print()
+    applied = payload["schema"]
     if applied:
         latest = applied[-1]
         print(
@@ -84,6 +126,31 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         )
     else:
         print("store schema : not initialised (run any gmlcache command to apply migrations)")
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    import json  # noqa: PLC0415
+
+    try:
+        payload = _doctor_payload(args)
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    if getattr(args, "bundle", False):
+        from datetime import datetime, timezone  # noqa: PLC0415
+
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        bundle_path = Path(f"gmlcache-bundle-{ts}.json")
+        bundle_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"bundle written: {bundle_path.resolve()}")
+        return 0
+
+    _print_doctor_text(payload)
     return 0
 
 
