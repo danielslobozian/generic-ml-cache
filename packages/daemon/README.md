@@ -13,24 +13,6 @@ pip install "generic-ml-cache-daemon[metrics]" # + Prometheus /metrics endpoint
 
 ## Starting the daemon
 
-### Via the CLI (recommended)
-
-```bash
-gmlcache daemon start                 # foreground, default 127.0.0.1:8765
-gmlcache daemon start --port 9000     # custom port
-gmlcache daemon start --metrics       # enable /metrics endpoint
-gmlcache daemon start --session abc   # bind to session "abc"
-```
-
-Check status or stop:
-
-```bash
-gmlcache daemon status
-gmlcache daemon stop
-```
-
-### Direct launch
-
 ```bash
 python -m generic_ml_cache_daemon             # uses defaults
 GMLCACHE_STORE=/path/to/store python -m generic_ml_cache_daemon
@@ -154,7 +136,7 @@ client = anthropic.Anthropic(
 
 The daemon is a thin FastAPI layer over the `generic-ml-cache-core` hexagonal
 architecture. It does not own any state — all persistence goes through the
-existing `JournalMetrics` (SQLite registry) and `SqliteExecutionRepository`
+existing `JournalMetrics` (SQLite registry) and `ExecutionRepository`
 that the core library manages.
 
 Background jobs run in a `ThreadPoolExecutor` inside an in-process
