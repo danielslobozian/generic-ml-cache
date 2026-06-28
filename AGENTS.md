@@ -488,6 +488,15 @@ return blob_path.read_bytes()
   Create the branch before touching any file. `main` is only ever updated via a merged
   PR. An agent that edits files while on `main` has violated this rule; the correct
   recovery is `git checkout -b <branch>` immediately (staged changes carry over).
+- **Version and release documentation are release-branch-only.** `VERSION`,
+  `CHANGELOG.md`, and `docs/ROADMAP.md` must never be touched on a `feature/`,
+  `tech/`, `fix/`, or `docs/` branch. They are only modified on a `release/<version>`
+  branch, and only after the feature work for that version has been implemented and
+  already merged into `main`. An agent that edits these files on any other branch has
+  violated this rule and must immediately revert those changes.
+  *Failing case: bumping VERSION or writing a CHANGELOG entry on a feature branch
+  before the implementation PR is even merged — the release commit arrives before the
+  code it describes.*
 - **Release branch checklist.** A release branch commit must touch exactly three files —
   no more, no less. A PR diff that omits any of the three is wrong and must not merge:
   1. `VERSION` — bumped to the new version string.
