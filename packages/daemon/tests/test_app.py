@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi import FastAPI
 
@@ -44,3 +46,18 @@ def test_create_app_metrics_can_be_enabled(tmp_path: Path) -> None:
 def test_create_app_stores_store_root(tmp_path: Path) -> None:
     application = create_app(tmp_path)
     assert application.state.store_root == tmp_path
+
+
+def test_create_app_starts_without_token(tmp_path: Path) -> None:
+    with patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("GMLCACHE_TOKEN", None)
+        application = create_app(tmp_path)
+    assert isinstance(application, FastAPI)
+
+
+def test_create_app_reads_token_from_environment(tmp_path: Path) -> None:
+    # create_app must not raise when GMLCACHE_TOKEN is set but the store is
+    # not yet encrypted (the token is simply unused against a plain store).
+    with patch.dict(os.environ, {"GMLCACHE_TOKEN": "dummy-token-for-wiring-test"}):
+        application = create_app(tmp_path)
+    assert isinstance(application, FastAPI)
