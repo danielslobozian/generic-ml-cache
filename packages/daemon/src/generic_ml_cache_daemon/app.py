@@ -99,7 +99,11 @@ def create_app(
     else:
         _diag = NullDiagnosticsAdapter()
     wired_use_cases = build_use_cases(
-        _db_conn_factory(store_root), store_root, client="claude", diag=_diag
+        _db_conn_factory(store_root),
+        store_root,
+        client="claude",
+        diag=_diag,
+        encryption_token=os.environ.get("GMLCACHE_TOKEN") or None,
     )
 
     eviction_stats = EvictionStats(
