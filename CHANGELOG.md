@@ -15,6 +15,30 @@ is the single changelog for all three; entries note which package(s) a change to
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-06-28
+
+### Added
+
+- **McCabe C901 complexity gate** (cli, daemon): `ruff` lint rule `C901` enabled with
+  `max-complexity = 10`; functions exceeding the ceiling fail the pre-commit hook and
+  CI. Existing violations resolved as part of the decomposition.
+
+### Changed
+
+- **Hexagonal decomposition of `cli.py`** (cli): the 2720-line God Module split into
+  `controllers/` (eight command-group modules), `presenters/` (shared rendering and
+  session report), `infrastructure/` (argument parser and entry point), and
+  `composition.py` (dependency-wiring helpers). `cli.py` is retained as a
+  backward-compatible re-export shim.
+- **Daemon layer rename** (daemon): `routes/` → `controllers/`, `models/` →
+  `presenters/`, `middleware/` → `infrastructure/` — both packages now share the same
+  hexagonal vocabulary.
+- **Status-line formatter** (tools): `tools/claude-code/format-status-line.py`
+  redesigned with per-field width budgets and smart clipping, multi-line cache output
+  (session and per-model token detail on separate lines below git/cwd/quota), normalized
+  model names (`claude-sonnet-4-6-20250919` → `sonnet`), and readable text prefixes
+  (`quota`, `PR`, `cache`) replacing icon glyphs.
+
 ## [0.19.0] - 2026-06-28
 
 ### Added
