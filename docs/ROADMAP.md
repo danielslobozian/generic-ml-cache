@@ -470,7 +470,7 @@ unchanged; the two subsystems serve different readers and must never be merged.
 
 Ships under the two-commit release rule.
 
-### 0.20.0 — CLI decomposition and complexity gate
+### 0.20.0 — CLI decomposition and complexity gate *(released 2026-06-28)*
 
 `cli.py` has grown to 2,600+ lines and 79 functions — a God Module. This milestone
 decomposes it into a `commands/` package and enforces a complexity ceiling in CI.
