@@ -337,7 +337,7 @@ class TestEvictStale:
     def test_lru_falls_back_to_created_at_when_key_absent_from_last_access(self):
         repo = create_autospec(ExecutionRepositoryPort)
         repo.current_executions_with_sizes.return_value = [
-            ExecutionSizeEntry("old-key", 100, "1970-01-01T00:00:00"),
+            ExecutionSizeEntry("old-key", 100, "2000-01-01T00:00:00"),
         ]
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
