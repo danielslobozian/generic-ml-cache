@@ -8,7 +8,7 @@ import asyncio
 import json
 from typing import Any, AsyncIterator, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
@@ -31,10 +31,7 @@ _STDERR = ArtifactType.STDERR
 
 
 def _build_command(body: RunBody) -> RunMlExecutionCommand:
-    try:
-        kind = resolve_execution_kind(body.client)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    kind = resolve_execution_kind(body.client)
     return RunMlExecutionCommand(
         execution_kind=kind,
         client=body.client,

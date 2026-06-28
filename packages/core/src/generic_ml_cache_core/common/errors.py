@@ -4,9 +4,13 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 
 class CacheError(Exception):
     """Base class for all generic-ml-cache errors."""
+
+    code: ClassVar[str] = "cache.error"
 
 
 class CacheMiss(CacheError):
@@ -16,9 +20,13 @@ class CacheMiss(CacheError):
     a silent fall-through to a real call.
     """
 
+    code: ClassVar[str] = "cache.miss"
+
 
 class UnknownClient(CacheError):
     """Raised when no adapter is registered for the requested client name."""
+
+    code: ClassVar[str] = "adapter.unknown"
 
 
 class ConfigError(CacheError):
@@ -29,9 +37,13 @@ class ConfigError(CacheError):
     (mode, timeout) that is not understood.
     """
 
+    code: ClassVar[str] = "config.invalid"
+
 
 class ClientNotFound(CacheError):
     """Raised when the client executable cannot be located on the system."""
+
+    code: ClassVar[str] = "adapter.not_found"
 
 
 class CommandLineTooLong(CacheError):
@@ -45,6 +57,8 @@ class CommandLineTooLong(CacheError):
     message that names the size, the limit, and the remedy.
     """
 
+    code: ClassVar[str] = "adapter.command_too_long"
+
 
 class InputFileError(CacheError):
     """Raised when a declared input file cannot be read for fingerprinting.
@@ -53,6 +67,8 @@ class InputFileError(CacheError):
     The filesystem fingerprint adapter translates the foreign ``OSError`` into
     this cause-named exception so the core never sees a library error type.
     """
+
+    code: ClassVar[str] = "input.file_error"
 
 
 class ArtifactBlobMissing(CacheError):
@@ -63,6 +79,8 @@ class ArtifactBlobMissing(CacheError):
     (an out-of-band deletion, a half-completed prune). The engine fails loud
     rather than returning a silently empty result.
     """
+
+    code: ClassVar[str] = "store.blob_missing"
 
 
 class WrongEncryptionToken(CacheError):
@@ -75,6 +93,8 @@ class WrongEncryptionToken(CacheError):
     or invalidate" rather than leaking a stack trace.
     """
 
+    code: ClassVar[str] = "crypto.wrong_token"
+
 
 class EncryptionTokenRequired(CacheError):
     """Raised when an operation needs to read or write encrypted content but no
@@ -85,11 +105,15 @@ class EncryptionTokenRequired(CacheError):
     stats, tags, status) do not touch content and still work without it.
     """
 
+    code: ClassVar[str] = "crypto.token_required"
+
 
 class EncryptionStateError(CacheError):
     """Raised when an encryption operation does not match the store's state —
     enabling an already-encrypted store, or disabling/rotating a public one.
     """
+
+    code: ClassVar[str] = "crypto.state_error"
 
 
 class StoreLocked(CacheError):
@@ -101,6 +125,8 @@ class StoreLocked(CacheError):
     holding process dies, so there is never a stale lock to clear by hand;
     acquisition fails fast rather than blocking.
     """
+
+    code: ClassVar[str] = "store.locked"
 
 
 class RunInterrupted(Exception):
