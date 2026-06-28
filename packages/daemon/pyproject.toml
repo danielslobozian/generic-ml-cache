@@ -64,7 +64,7 @@ packages = ["src/generic_ml_cache_daemon"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra --cov=generic_ml_cache_daemon --cov-fail-under=80"
 timeout = 60
 
 [tool.coverage.run]

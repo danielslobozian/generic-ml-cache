@@ -55,10 +55,49 @@ jobs:
           name: dist-${{ matrix.package }}
           path: dist/
 
+  verify:
+    name: Verify artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-core
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-cli
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-daemon
+          path: dist/
+
+      - name: Check metadata (twine)
+        run: |
+          python -m pip install --upgrade pip twine
+          python -m twine check dist/*
+
+      - name: Smoke install from wheels
+        run: |
+          pip install dist/generic_ml_cache_core-*.whl
+          pip install dist/generic_ml_cache_cli-*.whl
+          pip install dist/generic_ml_cache_daemon-*.whl
+          gmlcache --version
+          python -m generic_ml_cache_daemon --help
+          python -c "import generic_ml_cache_core, generic_ml_cache_cli, generic_ml_cache_daemon"
+
   # core is published first: the cli depends on it, so it must exist on PyPI first.
   publish-core:
     name: Publish generic-ml-cache-core
-    needs: build
+    needs: verify
     runs-on: ubuntu-latest
     # Per-package environment: a pending publisher is unique on
     # (owner, repo, workflow, environment), so the two packages need distinct
