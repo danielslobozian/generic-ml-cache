@@ -516,7 +516,7 @@ and consistent HTTP responses from the daemon.
 - The CLI renders each error class consistently; no behavioral change for existing users.
 - The code namespace is documented as part of the stable public API (see 0.23.0).
 
-### 0.23.0 — Public API boundary
+### 0.23.0 — Public API boundary *(released 2026-06-28)*
 
 `generic-ml-cache-core` is a library. Without a declared public surface, consumers can
 import any internal path and receive a silent breakage on upgrade.
