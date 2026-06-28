@@ -1,9 +1,9 @@
 # Security Policy
 
-`generic-ml-cache` is early, alpha software (`0.x`), published openly, and it takes
-security seriously regardless of maturity. It ships as two packages — the library
-`generic-ml-cache-core` and the client `generic-ml-cache-cli` — and this policy covers
-both. Thank you for helping keep it and its users safe.
+`generic-ml-cache` takes security seriously. It ships as three packages —
+`generic-ml-cache-core` (library), `generic-ml-cache-cli` (terminal client), and
+`generic-ml-cache-daemon` (local HTTP daemon) — and this policy covers all three.
+Thank you for helping keep it and its users safe.
 
 ## Supported versions
 

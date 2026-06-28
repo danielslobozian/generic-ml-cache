@@ -220,7 +220,7 @@ gmlcache deliberately does not:
 
 ## Documentation
 
-The full documentation lives under [`docs/`](docs/README.md) — design, specification, usage, architecture, and concept guides — aligned to the hexagonal, two-package architecture. [`docs/domain-model.md`](docs/domain-model.md) is the normative reference for the domain model.
+The full documentation lives under [`docs/`](docs/README.md) — design, specification, usage, architecture, and concept guides. [`docs/domain-model.md`](docs/domain-model.md) is the normative reference for the domain model.
 
 <br>
 

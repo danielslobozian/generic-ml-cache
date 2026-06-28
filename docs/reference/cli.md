@@ -26,8 +26,8 @@
 
 ---
 
-This reference contains the intended command surface. Exact syntax may differ by
-release; use `gmlcache --help` for the installed version.
+This reference is the authoritative command surface. Use `gmlcache --help` or
+`gmlcache <command> --help` for inline option descriptions.
 
 ## Current commands
 
