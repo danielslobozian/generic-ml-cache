@@ -40,7 +40,7 @@ Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANG
 gmlcache = "generic_ml_cache_cli.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "vulture>=2", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
+dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [tool.hatch.version]
 source = "regex"

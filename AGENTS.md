@@ -352,8 +352,11 @@ a comment that announces sections.
 
 - Dead code includes code kept *"for later"*: a symbol with **zero callers** — a
   method, a constant for an unbuilt feature, a "kept for compatibility" seam nobody
-  calls — is **deleted**, not retained "just in case". A `vulture`/coverage flag is
-  right until proven otherwise.
+  calls — is **deleted**, not retained "just in case". A zero-coverage symbol (one
+  no test ever reaches) is suspect until proven otherwise. (Static dead-code scanners
+  were tried and dropped: a ports/entry-point/DI architecture reads as "unused" to
+  them, so they flag the seams that make the design work — false positives unfit to
+  gate CI.)
 - The line is **callers + a plan**, not *real vs stub*. A **stubbed but
   wired-and-tested** implementation of a committed seam (a placeholder adapter the
   composition root injects and the suite drives end-to-end) is a *walking skeleton*,
