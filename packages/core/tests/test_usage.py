@@ -143,7 +143,7 @@ def test_answer_is_normalized_to_one_trailing_newline():
     """A client's structured `result` carries no trailing newline; the adapter adds
     one so the answer matches a real CLI's terminal output (and a piped capture ends
     conventionally). It is appended only when missing, and never to empty text."""
-    from generic_ml_cache_core.application.port.out.base import ensure_trailing_newline
+    from generic_ml_cache_adapters.adapter.out.client.output_parsing import ensure_trailing_newline
 
     assert ensure_trailing_newline("hi") == "hi\n"
     assert ensure_trailing_newline("hi\n") == "hi\n"  # already present -> not doubled

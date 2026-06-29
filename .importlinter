@@ -49,10 +49,9 @@ ignore_imports =
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
     # CLI shared composition helpers (encryption, diagnostics)
@@ -69,10 +68,9 @@ ignore_imports =
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store
+    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
     # `gmlcache doctor` and `gmlcache models` probe live adapters — read-only observational imports
@@ -119,3 +117,4 @@ modules =
     generic_ml_cache_adapters.adapter.out.persistence
     generic_ml_cache_adapters.adapter.out.storage
     generic_ml_cache_adapters.adapter.out.diagnostics
+    generic_ml_cache_adapters.adapter.out.workspace

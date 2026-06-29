@@ -28,8 +28,9 @@ from generic_ml_cache_core.application.domain.model.client_status import (
 from generic_ml_cache_core.application.domain.model.model_listing import (
     ModelListing as ModelListing,
 )
-from generic_ml_cache_core.application.port.out.base import ClientAdapter
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
 
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
@@ -78,7 +79,7 @@ def probe(
     _t = time.perf_counter()
     if diag:
         diag.debug("probe ENTER", name=name)
-    adapter = cast(ClientAdapter, get_adapter(name))
+    adapter = cast(LocalClientPort, get_adapter(name))
     try:
         exe = adapter.resolve_executable(executable)
     except ClientNotFound as exc:
@@ -150,9 +151,10 @@ def list_models(
     _t = time.perf_counter()
     if diag:
         diag.debug("list-models ENTER", name=name)
-    adapter = get_adapter(name, whitelist=whitelist)
-    if not isinstance(adapter, ClientAdapter):
+    raw = get_adapter(name, whitelist=whitelist)
+    if getattr(raw, "execution_kind", None) is not ExecutionKind.LOCAL_MANAGED:
         raise UnknownClient(f"not a local managed adapter: {name!r}")
+    adapter = cast(LocalClientPort, raw)
     try:
         exe = adapter.resolve_executable(executable)
     except ClientNotFound as exc:

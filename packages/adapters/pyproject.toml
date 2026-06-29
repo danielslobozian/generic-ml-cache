@@ -34,9 +34,9 @@ encryption = ["cryptography>=42"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "vulture>=2", "ruff>=0.15", "cryptography>=42", "import-linter>=2", "pyright>=1.1"]
 
 [project.entry-points."gmlcache.adapters"]
-claude = "generic_ml_cache_adapters.adapter.out.client.claude:ClaudeAdapter"
-codex = "generic_ml_cache_adapters.adapter.out.client.codex:CodexAdapter"
-cursor-agent = "generic_ml_cache_adapters.adapter.out.client.cursor:CursorAdapter"
+claude = "generic_ml_cache_adapters.adapter.out.client.claude:ClaudeCliAdapter"
+codex = "generic_ml_cache_adapters.adapter.out.client.codex:CodexCliAdapter"
+cursor-agent = "generic_ml_cache_adapters.adapter.out.client.cursor:CursorCliAdapter"
 anthropic = "generic_ml_cache_adapters.adapter.out.api.anthropic_direct_adapter:AnthropicDirectAdapter"
 openai = "generic_ml_cache_adapters.adapter.out.api.openai_direct_adapter:OpenAIDirectAdapter"
 gemini = "generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter:GeminiDirectAdapter"

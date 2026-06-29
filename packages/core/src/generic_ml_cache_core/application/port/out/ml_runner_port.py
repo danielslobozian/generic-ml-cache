@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""MlRunnerPort — the common outbound port for all ML execution adapters."""
+"""MlRunnerPort — the outbound port for single-call (API) ML execution adapters."""
 
 from __future__ import annotations
 
@@ -13,16 +13,17 @@ from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequ
 
 
 class MlRunnerPort(ABC):
-    """Common root for every ML execution adapter — local or API.
+    """Outbound port for a single-call ML execution: take a request, return a
+    result. This is the API path (e.g. a REST provider via :class:`ApiClientPort`).
 
-    The use case depends only on this interface. The concrete adapter behind it
-    (a managed local runner, a passthrough runner, a REST API client) is wired
-    at the composition root. The port carries no client name: the adapter
-    already IS the selected client.
+    Local CLI clients do NOT use this port — they implement :class:`LocalClientPort`,
+    which the managed-execution use case drives against an isolated workspace. The
+    port carries no client name: by the time ``run`` is called the adapter already
+    IS the selected client.
     """
 
     name: ClassVar[str]
-    """The unique adapter name (e.g. ``"claude"``, ``"anthropic"``, ``"pass-claude"``)."""
+    """The unique adapter name (e.g. ``"anthropic"``, ``"openai"``, ``"gemini"``)."""
 
     @property
     @abstractmethod

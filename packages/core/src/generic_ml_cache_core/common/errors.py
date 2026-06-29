@@ -129,6 +129,18 @@ class StoreLocked(CacheError):
     code: ClassVar[str] = "store.locked"
 
 
+class UnsupportedExecutionMode(CacheError):
+    """Raised when a local client adapter does not support the requested
+    execution mode (e.g. asking a passthrough-only adapter to run managed).
+
+    The adapter declares its supported modes via ``supports(kind)``. The core
+    checks capability before dispatching so the caller gets a clear, named error
+    rather than a silent wrong-mode execution.
+    """
+
+    code: ClassVar[str] = "adapter.unsupported_mode"
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

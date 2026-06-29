@@ -24,7 +24,7 @@ from generic_ml_cache_core.application.domain.model.run.persistence_depth import
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.base import ClientAdapter
+from generic_ml_cache_core.application.domain.model.grants import GRANTS
 from generic_ml_cache_core.common.errors import (
     CacheError,
     CacheMiss,
@@ -50,9 +50,10 @@ from generic_ml_cache_cli.presenters.shared import (
     _run_exit_code,
 )
 
-#: capabilities a caller may open with --grant, sourced from the adapter seam so
-#: the CLI choices, the help, and what the adapters implement can never drift.
-GRANT_CHOICES: List[str] = list(ClientAdapter.GRANTS)
+#: capabilities a caller may open with --grant, sourced from the core domain
+#: vocabulary so the CLI choices, the help, and what the adapters implement can
+#: never drift.
+GRANT_CHOICES: List[str] = list(GRANTS)
 _GRANT_HELP = (
     "open a capability for the client -- enablement, not restriction. One of "
     "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "

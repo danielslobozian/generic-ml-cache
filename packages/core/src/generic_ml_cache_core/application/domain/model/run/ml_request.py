@@ -28,6 +28,5 @@ class MlRequest:
     input_file_paths: List[str] = field(default_factory=list)
     allow_paths: List[str] = field(default_factory=list)
     client_args: List[str] = field(default_factory=list)
-    native_args: List[str] = field(default_factory=list)
     grants: FrozenSet[str] = field(default_factory=frozenset)
     user_system_prompt: Optional[str] = None

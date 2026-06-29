@@ -21,7 +21,7 @@ import warnings
 from typing import Dict, FrozenSet, List, Optional, Type
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
 from generic_ml_cache_core.common.errors import UnknownClient
 
 ADAPTER_CONTRACT_VERSION = "1"
@@ -35,14 +35,14 @@ the attribute is treated as compatible (no assertion).
 
 _ENTRYPOINT_GROUP = "gmlcache.adapters"
 
-_ADAPTER_CLASSES: List[Type[MlRunnerPort]] = []
-_EXTRA: Dict[str, MlRunnerPort] = {}
+_ADAPTER_CLASSES: List[Type[RegisteredAdapter]] = []
+_EXTRA: Dict[str, RegisteredAdapter] = {}
 _ENTRYPOINTS_LOADED: bool = False
-_ENTRYPOINT_INSTANCES: Dict[str, MlRunnerPort] = {}
+_ENTRYPOINT_INSTANCES: Dict[str, RegisteredAdapter] = {}
 _ENTRYPOINT_SOURCES: Dict[str, str] = {}
 
 
-def adapter(cls: Type[MlRunnerPort]) -> Type[MlRunnerPort]:
+def adapter(cls: Type[RegisteredAdapter]) -> Type[RegisteredAdapter]:
     """Class decorator that marks an adapter class for automatic discovery.
 
     Equivalent to Spring's ``@Component``: annotate the class once and the
@@ -53,7 +53,7 @@ def adapter(cls: Type[MlRunnerPort]) -> Type[MlRunnerPort]:
     return cls
 
 
-def register(instance: MlRunnerPort) -> None:
+def register(instance: RegisteredAdapter) -> None:
     """Register a pre-built *instance* under its own name.
 
     Intended for tests and third-party code that cannot use the :func:`adapter`
@@ -129,7 +129,7 @@ def _load_entry_points() -> None:
             continue
 
         try:
-            instance: MlRunnerPort = cls()
+            instance: RegisteredAdapter = cls()
         except Exception as exc:  # noqa: BLE001
             warnings.warn(
                 f"gmlcache: could not instantiate entry-point adapter {ep_key!r}: {exc}",
@@ -143,7 +143,7 @@ def _load_entry_points() -> None:
 
 def load_adapters(
     whitelist: Optional[FrozenSet[str]] = None,
-) -> Dict[str, MlRunnerPort]:
+) -> Dict[str, RegisteredAdapter]:
     """Return every available adapter, optionally filtered by *whitelist*.
 
     Discovery order (later entries win on name collision):
@@ -154,7 +154,7 @@ def load_adapters(
     whitelist restricts the result to the named adapters only.
     """
     _load_entry_points()
-    result: Dict[str, MlRunnerPort] = {}
+    result: Dict[str, RegisteredAdapter] = {}
     for name, instance in _ENTRYPOINT_INSTANCES.items():
         if whitelist is None or name in whitelist:
             result[name] = instance
@@ -184,7 +184,7 @@ def adapter_sources(
 def get_adapter(
     name: str,
     whitelist: Optional[FrozenSet[str]] = None,
-) -> MlRunnerPort:
+) -> RegisteredAdapter:
     """Return the adapter for *name* or raise :class:`~...UnknownClient`."""
     registry = load_adapters(whitelist)
     try:

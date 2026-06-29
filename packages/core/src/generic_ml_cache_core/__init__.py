@@ -33,7 +33,7 @@ Internal paths may change in any release, including patch releases.
 
 - :class:`WiredUseCases` — typed container of wired use-case references
 - :class:`RunMlExecutionCommand` — inbound command value object
-- :class:`ClientAdapter` / :class:`MlRunnerPort` — adapter contracts
+- :class:`MlRunnerPort` — outbound runner contract
 - :func:`register` / :func:`get_adapter` — adapter registry
 - Error hierarchy rooted at :class:`CacheError`
 - Checksum utilities: :func:`checksum_input_data`, :func:`text_checksum`,
@@ -60,7 +60,6 @@ from generic_ml_cache_core.adapter.registry import (  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402  # fmt: skip
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
@@ -90,7 +89,6 @@ __all__ = [
     # Inbound port
     "RunMlExecutionCommand",
     # Outbound port contracts
-    "ClientAdapter",
     "MlRunnerPort",
     # Adapter registry
     "register",

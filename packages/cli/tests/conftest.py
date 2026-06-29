@@ -17,18 +17,21 @@ from typing import List
 import pytest
 
 from generic_ml_cache_cli import register
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
-    AbstractManagedLocalAdapter,
-)
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
 
-class FakeAdapter(AbstractManagedLocalAdapter):
+class FakeAdapter:
     name = "fake"
     # An absolute path with a separator -> resolve_executable uses it verbatim.
     default_executable = sys.executable
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+        wire_cli_client(self, executable_override, timeout, stream_path)
 
     def prepare(self, run_dir, context, prompt, system_prompt) -> None:
         (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")
@@ -74,13 +77,17 @@ def _register_fake_adapter():
     register(_FakeApiAdapter())
 
 
-class FakeStdinAdapter(AbstractManagedLocalAdapter):
+class FakeStdinAdapter:
     """Like FakeAdapter, but delivers the prompt on stdin (as the real adapters
     now do) so the launcher's stdin path can be exercised end-to-end -- including
     a prompt far larger than any OS argv-size limit."""
 
     name = "fake_stdin"
     default_executable = sys.executable
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+        wire_cli_client(self, executable_override, timeout, stream_path)
 
     def prepare(self, run_dir, context, prompt, system_prompt) -> None:
         (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")

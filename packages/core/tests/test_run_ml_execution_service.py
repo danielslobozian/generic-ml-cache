@@ -29,7 +29,9 @@ from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 
 
-def _make_svc(file_fingerprint=None, runners=None, purge_service=None, max_size=None):
+def _make_svc(
+    file_fingerprint=None, runners=None, purge_service=None, max_size=None, workspace=None
+):
     return RunMlExecutionService(
         file_fingerprint=file_fingerprint or create_autospec(FileFingerprintPort),
         runners=runners or {},
@@ -38,6 +40,7 @@ def _make_svc(file_fingerprint=None, runners=None, purge_service=None, max_size=
         metrics=create_autospec(MetricsPort),
         purge_service=purge_service,
         max_size=max_size,
+        workspace=workspace,
     )
 
 
@@ -91,10 +94,12 @@ class TestBuildIdentity:
 
 
 class TestRunClient:
-    def test_runner_exists_calls_runner_run(self):
+    def test_api_runner_is_invoked_via_run(self):
+        # The API path is the surviving MlRunnerPort.run() route; local kinds no
+        # longer use it (they orchestrate via the workspace + LocalClientPort).
         runner = MagicMock()
-        svc = _make_svc(runners={ExecutionKind.LOCAL_MANAGED: runner})
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, prompt="hello")
+        svc = _make_svc(runners={ExecutionKind.API: runner})
+        cmd = _cmd(kind=ExecutionKind.API, prompt="hello")
         svc._run_client(cmd)
         runner.run.assert_called_once()
 
@@ -112,6 +117,59 @@ class TestRunClient:
         cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED)
         with pytest.raises(RuntimeError):
             svc._run_client(cmd)
+
+    def test_local_managed_with_workspace_orchestrates_the_client(self):
+        # When a WorkspacePort is injected, LOCAL_MANAGED no longer calls runner.run;
+        # core drives the workspace and the client only stages inputs + makes the call.
+        from pathlib import Path
+
+        from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
+        from generic_ml_cache_core.application.domain.model.run.client_run_result import (
+            GeneratedFile,
+        )
+        from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
+
+        handle = Workspace(run_dir=Path("/run"), config_home=Path("/home"))
+        workspace = MagicMock()
+        workspace.create.return_value = handle
+        workspace.snapshot.return_value = Snapshot()
+        workspace.capture.return_value = [GeneratedFile(name="out.txt", content=b"x")]
+
+        client = MagicMock()
+        client.build_grants_config_file.return_value = None
+        client.get_token_files.return_value = []
+        client.execute_managed.return_value = ClientAnswer(exit_code=0, stdout="done", stderr="")
+
+        svc = _make_svc(runners={ExecutionKind.LOCAL_MANAGED: client}, workspace=workspace)
+        result = svc._run_client(_cmd(kind=ExecutionKind.LOCAL_MANAGED, prompt="hi"))
+
+        client.run.assert_not_called()  # the old path is bypassed
+        client.execute_managed.assert_called_once()
+        assert result.exit_code == 0 and result.stdout == "done"
+        assert [f.name for f in result.files] == ["out.txt"]  # core captured the artifact
+        workspace.dispose.assert_called_once_with(handle)  # workspace always cleaned up
+
+    def test_local_passthrough_with_workspace_relays_via_the_client(self):
+        # With the hexagonal path wired, passthrough calls the client's relay and
+        # core packages the answer with no files — it never touches a workspace.
+        from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
+
+        workspace = MagicMock()
+        client = MagicMock()
+        client.execute_passthrough.return_value = ClientAnswer(
+            exit_code=7, stdout="out", stderr="err"
+        )
+
+        svc = _make_svc(runners={ExecutionKind.LOCAL_PASSTHROUGH: client}, workspace=workspace)
+        result = svc._run_client(
+            _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, native_args=["-c", "x"])
+        )
+
+        client.run.assert_not_called()  # old path bypassed
+        client.execute_passthrough.assert_called_once()
+        assert result.exit_code == 7 and result.stdout == "out" and result.stderr == "err"
+        assert result.files == []  # a passthrough never produces files
+        workspace.create.assert_not_called()  # passthrough needs no workspace
 
 
 class TestAfterRecord:

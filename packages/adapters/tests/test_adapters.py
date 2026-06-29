@@ -166,10 +166,38 @@ def test_codex_pins_run_dir_as_write_fence(tmp_path):
 
 
 def _grant(client, tmp_path, grants):
+    # The uniform grant door, exercised through the hexagonal split: the adapter
+    # supplies the config-file + credential descriptors; the WorkspacePort writes
+    # them into the redirected config home; the env points the client at it.
+    from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import (
+        FilesystemWorkspace,
+    )
+    from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
+
     adapter = get_adapter(client)
     home = tmp_path / "home"
-    env = adapter.grant_setup(tmp_path / "run", home, grants)
+    workspace = Workspace(run_dir=tmp_path / "run", config_home=home)
+    fs = FilesystemWorkspace()
+    fs.write_config(workspace, adapter.build_grants_config_file(grants))
+    fs.seed_credentials(workspace, adapter.get_token_files())
+    env_var = adapter.config_home_env_var()
+    env = {env_var: str(home)} if env_var else {}
     return adapter, home, env
+
+
+def _materialize(client, config_home, grants=()):
+    """Write a client's config + seed its credentials into ``config_home`` via the
+    WorkspacePort, the way the managed use case does."""
+    from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import (
+        FilesystemWorkspace,
+    )
+    from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
+
+    adapter = get_adapter(client)
+    workspace = Workspace(run_dir=config_home.parent / "run", config_home=config_home)
+    fs = FilesystemWorkspace()
+    fs.write_config(workspace, adapter.build_grants_config_file(list(grants)))
+    fs.seed_credentials(workspace, adapter.get_token_files())
 
 
 def test_grant_setup_redirects_each_clients_home(tmp_path):
@@ -232,9 +260,13 @@ def test_no_grant_opens_no_capability_in_the_file(tmp_path):
     assert get_adapter("cursor").grant_argv(()) == []
 
 
-def test_base_grant_setup_defaults_empty(tmp_path):
-    # The fake adapter does not override the seam -> base default: no env, no file.
-    assert get_adapter("fake").grant_setup(tmp_path, tmp_path / "h", ("net",)) == {}
+def test_a_client_without_config_knowledge_is_not_a_config_port():
+    # The fake adapter carries no grant config -> it is not a ClientConfigPort, so
+    # the use case skips config materialization for it entirely.
+    from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
+
+    assert not isinstance(get_adapter("fake"), ClientConfigPort)
+    assert isinstance(get_adapter("claude"), ClientConfigPort)
 
 
 def test_claude_grant_setup_seeds_main_config_and_dir(tmp_path, monkeypatch):
@@ -248,7 +280,7 @@ def test_claude_grant_setup_seeds_main_config_and_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(_P, "home", staticmethod(lambda: fake_home))
     cfg = tmp_path / "cfg"
-    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    _materialize("claude", cfg)
     assert (cfg / ".claude.json").read_text() == '{"x":1}'  # main config seeded
     assert (cfg / ".credentials.json").is_file()  # dir creds seeded
     assert (cfg / "settings.json").is_file()  # our grant file written
@@ -261,7 +293,7 @@ def test_claude_grant_setup_copies_subdirectory_from_claude_dir(tmp_path, monkey
     (extensions_dir / "config.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
     cfg = tmp_path / "cfg"
-    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    _materialize("claude", cfg)
     assert (cfg / "extensions" / "config.json").is_file()
 
 
@@ -279,7 +311,7 @@ def test_claude_grant_setup_survives_main_config_copy_error(tmp_path, monkeypatc
 
     monkeypatch.setattr(shutil, "copy2", _raise_on_claude_json)
     cfg = tmp_path / "cfg"
-    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    _materialize("claude", cfg)
     assert (cfg / "settings.json").is_file()
     assert not (cfg / ".claude.json").is_file()
 
@@ -295,10 +327,10 @@ def test_codex_grant_setup_survives_auth_copy_error(tmp_path, monkeypatch):
 
     monkeypatch.setattr(shutil, "copy2", _always_raise_oserror)
     cfg = tmp_path / "cfg"
-    result = get_adapter("codex").grant_setup(tmp_path / "run", cfg, ())
-    assert "CODEX_HOME" in result
-    assert (cfg / "config.toml").is_file()
-    assert not (cfg / "auth.json").is_file()
+    _materialize("codex", cfg)
+    assert get_adapter("codex").config_home_env_var() == "CODEX_HOME"
+    assert (cfg / "config.toml").is_file()  # config written before the failing seed
+    assert not (cfg / "auth.json").is_file()  # the credential copy error was swallowed
 
 
 def test_claude_grant_setup_survives_credential_copy_error_in_claude_dir(tmp_path, monkeypatch):
@@ -312,7 +344,7 @@ def test_claude_grant_setup_survives_credential_copy_error_in_claude_dir(tmp_pat
 
     monkeypatch.setattr(shutil, "copy2", _always_raise_oserror)
     cfg = tmp_path / "cfg"
-    get_adapter("claude").grant_setup(tmp_path / "run", cfg, ())
+    _materialize("claude", cfg)
     assert (cfg / "settings.json").is_file()
     assert not (cfg / ".credentials.json").is_file()
 

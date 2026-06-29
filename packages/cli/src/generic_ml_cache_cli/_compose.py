@@ -40,6 +40,7 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
     FilesystemStoreLock,
 )
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
+from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.migration_runner import run_migrations
 from generic_ml_cache_core.adapter.registry import get_adapter
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
@@ -49,7 +50,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
@@ -92,27 +93,19 @@ def _build_runners(
     timeout: Optional[float],
     stream_path: Optional[str],
     whitelist: Optional[FrozenSet[str]] = None,
-) -> Dict[ExecutionKind, MlRunnerPort]:
+) -> Dict[ExecutionKind, RegisteredAdapter]:
     if kind is ExecutionKind.LOCAL_MANAGED:
-        from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (  # noqa: PLC0415
-            AbstractManagedLocalAdapter,
-        )
-        from generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter import (  # noqa: PLC0415
-            AbstractPassthroughLocalAdapter,
-        )
-        from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: PLC0415
-
         assert client is not None
         registered = get_adapter(client, whitelist=whitelist)
-        cls = cast(type[AbstractManagedLocalAdapter], type(registered))
         exe_override = executable_override(client) if executable_override else None
-        managed = cls(executable_override=exe_override, timeout=timeout, stream_path=stream_path)
-        passthrough = AbstractPassthroughLocalAdapter(
-            cast(ClientAdapter, registered), exe_override, timeout
+        factory = cast(Callable[..., RegisteredAdapter], type(registered))
+        cli_adapter = factory(
+            executable_override=exe_override, timeout=timeout, stream_path=stream_path
         )
+        # One adapter instance handles both managed and passthrough execution.
         return {
-            ExecutionKind.LOCAL_MANAGED: managed,
-            ExecutionKind.LOCAL_PASSTHROUGH: passthrough,
+            ExecutionKind.LOCAL_MANAGED: cli_adapter,
+            ExecutionKind.LOCAL_PASSTHROUGH: cli_adapter,
         }
     if kind is ExecutionKind.API:
         assert client is not None
@@ -169,6 +162,7 @@ def build_use_cases(
             metrics,
             purge_service=purge,
             max_size=max_size,
+            workspace=FilesystemWorkspace(),
             diag=_diag,
         ),
         probe=ProbeService(file_fingerprint, repository),

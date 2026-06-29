@@ -9,31 +9,39 @@ with the seam and adjust here if the CLI changes.
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from generic_ml_cache_core.adapter.registry import adapter
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
+from generic_ml_cache_core.application.domain.model.run.client_config import (
+    CredentialFile,
+    GrantConfigFile,
+)
 from generic_ml_cache_core.application.domain.model.usage.usage import (
     Usage,
     float_or_none,
     int_or_none,
 )
-from generic_ml_cache_core.application.port.out.base import (
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
 )
 
-from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
-    AbstractManagedLocalAdapter,
-)
-
 
 @adapter
-class ClaudeAdapter(AbstractManagedLocalAdapter):
+class ClaudeCliAdapter:
+    """Adapter for Anthropic's Claude Code CLI. A pure translator: it composes a
+    CliRuntime (the shared call engine) and supplies only Claude's hooks."""
+
     name = "claude"
     default_executable = "claude"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+        wire_cli_client(self, executable_override, timeout, stream_path)
 
     def build_argv(
         self,
@@ -131,10 +139,10 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
             argv += ["--add-dir", p]
         return argv
 
-    def grant_setup(self, run_dir, config_home, grants):
-        # Uniform door: write settings.json into a redirected CLAUDE_CONFIG_DIR so
-        # the FILE (not a flag) enables capabilities. Verified against the live CLI:
-        # the redirected home governs because the run folder is clean of a project
+    def build_grants_config_file(self, grants):
+        # Uniform door: settings.json in a redirected CLAUDE_CONFIG_DIR so the FILE
+        # (not a flag) enables capabilities. Verified against the live CLI: the
+        # redirected home governs because the run folder is clean of a project
         # .claude/ that would outrank it. acceptEdits + Write/Edit are always on so
         # a file-producing call actually writes (the record-path guarantee); each
         # named grant ADDS its allow-token. The cache enables; it never closes
@@ -149,12 +157,16 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
         if "web-search" in grants:
             allow.append("WebSearch")
         settings = {"permissions": {"allow": allow}, "defaultMode": "acceptEdits"}
-        config_home.mkdir(parents=True, exist_ok=True)
-        (config_home / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+        return GrantConfigFile(
+            file_name="settings.json", content=json.dumps(settings).encode("utf-8")
+        )
+
+    def get_token_files(self):
         # Seed credentials so the relocated home is authenticated. Subscription
         # login lives in ~/.claude; an API key in the env carries over on its own.
         # Bulk caches (projects/history/todos/shell-snapshots) are skipped; a stray
         # settings.local.json would outrank ours, so it is dropped.
+        creds = []
         src = Path.home() / ".claude"
         if src.is_dir():
             skip = {
@@ -168,14 +180,7 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
             for child in src.iterdir():
                 if child.name in skip:
                     continue
-                dest = config_home / child.name
-                try:
-                    if child.is_dir():
-                        shutil.copytree(child, dest, dirs_exist_ok=True)
-                    else:
-                        shutil.copy2(child, dest)
-                except OSError:
-                    pass  # best-effort seeding; an env API key still authenticates
+                creds.append(CredentialFile(source=child, target_name=child.name))
         # Claude Code also keeps a top-level ~/.claude.json (account, onboarding,
         # project trust) BESIDE the ~/.claude dir; under a redirected CLAUDE_CONFIG_DIR
         # it is expected at <home>/.claude.json. Seed it too, or Claude Code finds no
@@ -183,11 +188,11 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
         # internal phase (harmless but noisy). Deleted with the run like the rest.
         main_config = Path.home() / ".claude.json"
         if main_config.is_file():
-            try:
-                shutil.copy2(main_config, config_home / ".claude.json")
-            except OSError:
-                pass  # best-effort; the run still proceeds without it (just noisy)
-        return {"CLAUDE_CONFIG_DIR": str(config_home)}
+            creds.append(CredentialFile(source=main_config, target_name=".claude.json"))
+        return creds
+
+    def config_home_env_var(self):
+        return "CLAUDE_CONFIG_DIR"
 
     def stream_event(self, raw_line):
         try:
@@ -214,3 +219,7 @@ class ClaudeAdapter(AbstractManagedLocalAdapter):
         if t == "result":
             return {"kind": "result"}
         return None
+
+
+# Backward-compatible alias — existing imports of ClaudeAdapter keep working.
+ClaudeAdapter = ClaudeCliAdapter
