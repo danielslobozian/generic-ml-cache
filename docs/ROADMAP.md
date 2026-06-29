@@ -634,7 +634,7 @@ behaviour.
   publish jobs.
 - Coverage floor enforced in CI with `--cov-fail-under` thresholds.
 
-### 0.28.0 — Hexagonal split: `generic-ml-cache-adapters`
+### 0.28.0 — Hexagonal split: `generic-ml-cache-adapters` ✅ released 2026-06-29
 
 Architectural correction. Core was shipping its own concrete adapter implementations
 (SQLite repository, filesystem blob store, AES-GCM cipher, ML client runners, API
@@ -654,28 +654,31 @@ hexagonal kernel with zero infrastructure dependencies.
   `sqlite_connection_factory` from the private `_common` folder — the `_common`
   symlink infrastructure is fully decommissioned.
 - Declares the six ML client adapters via the `gmlcache.adapters` entry-point
-  group so the core registry discovers them without any import of `adapters` from
-  `core`.
+  group. *(As shipped, this went further than planned: adapter discovery — the
+  entry-point scan — moved out of `core` entirely into `adapters`, so `core` holds
+  no registry at all, only the `AdapterCatalogPort` / `AdapterResolverPort`
+  contracts the composition root injects.)*
 
 **Core becomes a pure hexagonal kernel**
 - `generic-ml-cache-core` retains only: domain model, use case implementations,
   inbound/outbound port interfaces (ABCs and Protocols), error hierarchy, checksum
-  utilities, `DbConnection`/`DbCursor` Protocols, `WiredUseCases` container, and
-  the adapter registry mechanism.
+  utilities, `DbConnection`/`DbCursor` Protocols, the `WiredUseCases` container
+  (relocated to `application/wiring/`), and the `AdapterCatalogPort` /
+  `AdapterResolverPort` discovery contracts.
 - Zero concrete implementations. Zero infrastructure imports. Zero database driver
   imports. The `encryption` optional dependency moves to `adapters`.
 
 **Composition moves to the driver applications**
-- `build_use_cases()` (renamed; see below) dissolves from `core`. Each driver
-  (CLI, daemon) owns a private `_compose` module that imports from `core` and
-  `adapters` and wires its own dependency graph.
+- `build_use_cases()` dissolves from `core`. Each driver (CLI, daemon) owns a
+  private `_compose` module that imports from `core` and `adapters` and wires its
+  own dependency graph.
 - `WiredUseCases` remains in `core` as a typed container of use-case interface
   references — it has no infrastructure dependency.
 
 **Naming**
-- `build_use_cases` was a misnomer; the function assembles adapters, not use cases.
-  The private composition functions in CLI and daemon are named descriptively for
-  their own context.
+- `build_use_cases` remains a misnomer (it assembles adapters, not use cases). As
+  shipped it kept the name inside each driver's `_compose`; renaming it to something
+  clearer is a deferred follow-up cleanup.
 
 **Dependency graph after 0.28.0**
 ```

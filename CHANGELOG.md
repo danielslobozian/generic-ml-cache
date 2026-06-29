@@ -7,13 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the version is `0.x.y` the project is in **alpha** and anything may change
 between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.0`.
 
-Since `0.2.0` the project is a **monorepo of three lockstep-versioned packages** — the
-library [`generic-ml-cache-core`](packages/core), the CLI
+Since `0.2.0` the project is a **monorepo of lockstep-versioned packages** — the
+hexagonal kernel [`generic-ml-cache-core`](packages/core), its concrete adapters
+[`generic-ml-cache-adapters`](packages/adapters) (split out in 0.28.0), the CLI
 [`generic-ml-cache-cli`](packages/cli), and (since 0.13.0) the optional daemon
 [`generic-ml-cache-daemon`](packages/daemon). All share the version below, and this file
-is the single changelog for all three; entries note which package(s) a change touches.
+is the single changelog for all of them; entries note which package(s) a change touches.
 
 ## [Unreleased]
+
+## [0.28.0] - 2026-06-29
+
+The **hexagonal split**: every concrete adapter leaves `core` for a new fourth package,
+`generic-ml-cache-adapters`, leaving `core` a pure kernel of domain model, use cases, and
+port contracts. Includes the architecture-analysis remediation that hardened the split.
+
+### Added
+
+- **New package `generic-ml-cache-adapters`** (`pip install generic-ml-cache-adapters`):
+  every concrete outbound port implementation that previously lived in `core` — the
+  SQLite execution repository + schema migrations, filesystem blob store, AES-GCM cipher
+  and encryption helpers, all six ML client/API adapters (claude, codex, cursor-agent,
+  anthropic, openai, gemini), system clock, filesystem file fingerprint, journal metrics,
+  HTTP gateway forward adapter, and the diagnostics adapters. The `encryption` extra
+  (`cryptography`) moves here.
+- **`AdapterCatalogPort` / `AdapterResolverPort`** (core): the injected adapter-discovery
+  contract. `AdapterDescriptor` carries each adapter's boundary, supported execution
+  modes, and capabilities; the composition root builds the catalog and injects it.
+- **Architecture guards**: `py.typed` for adapters; import-linter contracts for
+  `domain ↛ port`, `port ↛ usecase`, and package isolation (`adapters ↛ drivers`,
+  `daemon ↛ cli`, `cli ↛ daemon` except the lazy launcher); a core purity unit guard
+  (no entry-point scanning, no raw filesystem/subprocess/socket I/O); branch coverage
+  across all packages; and the `C901` complexity gate extended to core and adapters.
+
+### Changed
+
+- **Core is now a pure hexagonal kernel** (core): domain model, use cases, and port
+  contracts only. Adapter discovery (entry-point scanning) moved out of `core` entirely,
+  behind `AdapterCatalogPort` — `core` no longer scans Python packaging metadata.
+- **Client adapters are pure translators** (core, adapters): managed execution — the
+  isolated workspace lifecycle and artifact capture — is now a `core` use case; each CLI
+  adapter composes a shared `CliRuntime` and supplies only its own translation hooks.
+- **Daemon routes by client name** (daemon): `/run` and `/jobs` select the adapter for
+  the requested client instead of a single hardcoded one, and enforce the configured
+  whitelist (HTTP 400 for an unknown or excluded client).
+- Cross-package version pins tightened from `>=` to `==0.28.*` so a fresh install can
+  never mix incompatible package versions.
+
+### Removed
+
+- **Breaking (adapter authors and embedders)**: `ClientAdapter`, the `@adapter`
+  decorator, and the `register` / `get_adapter` registry API are removed from `core`.
+  Third-party adapters now declare themselves via the `gmlcache.adapters` entry-point
+  group plus a `descriptor()` classmethod; the `register` / `get_adapter` helpers live in
+  `generic-ml-cache-adapters`. The vestigial `generic_ml_cache_core.adapter` package and
+  the `generic_ml_cache_core.stream` file-I/O class are gone (the latter moved to
+  `generic_ml_cache_adapters.stream`).
+
+### Fixed
+
+- **Daemon multi-client correctness** (daemon): a request for a non-default client
+  previously dispatched to the hardcoded runner; it now runs the requested client.
+- **`httpx2>=2.0` dependency typo** (daemon): corrected to `httpx` in the dev extras.
 
 ## [0.27.0] - 2026-06-28
 
