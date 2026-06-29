@@ -155,5 +155,26 @@ def test_is_frozen():
         identity.client = "codex"  # type: ignore[misc]
 
 
-def test_allow_paths_are_not_a_field():
-    assert not hasattr(ManagedCallIdentity, "allow_paths")
+def test_allow_paths_set_enters_the_key():
+    assert (
+        _make_identity(allow_paths=frozenset({"/work/src"})).generate_key()
+        != _make_identity().generate_key()
+    )
+
+
+def test_different_allow_paths_sets_produce_different_keys():
+    # Adding a folder is a deliberate, different call — it must change the key.
+    one = _make_identity(allow_paths=frozenset({"/work/a"}))
+    two = _make_identity(allow_paths=frozenset({"/work/a", "/work/b"}))
+    assert one.generate_key() != two.generate_key()
+
+
+def test_allow_paths_are_order_independent():
+    first = _make_identity(allow_paths=frozenset({"/a", "/b"}))
+    second = _make_identity(allow_paths=frozenset({"/b", "/a"}))
+    assert first.generate_key() == second.generate_key()
+
+
+def test_empty_allow_paths_is_backward_compatible():
+    # No allow_paths keys identically to before this field existed.
+    assert _make_identity(allow_paths=frozenset()).generate_key() == _make_identity().generate_key()

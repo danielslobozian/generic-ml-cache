@@ -20,8 +20,11 @@ class ManagedCallIdentity(CallIdentity):
     has been fingerprinted and every file path resolved to its content
     fingerprint. It is not the user's raw request.
 
-    allow_paths (permission grants to scan folders) are NOT a field here: they do
-    not enter the key and travel separately to the client runner.
+    allow_paths (the folders the client may scan) enter the key as a *set*: a
+    different set of allowed folders is a different call, so it must yield a new key.
+    Their *contents* are not fingerprinted (unbounded, possibly modified between
+    runs) — content stability is the caller's assertion via ``scan_trust``, which
+    gates cacheability, not the key (see ``domain/service/cacheability.py``).
     """
 
     client: str
@@ -33,6 +36,7 @@ class ManagedCallIdentity(CallIdentity):
     client_args_fingerprint: Optional[str] = None
     system_fingerprint: Optional[str] = None
     grants: FrozenSet[str] = field(default_factory=frozenset)
+    allow_paths: FrozenSet[str] = field(default_factory=frozenset)
 
     def generate_key(self) -> str:
         key_data: Dict[str, str] = {
@@ -57,4 +61,9 @@ class ManagedCallIdentity(CallIdentity):
             key_data[f"args:{self.client_args_fingerprint}"] = self.client_args_fingerprint
         if self.grants:
             key_data["grants"] = ",".join(sorted(self.grants))
+        # The set of allowed folders is keyed (order-independent): adding or removing
+        # a folder is a deliberate, different call. Omitted when empty, so calls with
+        # no allow_paths key identically to before this field existed.
+        if self.allow_paths:
+            key_data["allow_paths"] = ",".join(sorted(self.allow_paths))
         return checksum_input_data(key_data)

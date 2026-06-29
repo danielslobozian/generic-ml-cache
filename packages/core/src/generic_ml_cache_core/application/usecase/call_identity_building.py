@@ -21,8 +21,9 @@ from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_ch
 class KeyedCallInputs(Protocol):
     """The raw, key-determining fields any command must expose to be keyed.
 
-    Allow-paths and scan-trust are *not* here — they decide cacheability, not the
-    key (see ``domain/service/cacheability.py``).
+    The *set* of allow-paths is keyed (a different set of folders is a different
+    call). ``scan_trust`` is *not* here — it decides cacheability, not the key, and
+    the folders' contents are never fingerprinted (see ``domain/service/cacheability.py``).
 
     All attributes are declared as read-only (@property) so frozen dataclasses
     satisfy this protocol without pyright emitting mutable-attribute mismatches.
@@ -42,6 +43,8 @@ class KeyedCallInputs(Protocol):
     def user_system_prompt(self) -> Optional[str]: ...
     @property
     def input_file_paths(self) -> List[str]: ...
+    @property
+    def allow_paths(self) -> List[str]: ...
     @property
     def client_args(self) -> List[str]: ...
     @property
@@ -73,5 +76,6 @@ def build_call_identity(
         input_file_fingerprints=input_file_fingerprints,
         client_args_fingerprint=client_args_fingerprint,
         system_fingerprint=system_fingerprint,
+        allow_paths=frozenset(keyed_inputs.allow_paths),
         grants=frozenset(keyed_inputs.grants),
     )

@@ -80,6 +80,17 @@ def test_user_system_prompt_is_fingerprinted_into_the_identity():
     assert with_sys.generate_key() != without.generate_key()
 
 
+def test_allow_paths_become_a_frozenset_in_the_identity():
+    identity = build_call_identity(FakeFingerprint(), _command(allow_paths=["/a", "/b"]))
+    assert identity.allow_paths == frozenset({"/a", "/b"})
+
+
+def test_allow_paths_change_the_key():
+    with_paths = build_call_identity(FakeFingerprint(), _command(allow_paths=["/a"]))
+    without = build_call_identity(FakeFingerprint(), _command())
+    assert with_paths.generate_key() != without.generate_key()
+
+
 def test_key_is_deterministic():
     first = build_call_identity(FakeFingerprint(), _command()).generate_key()
     second = build_call_identity(FakeFingerprint(), _command()).generate_key()
