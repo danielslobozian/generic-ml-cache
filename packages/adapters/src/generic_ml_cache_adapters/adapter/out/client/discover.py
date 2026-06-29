@@ -14,14 +14,8 @@ from __future__ import annotations
 
 import subprocess
 import time
-from typing import Dict, FrozenSet, List, Optional, Tuple, cast
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
-from generic_ml_cache_core.adapter.registry import (
-    get_adapter,
-)
-from generic_ml_cache_core.adapter.registry import (
-    registered_local_names as registered_names,
-)
 from generic_ml_cache_core.application.domain.model.client_status import (
     ClientStatus as ClientStatus,
 )
@@ -34,7 +28,25 @@ from generic_ml_cache_core.application.port.out.local_client_port import LocalCl
 
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
+from generic_ml_cache_adapters.discovery.composition import (
+    catalog_for,
+    default_resolver,
+    registered_local_names,
+)
+
 _LIST_MODELS_EXIT = "list-models EXIT"
+
+
+def _resolve_local_client(name: str, whitelist: Optional[FrozenSet[str]] = None) -> LocalClientPort:
+    """Resolve a local-managed client adapter by client name, via the catalog +
+    resolver. Raises :class:`UnknownClient` if no local adapter serves ``name``."""
+    descriptors = list(catalog_for(whitelist).find_by_client_name(name))
+    if not descriptors:
+        raise UnknownClient(f"unknown adapter {name!r}")
+    local = [d for d in descriptors if d.supports_mode(ExecutionKind.LOCAL_MANAGED)]
+    if not local:
+        raise UnknownClient(f"not a local managed adapter: {name!r}")
+    return default_resolver().resolve_local_client(local[0].adapter_id)
 
 
 def _probe_version(
@@ -79,7 +91,7 @@ def probe(
     _t = time.perf_counter()
     if diag:
         diag.debug("probe ENTER", name=name)
-    adapter = cast(LocalClientPort, get_adapter(name))
+    adapter = _resolve_local_client(name)
     try:
         exe = adapter.resolve_executable(executable)
     except ClientNotFound as exc:
@@ -124,7 +136,7 @@ def probe_all(
     exe = executables or {}
     results = [
         probe(name, executable=exe.get(name), timeout=timeout, diag=diag)
-        for name in registered_names(whitelist=whitelist)
+        for name in registered_local_names(whitelist)
     ]
     if diag:
         diag.debug(
@@ -151,10 +163,7 @@ def list_models(
     _t = time.perf_counter()
     if diag:
         diag.debug("list-models ENTER", name=name)
-    raw = get_adapter(name, whitelist=whitelist)
-    if getattr(raw, "execution_kind", None) is not ExecutionKind.LOCAL_MANAGED:
-        raise UnknownClient(f"not a local managed adapter: {name!r}")
-    adapter = cast(LocalClientPort, raw)
+    adapter = _resolve_local_client(name, whitelist)
     try:
         exe = adapter.resolve_executable(executable)
     except ClientNotFound as exc:
@@ -256,7 +265,7 @@ def list_models_all(
     exe = executables or {}
     results = [
         list_models(name, executable=exe.get(name), timeout=timeout, whitelist=whitelist, diag=diag)
-        for name in registered_names(whitelist=whitelist)
+        for name in registered_local_names(whitelist)
     ]
     if diag:
         diag.debug(

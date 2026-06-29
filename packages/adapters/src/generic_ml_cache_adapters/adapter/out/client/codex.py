@@ -13,7 +13,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from generic_ml_cache_core.adapter.registry import adapter
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
 from generic_ml_cache_core.application.domain.model.run.client_config import (
@@ -23,9 +25,9 @@ from generic_ml_cache_core.application.domain.model.run.client_config import (
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.adapter.out.client.output_parsing import ensure_trailing_newline
+from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 
 
-@adapter
 class CodexCliAdapter:
     """Adapter for OpenAI's Codex CLI. Composes a CliRuntime and supplies only
     Codex's translation hooks."""
@@ -36,6 +38,10 @@ class CodexCliAdapter:
 
     def __init__(self, executable_override=None, timeout=None, stream_path=None):
         wire_cli_client(self, executable_override, timeout, stream_path)
+
+    @classmethod
+    def descriptor(cls):
+        return local_cli_descriptor("codex", {ClientCapability.RUN}, "OpenAI Codex")
 
     def build_argv(
         self,

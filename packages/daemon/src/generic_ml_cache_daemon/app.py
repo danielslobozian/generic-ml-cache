@@ -45,7 +45,10 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_core.adapter.registry import get_adapter, resolve_execution_kind
+from generic_ml_cache_adapters.discovery.composition import default_catalog, default_resolver
+from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
+    SelectAdapterForExecutionService,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
@@ -159,10 +162,14 @@ def create_app(
     _repository = ExecutionRepository(_conn_factory, _clock)
     _metrics = JournalMetrics(AccessRegistry(_conn_factory, diag=_diag))
     _file_fingerprint = FilesystemFileFingerprint()
-    resolve_execution_kind("claude")  # validate "claude" is registered
-    _registered = get_adapter("claude")
-    _factory = cast(Callable[..., RegisteredAdapter], type(_registered))
-    _cli_adapter = _factory(executable_override=None, timeout=None, stream_path=None)
+    # Select claude's adapter from the catalog and resolve it to an instance.
+    _descriptor = SelectAdapterForExecutionService(default_catalog()).select(
+        "claude", ExecutionKind.LOCAL_MANAGED
+    )
+    _cli_adapter = cast(
+        RegisteredAdapter,
+        default_resolver().resolve_local_client(_descriptor.adapter_id),
+    )
     # One adapter instance handles both managed and passthrough execution.
     _runners: dict[ExecutionKind, RegisteredAdapter] = {
         ExecutionKind.LOCAL_MANAGED: _cli_adapter,

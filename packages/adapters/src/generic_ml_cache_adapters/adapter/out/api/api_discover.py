@@ -12,9 +12,10 @@ from __future__ import annotations
 
 from typing import FrozenSet, Optional
 
-from generic_ml_cache_core.adapter.registry import get_adapter
 from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
+
+from generic_ml_cache_adapters.discovery.composition import get_adapter
 from generic_ml_cache_core.common.errors import UnknownClient
 
 

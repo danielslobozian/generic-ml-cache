@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-from generic_ml_cache_core.adapter.registry import adapter
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
@@ -23,9 +25,9 @@ from generic_ml_cache_adapters.adapter.out.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
 )
+from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 
 
-@adapter
 class CursorCliAdapter:
     """Adapter for the Cursor agent CLI. Composes a CliRuntime and supplies only
     Cursor's translation hooks (including its own model-listing)."""
@@ -36,6 +38,12 @@ class CursorCliAdapter:
 
     def __init__(self, executable_override=None, timeout=None, stream_path=None):
         wire_cli_client(self, executable_override, timeout, stream_path)
+
+    @classmethod
+    def descriptor(cls):
+        return local_cli_descriptor(
+            "cursor", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Cursor Agent"
+        )
 
     def build_argv(
         self,

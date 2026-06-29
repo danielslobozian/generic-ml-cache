@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 
-from generic_ml_cache_core.adapter.registry import registered_local_names, registered_names
+from generic_ml_cache_cli.discovery import registered_local_names, registered_names
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 

@@ -12,7 +12,7 @@ import sqlite3
 from typing import Optional
 
 from generic_ml_cache_cli._compose import build_use_cases
-from generic_ml_cache_core.adapter.registry import resolve_execution_kind
+from generic_ml_cache_adapters.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -114,7 +114,7 @@ def test_api_records_then_replays_with_the_stub(tmp_path):
 def test_api_client_routes_to_api_adapter(tmp_path):
     wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake-api")
     command = RunMlExecutionCommand(
-        execution_kind=resolve_execution_kind("fake-api"),
+        execution_kind=execution_kind_for("fake-api"),
         client="fake-api",
         model="m",
         context="",

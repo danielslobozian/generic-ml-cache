@@ -9,13 +9,21 @@ from typing import List
 import pytest
 
 from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
-from generic_ml_cache_core.adapter.registry import get_adapter, register, registered_names
+from generic_ml_cache_adapters.discovery.composition import get_adapter, registered_names
+from generic_ml_cache_adapters.discovery.in_memory_adapter_registry import register
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import UnknownClient
+from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
+
+_RUN = ClientCapability.RUN
+_LIST = ClientCapability.LIST_MODELS
 
 
 # ---------------------------------------------------------------------------
@@ -25,6 +33,10 @@ from generic_ml_cache_core.common.errors import UnknownClient
 
 class _ListingAdapter(ApiClientPort, ModelListingPort):
     name = "_listing"
+
+    @classmethod
+    def descriptor(cls):
+        return api_descriptor("_listing", {_RUN, _LIST}, "Listing")
 
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
@@ -41,12 +53,20 @@ class _NonListingAdapter(ApiClientPort):
 
     name = "_non-listing"
 
+    @classmethod
+    def descriptor(cls):
+        return api_descriptor("_non-listing", {_RUN}, "NonListing")
+
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
 
 
 class _FailingListAdapter(ApiClientPort, ModelListingPort):
     name = "_fail-listing"
+
+    @classmethod
+    def descriptor(cls):
+        return api_descriptor("_fail-listing", {_RUN, _LIST}, "Failing")
 
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
@@ -61,7 +81,7 @@ class _FailingListAdapter(ApiClientPort, ModelListingPort):
 
 
 def test_register_and_get_adapter():
-    register(_ListingAdapter())
+    register(_ListingAdapter)
     adapter = get_adapter("_listing")
     assert isinstance(adapter, _ListingAdapter)
 
@@ -72,7 +92,7 @@ def test_get_unknown_adapter_raises_unknown_client():
 
 
 def test_registered_names_includes_registered():
-    register(_NonListingAdapter())
+    register(_NonListingAdapter)
     assert "_non-listing" in registered_names()
 
 
@@ -102,7 +122,7 @@ def test_unknown_provider_returns_not_present():
 
 
 def test_listing_adapter_returns_models():
-    register(_ListingAdapter())
+    register(_ListingAdapter)
     ml = list_api_models("_listing")
     assert ml.present is True
     assert ml.supported is True
@@ -115,7 +135,7 @@ def test_listing_adapter_returns_models():
 
 
 def test_non_listing_adapter_returns_supported_false():
-    register(_NonListingAdapter())
+    register(_NonListingAdapter)
     ml = list_api_models("_non-listing")
     assert ml.present is True
     assert ml.supported is False
@@ -128,7 +148,7 @@ def test_non_listing_adapter_returns_supported_false():
 
 
 def test_failing_list_adapter_returns_reason():
-    register(_FailingListAdapter())
+    register(_FailingListAdapter)
     ml = list_api_models("_fail-listing")
     assert ml.present is True
     assert ml.supported is True
@@ -155,20 +175,20 @@ def test_non_listing_adapter_does_not_implement_model_listing_port():
 
 
 def test_list_api_models_whitelist_excludes_disabled_provider():
-    register(_ListingAdapter())
+    register(_ListingAdapter)
     ml = list_api_models("_listing", whitelist=frozenset({"other"}))
     assert ml.present is False
     assert "unknown adapter" in (ml.reason or "").lower()
 
 
 def test_list_api_models_whitelist_allows_included_provider():
-    register(_ListingAdapter())
+    register(_ListingAdapter)
     ml = list_api_models("_listing", whitelist=frozenset({"_listing"}))
     assert ml.present is True
     assert ml.supported is True
 
 
 def test_list_api_models_none_whitelist_allows_all():
-    register(_ListingAdapter())
+    register(_ListingAdapter)
     ml = list_api_models("_listing", whitelist=None)
     assert ml.present is True

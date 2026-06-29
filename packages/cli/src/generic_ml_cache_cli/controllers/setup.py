@@ -34,7 +34,7 @@ def _doctor_payload(args: argparse.Namespace) -> dict:
     import platform  # noqa: PLC0415
     from dataclasses import asdict  # noqa: PLC0415
 
-    from generic_ml_cache_core.adapter.registry import adapter_sources  # noqa: PLC0415
+    from generic_ml_cache_cli.discovery import adapter_sources  # noqa: PLC0415
     from generic_ml_cache_adapters.adapter.out.client.discover import probe_all  # noqa: PLC0415
     from generic_ml_cache_adapters.migration_runner import schema_version  # noqa: PLC0415
 

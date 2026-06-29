@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
 from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
-from generic_ml_cache_core.adapter.registry import resolve_execution_kind
+from generic_ml_cache_cli.discovery import execution_kind_for
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
@@ -126,7 +126,7 @@ def _spec_whitelist(spec: dict):
 
 def _command_from_spec(spec: dict) -> RunMlExecutionCommand:
     return RunMlExecutionCommand(
-        execution_kind=resolve_execution_kind(spec["client"], whitelist=_spec_whitelist(spec)),
+        execution_kind=execution_kind_for(spec["client"], _spec_whitelist(spec)),
         client=spec["client"],
         model=spec["model"],
         effort=spec["effort"],

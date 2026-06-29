@@ -29,6 +29,14 @@ class UnknownClient(CacheError):
     code: ClassVar[str] = "adapter.unknown"
 
 
+class CapabilityUnavailable(CacheError):
+    """Raised when no adapter for a client offers a required capability
+    (e.g. asking for model listing from a client that cannot enumerate models).
+    """
+
+    code: ClassVar[str] = "adapter.capability_unavailable"
+
+
 class ConfigError(CacheError):
     """Raised when the optional config file or a config env var is invalid.
 

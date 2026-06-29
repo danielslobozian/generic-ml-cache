@@ -9,7 +9,7 @@ from typing import List
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from generic_ml_cache_core.adapter.registry import registered_names
+from generic_ml_cache_adapters.discovery.composition import registered_names
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.metrics import is_prometheus_available

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
-from generic_ml_cache_core.adapter.registry import resolve_execution_kind
+from generic_ml_cache_adapters.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_state import (
     ExecutionState,
@@ -31,7 +31,7 @@ _STDERR = ArtifactType.STDERR
 
 
 def _build_command(body: RunBody) -> RunMlExecutionCommand:
-    kind = resolve_execution_kind(body.client)
+    kind = execution_kind_for(body.client)
     return RunMlExecutionCommand(
         execution_kind=kind,
         client=body.client,

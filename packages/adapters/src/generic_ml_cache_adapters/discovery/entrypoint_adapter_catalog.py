@@ -1,0 +1,99 @@
+# SPDX-FileCopyrightText: 2026 Daniel Slobozian
+# SPDX-License-Identifier: Apache-2.0
+"""EntryPointAdapterCatalog — discover adapters from installed entry points.
+
+The default catalog: it scans the ``gmlcache.adapters`` entry-point group, loads
+each adapter class, and reads its ``descriptor()`` — without instantiating the
+adapter. A broken or incompatible entry point is warned and skipped; bad
+third-party code never crashes discovery. This is where the packaging-system
+dependency lives, out of core.
+"""
+
+from __future__ import annotations
+
+import warnings
+from typing import Dict, List, Optional, Sequence, cast
+
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
+
+from generic_ml_cache_adapters.discovery._entrypoints import (
+    ADAPTER_CONTRACT_VERSION,
+    ADAPTER_ENTRYPOINT_GROUP,
+    describe_source,
+    iter_entry_points,
+)
+
+
+class EntryPointAdapterCatalog(AdapterCatalogPort):
+    """Catalog backed by the installed ``gmlcache.adapters`` entry points."""
+
+    def __init__(self, group: str = ADAPTER_ENTRYPOINT_GROUP) -> None:
+        self._group = group
+        self._descriptors: Optional[List[AdapterDescriptor]] = None
+        self._sources: Dict[str, str] = {}
+
+    def _scan(self) -> List[AdapterDescriptor]:
+        descriptors: List[AdapterDescriptor] = []
+        for ep in iter_entry_points(self._group):
+            ep_key = getattr(ep, "name", str(ep))
+            try:
+                cls = ep.load()
+            except Exception as exc:  # noqa: BLE001 — broken plugin must not crash discovery
+                warnings.warn(
+                    f"gmlcache: could not load entry-point adapter {ep_key!r}: {exc}", stacklevel=2
+                )
+                continue
+
+            declared = getattr(cls, "adapter_contract_version", None)
+            if declared is not None and declared != ADAPTER_CONTRACT_VERSION:
+                warnings.warn(
+                    f"gmlcache: entry-point adapter {ep_key!r} targets contract {declared!r} "
+                    f"but this core requires {ADAPTER_CONTRACT_VERSION!r}; skipping",
+                    stacklevel=2,
+                )
+                continue
+
+            describe = getattr(cls, "descriptor", None)
+            if not callable(describe):
+                warnings.warn(
+                    f"gmlcache: entry-point adapter {ep_key!r} has no descriptor(); skipping",
+                    stacklevel=2,
+                )
+                continue
+            try:
+                descriptor = cast(AdapterDescriptor, describe())
+            except Exception as exc:  # noqa: BLE001
+                warnings.warn(
+                    f"gmlcache: descriptor() failed for entry-point adapter {ep_key!r}: {exc}",
+                    stacklevel=2,
+                )
+                continue
+
+            descriptors.append(descriptor)
+            self._sources[descriptor.adapter_id] = describe_source(ep)
+        return descriptors
+
+    def _ensure_loaded(self) -> List[AdapterDescriptor]:
+        if self._descriptors is None:
+            self._descriptors = self._scan()
+        return self._descriptors
+
+    def list_adapters(self) -> Sequence[AdapterDescriptor]:
+        return list(self._ensure_loaded())
+
+    def find_by_client_name(self, client_name: str) -> Sequence[AdapterDescriptor]:
+        return [d for d in self._ensure_loaded() if d.client_name == client_name]
+
+    def supports(self, client_name: str, mode: ExecutionKind) -> bool:
+        return any(
+            d.client_name == client_name and d.supports_mode(mode) for d in self._ensure_loaded()
+        )
+
+    def sources(self) -> Dict[str, str]:
+        """Map each ``adapter_id`` to the distribution that provided it (for doctor)."""
+        self._ensure_loaded()
+        return dict(self._sources)

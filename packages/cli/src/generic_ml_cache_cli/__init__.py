@@ -18,10 +18,7 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from generic_ml_cache_core import (  # noqa: E402  # re-export the stable surface
-    UnknownClient,
-    get_adapter,
-    register,
-)
+from generic_ml_cache_cli.discovery import register  # noqa: E402  # adapter registration seam
+from generic_ml_cache_core.common.errors import UnknownClient  # noqa: E402
 
-__all__ = ["__version__", "register", "get_adapter", "UnknownClient"]
+__all__ = ["__version__", "register", "UnknownClient"]

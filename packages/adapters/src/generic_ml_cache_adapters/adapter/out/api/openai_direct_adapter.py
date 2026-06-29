@@ -10,7 +10,9 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-from generic_ml_cache_core.adapter.registry import adapter
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
@@ -19,10 +21,11 @@ from generic_ml_cache_core.application.domain.model.usage.usage import int_or_no
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 
+from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
+
 _BASE_URL = "https://api.openai.com/v1"
 
 
-@adapter
 class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
     """Calls OpenAI's Responses API using stdlib urllib.
 
@@ -36,6 +39,12 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
     """
 
     name = "openai"
+
+    @classmethod
+    def descriptor(cls):
+        return api_descriptor(
+            "openai", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "OpenAI API"
+        )
 
     def __init__(self, api_key: Optional[str] = None, timeout: float = 120.0) -> None:
         self._api_key = api_key
