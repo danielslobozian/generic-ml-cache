@@ -55,18 +55,21 @@ from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_ch
 class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
     """Record-or-replay any ML execution — managed local, API, or passthrough.
 
-    Dispatches on ``command.execution_kind``. LOCAL_MANAGED and LOCAL_PASSTHROUGH
-    drive a :class:`LocalClientPort` adapter — managed runs go through an isolated
-    workspace (this service owns it via the :class:`WorkspacePort`) and capture
-    artifacts; passthrough is a raw relay. API goes through an :class:`MlRunnerPort`
-    REST adapter. Identity, journaling, artifact storage, and the cache protocol
-    are handled once by the shared base.
+    Two orthogonal axes drive a call. The **client name** (``command.client``)
+    selects *which* adapter from the injected ``runners`` map; the **execution
+    kind** (``command.execution_kind``) selects *how* it is invoked — a CLI
+    adapter answers both LOCAL_MANAGED (isolated workspace owned here via the
+    :class:`WorkspacePort`, artifacts captured) and LOCAL_PASSTHROUGH (a raw
+    relay), while an API adapter answers API through :class:`MlRunnerPort`. A
+    single-client driver (the CLI) injects a one-entry map; a multi-client driver
+    (the daemon) injects one entry per client it serves. Identity, journaling,
+    artifact storage, and the cache protocol are handled once by the shared base.
     """
 
     def __init__(
         self,
         file_fingerprint: FileFingerprintPort,
-        runners: Dict[ExecutionKind, RegisteredAdapter],
+        runners: Dict[str, RegisteredAdapter],
         blob_store: BlobStorePort,
         repository: ExecutionRepositoryPort,
         metrics: MetricsPort,
@@ -103,17 +106,17 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
 
     def _run_client(self, command: RunMlExecutionCommand) -> ClientRunResult:
         _t = time.perf_counter()
-        runner = self._runners.get(command.execution_kind)
+        runner = self._runners.get(command.client)
         if runner is None:
             if self._diag:
                 self._diag.error(
-                    "no runner registered for execution kind",
-                    kind=str(command.execution_kind),
+                    "no runner registered for client",
                     client=command.client,
+                    kind=str(command.execution_kind),
                 )
             raise RuntimeError(
-                f"No runner registered for {command.execution_kind!r}; "
-                "pass client= to build_use_cases or wire a runner for this kind"
+                f"No runner registered for client {command.client!r}; "
+                "pass client= to build_use_cases or wire a runner for this client"
             )
         if self._diag:
             self._diag.debug(

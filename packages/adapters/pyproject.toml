@@ -25,7 +25,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "generic-ml-cache-core>=0.27.0",
+    "generic-ml-cache-core==0.27.*",
     "structlog>=21",
 ]
 

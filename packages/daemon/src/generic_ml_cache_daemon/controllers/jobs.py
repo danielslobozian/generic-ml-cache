@@ -45,7 +45,7 @@ def _job_to_response(job: Job) -> JobResponse:
 def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
     """Submit an execution to run in the background. Returns immediately with
     a job_id in 'pending' state."""
-    command = _build_command(body)  # type: ignore[arg-type]
+    command = _build_command(body, request.app.state.whitelist)  # type: ignore[arg-type]
     wired = request.app.state.wired
     registry = request.app.state.job_registry
     job = registry.submit(wired.run_ml.execute, command)

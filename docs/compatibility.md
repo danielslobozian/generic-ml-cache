@@ -51,7 +51,7 @@ following surfaces are locked under the promise described in the sections below:
 |---|---|
 | **CLI** | All command names, flag names, positional arguments, and exit codes documented in [`docs/reference/cli.md`](reference/cli.md). Output format of `--json` on commands that support it (reporting commands only — `check`, `doctor`, `models`, `status`, `stats`, `list`, `purge`, `tags`, `session *`, `exec status`, `exec list`, `daemon status`). Write-and-action commands (`run`, `encrypt`, `daemon start`, etc.) have no `--json` flag. |
 | **Python API** | Every name in `generic_ml_cache_core.__all__` — its signature, its semantics, and its exception contract. |
-| **Adapter contract** | The `MlRunnerPort` / `ClientAdapter` / `ApiClientPort` interfaces, the `@register` / `get_adapter` registry API, the `gmlcache.adapters` entry-point group, and the `adapter_contract_version` compatibility check. |
+| **Adapter contract** | The `LocalClientPort` / `ApiClientPort` / `MlRunnerPort` / `ModelListingPort` interfaces, the `gmlcache.adapters` entry-point group with its `descriptor()` declaration, the `AdapterCatalogPort` / `AdapterResolverPort` discovery contract, and the `adapter_contract_version` compatibility check. (Discovery and the `register` / `get_adapter` helpers live in `generic-ml-cache-adapters`, not core.) |
 | **Execution-record schema** | The logical record format (fields, types, relationships) as documented in [`docs/storage.md`](storage.md). The physical SQLite DDL is an implementation detail and may be migrated transparently. |
 | **Configuration** | All keys documented in [`docs/reference/configuration.md`](reference/configuration.md), their types, and their precedence order (default → file → env → flag). |
 
@@ -112,8 +112,11 @@ The adapter contract is versioned via `ADAPTER_CONTRACT_VERSION` (currently `"1"
 A third-party adapter declares compatibility by setting:
 
 ```python
-class MyAdapter(ClientAdapter):
+class MyAdapter:  # implements LocalClientPort or ApiClientPort structurally — no base class
     adapter_contract_version = "1"
+
+    @classmethod
+    def descriptor(cls) -> AdapterDescriptor: ...
 ```
 
 An adapter that omits `adapter_contract_version` is treated as compatible. An adapter
@@ -124,9 +127,9 @@ that declares a different version emits a warning and is skipped at load time.
 An adapter written against contract version `"1"` will continue to load and function
 correctly across all `1.x` releases. The following are guaranteed:
 
-- `MlRunnerPort`, `ClientAdapter`, `ApiClientPort` — no method removed or renamed;
-  new optional methods may be added with default no-op implementations.
-- `@register` / `get_adapter` — signatures unchanged.
+- `LocalClientPort`, `ApiClientPort`, `MlRunnerPort`, `ModelListingPort` — no method removed or
+  renamed; new optional methods may be added with default no-op implementations.
+- `AdapterCatalogPort` / `AdapterResolverPort` and the `descriptor()` declaration — signatures unchanged.
 - `gmlcache.adapters` entry-point group — name unchanged; discovery protocol unchanged.
 - `RunMlExecutionCommand` — no field removed; new optional fields may be added with
   defaults.

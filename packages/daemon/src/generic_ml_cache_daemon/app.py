@@ -45,12 +45,9 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_adapters.discovery.composition import default_catalog, default_resolver
-from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
-    SelectAdapterForExecutionService,
-)
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
+from generic_ml_cache_adapters.discovery.composition import catalog_for, default_resolver
+from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
+from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
@@ -162,19 +159,23 @@ def create_app(
     _repository = ExecutionRepository(_conn_factory, _clock)
     _metrics = JournalMetrics(AccessRegistry(_conn_factory, diag=_diag))
     _file_fingerprint = FilesystemFileFingerprint()
-    # Select claude's adapter from the catalog and resolve it to an instance.
-    _descriptor = SelectAdapterForExecutionService(default_catalog()).select(
-        "claude", ExecutionKind.LOCAL_MANAGED
-    )
-    _cli_adapter = cast(
-        RegisteredAdapter,
-        default_resolver().resolve_local_client(_descriptor.adapter_id),
-    )
-    # One adapter instance handles both managed and passthrough execution.
-    _runners: dict[ExecutionKind, RegisteredAdapter] = {
-        ExecutionKind.LOCAL_MANAGED: _cli_adapter,
-        ExecutionKind.LOCAL_PASSTHROUGH: _cli_adapter,
-    }
+    # Resolve every whitelisted client to an instance, keyed by client NAME. The
+    # service selects by command.client and dispatches the method by kind (a CLI
+    # adapter answers managed; an API adapter answers API — passthrough is not
+    # exposed over REST). An unknown/non-whitelisted client is rejected at /run
+    # before it reaches the service.
+    _catalog = catalog_for(whitelist)
+    _resolver = default_resolver()
+    _runners: dict[str, RegisteredAdapter] = {}
+    for _d in _catalog.list_adapters():
+        if _d.boundary is AdapterBoundary.API:
+            _runners[_d.client_name] = cast(
+                RegisteredAdapter, _resolver.resolve_runner(_d.adapter_id)
+            )
+        else:
+            _runners[_d.client_name] = cast(
+                RegisteredAdapter, _resolver.resolve_local_client(_d.adapter_id)
+            )
     _purge = PurgeService(_repository, _blob_store, _metrics, diag=_diag)
     _gateway_forward = HttpGatewayForwardAdapter()
     _run_gateway = RunMlGatewayService(

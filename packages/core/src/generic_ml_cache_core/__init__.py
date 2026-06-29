@@ -4,14 +4,17 @@
 
 Record a real ML client (or API) call once, replay it forever by its content key.
 
-This is a stateless library: it holds the domain model, the use cases, the port
-contracts, AND the default outbound adapters (execution repository,
-filesystem blob store, local client runner, API client, metrics, clock,
-fingerprint). It bakes in *structure* (table names, blob naming, schema) but no
-*location* -- the data source (store path) and configuration are injected by the
-caller. Wire it using a driver application's private composition root or construct the adapters and use
-cases directly. The CLI / a daemon / an embedding app are inbound drivers that
-supply the data source and map their surface onto this library.
+This is a stateless library: it holds the domain model, the use cases, and the
+port contracts — the hexagonal core, and nothing more. The outbound adapters that
+implement those ports (execution repository, filesystem blob store, local CLI and
+API clients, metrics, clock, fingerprint) live in the separate
+``generic-ml-cache-adapters`` package; adapter discovery lives there too, behind
+:class:`AdapterCatalogPort`. Core bakes in *structure* (table names, blob naming,
+schema) but no *location* -- the data source (store path) and configuration are
+injected by the caller. Wire it from a driver application's private composition
+root, assembling the adapters from ``generic-ml-cache-adapters``. The CLI / a
+daemon / an embedding app are inbound drivers that supply the data source and map
+their surface onto this library.
 
 **Stability contract (from 1.0.0 onwards):**
 
@@ -26,7 +29,7 @@ Under SemVer:
   guide will be published with the release.
 
 Anything *not* listed in ``__all__`` — including all sub-modules under
-``adapter/``, ``application/``, ``common/``, and ``migrations/`` — is internal.
+``application/``, ``common/``, and ``migrations/`` — is internal.
 Internal paths may change in any release, including patch releases.
 
 **Public API (``__all__``):**
@@ -50,7 +53,7 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from generic_ml_cache_core.application.port.inbound.wired_use_cases import (  # noqa: E402  # fmt: skip
+from generic_ml_cache_core.application.wiring.wired_use_cases import (  # noqa: E402  # fmt: skip
     WiredUseCases,
 )
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402  # fmt: skip

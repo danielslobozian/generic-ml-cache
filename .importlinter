@@ -80,13 +80,28 @@ ignore_imports =
     generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app
 
 # Rule 3 — domain model purity.
-# Domain objects (entities, value objects, domain events) must not import use cases
-# or application services. They are pure: they model the world, not the workflows.
+# Domain objects (entities, value objects, domain events) must not import use cases,
+# application services, OR ports. They are the innermost ring: they model the world,
+# not the workflows, and not the boundaries that drive them. (A domain model leaking
+# in from a port — e.g. ModelInfo via port/out/base — is the exact slip this catches.)
 [importlinter:contract:hex-domain-purity]
-name = Domain model must not import use cases
+name = Domain model must not import use cases or ports
 type = forbidden
 source_modules =
     generic_ml_cache_core.application.domain
+forbidden_modules =
+    generic_ml_cache_core.application.usecase
+    generic_ml_cache_core.application.port
+
+# Rule 3b — ports must not import use-case implementations.
+# Ports are abstractions; use cases implement them. The arrow points one way:
+# usecase -> port, never port -> usecase. (Composition containers that legitimately
+# name use cases live in application.wiring, outside the port ring, not here.)
+[importlinter:contract:hex-ports-no-usecases]
+name = Ports must not import use cases
+type = forbidden
+source_modules =
+    generic_ml_cache_core.application.port
 forbidden_modules =
     generic_ml_cache_core.application.usecase
 

@@ -4,13 +4,15 @@
 
 from __future__ import annotations
 
-import sqlite3
 import pytest
 
 pytest.importorskip("cryptography")
 
-from generic_ml_cache_cli._compose import build_use_cases  # noqa: E402
 from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
+from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (  # noqa: E402
+    EncryptingBlobStore,
+    TokenRequiredBlobStore,
+)
 from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
     FilesystemEncryptionManifestStore,
 )
@@ -52,18 +54,24 @@ def _token():
     return AesGcmCipher().generate_token()
 
 
-def _db_factory(store):
-    db_path = store / "executions.sqlite3"
-
-    def _connect():
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(str(db_path))
-
-    return _connect
+def _decrypting_blob_store(store, token):
+    """The decrypting blob store the composition root would build for a token —
+    reconstructed locally so an adapters test never reaches into a driver package.
+    Mirrors cli._compose._resolve_blob_store. Raises WrongEncryptionToken eagerly
+    if the token cannot open the manifest's wrapped data key."""
+    blob_store = FilesystemBlobStore(store / "blobs")
+    manifest = FilesystemEncryptionManifestStore(store).load()
+    if manifest is None:
+        return blob_store
+    if token is None:
+        return TokenRequiredBlobStore(blob_store)
+    cipher = AesGcmCipher()
+    data_key = cipher.open_envelope(token, manifest)
+    return EncryptingBlobStore(blob_store, cipher, data_key)
 
 
 def _read_decrypted(store, token, key):
-    return build_use_cases(_db_factory(store), store, encryption_token=token).blob_store.get(key)
+    return _decrypting_blob_store(store, token).get(key)
 
 
 def _raw(store, key):
@@ -113,7 +121,7 @@ def test_rotate_swaps_token_without_re_encrypting_blobs(tmp_path):
     assert _raw(store, "k") == raw_before  # blob bytes unchanged (data key unchanged)
     assert _read_decrypted(store, new, "k") == b"secret"  # new token reads
     with pytest.raises(WrongEncryptionToken):
-        build_use_cases(_db_factory(store), store, encryption_token=old)  # old token rejected
+        _decrypting_blob_store(store, old)  # old token rejected
 
 
 # --- invalidate --------------------------------------------------------------
@@ -180,6 +188,7 @@ def test_recover_rolls_forward_an_interrupted_commit(tmp_path, monkeypatch):
     assert _state(store) is EncryptionState.PUBLIC
 
     # opening the store recovers -> rolls forward to encrypted, content intact
+    _encryptor(store).recover()
     assert _read_decrypted(store, token, "k") == b"PLAINMARKER"
     assert _state(store) is EncryptionState.ENCRYPTED
     assert not (store / _MARKER).exists()
