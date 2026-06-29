@@ -36,7 +36,7 @@ import sys
 import time
 
 
-def main() -> int:
+def main() -> int:  # noqa: C901
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--effort", required=True)

@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 encryption = ["cryptography>=42"]
-dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "vulture>=2", "ruff>=0.15", "cryptography>=42", "import-linter>=2", "pyright>=1.1"]
+dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "cryptography>=42", "import-linter>=2", "pyright>=1.1"]
 
 [project.entry-points."gmlcache.adapters"]
 claude = "generic_ml_cache_adapters.adapter.out.client.claude:ClaudeCliAdapter"
@@ -57,9 +57,15 @@ packages = ["src/generic_ml_cache_adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=generic_ml_cache_adapters --cov-fail-under=80"
+addopts = "-ra --cov-branch --cov=generic_ml_cache_adapters --cov-fail-under=80"
 timeout = 60
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+extend-select = ["C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

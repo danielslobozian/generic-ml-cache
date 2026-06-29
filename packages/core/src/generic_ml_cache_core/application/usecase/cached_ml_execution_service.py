@@ -76,7 +76,7 @@ class CachedMlExecutionService(ABC):
         self._key_locks: Dict[str, threading.Lock] = {}
         self._key_locks_guard = threading.Lock()
 
-    def execute(self, command: CacheableExecutionCommand) -> MlExecution:
+    def execute(self, command: CacheableExecutionCommand) -> MlExecution:  # noqa: C901
         _t = time.perf_counter()
         call_identity = self._build_identity(command)
         execution_key = call_identity.generate_key()

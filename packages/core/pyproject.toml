@@ -33,7 +33,7 @@ Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
 Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "vulture>=2", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
+dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [tool.hatch.version]
 source = "regex"
@@ -45,9 +45,15 @@ packages = ["src/generic_ml_cache_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=generic_ml_cache_core --cov-fail-under=85"
+addopts = "-ra --cov-branch --cov=generic_ml_cache_core --cov-fail-under=85"
 timeout = 60
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+extend-select = ["C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

@@ -659,6 +659,14 @@ constructor. The core names only the ports; it never chooses a datasource.
 One inbound port per use case. Each names the action and declares the command
 type it accepts. Defined in `application/port/inbound/`.
 
+> **Why the direction is spelled out (`inbound`, not `in`).** `in` is a reserved
+> Python keyword, so it cannot be used as a package or module name —
+> `from ...port.in import X` is a `SyntaxError`. The inbound side is therefore
+> always written in full as `inbound` rather than the shorter `in`; its outbound
+> counterpart lives in `application/port/out/`. The asymmetry (`inbound` vs the
+> short `out`) is a language constraint, not an oversight — `out` is a legal
+> identifier, `in` is not.
+
 ---
 
 ## 10. Engine model and project split
