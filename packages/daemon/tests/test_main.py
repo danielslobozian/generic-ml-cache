@@ -47,6 +47,22 @@ def test_custom_host_and_port_flags(tmp_path: Path, monkeypatch) -> None:
     assert kwargs["port"] == 9999
 
 
+def test_main_parses_size_age_and_adapters_from_env(tmp_path: Path, monkeypatch) -> None:
+    # Exercises the GMLCACHE_MAX_SIZE / MAX_AGE / EVICTION_INTERVAL / ADAPTERS parsing.
+    monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path))
+    monkeypatch.setenv("GMLCACHE_MAX_SIZE", "10mb")
+    monkeypatch.setenv("GMLCACHE_MAX_AGE", "2h")
+    monkeypatch.setenv("GMLCACHE_EVICTION_INTERVAL", "120")
+    monkeypatch.setenv("GMLCACHE_ADAPTERS", "claude, cursor")
+
+    mock_run = MagicMock()
+    with patch("uvicorn.run", mock_run):
+        main([])
+
+    application = mock_run.call_args[0][0]
+    assert application.state.whitelist == frozenset({"claude", "cursor"})
+
+
 def test_main_calls_uvicorn_run_with_defaults(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path))
     monkeypatch.delenv("GMLCACHE_SESSION", raising=False)
