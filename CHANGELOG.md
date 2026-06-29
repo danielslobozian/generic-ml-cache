@@ -69,6 +69,10 @@ port contracts. Includes the architecture-analysis remediation that hardened the
 - **Daemon multi-client correctness** (daemon): a request for a non-default client
   previously dispatched to the hardcoded runner; it now runs the requested client.
 - **`httpx2>=2.0` dependency typo** (daemon): corrected to `httpx` in the dev extras.
+- **Source distributions failed to build** (adapters, daemon): their `LICENSE` and
+  `NOTICE` were symlinks to the repo root, which `python -m build` rejects when packing
+  the sdist (`LinkOutsideDestinationError`) — the reason the 0.27.0 publish never
+  reached PyPI. Replaced with real files, matching core and cli.
 
 ## [0.27.0] - 2026-06-28
 
