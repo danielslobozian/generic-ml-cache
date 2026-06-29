@@ -31,6 +31,7 @@ class ManagedCallIdentity(CallIdentity):
     prompt_fingerprint: str
     input_file_fingerprints: Dict[str, str] = field(default_factory=dict)
     client_args_fingerprint: Optional[str] = None
+    system_fingerprint: Optional[str] = None
     grants: FrozenSet[str] = field(default_factory=frozenset)
 
     def generate_key(self) -> str:
@@ -42,6 +43,11 @@ class ManagedCallIdentity(CallIdentity):
             "context": self.context_fingerprint,
             "prompt": self.prompt_fingerprint,
         }
+        # The system prompt changes model behaviour, so it is part of the identity
+        # (matching the API path). Absent system prompt -> omitted, so a call that
+        # never set one keys identically to before this field existed.
+        if self.system_fingerprint:
+            key_data["system"] = self.system_fingerprint
         # Path-sensitive: the path enters the key alongside the content fingerprint.
         # A rename is a real change (the prompt may reference the file by name), so it
         # must yield a new key — soundness over hit-rate (prefer a miss to a wrong hit).

@@ -309,6 +309,11 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--context")
     check.add_argument("--context-file")
     check.add_argument(
+        "--system-prompt",
+        help="system prompt keyed into the call; must match the run you would make",
+    )
+    check.add_argument("--system-prompt-file")
+    check.add_argument(
         "--input-file",
         action="append",
         dest="input_file",

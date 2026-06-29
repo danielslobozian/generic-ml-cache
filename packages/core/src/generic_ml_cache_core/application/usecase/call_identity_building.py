@@ -9,7 +9,7 @@ function's parameter type and stays beside it (one cohesive unit).
 
 from __future__ import annotations
 
-from typing import List, Protocol
+from typing import List, Optional, Protocol
 
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
@@ -39,6 +39,8 @@ class KeyedCallInputs(Protocol):
     @property
     def prompt(self) -> str: ...
     @property
+    def user_system_prompt(self) -> Optional[str]: ...
+    @property
     def input_file_paths(self) -> List[str]: ...
     @property
     def client_args(self) -> List[str]: ...
@@ -59,6 +61,9 @@ def build_call_identity(
     client_args_fingerprint = (
         fingerprint_arguments(keyed_inputs.client_args) if keyed_inputs.client_args else None
     )
+    system_fingerprint = (
+        text_checksum(keyed_inputs.user_system_prompt) if keyed_inputs.user_system_prompt else None
+    )
     return ManagedCallIdentity(
         client=keyed_inputs.client,
         model=keyed_inputs.model,
@@ -67,5 +72,6 @@ def build_call_identity(
         prompt_fingerprint=text_checksum(keyed_inputs.prompt),
         input_file_fingerprints=input_file_fingerprints,
         client_args_fingerprint=client_args_fingerprint,
+        system_fingerprint=system_fingerprint,
         grants=frozenset(keyed_inputs.grants),
     )

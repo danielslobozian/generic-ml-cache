@@ -83,6 +83,27 @@ def test_different_prompt_fingerprint_produces_different_keys():
     )
 
 
+def test_different_system_fingerprint_produces_different_keys():
+    # A system prompt changes model behaviour, so it must change the key — the same
+    # soundness the API path already had, now in the managed path.
+    assert (
+        _make_identity(system_fingerprint="be terse").generate_key()
+        != _make_identity(system_fingerprint="be verbose").generate_key()
+    )
+
+
+def test_system_fingerprint_presence_changes_the_key():
+    assert (
+        _make_identity(system_fingerprint="sys").generate_key() != _make_identity().generate_key()
+    )
+
+
+def test_no_system_fingerprint_is_backward_compatible():
+    # A call that never set a system prompt keys identically to before the field
+    # existed (None is omitted from the key), so existing cache entries are preserved.
+    assert _make_identity(system_fingerprint=None).generate_key() == _make_identity().generate_key()
+
+
 def test_different_input_files_produce_different_keys():
     without_files = _make_identity()
     with_file = _make_identity(input_file_fingerprints={"/src/a.py": "sha_a"})

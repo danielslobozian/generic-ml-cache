@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 from generic_ml_cache_core.application.domain.service.cacheability import is_call_uncacheable
 
@@ -14,9 +14,9 @@ from generic_ml_cache_core.application.domain.service.cacheability import is_cal
 class ProbeCommand:
     """The input to the probe use case: the key-determining inputs only.
 
-    A probe is a read-only forecast, so it carries no run policy (no cache mode,
-    no persist/record flags, no system prompt). It exposes the same keyed fields a
-    run does, so both derive the same key from the shared builder.
+    A probe is a read-only forecast, so it carries no run *policy* (no cache mode,
+    no persist/record flags). It does carry every *keyed* input — including the
+    system prompt — so a probe and a run derive the same key from the shared builder.
     """
 
     client: str
@@ -24,6 +24,7 @@ class ProbeCommand:
     effort: str
     context: str
     prompt: str
+    user_system_prompt: Optional[str] = None
     input_file_paths: List[str] = field(default_factory=list)
     allow_paths: List[str] = field(default_factory=list)
     scan_trust: bool = False

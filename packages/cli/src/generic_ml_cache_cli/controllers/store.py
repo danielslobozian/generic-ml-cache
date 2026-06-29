@@ -82,6 +82,9 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
     context = _read_text_arg(args.context, args.context_file, "context")
     prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
+    system_prompt = (
+        _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
+    )
     if not prompt:
         raise SystemExit("error: a non-empty --prompt or --prompt-file is required")
     try:
@@ -97,6 +100,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
         effort=args.effort,
         context=context,
         prompt=prompt,
+        user_system_prompt=system_prompt,
         input_file_paths=_resolve_input_file_paths(args.input_file),
         allow_paths=_resolve_allow_paths(args.allow_path),
         scan_trust=bool(settings["trust_scan"][0]),

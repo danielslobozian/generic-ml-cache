@@ -72,6 +72,14 @@ def test_grants_become_a_frozenset():
     assert identity.grants == frozenset({"net", "read"})
 
 
+def test_user_system_prompt_is_fingerprinted_into_the_identity():
+    with_sys = build_call_identity(FakeFingerprint(), _command(user_system_prompt="be terse"))
+    without = build_call_identity(FakeFingerprint(), _command())
+    assert with_sys.system_fingerprint is not None
+    assert without.system_fingerprint is None
+    assert with_sys.generate_key() != without.generate_key()
+
+
 def test_key_is_deterministic():
     first = build_call_identity(FakeFingerprint(), _command()).generate_key()
     second = build_call_identity(FakeFingerprint(), _command()).generate_key()
