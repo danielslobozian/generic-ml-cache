@@ -47,7 +47,7 @@ dev = [
   "pytest-timeout",
   "coverage>=7",
   "ruff>=0.15",
-  "httpx2>=2.0",
+  "httpx>=0.27",
   "prometheus-client>=0.20",
   "import-linter>=2",
   "pyright>=1.1",
@@ -63,7 +63,7 @@ packages = ["src/generic_ml_cache_daemon"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=generic_ml_cache_daemon --cov-fail-under=80"
+addopts = "-ra --cov-branch --cov=generic_ml_cache_daemon --cov-fail-under=80"
 timeout = 60
 
 [tool.coverage.run]

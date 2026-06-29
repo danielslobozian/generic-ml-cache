@@ -147,7 +147,7 @@ def probe_all(
     return results
 
 
-def list_models(
+def list_models(  # noqa: C901
     name: str,
     executable: Optional[str] = None,
     timeout: float = 30.0,

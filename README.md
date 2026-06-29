@@ -26,7 +26,7 @@
 
 <br>
 
-[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Three packages](#three-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
+[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Four packages](#four-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
 
 </div>
 
@@ -74,7 +74,7 @@ It is **not** a gateway, **not** a multi-user router, and **not** a way to make 
 | Package | What it is | Install |
 |---|---|---|
 | [`generic-ml-cache-cli`](packages/cli) | the `gmlcache` terminal client | `pip install generic-ml-cache-cli` |
-| [`generic-ml-cache-core`](packages/core) | the hexagonal kernel — domain model, use cases, and port contracts; **zero runtime dependencies** | `pip install generic-ml-cache-core` |
+| [`generic-ml-cache-core`](packages/core) | the hexagonal kernel — domain model, use cases, and port contracts | `pip install generic-ml-cache-core` |
 | [`generic-ml-cache-adapters`](packages/adapters) | concrete port implementations — SQLite, filesystem, ML clients, API adapters, encryption | `pip install generic-ml-cache-adapters` |
 | [`generic-ml-cache-daemon`](packages/daemon) | local HTTP API over the cache store; Claude gateway proxy | `pip install generic-ml-cache-daemon` |
 

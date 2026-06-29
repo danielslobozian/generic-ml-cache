@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 
-from generic_ml_cache_core.stream import StreamWriter
+from generic_ml_cache_adapters.stream import StreamWriter
 
 
 def test_stream_writer_writes_event_to_file(tmp_path):

@@ -241,13 +241,16 @@ client = anthropic.Anthropic(api_key="…", base_url="http://127.0.0.1:8765/gate
 
 `gmlcache` is one inbound driver over
 [`generic-ml-cache-core`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/core)
-— the stateless engine that ships the domain model, use cases, ports, and every adapter.
-Embed it directly instead of driving it from a terminal:
+— the stateless engine that ships the domain model, use cases, and ports; the
+concrete adapters live in
+[`generic-ml-cache-adapters`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/adapters).
+Embed it by reusing this package's composition root (composition is a driver
+concern, never core's):
 
 ```python
 import sqlite3
 from pathlib import Path
-from generic_ml_cache_core import build_use_cases
+from generic_ml_cache_cli._compose import build_use_cases
 
 store = Path("/path/you/choose")
 store.mkdir(parents=True, exist_ok=True)

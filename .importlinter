@@ -133,3 +133,37 @@ modules =
     generic_ml_cache_adapters.adapter.out.storage
     generic_ml_cache_adapters.adapter.out.diagnostics
     generic_ml_cache_adapters.adapter.out.workspace
+
+# Rule 7 — package-level isolation: lower packages never import driver packages.
+# Adapters (infrastructure) and a driver must not reach "up" into another driver.
+# Freezes the current clean state so accidental coupling can't creep in later.
+[importlinter:contract:adapters-no-drivers]
+name = Adapters must not import driver packages
+type = forbidden
+source_modules =
+    generic_ml_cache_adapters
+forbidden_modules =
+    generic_ml_cache_cli
+    generic_ml_cache_daemon
+
+# Rule 8 — the daemon never imports the CLI (they are sibling drivers).
+[importlinter:contract:daemon-not-cli]
+name = Daemon must not import the CLI
+type = forbidden
+source_modules =
+    generic_ml_cache_daemon
+forbidden_modules =
+    generic_ml_cache_cli
+
+# Rule 9 — the CLI imports the daemon only through the optional lazy launcher
+# (`gmlcache daemon start`), guarded by an ImportError so the daemon stays an
+# optional dependency. No other CLI module may depend on the daemon.
+[importlinter:contract:cli-not-daemon]
+name = CLI must not import the daemon except the optional lazy launcher
+type = forbidden
+source_modules =
+    generic_ml_cache_cli
+forbidden_modules =
+    generic_ml_cache_daemon
+ignore_imports =
+    generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app

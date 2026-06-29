@@ -91,7 +91,7 @@ class CodexCliAdapter:
     def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
         return f"{context}\n\n{prompt}" if context else prompt
 
-    def parse_output(self, stdout: str) -> ParsedOutput:
+    def parse_output(self, stdout: str) -> ParsedOutput:  # noqa: C901
         """Codex's ``--json`` output is a JSON-lines *stream* of events, one per
         line. The answer text is the ``text`` of the final ``agent_message`` item;
         the usage is the ``usage`` block on the final ``turn.completed`` event.

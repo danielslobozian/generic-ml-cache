@@ -57,9 +57,15 @@ packages = ["src/generic_ml_cache_adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --cov=generic_ml_cache_adapters --cov-fail-under=80"
+addopts = "-ra --cov-branch --cov=generic_ml_cache_adapters --cov-fail-under=80"
 timeout = 60
 
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+extend-select = ["C901"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

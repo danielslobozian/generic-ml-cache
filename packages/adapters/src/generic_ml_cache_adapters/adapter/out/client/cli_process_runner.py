@@ -62,7 +62,7 @@ def _check_command_line_size(argv: List[str]) -> None:
         )
 
 
-def _communicate_streaming(
+def _communicate_streaming(  # noqa: C901
     proc: subprocess.Popen,
     stdin_text: Optional[str],
     timeout: float | None,
@@ -126,7 +126,7 @@ class CliProcessRunner:
     rather than an OS-level launch failure), then launches and collects.
     """
 
-    def run(
+    def run(  # noqa: C901
         self,
         argv: List[str],
         cwd: Path,
