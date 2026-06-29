@@ -16,6 +16,21 @@ is the single changelog for all of them; entries note which package(s) a change 
 
 ## [Unreleased]
 
+## [0.28.1] - 2026-06-29
+
+The first release of the `0.28` line to reach PyPI: `0.28.0` (and `0.27.0` before it)
+built correctly but failed to publish, so this patch carries the full `0.28.0` feature
+set plus the packaging fix that unblocks it.
+
+### Fixed
+
+- **Source distributions for `adapters` and `daemon` failed to build** (adapters,
+  daemon): their `LICENSE` and `NOTICE` were symlinks to the repo-root files, which
+  `python -m build` rejects when packing the sdist tarball
+  (`tarfile.LinkOutsideDestinationError`) — so the `adapters`/`daemon` builds died and
+  fail-fast cancelled the publish, leaving `0.27.0` and `0.28.0` unpublished. Replaced
+  the symlinks with real files, matching how `core` and `cli` already ship theirs.
+
 ## [0.28.0] - 2026-06-29
 
 The **hexagonal split**: every concrete adapter leaves `core` for a new fourth package,
