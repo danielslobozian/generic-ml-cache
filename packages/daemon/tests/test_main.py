@@ -4,8 +4,47 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
+
+from generic_ml_cache_daemon.__main__ import main
+
+
+def test_help_prints_usage_and_exits_without_starting_server() -> None:
+    # Regression: ``main()`` used to ignore argv and boot uvicorn, so ``--help``
+    # hung forever (it stalled the release smoke-install for 12 minutes). It must
+    # now print usage and exit 0 before any server starts.
+    with patch("uvicorn.run") as mock_run, pytest.raises(SystemExit) as exc:
+        main(["--help"])
+    assert exc.value.code == 0
+    assert not mock_run.called
+
+
+def test_module_invocation_help_exits_promptly() -> None:
+    # Exactly what the release workflow's smoke-install runs. Must return quickly,
+    # not block on a running server.
+    result = subprocess.run(
+        [sys.executable, "-m", "generic_ml_cache_daemon", "--help"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0
+    assert "usage:" in result.stdout
+
+
+def test_custom_host_and_port_flags(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path))
+    mock_run = MagicMock()
+    with patch("uvicorn.run", mock_run):
+        main(["--host", "0.0.0.0", "--port", "9999"])
+    _, kwargs = mock_run.call_args
+    assert kwargs["host"] == "0.0.0.0"
+    assert kwargs["port"] == 9999
 
 
 def test_main_calls_uvicorn_run_with_defaults(tmp_path: Path, monkeypatch) -> None:
@@ -17,7 +56,7 @@ def test_main_calls_uvicorn_run_with_defaults(tmp_path: Path, monkeypatch) -> No
     with patch("uvicorn.run", mock_run):
         from generic_ml_cache_daemon.__main__ import main
 
-        main()
+        main([])
 
     assert mock_run.called
     _, kwargs = mock_run.call_args
@@ -34,7 +73,7 @@ def test_main_passes_session_id_from_env(tmp_path: Path, monkeypatch) -> None:
     with patch("uvicorn.run", mock_run):
         from generic_ml_cache_daemon.__main__ import main
 
-        main()
+        main([])
 
     application_arg = mock_run.call_args[0][0]
     assert application_arg.state.session_id == "test-session-id"
@@ -49,7 +88,7 @@ def test_main_enables_metrics_from_env(tmp_path: Path, monkeypatch) -> None:
     with patch("uvicorn.run", mock_run):
         from generic_ml_cache_daemon.__main__ import main
 
-        main()
+        main([])
 
     application_arg = mock_run.call_args[0][0]
     assert application_arg.state.enable_metrics is True
