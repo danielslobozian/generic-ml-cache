@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 from pathlib import Path
@@ -46,7 +47,26 @@ def _parse_adapters(raw: str) -> Optional[FrozenSet[str]]:
     return frozenset(name.strip() for name in text.split(",") if name.strip())
 
 
-def main() -> None:
+def main(argv: Optional[list[str]] = None) -> None:
+    # Parse args first so ``--help`` prints usage and exits *before* any server
+    # starts. All cache behaviour is configured by GMLCACHE_* environment variables;
+    # the only flags are the bind host/port. ``argv`` defaults to ``sys.argv[1:]``;
+    # tests pass an explicit list so the runner's own argv is never parsed here.
+    parser = argparse.ArgumentParser(
+        prog="python -m generic_ml_cache_daemon",
+        description=(
+            "Run the generic-ml-cache HTTP daemon. Cache configuration is read from "
+            "GMLCACHE_* environment variables: GMLCACHE_STORE, GMLCACHE_SESSION, "
+            "GMLCACHE_METRICS, GMLCACHE_MAX_SIZE, GMLCACHE_MAX_AGE, "
+            "GMLCACHE_EVICTION_INTERVAL, GMLCACHE_ADAPTERS."
+        ),
+    )
+    parser.add_argument("--host", default=_DEFAULT_HOST, help="bind host (default: %(default)s)")
+    parser.add_argument(
+        "--port", type=int, default=_DEFAULT_PORT, help="bind port (default: %(default)s)"
+    )
+    args = parser.parse_args(argv)
+
     store_root = Path(os.environ.get("GMLCACHE_STORE", str(Path.home() / ".gmlcache")))
     session_id = os.environ.get("GMLCACHE_SESSION") or None
     enable_metrics = os.environ.get("GMLCACHE_METRICS", "").lower() in ("1", "true", "yes")
@@ -72,8 +92,8 @@ def main() -> None:
         eviction_interval=eviction_interval,
         whitelist=whitelist,
     )
-    uvicorn.run(application, host=_DEFAULT_HOST, port=_DEFAULT_PORT)
+    uvicorn.run(application, host=args.host, port=args.port)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

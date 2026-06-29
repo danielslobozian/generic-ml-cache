@@ -16,11 +16,28 @@ is the single changelog for all of them; entries note which package(s) a change 
 
 ## [Unreleased]
 
+## [0.28.2] - 2026-06-29
+
+The first `0.28` release to actually publish. `0.28.1` got further — all four
+packages built and passed `twine check` — but stalled in the release smoke-test,
+where `python -m generic_ml_cache_daemon --help` booted the server instead of
+printing help and hung the job. This patch makes the daemon entry point parse
+arguments. No functional change to the cache or the feature set.
+
+### Fixed
+
+- **`python -m generic_ml_cache_daemon --help` started the server and hung** (daemon):
+  the entry point ignored `argv` and called `uvicorn.run` unconditionally, so `--help`
+  (and the release workflow's smoke-install step that runs it) never returned. It now
+  parses arguments — `--help` prints usage and exits, and `--host` / `--port` override
+  the bind address — *before* any server starts.
+
 ## [0.28.1] - 2026-06-29
 
-The first release of the `0.28` line to reach PyPI: `0.28.0` (and `0.27.0` before it)
-built correctly but failed to publish, so this patch carries the full `0.28.0` feature
-set plus the packaging fix that unblocks it.
+Carries the full `0.28.0` feature set plus the packaging fix below — but it did not
+publish either: the build now succeeded, yet the release smoke-test hung on the daemon
+entry point (fixed in `0.28.2`). (`0.28.0` and `0.27.0` failed earlier still, at the
+build step.)
 
 ### Fixed
 
