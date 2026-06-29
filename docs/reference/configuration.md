@@ -66,7 +66,7 @@ cursor = /usr/local/bin/cursor
 
 Precedence per client: `--executable` flag > `[executables]` config entry > adapter's own `PATH` lookup.
 
-Unknown client names are accepted without warning — the adapter registry is extensible, and a key is only consulted when that client is launched.
+Unknown client names are accepted without warning — the adapter catalog is extensible, and a key is only consulted when that client is launched.
 
 ---
 

@@ -43,6 +43,7 @@ from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import 
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.migration_runner import run_migrations
 from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execution_kind_for
+from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
@@ -50,7 +51,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
     SelectAdapterForExecutionService,
 )
-from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
+from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
@@ -96,7 +97,10 @@ def _build_runners(
     timeout: Optional[float],
     stream_path: Optional[str],
     whitelist: Optional[FrozenSet[str]] = None,
-) -> Dict[ExecutionKind, RegisteredAdapter]:
+) -> Dict[str, RegisteredAdapter]:
+    # Keyed by client NAME: the service selects the adapter by command.client and
+    # dispatches the method by command.execution_kind. The CLI runs one selected
+    # client per invocation, so this is a one-entry map.
     catalog = catalog_for(whitelist)
     resolver = default_resolver()
     if kind is ExecutionKind.LOCAL_MANAGED:
@@ -105,30 +109,29 @@ def _build_runners(
             client, ExecutionKind.LOCAL_MANAGED
         )
         exe_override = executable_override(client) if executable_override else None
+        # One adapter instance answers both managed and passthrough for this client.
         cli_adapter = cast(
             RegisteredAdapter,
             resolver.resolve_local_client(
                 descriptor.adapter_id, exe_override, timeout, stream_path
             ),
         )
-        # One adapter instance handles both managed and passthrough execution.
-        return {
-            ExecutionKind.LOCAL_MANAGED: cli_adapter,
-            ExecutionKind.LOCAL_PASSTHROUGH: cli_adapter,
-        }
+        return {client: cli_adapter}
     if kind is ExecutionKind.API:
         assert client is not None
         descriptor = SelectAdapterForExecutionService(catalog).select(client, ExecutionKind.API)
-        return {
-            ExecutionKind.API: cast(
-                RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id)
-            )
-        }
+        return {client: cast(RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id))}
+    # No client selected: stub mode — every API client name is served by the
+    # in-process stub adapter (records/replays a canned response, no live call), so
+    # demos and cache tests can exercise the pipeline without real credentials.
     from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import (
         StubApiClientAdapter,
     )  # noqa: PLC0415
 
-    return {ExecutionKind.API: StubApiClientAdapter()}
+    stub = cast(RegisteredAdapter, StubApiClientAdapter())
+    return {
+        d.client_name: stub for d in catalog.list_adapters() if d.boundary is AdapterBoundary.API
+    }
 
 
 def build_use_cases(

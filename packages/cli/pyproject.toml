@@ -25,8 +25,8 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-    "generic-ml-cache-core>=0.27.0",
-    "generic-ml-cache-adapters>=0.27.0",
+    "generic-ml-cache-core==0.27.*",
+    "generic-ml-cache-adapters==0.27.*",
     "argcomplete>=3,<4",
 ]
 

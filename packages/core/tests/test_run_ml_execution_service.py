@@ -98,7 +98,7 @@ class TestRunClient:
         # The API path is the surviving MlRunnerPort.run() route; local kinds no
         # longer use it (they orchestrate via the workspace + LocalClientPort).
         runner = MagicMock()
-        svc = _make_svc(runners={ExecutionKind.API: runner})
+        svc = _make_svc(runners={"claude": runner})
         cmd = _cmd(kind=ExecutionKind.API, prompt="hello")
         svc._run_client(cmd)
         runner.run.assert_called_once()
@@ -107,7 +107,7 @@ class TestRunClient:
         expected = MagicMock()
         runner = MagicMock()
         runner.run.return_value = expected
-        svc = _make_svc(runners={ExecutionKind.API: runner})
+        svc = _make_svc(runners={"claude": runner})
         cmd = _cmd(kind=ExecutionKind.API, prompt="q")
         result = svc._run_client(cmd)
         assert result is expected
@@ -140,7 +140,7 @@ class TestRunClient:
         client.get_token_files.return_value = []
         client.execute_managed.return_value = ClientAnswer(exit_code=0, stdout="done", stderr="")
 
-        svc = _make_svc(runners={ExecutionKind.LOCAL_MANAGED: client}, workspace=workspace)
+        svc = _make_svc(runners={"claude": client}, workspace=workspace)
         result = svc._run_client(_cmd(kind=ExecutionKind.LOCAL_MANAGED, prompt="hi"))
 
         client.run.assert_not_called()  # the old path is bypassed
@@ -160,7 +160,7 @@ class TestRunClient:
             exit_code=7, stdout="out", stderr="err"
         )
 
-        svc = _make_svc(runners={ExecutionKind.LOCAL_PASSTHROUGH: client}, workspace=workspace)
+        svc = _make_svc(runners={"claude": client}, workspace=workspace)
         result = svc._run_client(
             _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, native_args=["-c", "x"])
         )

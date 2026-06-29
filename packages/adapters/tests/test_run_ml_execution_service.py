@@ -237,6 +237,50 @@ def _passthrough_command(**overrides) -> RunMlExecutionCommand:
     return RunMlExecutionCommand(**base)
 
 
+class _DispatchRunner:
+    """One fake that answers every execution kind by delegating to the kind-specific
+    fake — so the harness can wire a single client name to all three. (A real client
+    name has one boundary, so it answers only its own kinds; this is a test convenience
+    that lets the existing per-kind fakes and their assertions stay unchanged.)"""
+
+    name = "fake"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, managed, passthrough, api) -> None:
+        self._managed = managed
+        self._passthrough = passthrough
+        self._api = api
+
+    def stage_inputs(self, request, workspace) -> None:
+        self._managed.stage_inputs(request, workspace)
+
+    def execute_managed(self, request, workspace) -> ClientAnswer:
+        return self._managed.execute_managed(request, workspace)
+
+    def execute_passthrough(self, request) -> ClientAnswer:
+        return self._passthrough.execute_passthrough(request)
+
+    def run(self, request: MlRequest) -> ClientRunResult:
+        return self._api.run(request)
+
+
+class _AnyClientRunners(dict):
+    """A name->runner map that answers *every* client name with one dispatcher, so a
+    test need not enumerate client names. The real service receives an explicit map
+    with one entry per client it serves; tests just route everything to their fakes."""
+
+    def __init__(self, dispatcher: _DispatchRunner) -> None:
+        super().__init__()
+        self._dispatcher = dispatcher
+
+    def get(self, key, default=None):  # noqa: ARG002
+        return self._dispatcher
+
+
+def _runners_for(managed, passthrough, api) -> _AnyClientRunners:
+    return _AnyClientRunners(_DispatchRunner(managed, passthrough, api))
+
+
 class _Harness:
     def __init__(
         self,
@@ -252,11 +296,7 @@ class _Harness:
         self.metrics = FakeMetrics()
         self.service = RunMlExecutionService(
             FakeFileFingerprint(),
-            {
-                ExecutionKind.LOCAL_MANAGED: self.runner,
-                ExecutionKind.API: self.api,
-                ExecutionKind.LOCAL_PASSTHROUGH: self.passthrough,
-            },
+            _runners_for(self.runner, self.passthrough, self.api),
             self.blob,
             self.repo,
             self.metrics,
@@ -529,11 +569,7 @@ def _harness_with_quota(max_size: Optional[int]) -> tuple:
     spy = _SpyPurge()
     service = RunMlExecutionService(
         FakeFileFingerprint(),
-        {
-            ExecutionKind.LOCAL_MANAGED: harness.runner,
-            ExecutionKind.API: harness.api,
-            ExecutionKind.LOCAL_PASSTHROUGH: harness.passthrough,
-        },
+        _runners_for(harness.runner, harness.passthrough, harness.api),
         harness.blob,
         harness.repo,
         harness.metrics,
@@ -574,7 +610,7 @@ def test_eviction_not_triggered_on_failed_run():
     )
     failing_service = RunMlExecutionService(
         FakeFileFingerprint(),
-        {ExecutionKind.LOCAL_MANAGED: failing_harness.runner},
+        _runners_for(failing_harness.runner, failing_harness.passthrough, failing_harness.api),
         failing_harness.blob,
         failing_harness.repo,
         failing_harness.metrics,

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Dict, FrozenSet, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -30,8 +30,11 @@ _STDOUT = ArtifactType.STDOUT
 _STDERR = ArtifactType.STDERR
 
 
-def _build_command(body: RunBody) -> RunMlExecutionCommand:
-    kind = execution_kind_for(body.client)
+def _build_command(body: RunBody, whitelist: Optional[FrozenSet[str]]) -> RunMlExecutionCommand:
+    # Resolve the kind over the *whitelisted* catalog: an unknown or non-whitelisted
+    # client raises UnknownClient here, which the CacheError handler maps to 400 —
+    # the whitelist is enforced at /run, not only at /health.
+    kind = execution_kind_for(body.client, whitelist)
     return RunMlExecutionCommand(
         execution_kind=kind,
         client=body.client,
@@ -99,7 +102,7 @@ async def run(body: RunBody, request: Request) -> Any:
       ``complete`` event when the execution finishes.
     - Any other ``Accept`` → JSON: blocks until the execution completes.
     """
-    command = _build_command(body)
+    command = _build_command(body, request.app.state.whitelist)
     wired = request.app.state.wired
 
     if "text/event-stream" in request.headers.get("accept", ""):
