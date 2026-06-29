@@ -17,9 +17,12 @@ class MessageParam(BaseModel):
 
 
 class MessagesRequest(BaseModel):
-    # Ignore unknown fields (e.g. `metadata`, `stream`) so real Claude Code
-    # traffic doesn't fail validation on fields the gateway doesn't use yet.
-    model_config = ConfigDict(extra="ignore")
+    # Keep unknown fields (`temperature`, `top_p`, `tools`, `stop_sequences`,
+    # `metadata`, `stream`, `thinking`, …) so the gateway forwards them upstream
+    # verbatim and keys them — a transparent proxy must never silently drop a field
+    # the caller sent. The named fields below are validated; everything else passes
+    # through via ``extra="allow"``.
+    model_config = ConfigDict(extra="allow")
 
     model: str
     messages: List[MessageParam]

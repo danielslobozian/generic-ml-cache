@@ -12,10 +12,11 @@ from generic_ml_cache_core.application.domain.model.gateway.gateway_request impo
 
 def _make_request():
     return GatewayRequest(
-        model="claude-3-5-sonnet-20241022",
-        messages=[{"role": "user", "content": "hello"}],
-        system=None,
-        max_tokens=1024,
+        body={
+            "model": "claude-3-5-sonnet-20241022",
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 1024,
+        }
     )
 
 

@@ -115,6 +115,19 @@ def test_gateway_command_carries_system(tmp_path: Path) -> None:
         assert command.gateway_request.system == "You are a helpful assistant."
 
 
+def test_gateway_command_keeps_extra_request_fields(tmp_path: Path) -> None:
+    # extra="allow": temperature/tools/… survive into the body the gateway forwards
+    # and keys — the proxy never drops a field the caller sent. The gmlcache
+    # session id rides in the URL, not the body, so it is excluded.
+    with _patched_client(tmp_path, _make_gateway_response()) as tc:
+        body = {**_SINGLE_TURN, "temperature": 0.3, "tools": [{"name": "search"}]}
+        tc.post(_URL, json=body)
+        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
+        assert command.gateway_request.body["temperature"] == 0.3
+        assert command.gateway_request.body["tools"] == [{"name": "search"}]
+        assert "session_id" not in command.gateway_request.body
+
+
 def test_gateway_session_id_from_url_path(tmp_path: Path) -> None:
     with _patched_client(tmp_path, _make_gateway_response()) as tc:
         tc.post(_URL, json=_SINGLE_TURN)

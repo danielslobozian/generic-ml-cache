@@ -14,10 +14,11 @@ from generic_ml_cache_core.application.usecase.run_ml_gateway_service import Run
 
 def _make_request(model="claude-3-5-sonnet-20241022"):
     return GatewayRequest(
-        model=model,
-        messages=[{"role": "user", "content": "hello"}],
-        system=None,
-        max_tokens=1024,
+        body={
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 1024,
+        }
     )
 
 

@@ -5,13 +5,28 @@ import json
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import GatewayRequest
 
 
-def _make(model="claude-3-5-sonnet-20241022", messages=None, system=None, max_tokens=1024):
-    return GatewayRequest(
-        model=model,
-        messages=messages or [{"role": "user", "content": "hi"}],
-        system=system,
-        max_tokens=max_tokens,
-    )
+def _make(model="claude-3-5-sonnet-20241022", messages=None, system=None, max_tokens=1024, **extra):
+    body = {
+        "model": model,
+        "messages": messages or [{"role": "user", "content": "hi"}],
+        "max_tokens": max_tokens,
+    }
+    if system is not None:
+        body["system"] = system
+    body.update(extra)
+    return GatewayRequest(body=body)
+
+
+class TestAccessors:
+    def test_named_accessors_read_from_body(self):
+        req = _make(system="s", max_tokens=42)
+        assert req.model == "claude-3-5-sonnet-20241022"
+        assert req.messages == [{"role": "user", "content": "hi"}]
+        assert req.system == "s"
+        assert req.max_tokens == 42
+
+    def test_model_defaults_to_empty_when_absent(self):
+        assert GatewayRequest(body={}).model == ""
 
 
 class TestGenerateCacheKey:
@@ -30,15 +45,29 @@ class TestGenerateCacheKey:
         r2 = _make(messages=[{"role": "user", "content": "b"}])
         assert r1.generate_cache_key() != r2.generate_cache_key()
 
-    def test_max_tokens_excluded_from_key(self):
+    def test_max_tokens_included_in_key(self):
+        # A smaller cap can truncate the output, so a different max_tokens is a
+        # different request and must produce a different key.
         r1 = _make(max_tokens=100)
         r2 = _make(max_tokens=9000)
-        assert r1.generate_cache_key() == r2.generate_cache_key()
+        assert r1.generate_cache_key() != r2.generate_cache_key()
 
     def test_system_included_in_key(self):
         r1 = _make(system="be concise")
         r2 = _make(system=None)
         assert r1.generate_cache_key() != r2.generate_cache_key()
+
+    def test_extra_fields_change_the_key(self):
+        # temperature/top_p/tools/… are semantic; differing in any must miss the cache.
+        assert (
+            _make(temperature=0.0).generate_cache_key()
+            != _make(temperature=1.0).generate_cache_key()
+        )
+
+    def test_tools_change_the_key(self):
+        assert (
+            _make(tools=[{"name": "search"}]).generate_cache_key() != _make().generate_cache_key()
+        )
 
 
 class TestSerializeRequest:
@@ -54,6 +83,13 @@ class TestSerializeRequest:
         req = _make(system="be brief")
         body = json.loads(req.serialize_request())
         assert body["system"] == "be brief"
+
+    def test_forwards_extra_fields_verbatim(self):
+        req = _make(temperature=0.7, tools=[{"name": "x"}], stop_sequences=["END"])
+        body = json.loads(req.serialize_request())
+        assert body["temperature"] == 0.7
+        assert body["tools"] == [{"name": "x"}]
+        assert body["stop_sequences"] == ["END"]
 
     def test_returns_bytes(self):
         assert isinstance(_make().serialize_request(), bytes)

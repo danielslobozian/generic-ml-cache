@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
@@ -19,41 +19,45 @@ _ANTHROPIC_CLIENT = "anthropic"
 class GatewayRequest:
     """The incoming request to the caching gateway proxy.
 
-    Holds the raw wire-level fields as received from the API client.
-    ``generate_cache_key`` is the single source of truth for the cache key
-    produced from this request.
+    Holds the *entire* request body as received from the API client. A transparent
+    proxy must neither drop nor reorder fields: every field the caller sent is
+    forwarded upstream verbatim, and every field is part of the cache identity — so
+    two requests that differ in any way (``temperature``, ``tools``, ``stop_sequences``,
+    ``max_tokens`` …) never collide on one cached response.
     """
 
-    model: str
-    messages: list
-    system: Optional[object]
-    max_tokens: int
+    body: Mapping[str, Any]
+
+    @property
+    def model(self) -> str:
+        value = self.body.get("model")
+        return value if isinstance(value, str) else ""
+
+    @property
+    def messages(self) -> Any:
+        return self.body.get("messages")
+
+    @property
+    def system(self) -> Any:
+        return self.body.get("system")
+
+    @property
+    def max_tokens(self) -> Any:
+        return self.body.get("max_tokens")
 
     def generate_cache_key(self) -> str:
-        """Return a deterministic SHA-256 hex key for this request.
+        """Return a deterministic SHA-256 hex key over the *whole* request body.
 
-        Only the semantic fields that determine the response are hashed:
-        ``model``, ``messages``, and ``system``. ``max_tokens`` is excluded
-        because a different token cap does not produce a semantically different
-        cached response.
+        Every field the caller sent can change the response (or is part of wire
+        fidelity), so none is silently dropped from the key — soundness over
+        hit-rate. ``max_tokens`` is included: a smaller cap can truncate the output.
         """
-        payload = json.dumps(
-            {"model": self.model, "messages": self.messages, "system": self.system},
-            sort_keys=True,
-            ensure_ascii=False,
-        )
+        payload = json.dumps(dict(self.body), sort_keys=True, ensure_ascii=False)
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def serialize_request(self) -> bytes:
-        """Return the upstream JSON request body."""
-        request_body: dict = {
-            "model": self.model,
-            "messages": self.messages,
-            "max_tokens": self.max_tokens,
-        }
-        if self.system is not None:
-            request_body["system"] = self.system
-        return json.dumps(request_body, sort_keys=True).encode("utf-8")
+        """Return the upstream JSON request body — the caller's body, verbatim."""
+        return json.dumps(dict(self.body), sort_keys=True).encode("utf-8")
 
     def request_model(self) -> str:
         """Return the model identifier used for metrics."""

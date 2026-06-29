@@ -41,12 +41,11 @@ async def proxy_messages(session_id: str, body: MessagesRequest, request: Reques
     """
     forward_headers = {k: v for k, v in request.headers.items() if k not in _HOP_BY_HOP}
     api_token = request.headers.get("x-api-key", "")
-    gateway_request = GatewayRequest(
-        model=body.model,
-        messages=[m.model_dump() for m in body.messages],
-        system=body.system,
-        max_tokens=body.max_tokens,
-    )
+    # Forward the caller's body verbatim — every field, validated or not, is kept
+    # (extra="allow") so nothing is dropped upstream or from the cache key. The
+    # gmlcache session id rides in the URL path, not the upstream body, so it is
+    # excluded; max_tokens carries its validated default when the caller omits it.
+    gateway_request = GatewayRequest(body=body.model_dump(exclude={"session_id"}))
     command = RunMlGatewayCommand(
         gateway_request=gateway_request,
         api_token=api_token,
