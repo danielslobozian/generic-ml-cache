@@ -455,7 +455,7 @@ def _cmd_exists(name: str) -> bool:
 def _github_pr_section() -> str:
     """Return PR status for the current branch using the gh CLI."""
     raw = _run(
-        ["gh", "pr", "view", "--json", "number,url,comments,statusCheckRollup"],
+        ["gh", "pr", "view", "--json", "number,url,comments,statusCheckRollup,state"],
         timeout=5,
     )
     if not raw:
@@ -463,6 +463,9 @@ def _github_pr_section() -> str:
     try:
         pr: dict = json.loads(raw)
     except json.JSONDecodeError:
+        return ""
+
+    if pr.get("state", "OPEN") != "OPEN":
         return ""
 
     number = pr.get("number", "")
@@ -548,6 +551,14 @@ def pr_section() -> str:
     elif _cmd_exists("glab"):
         line = _gitlab_mr_section()
     else:
+        return ""
+
+    if not line:
+        # PR closed/merged or no PR — clear stale cache immediately.
+        try:
+            _PR_CACHE.unlink(missing_ok=True)
+        except OSError:
+            pass
         return ""
 
     # Only cache when we have check data — an empty checks result is transient

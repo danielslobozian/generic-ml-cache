@@ -47,7 +47,7 @@ def test_command_line_size_guard_is_legible_and_platform_aware():
     # real limit, so the test sizes its oversize argument against that limit -- it
     # behaves correctly on Linux (per-arg), Windows and macOS (total).
     from generic_ml_cache_core.common.errors import CommandLineTooLong
-    from generic_ml_cache_adapters.adapter.out.client.isolation import (
+    from generic_ml_cache_adapters.adapter.out.client.cli_process_runner import (
         _check_command_line_size,
         _command_line_limit,
     )

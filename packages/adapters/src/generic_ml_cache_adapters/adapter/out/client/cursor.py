@@ -11,24 +11,39 @@ from __future__ import annotations
 import json
 from typing import List, Optional
 
-from generic_ml_cache_core.adapter.registry import adapter
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
+from generic_ml_cache_core.application.domain.model.run.client_config import GrantConfigFile
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
-from generic_ml_cache_core.application.port.out.base import (
-    ModelInfo,
+
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
 )
-
-from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
-    AbstractManagedLocalAdapter,
-)
+from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 
 
-@adapter
-class CursorAdapter(AbstractManagedLocalAdapter):
+class CursorCliAdapter:
+    """Adapter for the Cursor agent CLI. Composes a CliRuntime and supplies only
+    Cursor's translation hooks (including its own model-listing)."""
+
     name = "cursor"
     default_executable = "cursor-agent"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+        wire_cli_client(self, executable_override, timeout, stream_path)
+
+    @classmethod
+    def descriptor(cls):
+        return local_cli_descriptor(
+            "cursor", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Cursor Agent"
+        )
 
     def build_argv(
         self,
@@ -130,8 +145,8 @@ class CursorAdapter(AbstractManagedLocalAdapter):
         # Verified against cursor-agent --print on the live CLI.
         return ["--trust"]
 
-    def grant_setup(self, run_dir, config_home, grants):
-        # Uniform door: write $CURSOR_CONFIG_DIR/cli-config.json so the FILE enables
+    def build_grants_config_file(self, grants):
+        # Uniform door: $CURSOR_CONFIG_DIR/cli-config.json so the FILE enables
         # capabilities. The project-level permission file was stripped by a security
         # fix (GHSA-v64q-396f-7m79), so we redirect the config home instead. Write
         # is always on (the record-path guarantee). Cursor has no file-level read
@@ -152,10 +167,21 @@ class CursorAdapter(AbstractManagedLocalAdapter):
             if tok not in seen:
                 seen.add(tok)
                 ordered.append(tok)
-        config_home.mkdir(parents=True, exist_ok=True)
         config = {"version": 1, "permissions": {"allow": ordered}}
-        (config_home / "cli-config.json").write_text(json.dumps(config), encoding="utf-8")
-        return {"CURSOR_CONFIG_DIR": str(config_home)}
+        return GrantConfigFile(
+            file_name="cli-config.json", content=json.dumps(config).encode("utf-8")
+        )
+
+    def get_token_files(self):
+        return []  # Cursor seeds no credentials into its config home
+
+    def config_home_env_var(self):
+        return "CURSOR_CONFIG_DIR"
+
+    def stdin_payload(self, context, prompt, system_prompt):
+        # cursor-agent has no stdin prompt path; the prompt rides as the trailing
+        # argv positional (see build_argv), so nothing is delivered on stdin.
+        return None
 
     def grant_argv(self, grants):
         # Cursor's sandbox blocks external network egress and its sandbox.json
@@ -211,3 +237,7 @@ class CursorAdapter(AbstractManagedLocalAdapter):
         if t == "result":
             return {"kind": "result"}
         return None
+
+
+# Backward-compatible alias.
+CursorAdapter = CursorCliAdapter

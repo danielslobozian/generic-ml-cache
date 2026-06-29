@@ -10,24 +10,38 @@ lets you point at any binary.
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from generic_ml_cache_core.adapter.registry import adapter
-from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
-from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
-from generic_ml_cache_core.application.port.out.base import ensure_trailing_newline
-
-from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
-    AbstractManagedLocalAdapter,
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
 )
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
+from generic_ml_cache_core.application.domain.model.run.client_config import (
+    CredentialFile,
+    GrantConfigFile,
+)
+from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.output_parsing import ensure_trailing_newline
+from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 
 
-@adapter
-class CodexAdapter(AbstractManagedLocalAdapter):
+class CodexCliAdapter:
+    """Adapter for OpenAI's Codex CLI. Composes a CliRuntime and supplies only
+    Codex's translation hooks."""
+
     name = "codex"
     default_executable = "codex"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+        wire_cli_client(self, executable_override, timeout, stream_path)
+
+    @classmethod
+    def descriptor(cls):
+        return local_cli_descriptor("codex", {ClientCapability.RUN}, "OpenAI Codex")
 
     def build_argv(
         self,
@@ -125,29 +139,29 @@ class CodexAdapter(AbstractManagedLocalAdapter):
             )
         return ParsedOutput(text=ensure_trailing_newline(answer), usage=usage)
 
-    def grant_setup(self, run_dir, config_home, grants):
-        # Uniform door: write $CODEX_HOME/config.toml so the FILE enables
-        # capabilities. The run folder is untrusted (a fresh temp dir), so a
-        # folder-local .codex/config.toml would be skipped -- we redirect the home
-        # instead and seed auth.json into it. workspace-write is always on (the
-        # record-path guarantee); it already permits read + shell, so granting
-        # those needs nothing extra (Codex exposes no file-level read/shell *deny*
-        # -- a documented limit, not a door we close). net flips network_access on;
+    def build_grants_config_file(self, grants):
+        # Uniform door: $CODEX_HOME/config.toml so the FILE enables capabilities.
+        # The run folder is untrusted (a fresh temp dir), so a folder-local
+        # .codex/config.toml would be skipped -- we redirect the home instead and
+        # seed auth.json into it. workspace-write is always on (the record-path
+        # guarantee); it already permits read + shell, so granting those needs
+        # nothing extra (Codex exposes no file-level read/shell *deny* -- a
+        # documented limit, not a door we close). net flips network_access on;
         # web-search sets web_search=live. The cache enables (docs/reference/grants.md).
         lines = ['approval_policy = "never"', 'sandbox_mode = "workspace-write"']
         if "web-search" in grants:
             lines.append('web_search = "live"')
         if "net" in grants:
             lines += ["[sandbox_workspace_write]", "network_access = true"]
-        config_home.mkdir(parents=True, exist_ok=True)
-        (config_home / "config.toml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        content = ("\n".join(lines) + "\n").encode("utf-8")
+        return GrantConfigFile(file_name="config.toml", content=content)
+
+    def get_token_files(self):
         auth = Path.home() / ".codex" / "auth.json"
-        if auth.is_file():
-            try:
-                shutil.copy2(auth, config_home / "auth.json")
-            except OSError:
-                pass  # best-effort; an env API key still authenticates the run
-        return {"CODEX_HOME": str(config_home)}
+        return [CredentialFile(source=auth, target_name="auth.json")] if auth.is_file() else []
+
+    def config_home_env_var(self):
+        return "CODEX_HOME"
 
     def stream_event(self, raw_line):
         try:
@@ -172,3 +186,7 @@ class CodexAdapter(AbstractManagedLocalAdapter):
                 if it:
                     return {"kind": "tool", "name": it}
         return None
+
+
+# Backward-compatible alias.
+CodexAdapter = CodexCliAdapter

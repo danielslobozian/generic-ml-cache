@@ -40,16 +40,20 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
     FilesystemStoreLock,
 )
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
+from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_core.adapter.registry import get_adapter
+from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execution_kind_for
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
+    SelectAdapterForExecutionService,
+)
 from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
@@ -92,31 +96,34 @@ def _build_runners(
     timeout: Optional[float],
     stream_path: Optional[str],
     whitelist: Optional[FrozenSet[str]] = None,
-) -> Dict[ExecutionKind, MlRunnerPort]:
+) -> Dict[ExecutionKind, RegisteredAdapter]:
+    catalog = catalog_for(whitelist)
+    resolver = default_resolver()
     if kind is ExecutionKind.LOCAL_MANAGED:
-        from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (  # noqa: PLC0415
-            AbstractManagedLocalAdapter,
-        )
-        from generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter import (  # noqa: PLC0415
-            AbstractPassthroughLocalAdapter,
-        )
-        from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: PLC0415
-
         assert client is not None
-        registered = get_adapter(client, whitelist=whitelist)
-        cls = cast(type[AbstractManagedLocalAdapter], type(registered))
-        exe_override = executable_override(client) if executable_override else None
-        managed = cls(executable_override=exe_override, timeout=timeout, stream_path=stream_path)
-        passthrough = AbstractPassthroughLocalAdapter(
-            cast(ClientAdapter, registered), exe_override, timeout
+        descriptor = SelectAdapterForExecutionService(catalog).select(
+            client, ExecutionKind.LOCAL_MANAGED
         )
+        exe_override = executable_override(client) if executable_override else None
+        cli_adapter = cast(
+            RegisteredAdapter,
+            resolver.resolve_local_client(
+                descriptor.adapter_id, exe_override, timeout, stream_path
+            ),
+        )
+        # One adapter instance handles both managed and passthrough execution.
         return {
-            ExecutionKind.LOCAL_MANAGED: managed,
-            ExecutionKind.LOCAL_PASSTHROUGH: passthrough,
+            ExecutionKind.LOCAL_MANAGED: cli_adapter,
+            ExecutionKind.LOCAL_PASSTHROUGH: cli_adapter,
         }
     if kind is ExecutionKind.API:
         assert client is not None
-        return {ExecutionKind.API: get_adapter(client, whitelist=whitelist)}
+        descriptor = SelectAdapterForExecutionService(catalog).select(client, ExecutionKind.API)
+        return {
+            ExecutionKind.API: cast(
+                RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id)
+            )
+        }
     from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import (
         StubApiClientAdapter,
     )  # noqa: PLC0415
@@ -136,8 +143,6 @@ def build_use_cases(
     whitelist: Optional[FrozenSet[str]] = None,
     diag: Optional[DiagnosticsPort] = None,
 ) -> WiredUseCases:
-    from generic_ml_cache_core.adapter.registry import resolve_execution_kind  # noqa: PLC0415
-
     store_root = Path(store_root)
     _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
     _recover_store(store_root)
@@ -147,7 +152,7 @@ def build_use_cases(
     repository = ExecutionRepository(conn_factory, clock)
     metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
-    kind = resolve_execution_kind(client, whitelist=whitelist) if client is not None else None
+    kind = execution_kind_for(client, whitelist) if client is not None else None
     runners = _build_runners(
         client, kind, executable_override, timeout, stream_path, whitelist=whitelist
     )
@@ -169,6 +174,7 @@ def build_use_cases(
             metrics,
             purge_service=purge,
             max_size=max_size,
+            workspace=FilesystemWorkspace(),
             diag=_diag,
         ),
         probe=ProbeService(file_fingerprint, repository),

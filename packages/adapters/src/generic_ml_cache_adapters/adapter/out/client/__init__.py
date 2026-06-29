@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Client adapters.
 
-Built-in adapters carry the ``@adapter`` decorator and are discovered
-automatically by the unified registry scanner.  No explicit registration here.
+Built-in adapters declare themselves via the ``gmlcache.adapters`` entry-point
+group and a ``descriptor()`` classmethod; the discovery layer (catalogs and
+resolvers) finds and constructs them.
 """
 
 from __future__ import annotations
 
-from generic_ml_cache_core.adapter.registry import get_adapter, register, registered_names
-from generic_ml_cache_core.application.port.out.base import ClientAdapter
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import CliRuntime, wire_cli_client
 
-__all__ = ["ClientAdapter", "get_adapter", "register", "registered_names"]
+__all__ = ["CliRuntime", "wire_cli_client"]

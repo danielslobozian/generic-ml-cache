@@ -28,10 +28,11 @@ class GeneratedFile:
 
 @dataclass(frozen=True)
 class ClientRunResult:
-    """The raw, transient result the ClientRunnerPort returns.
+    """The raw, transient result of a client run, assembled by the use case.
 
-    The contract surface of the runner port — not an adapter-internal type — but
-    nothing here is stored yet. The use case turns this into stored Artifacts
+    For a managed run the use case combines the adapter's ClientAnswer with the
+    files captured from the workspace into this; an API run maps its reply here
+    directly. Nothing here is stored yet: the use case turns this into Artifacts
     (hash each piece, put it in the blob store) and assembles the MlExecution.
     The runner itself never hashes, never computes a key, never stores.
 

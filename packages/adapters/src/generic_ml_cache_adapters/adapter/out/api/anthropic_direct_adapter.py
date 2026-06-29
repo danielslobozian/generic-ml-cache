@@ -10,7 +10,9 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-from generic_ml_cache_core.adapter.registry import adapter
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
@@ -19,11 +21,12 @@ from generic_ml_cache_core.application.domain.model.usage.usage import int_or_no
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 
+from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
+
 _BASE_URL = "https://api.anthropic.com/v1"
 _API_VERSION = "2023-06-01"
 
 
-@adapter
 class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
     """Calls Anthropic's Messages API using stdlib urllib.
 
@@ -36,6 +39,12 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
 
     name = "anthropic"
     _DEFAULT_MAX_TOKENS = 8192
+
+    @classmethod
+    def descriptor(cls):
+        return api_descriptor(
+            "anthropic", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Anthropic API"
+        )
 
     def __init__(
         self,

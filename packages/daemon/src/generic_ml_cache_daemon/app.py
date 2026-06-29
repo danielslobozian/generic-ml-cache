@@ -43,12 +43,16 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
     FilesystemStoreLock,
 )
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
+from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_core.adapter.registry import get_adapter, resolve_execution_kind
+from generic_ml_cache_adapters.discovery.composition import default_catalog, default_resolver
+from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
+    SelectAdapterForExecutionService,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.inbound.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
@@ -158,22 +162,18 @@ def create_app(
     _repository = ExecutionRepository(_conn_factory, _clock)
     _metrics = JournalMetrics(AccessRegistry(_conn_factory, diag=_diag))
     _file_fingerprint = FilesystemFileFingerprint()
-    _kind = resolve_execution_kind("claude")
-    from generic_ml_cache_adapters.adapter.out.client.abstract_managed_local_adapter import (
-        AbstractManagedLocalAdapter,
-    )  # noqa: PLC0415
-    from generic_ml_cache_adapters.adapter.out.client.abstract_passthrough_local_adapter import (
-        AbstractPassthroughLocalAdapter,
-    )  # noqa: PLC0415
-    from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: PLC0415
-
-    _registered = get_adapter("claude")
-    _cls = cast(type[AbstractManagedLocalAdapter], type(_registered))
-    _managed = _cls(executable_override=None, timeout=None, stream_path=None)
-    _passthrough = AbstractPassthroughLocalAdapter(cast(ClientAdapter, _registered), None, None)
-    _runners: dict[ExecutionKind, MlRunnerPort] = {
-        ExecutionKind.LOCAL_MANAGED: _managed,
-        ExecutionKind.LOCAL_PASSTHROUGH: _passthrough,
+    # Select claude's adapter from the catalog and resolve it to an instance.
+    _descriptor = SelectAdapterForExecutionService(default_catalog()).select(
+        "claude", ExecutionKind.LOCAL_MANAGED
+    )
+    _cli_adapter = cast(
+        RegisteredAdapter,
+        default_resolver().resolve_local_client(_descriptor.adapter_id),
+    )
+    # One adapter instance handles both managed and passthrough execution.
+    _runners: dict[ExecutionKind, RegisteredAdapter] = {
+        ExecutionKind.LOCAL_MANAGED: _cli_adapter,
+        ExecutionKind.LOCAL_PASSTHROUGH: _cli_adapter,
     }
     _purge = PurgeService(_repository, _blob_store, _metrics, diag=_diag)
     _gateway_forward = HttpGatewayForwardAdapter()
@@ -193,6 +193,7 @@ def create_app(
             _metrics,
             purge_service=_purge,
             max_size=max_size,
+            workspace=FilesystemWorkspace(),
             diag=_diag,
         ),
         probe=ProbeService(_file_fingerprint, _repository),

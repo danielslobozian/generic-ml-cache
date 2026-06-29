@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import pytest
@@ -25,14 +26,15 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
+from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
+from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.client_runner_port import ClientRunnerPort
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
+from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import CacheMiss
@@ -43,18 +45,53 @@ class FixedClock(ClockPort):
         return datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
 
 
-class FakeClientRunner(ClientRunnerPort):
+def _as_answer(result: ClientRunResult) -> ClientAnswer:
+    return ClientAnswer(
+        exit_code=result.exit_code,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        token_usage=result.token_usage,
+    )
+
+
+class FakeWorkspace(WorkspacePort):
+    """A no-op workspace: the managed use case drives it, but these tests assert on
+    stdout/exit/cache behavior, not captured artifacts, so capture returns nothing."""
+
+    def create(self) -> Workspace:
+        return Workspace(run_dir=Path("/run"), config_home=Path("/home"))
+
+    def write_config(self, workspace, config_file) -> None:
+        pass
+
+    def seed_credentials(self, workspace, credentials) -> None:
+        pass
+
+    def snapshot(self, run_dir) -> Snapshot:
+        return Snapshot()
+
+    def capture(self, run_dir, baseline) -> List:
+        return []
+
+    def dispose(self, workspace) -> None:
+        pass
+
+
+class FakeClientRunner:
     name = "fake-managed"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
 
     def __init__(self, *results: ClientRunResult) -> None:
         self._results = list(results) or [ClientRunResult(exit_code=0, stdout="managed out\n")]
-        self.calls: List[MlRequest] = []
+        self.calls: List = []
 
-    def run(self, request: MlRequest) -> ClientRunResult:
+    def stage_inputs(self, request, workspace) -> None:
+        pass
+
+    def execute_managed(self, request, workspace) -> ClientAnswer:
         self.calls.append(request)
-        if len(self._results) > 1:
-            return self._results.pop(0)
-        return self._results[0]
+        result = self._results.pop(0) if len(self._results) > 1 else self._results[0]
+        return _as_answer(result)
 
 
 class FakeApiClient(ApiClientPort):
@@ -73,22 +110,18 @@ class FakeApiClient(ApiClientPort):
         return self._results[0]
 
 
-class FakePassthroughRunner(MlRunnerPort):
+class FakePassthroughRunner:
     name = "fake-pass"
+    execution_kind = ExecutionKind.LOCAL_PASSTHROUGH
 
     def __init__(self, *results: ClientRunResult) -> None:
         self._results = list(results) or [ClientRunResult(exit_code=0, stdout="native out\n")]
-        self.calls: List[MlRequest] = []
+        self.calls: List = []
 
-    @property
-    def execution_kind(self) -> ExecutionKind:
-        return ExecutionKind.LOCAL_PASSTHROUGH
-
-    def run(self, request: MlRequest) -> ClientRunResult:
+    def execute_passthrough(self, request) -> ClientAnswer:
         self.calls.append(request)
-        if len(self._results) > 1:
-            return self._results.pop(0)
-        return self._results[0]
+        result = self._results.pop(0) if len(self._results) > 1 else self._results[0]
+        return _as_answer(result)
 
 
 class FakeFileFingerprint(FileFingerprintPort):
@@ -207,7 +240,7 @@ def _passthrough_command(**overrides) -> RunMlExecutionCommand:
 class _Harness:
     def __init__(
         self,
-        client_runner: Optional[ClientRunnerPort] = None,
+        client_runner: Optional[FakeClientRunner] = None,
         api_client: Optional[ApiClientPort] = None,
         passthrough_runner: Optional[FakePassthroughRunner] = None,
     ) -> None:
@@ -227,6 +260,7 @@ class _Harness:
             self.blob,
             self.repo,
             self.metrics,
+            workspace=FakeWorkspace(),
         )
 
 
@@ -505,6 +539,7 @@ def _harness_with_quota(max_size: Optional[int]) -> tuple:
         harness.metrics,
         purge_service=spy,
         max_size=max_size,
+        workspace=FakeWorkspace(),
     )
     return service, spy
 
@@ -545,6 +580,7 @@ def test_eviction_not_triggered_on_failed_run():
         failing_harness.metrics,
         purge_service=spy,
         max_size=1_000_000,
+        workspace=FakeWorkspace(),
     )
     failing_service.execute(_managed_command())
     assert spy.evict_calls == []

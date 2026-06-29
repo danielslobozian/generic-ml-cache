@@ -6,9 +6,15 @@ import json
 import sys
 from typing import List, Optional
 
-from generic_ml_cache_cli import register
-from generic_ml_cache_core.application.port.out.base import ClientAdapter, ModelInfo
+from generic_ml_cache_cli.discovery import register
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
+    ClientCapability,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
+from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 from generic_ml_cache_cli.cli import main
 from generic_ml_cache_adapters.adapter.out.client.discover import list_models
 
@@ -55,11 +61,19 @@ def test_list_models_unsupported_for_fake():
     assert "no model-listing" in (ml.reason or "")
 
 
-class _ListingAdapter(ClientAdapter):
+class _ListingAdapter:
     """A present client that can enumerate two models, via the interpreter."""
 
     name = "fakelist"
     default_executable = sys.executable
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+        wire_cli_client(self, executable_override, timeout, stream_path)
+
+    @classmethod
+    def descriptor(cls):
+        return local_cli_descriptor("fakelist", {ClientCapability.LIST_MODELS}, "Fake List")
 
     def build_argv(self, *a, **k) -> List[str]:  # pragma: no cover - unused here
         raise NotImplementedError
@@ -79,7 +93,7 @@ class _ListingAdapter(ClientAdapter):
 
 
 def test_list_models_success_relay():
-    register(_ListingAdapter())
+    register(_ListingAdapter)
     ml = list_models("fakelist")
     assert ml.present is True and ml.supported is True
     assert [m.id for m in ml.models] == ["m-one", "m-two"]

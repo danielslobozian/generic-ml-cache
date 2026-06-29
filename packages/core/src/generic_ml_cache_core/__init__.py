@@ -33,8 +33,8 @@ Internal paths may change in any release, including patch releases.
 
 - :class:`WiredUseCases` — typed container of wired use-case references
 - :class:`RunMlExecutionCommand` — inbound command value object
-- :class:`ClientAdapter` / :class:`MlRunnerPort` — adapter contracts
-- :func:`register` / :func:`get_adapter` — adapter registry
+- :class:`MlRunnerPort` — outbound runner contract
+- :class:`AdapterCatalogPort` — the injected adapter universe (discovery lives in the adapters package)
 - Error hierarchy rooted at :class:`CacheError`
 - Checksum utilities: :func:`checksum_input_data`, :func:`text_checksum`,
   :func:`file_content_fingerprint`
@@ -53,14 +53,9 @@ except PackageNotFoundError:  # running from an uninstalled source tree
 from generic_ml_cache_core.application.port.inbound.wired_use_cases import (  # noqa: E402  # fmt: skip
     WiredUseCases,
 )
-from generic_ml_cache_core.adapter.registry import (  # noqa: E402  # fmt: skip
-    get_adapter,
-    register,
-)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402  # fmt: skip
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.base import ClientAdapter  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort  # noqa: E402  # fmt: skip
 from generic_ml_cache_core.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
@@ -90,11 +85,7 @@ __all__ = [
     # Inbound port
     "RunMlExecutionCommand",
     # Outbound port contracts
-    "ClientAdapter",
     "MlRunnerPort",
-    # Adapter registry
-    "register",
-    "get_adapter",
     # Checksum utilities
     "checksum_input_data",
     "text_checksum",

@@ -29,6 +29,14 @@ class UnknownClient(CacheError):
     code: ClassVar[str] = "adapter.unknown"
 
 
+class CapabilityUnavailable(CacheError):
+    """Raised when no adapter for a client offers a required capability
+    (e.g. asking for model listing from a client that cannot enumerate models).
+    """
+
+    code: ClassVar[str] = "adapter.capability_unavailable"
+
+
 class ConfigError(CacheError):
     """Raised when the optional config file or a config env var is invalid.
 
@@ -127,6 +135,18 @@ class StoreLocked(CacheError):
     """
 
     code: ClassVar[str] = "store.locked"
+
+
+class UnsupportedExecutionMode(CacheError):
+    """Raised when a local client adapter does not support the requested
+    execution mode (e.g. asking a passthrough-only adapter to run managed).
+
+    The adapter declares its supported modes via ``supports(kind)``. The core
+    checks capability before dispatching so the caller gets a clear, named error
+    rather than a silent wrong-mode execution.
+    """
+
+    code: ClassVar[str] = "adapter.unsupported_mode"
 
 
 class RunInterrupted(Exception):
