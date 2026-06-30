@@ -40,12 +40,12 @@ pip install generic-ml-cache-core
 for the shipped infrastructure, then wire them in your composition root:
 
 ```python
-from generic_ml_cache_core import WiredUseCases
+from generic_ml_cache_core import ApplicationApi
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
 
-# wired: WiredUseCases — constructed by your composition root (see adapters package)
+# wired: ApplicationApi — constructed by your composition root (see adapters package)
 command = RunMlExecutionCommand(
     execution_kind=ExecutionKind.LOCAL_MANAGED,
     client="claude", model="claude-sonnet-4-5", effort="", context="", prompt="…",
@@ -63,7 +63,7 @@ and pass your own adapters. The core never imports any concrete implementation.
 - **Ports** (`application/port/...`) — client runner, blob store, execution repository,
   metrics, clock, fingerprint, API client. The `gmlcache.adapters` entry-point group is
   discovered and resolved outside core (in the adapters package today).
-- **`WiredUseCases`** — typed container of wired use-case references (constructed by
+- **`ApplicationApi`** — typed container of wired use-case references (constructed by
   the composition root in the adapters or CLI package).
 
 Inbound drivers —

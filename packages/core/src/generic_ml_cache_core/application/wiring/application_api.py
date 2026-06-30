@@ -21,7 +21,7 @@ from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
 
 @dataclass(frozen=True)
-class WiredUseCases:
+class ApplicationApi:
     """Typed container of wired use-case and port references.
 
     Constructed by the driver application's private composition root; passed to

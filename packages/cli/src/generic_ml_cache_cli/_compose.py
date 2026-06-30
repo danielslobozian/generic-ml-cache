@@ -61,7 +61,7 @@ from generic_ml_cache_core.application.usecase.run_ml_gateway_service import Run
 from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
     SelectAdapterForExecutionService,
 )
-from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execution_kind_for
 
@@ -147,7 +147,7 @@ def build_use_cases(
     max_size: int | None = None,
     whitelist: frozenset[str] | None = None,
     diag: DiagnosticsPort | None = None,
-) -> WiredUseCases:
+) -> ApplicationApi:
     store_root = Path(store_root)
     _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
     _recover_store(store_root)
@@ -170,7 +170,7 @@ def build_use_cases(
         metrics=metrics,
         diag=_diag,
     )
-    return WiredUseCases(
+    return ApplicationApi(
         run_ml=RunMlExecutionService(
             file_fingerprint,
             runners,

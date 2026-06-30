@@ -34,7 +34,7 @@ Internal paths may change in any release, including patch releases.
 
 **Public API (``__all__``):**
 
-- :class:`WiredUseCases` — typed container of wired use-case references
+- :class:`ApplicationApi` — typed container of wired use-case references
 - :class:`RunMlExecutionCommand` — inbound command value object
 - :class:`MlRunnerPort` — outbound runner contract
 - :class:`AdapterCatalogPort` — the injected adapter universe (discovery lives in the adapters package)
@@ -59,8 +59,8 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 from generic_ml_cache_core.application.port.out.ml_runner_port import (
     MlRunnerPort,  # noqa: E402  # fmt: skip
 )
-from generic_ml_cache_core.application.wiring.wired_use_cases import (  # noqa: E402  # fmt: skip
-    WiredUseCases,
+from generic_ml_cache_core.application.wiring.application_api import (  # noqa: E402  # fmt: skip
+    ApplicationApi,
 )
 from generic_ml_cache_core.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
@@ -86,7 +86,7 @@ from generic_ml_cache_core.common.errors import (  # noqa: E402  # fmt: skip
 __all__ = [
     "__version__",
     # Composition root
-    "WiredUseCases",
+    "ApplicationApi",
     # Inbound port
     "RunMlExecutionCommand",
     # Outbound port contracts

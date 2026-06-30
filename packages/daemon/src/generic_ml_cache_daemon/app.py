@@ -56,7 +56,7 @@ from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
     RunMlExecutionService,
 )
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
-from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 from generic_ml_cache_core.common.errors import CacheError
 
 from generic_ml_cache_daemon import __version__
@@ -186,7 +186,7 @@ def create_app(
         metrics=_metrics,
         diag=_diag,
     )
-    wired_use_cases = WiredUseCases(
+    wired_use_cases = ApplicationApi(
         run_ml=RunMlExecutionService(
             _file_fingerprint,
             _runners,
