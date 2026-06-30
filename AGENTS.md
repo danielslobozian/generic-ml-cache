@@ -156,33 +156,43 @@ library's `adapter/`; the library's `adapter/inbound/` holds only the wiring fac
 
 ### The use-case triple (inbound naming, settled)
 
-Each use case is **three files in two homes**, following the ports-and-adapters
-convention:
+**Every user-driven capability is an inbound port** — defined by the *boundary*
+it sits on (a CLI command, a daemon route reaching it), not by the number of
+implementations. Each capability lives in a **by-capability sub-package** so its
+ports and commands stay together:
 
-- `port/inbound/<action>_use_case.py` → **`<Action>UseCase`** — the inbound port,
-  an `ABC` with the single `execute(command) -> <Result>` method. The driving
-  adapter depends on *this*, never on the implementation.
-- `port/inbound/<action>_command.py` → **`<Action>Command`** — the command. It is
-  part of the inbound contract (the port method takes it), so it lives with the
-  port, **not** with the implementation.
-- `usecase/<action>_service.py` → **`<Action>Service`** — the implementation,
-  which subclasses the port. This is the orchestration.
+- `port/inbound/<capability>/<action>_use_case.py` → **`<Action>UseCase`** — the
+  inbound port, an `ABC`. A single-method use case (one operation, its command,
+  its result). The driving adapter depends on *this*, never the implementation.
+- `port/inbound/<capability>/<action>_command.py` → **`<Action>Command`** — the
+  command, part of the inbound contract (the port method takes it), so it lives
+  with the port, **not** with the implementation. (No command for a no-input
+  query.)
+- `usecase/<capability>_service.py` → **`<Capability>Service`** — the
+  implementation. A capability with several operations regroups its single-method
+  use cases into **one** service implementing all their ABCs, each as a
+  **distinctly-named method** (e.g. `SessionTagsService.tag` / `.untag` /
+  `.list_tags`). The single-operation form (run/probe/gateway) keeps the
+  `execute(command)` method name.
 
 So the interface carries the `UseCase` name and the implementation carries
-`Service`. The failing case: a concrete class named `<Action>UseCase` in
-`usecase/` with no interface above it is wrong — the name belongs to the port,
-and the driving adapter has nothing to depend on but the concrete class.
+`Service`. A **mere option is a command field, not a new use case** (`hard` is
+`PurgeByTagCommand(tag, hard=False)`, never a `HardDeleteByTagUseCase`) — the
+command is the evolution seam. The **discriminator-in-one-method** form (one
+`execute` switching on a target/type tag) is **forbidden** — it is the if/elif
+ladder §9 forbids. *Failing cases: a concrete `<Action>UseCase` in `usecase/`
+with no interface above it; dropping a new `*_use_case.py` into a flat `inbound/`
+once the capability has a sub-package; omitting a `PurgeUseCase` because
+`PurgeService` has one implementation.*
 
-**The one exception — a coordinating service with a single implementation.**
-A service that is called only from the composition root (never driven by an
-external actor through a port) and has exactly one concrete form does not need
-an inbound port ABC. It lives in `application/usecase/`, is named `<Concept>Service`,
-and is injected as a concrete dependency through the composition root.
-`PurgeService` is the model: the CLI drives it through the wired object, not
-through an interface, because there will never be an alternative purge strategy.
-*Failing case: inventing a `PurgeUseCase` ABC with one implementor just to
-"follow the pattern" — adding an interface with no second implementation is
-ceremony, not architecture.*
+**The genuine exception — a purely-internal service.** A service invoked only by
+other use cases or the composition root, *never reachable by a driving adapter*,
+gets no inbound port — regardless of its implementation count. Note the inverse
+is NOT a reason to omit a port: a primary port characteristically has exactly
+**one** implementation (the application service itself), and it still gets a
+port. The boundary is the test, not the count. The capability services are
+exposed to controllers only through the narrowed `ApplicationApi` bundle (§5);
+the composition root keeps the out-adapters and injects them into the impls.
 
 ### The base-use-case hook (post-record side effects)
 
@@ -234,6 +244,15 @@ passes every test.
 - **Ports are owned by the core ring.** The interface lives in `application/port/...`;
   the implementation lives in `adapter/...` (still inside the library). The core ring
   names the contract and depends on the contract, never on the concrete adapter.
+- **Driving adapters reach the application only through inbound ports.** A
+  controller (a CLI command, a daemon route) invokes the domain ONLY via the
+  inbound ports handed to it in the `ApplicationApi` bundle — which carries inbound
+  ports *only* (no `blob_store`/`repository`/`metrics`/`diag`). It must not import a
+  use-case implementation, an outbound port, or a domain service; an outbound
+  adapter is unreachable from a controller by construction. Enforced by import-linter
+  Rule 10 (`hex-controllers-inbound-only`) + the narrowed bundle. *Failing case: a
+  controller calling `wired.repository.find(...)` instead of an
+  `execution_query.find_current(...)` inbound port.*
 - **No I/O in the domain.** Domain objects and domain services read no files, open
   no sockets, touch no database. I/O is an adapter concern. (A domain object may
   compute over data it already holds — e.g. generate a key from in-memory
@@ -450,7 +469,7 @@ return blob_path.read_bytes()
      composition root into `adapter.out`; domain model must not import use cases;
      driven adapter sub-packages must not import each other. A BROKEN contract is an
      architecture defect, not a style issue.
-  7. `pyright` — static type checking (basic mode) against `pyrightconfig.json`.
+  7. `pyright` — static type checking (standard mode) against `pyrightconfig.json`.
      Zero errors required. `# type: ignore` is acceptable only for provably safe casts
      that cannot be expressed in the type system; a comment must be present explaining
      why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
