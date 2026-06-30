@@ -8,6 +8,8 @@ build/
 coverage.xml
 .pytest_cache/
 .ruff_cache/
+.nox/
+.uv-cache/
 
 # editors / IDEs
 .idea/
