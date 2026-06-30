@@ -30,7 +30,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
 from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
+from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
 from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
     SelectAdapterForExecutionService,
 )
@@ -49,7 +49,7 @@ def _build_runners(
     executable_override: ExecutableOverride | None,
     timeout: float | None,
     stream_path: str | None,
-) -> dict[str, RegisteredAdapter]:
+) -> dict[str, RegisteredAdapterPort]:
     # Keyed by client NAME: the service selects the adapter by command.client and
     # dispatches the method by command.execution_kind. The CLI runs one selected
     # client per invocation, so this is a one-entry map.
@@ -61,7 +61,7 @@ def _build_runners(
         exe_override = executable_override(client) if executable_override else None
         # One adapter instance answers both managed and passthrough for this client.
         cli_adapter = cast(
-            RegisteredAdapter,
+            RegisteredAdapterPort,
             resolver.resolve_local_client(
                 descriptor.adapter_id, exe_override, timeout, stream_path
             ),
@@ -70,7 +70,7 @@ def _build_runners(
     if kind is ExecutionKind.API:
         assert client is not None
         descriptor = SelectAdapterForExecutionService(catalog).select(client, ExecutionKind.API)
-        return {client: cast(RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id))}
+        return {client: cast(RegisteredAdapterPort, resolver.resolve_runner(descriptor.adapter_id))}
     # No client selected: stub mode — every API client name is served by the
     # in-process stub adapter (records/replays a canned response, no live call), so
     # demos and cache tests can exercise the pipeline without real credentials.
@@ -78,7 +78,7 @@ def _build_runners(
         StubApiClientAdapter,
     )
 
-    stub = cast(RegisteredAdapter, StubApiClientAdapter())
+    stub = cast(RegisteredAdapterPort, StubApiClientAdapter())
     return {
         d.client_name: stub for d in catalog.list_adapters() if d.boundary is AdapterBoundary.API
     }
@@ -101,7 +101,7 @@ def build_use_cases(
 
     def _runners(
         catalog: AdapterCatalogPort, resolver: AdapterResolverPort
-    ) -> dict[str, RegisteredAdapter]:
+    ) -> dict[str, RegisteredAdapterPort]:
         return _build_runners(
             catalog, resolver, client, kind, executable_override, timeout, stream_path
         )

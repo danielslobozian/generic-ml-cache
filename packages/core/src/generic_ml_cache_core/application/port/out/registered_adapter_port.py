@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""RegisteredAdapter — the minimal contract every registered adapter satisfies.
+"""RegisteredAdapterPort — the minimal contract every registered adapter satisfies.
 
 The registry holds heterogeneous adapters: API adapters (which run via
 :class:`MlRunnerPort`) and local client adapters (which run via
@@ -17,7 +17,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 
 
 @runtime_checkable
-class RegisteredAdapter(Protocol):
+class RegisteredAdapterPort(Protocol):
     """Identity shared by every registered adapter, API or local."""
 
     name: str

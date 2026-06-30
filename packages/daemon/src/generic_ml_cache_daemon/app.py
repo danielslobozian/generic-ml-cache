@@ -24,7 +24,7 @@ from generic_ml_cache_bootstrap.application import build_application_api
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
 from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
+from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
 from generic_ml_cache_core.common.errors import CacheError
 
 from generic_ml_cache_daemon import __version__
@@ -115,16 +115,16 @@ def create_app(
     # /run before it reaches the service.
     def _runners(
         catalog: AdapterCatalogPort, resolver: AdapterResolverPort
-    ) -> dict[str, RegisteredAdapter]:
-        runners: dict[str, RegisteredAdapter] = {}
+    ) -> dict[str, RegisteredAdapterPort]:
+        runners: dict[str, RegisteredAdapterPort] = {}
         for descriptor in catalog.list_adapters():
             if descriptor.boundary is AdapterBoundary.API:
                 runners[descriptor.client_name] = cast(
-                    RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id)
+                    RegisteredAdapterPort, resolver.resolve_runner(descriptor.adapter_id)
                 )
             else:
                 runners[descriptor.client_name] = cast(
-                    RegisteredAdapter, resolver.resolve_local_client(descriptor.adapter_id)
+                    RegisteredAdapterPort, resolver.resolve_local_client(descriptor.adapter_id)
                 )
         return runners
 

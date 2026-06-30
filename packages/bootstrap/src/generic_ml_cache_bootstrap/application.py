@@ -53,7 +53,7 @@ from generic_ml_cache_core.application.port.out.adapter_catalog_port import Adap
 from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
+from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
 from generic_ml_cache_core.application.usecase.artifact_content_service import (
     ArtifactContentService,
 )
@@ -77,7 +77,7 @@ _BLOBS_DIRNAME = "blobs"
 # The driver-specific variation: given the resolved catalog + resolver, return the
 # runner adapters to wire, keyed by client NAME. (CLI: one selected client; daemon:
 # all whitelisted.)
-BuildRunners = Callable[[AdapterCatalogPort, AdapterResolverPort], dict[str, RegisteredAdapter]]
+BuildRunners = Callable[[AdapterCatalogPort, AdapterResolverPort], dict[str, RegisteredAdapterPort]]
 
 
 def recover_store(store_root: Path) -> None:

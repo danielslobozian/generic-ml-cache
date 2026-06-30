@@ -461,7 +461,7 @@ return blob_path.read_bytes()
   not a reason to drop to a Protocol. *Failing case: a `LocalClientPort` that adapters
   only match structurally while its sibling `MlRunnerPort` is an ABC they subclass —
   the two driven-client ports must enforce conformance the same way.* The only
-  remaining `Protocol`s are the three genuinely-structural ones: `RegisteredAdapter`
+  remaining `Protocol`s are the three genuinely-structural ones: `RegisteredAdapterPort`
   (a structural supertype narrowed at runtime), `CacheableExecutionCommand`, and
   `KeyedCallInputs` (structural shapes over command/identity objects).
 - **Ship `py.typed`.** The package publishes its types so consumers (a daemon, the

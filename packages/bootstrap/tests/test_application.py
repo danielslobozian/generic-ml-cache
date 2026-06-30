@@ -8,7 +8,7 @@ from typing import cast
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
 from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
+from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_bootstrap.application import build_application_api
@@ -23,7 +23,7 @@ def _conn_factory(db_path):
 
 def _no_runners(
     _catalog: AdapterCatalogPort, _resolver: AdapterResolverPort
-) -> dict[str, RegisteredAdapter]:
+) -> dict[str, RegisteredAdapterPort]:
     return {}
 
 
@@ -55,7 +55,7 @@ def test_build_runners_receives_catalog_and_resolver(tmp_path):
 
     def _runners(
         catalog: AdapterCatalogPort, resolver: AdapterResolverPort
-    ) -> dict[str, RegisteredAdapter]:
+    ) -> dict[str, RegisteredAdapterPort]:
         seen["catalog"] = catalog
         seen["resolver"] = resolver
         return {}

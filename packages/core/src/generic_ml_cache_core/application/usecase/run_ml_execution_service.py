@@ -45,7 +45,7 @@ from generic_ml_cache_core.application.port.out.file_fingerprint_port import Fil
 from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
+from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
 from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
@@ -72,7 +72,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
     def __init__(
         self,
         file_fingerprint: FileFingerprintPort,
-        runners: dict[str, RegisteredAdapter],
+        runners: dict[str, RegisteredAdapterPort],
         blob_store: BlobStorePort,
         repository: ExecutionRepositoryPort,
         metrics: MetricsPort,
@@ -160,7 +160,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         return result
 
     def _run_managed(
-        self, command: RunMlExecutionCommand, runner: RegisteredAdapter
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
     ) -> ClientRunResult:
         """Orchestrate one isolated managed run: prepare the workspace, let the
         client make its call, capture the generated files, and package the result.
@@ -204,7 +204,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         )
 
     def _run_passthrough(
-        self, command: RunMlExecutionCommand, runner: RegisteredAdapter
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
     ) -> ClientRunResult:
         """Relay a native passthrough call through the client and package it. There
         is no workspace and no artifact capture — a passthrough never produces files."""
