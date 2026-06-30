@@ -22,6 +22,12 @@ class _FakeMetrics:
     def clear_session_spec(self, session_id: str) -> None:
         self.specs.pop(session_id, None)
 
+    def session_spec(self, session_id: str) -> SessionSpec | None:
+        return self.specs.get(session_id)
+
+    def list_session_ids(self) -> list[str]:
+        return sorted(self.specs)
+
 
 def test_set_spec_stores_it():
     metrics = _FakeMetrics()
@@ -37,6 +43,27 @@ def test_clear_spec_removes_it():
     svc.set_spec(SetSessionSpecCommand("s1", SessionSpec(client="c", model="m", effort="e")))
     svc.clear_spec(ClearSessionSpecCommand("s1"))
     assert "s1" not in metrics.specs
+
+
+def test_get_spec_returns_the_stored_spec_or_none():
+    from generic_ml_cache_core.application.port.inbound.session_admin.get_session_spec_command import (
+        GetSessionSpecCommand,
+    )
+
+    metrics = _FakeMetrics()
+    svc = SessionAdminService(metrics)  # type: ignore[arg-type]
+    spec = SessionSpec(client="c", model="m", effort="e")
+    svc.set_spec(SetSessionSpecCommand("s1", spec))
+    assert svc.get_spec(GetSessionSpecCommand("s1")) is spec
+    assert svc.get_spec(GetSessionSpecCommand("absent")) is None
+
+
+def test_list_session_ids():
+    metrics = _FakeMetrics()
+    svc = SessionAdminService(metrics)  # type: ignore[arg-type]
+    svc.set_spec(SetSessionSpecCommand("s2", SessionSpec(client="c", model="m", effort="e")))
+    svc.set_spec(SetSessionSpecCommand("s1", SessionSpec(client="c", model="m", effort="e")))
+    assert svc.list_session_ids() == ["s1", "s2"]
 
 
 def test_clear_unknown_session_is_a_noop():

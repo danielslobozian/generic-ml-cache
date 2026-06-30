@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
+    FindCurrentExecutionCommand,
+)
 from generic_ml_cache_core.common.errors import (
     EncryptionTokenRequired,
     StoreLocked,
@@ -191,7 +194,7 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
             encryption_token=token,
             diag=_make_diag(args),
         )
-        execution = wired.repository.find_current(key)
+        execution = wired.execution_query.find_current(FindCurrentExecutionCommand(key))
         if execution is None:
             print(
                 f"gmlc: job {args.job_id} has no stored result (was the cache pruned?)",
@@ -355,7 +358,7 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
             encryption_token=token,
             diag=_make_diag(args),
         )
-        execution = wired.repository.find_current(key)
+        execution = wired.execution_query.find_current(FindCurrentExecutionCommand(key))
         if execution is None:
             print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
             return 4
