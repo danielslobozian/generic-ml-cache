@@ -7,6 +7,9 @@ from __future__ import annotations
 import sqlite3
 
 import pytest
+from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
+    FindCurrentExecutionCommand,
+)
 
 pytest.importorskip("cryptography")
 
@@ -107,7 +110,7 @@ def test_encrypted_store_without_token_blocks_content_but_not_metadata(tmp_path)
 
     wired = build_use_cases(_db_factory(store), store)  # no token — metadata-only, no client needed
     # metadata is still readable (it is not encrypted) ...
-    assert wired.repository.find_current(key) is not None
+    assert wired.execution_query.find_current(FindCurrentExecutionCommand(key)) is not None
     # ... but serving the hit must hydrate the blob, which needs the token.
     with pytest.raises(EncryptionTokenRequired):
         build_use_cases(_db_factory(store), store, client="fake").run_ml.execute(_command())

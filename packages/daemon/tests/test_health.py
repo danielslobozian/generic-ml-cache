@@ -44,7 +44,7 @@ def test_ready_returns_503_when_store_inaccessible(tmp_path: Path) -> None:
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path)
-    application.state.wired.metrics.event_counts = MagicMock(  # type: ignore[method-assign]
+    application.state.wired.store_stats.event_counts = MagicMock(  # type: ignore[method-assign]
         side_effect=RuntimeError("simulated store failure")
     )
 

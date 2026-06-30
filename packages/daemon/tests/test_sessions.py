@@ -118,12 +118,26 @@ def test_get_stats_by_model_empty_for_new_session(client: TestClient) -> None:
     assert stats["by_model"] == []
 
 
-def test_get_stats_by_model_present_after_events(app_and_client) -> None:
-    application, http_client = app_and_client
-    wired = application.state.wired
+def _seed_metrics(tmp_path):
+    """Build the metrics out-port directly to seed journal events — it is no
+    longer exposed on the narrowed ApplicationApi (controllers go through ports)."""
+    import sqlite3
+
+    from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
+    from generic_ml_cache_adapters.adapter.out.metrics.journal_metrics import JournalMetrics
+
+    def _factory():
+        return sqlite3.connect(str(tmp_path / "executions.sqlite3"), check_same_thread=False)
+
+    return JournalMetrics(AccessRegistry(_factory))
+
+
+def test_get_stats_by_model_present_after_events(app_and_client, tmp_path) -> None:
+    _application, http_client = app_and_client
+    metrics = _seed_metrics(tmp_path)
     session_id = http_client.post("/sessions", json={}).json()["session_id"]
 
-    wired.metrics.record_event(
+    metrics.record_event(
         "record",
         execution_key="k1",
         client="claude",
@@ -131,7 +145,7 @@ def test_get_stats_by_model_present_after_events(app_and_client) -> None:
         effort="high",
         session_id=session_id,
     )
-    wired.metrics.record_event(
+    metrics.record_event(
         "hit",
         execution_key="k1",
         client="claude",
@@ -151,11 +165,11 @@ def test_get_stats_by_model_present_after_events(app_and_client) -> None:
     assert model_row["hits"] == 1
 
 
-def test_get_stats_by_model_token_fields_present(app_and_client) -> None:
-    application, http_client = app_and_client
-    wired = application.state.wired
+def test_get_stats_by_model_token_fields_present(app_and_client, tmp_path) -> None:
+    _application, http_client = app_and_client
+    metrics = _seed_metrics(tmp_path)
     session_id = http_client.post("/sessions", json={}).json()["session_id"]
-    wired.metrics.record_event(
+    metrics.record_event(
         "record",
         execution_key="k9",
         client="openai",

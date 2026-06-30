@@ -38,6 +38,17 @@ def _stdout(execution) -> bytes | None:
     return None
 
 
+def _repo(tmp_path):
+    # White-box: build the repository out-port directly (it is no longer on the
+    # narrowed ApplicationApi) to assert the stored audit trail.
+    from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
+    from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
+        ExecutionRepository,
+    )
+
+    return ExecutionRepository(_factory(tmp_path), SystemClock())
+
+
 def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
     wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake")
     command = RunMlExecutionCommand(
@@ -59,8 +70,8 @@ def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
     assert _stdout(second) == _stdout(first)  # replay reproduces the output
 
     key = first.call_identity.generate_key()
-    assert len(wired.repository.find_all(key)) == 2  # IN_PROGRESS + SUCCESS from one real run
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert len(_repo(tmp_path).find_all(key)) == 2  # IN_PROGRESS + SUCCESS from one real run
+    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_managed_durable_across_a_fresh_wiring(tmp_path):
@@ -77,10 +88,7 @@ def test_managed_durable_across_a_fresh_wiring(tmp_path):
     replay = build_use_cases(_factory(tmp_path), tmp_path, client="fake").run_ml.execute(command)
     assert b"durable" in _stdout(replay)
     key = replay.call_identity.generate_key()
-    assert (
-        len(build_use_cases(_factory(tmp_path), tmp_path, client="fake").repository.find_all(key))
-        == 2
-    )
+    assert len(_repo(tmp_path).find_all(key)) == 2
 
 
 def test_passthrough_records_then_replays(tmp_path):
@@ -95,7 +103,7 @@ def test_passthrough_records_then_replays(tmp_path):
     assert first.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
     assert b"pt" in _stdout(first)
     wired.run_ml.execute(command)
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_api_records_then_replays_with_the_stub(tmp_path):
@@ -108,7 +116,7 @@ def test_api_records_then_replays_with_the_stub(tmp_path):
     assert first.token_usage is not None
     second = wired.run_ml.execute(command)
     assert _stdout(second) == _stdout(first)
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_api_client_routes_to_api_adapter(tmp_path):
@@ -125,4 +133,4 @@ def test_api_client_routes_to_api_adapter(tmp_path):
     assert first.token_usage is not None
     second = wired.run_ml.execute(command)
     assert _stdout(second) == _stdout(first)
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}

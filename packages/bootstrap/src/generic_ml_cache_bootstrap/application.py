@@ -157,9 +157,5 @@ def build_application_api(
         execution_query=ExecutionQueryService(repository),
         store_stats=StoreStatsService(metrics),
         artifacts=ArtifactContentService(blob_store),
-        blob_store=blob_store,
-        repository=repository,
-        metrics=metrics,
         run_gateway=run_gateway,
-        diag=_diag,
     )

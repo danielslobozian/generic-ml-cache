@@ -39,10 +39,6 @@ def test_build_application_api_wires_the_full_graph(tmp_path):
     assert api.probe is not None
     assert api.purge is not None
     assert api.run_gateway is not None
-    assert api.repository is not None
-    assert api.metrics is not None
-    assert api.blob_store is not None
-    assert api.diag is not None  # defaults to the null diagnostics adapter
 
 
 def test_build_application_api_runs_migrations(tmp_path):
