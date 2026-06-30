@@ -4,11 +4,13 @@ root_packages =
     generic_ml_cache_cli
     generic_ml_cache_daemon
     generic_ml_cache_adapters
+    generic_ml_cache_bootstrap
 include_external_packages = True
 
-# Rule 1 — the application ring is independent of the adapter layer.
-# Domain, use cases, and ports may not import from any adapter (inbound or outbound).
-# This is the hexagonal invariant: dependencies point inward, never outward.
+# Rule 1 — the application ring is independent of the adapter/composition layers.
+# Domain, use cases, and ports may not import from any adapter (inbound or outbound)
+# nor from bootstrap (the composition root). This is the hexagonal invariant:
+# dependencies point inward, never outward.
 [importlinter:contract:hex-application-ring]
 name = Application ring must not import adapters
 type = forbidden
@@ -16,20 +18,25 @@ source_modules =
     generic_ml_cache_core.application
 forbidden_modules =
     generic_ml_cache_adapters
+    generic_ml_cache_bootstrap
 
-# Rule 2 — driver packages (CLI, daemon) may only reach into adapters via their
-# private composition modules.  They must not import driven adapter implementations
-# (generic_ml_cache_adapters.adapter.out.*) from business-logic modules.
+# Rule 2 — driver packages (CLI, daemon) must not import driven adapter
+# implementations (generic_ml_cache_adapters.adapter.out.*) DIRECTLY. Reaching
+# adapters *through* the bootstrap composition root is the intended path, so this
+# checks direct imports only (allow_indirect_imports) — otherwise the legitimate
+# cli/daemon -> bootstrap -> adapter.out chain would be flagged.
 #
-# ignore_imports lists the legitimate wiring edges in the private composition roots
-# (_compose.py in CLI, inline wiring in daemon/app.py) and shared helpers:
-#   * cli._compose is the CLI composition root — it is supposed to wire adapters.
-#   * daemon.app is the daemon composition root — same.
-#   * cli.composition provides get_encryption_state / load_cipher / build_store_encryptor.
-#   * cli.controllers.daemon → daemon.app is an optional lazy import.
+# The few remaining ignore_imports are genuinely driver-specific direct edges the
+# split did not (and should not) relocate into the composition root:
+#   * cli._compose encryption helpers back the `gmlcache encrypt/decrypt/status`
+#     commands (CLI feature logic, not wiring) + the stub adapter for demos.
+#   * cli.composition / daemon.app pick their own diagnostics adapter (logging is
+#     driver policy).
+#   * cli.controllers.daemon -> daemon.app is the optional lazy launcher.
 [importlinter:contract:hex-drivers-no-driven-adapters]
 name = Driver packages must not import driven adapter implementations directly
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     generic_ml_cache_cli
     generic_ml_cache_daemon
@@ -116,6 +123,20 @@ name = Adapters must not import driver packages
 type = forbidden
 source_modules =
     generic_ml_cache_adapters
+forbidden_modules =
+    generic_ml_cache_cli
+    generic_ml_cache_daemon
+
+# Rule 6b — bootstrap is the composition root: it wires core + adapters and is
+# imported only by the drivers. It must never reach "up" into a driver (that
+# would be the composition root depending on a thing it composes). It is allowed
+# to import core, adapters, and adapter.out — wiring is its job — so it is not
+# itself isolation-policed, only confined here.
+[importlinter:contract:bootstrap-no-drivers]
+name = Bootstrap must not import driver packages
+type = forbidden
+source_modules =
+    generic_ml_cache_bootstrap
 forbidden_modules =
     generic_ml_cache_cli
     generic_ml_cache_daemon
