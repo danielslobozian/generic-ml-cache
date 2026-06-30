@@ -61,6 +61,7 @@ from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
 )
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
 from generic_ml_cache_core.application.usecase.session_admin_service import SessionAdminService
+from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
@@ -147,6 +148,7 @@ def build_application_api(
         purge=purge,
         session_tags=SessionTagsService(metrics),
         session_admin=SessionAdminService(metrics),
+        session_report=SessionReportService(metrics, repository),
         blob_store=blob_store,
         repository=repository,
         metrics=metrics,

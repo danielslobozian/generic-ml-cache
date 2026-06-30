@@ -7,10 +7,10 @@ from __future__ import annotations
 import secrets
 
 from fastapi import APIRouter, HTTPException, Request
+from generic_ml_cache_core.application.domain.model.session.session_report import ModelUsage
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
-from generic_ml_cache_core.application.usecase.session_report import (
-    ModelUsage,
-    build_session_report,
+from generic_ml_cache_core.application.port.inbound.session_report.report_for_session_command import (
+    ReportForSessionCommand,
 )
 
 from generic_ml_cache_daemon.presenters.session import (
@@ -77,9 +77,7 @@ def get_session(session_id: str, request: Request) -> SessionResponse:
 def get_session_stats(session_id: str, request: Request) -> SessionStatsResponse:
     """Return call/hit statistics and per-model token usage for a session."""
     wired = request.app.state.wired
-    events = wired.metrics.session_events(session_id)
-    usage_by_key = _collect_usage(events, wired.repository)
-    report = build_session_report(session_id, events, usage_by_key)
+    report = wired.session_report.report_for_session(ReportForSessionCommand(session_id))
     hit_rate = round(report.hits / report.invocations, 4) if report.invocations > 0 else 0.0
     return SessionStatsResponse(
         session_id=session_id,
@@ -90,15 +88,6 @@ def get_session_stats(session_id: str, request: Request) -> SessionStatsResponse
         hit_rate=hit_rate,
         by_model=[_model_usage_body(mu) for mu in report.by_model],
     )
-
-
-def _collect_usage(events, repository) -> dict:
-    usage_by_key = {}
-    for execution_key in {row.execution_key for row in events if row.execution_key}:
-        execution = repository.find_current(execution_key)
-        if execution is not None:
-            usage_by_key[execution_key] = execution.token_usage
-    return usage_by_key
 
 
 def _model_usage_body(mu: ModelUsage) -> ModelUsageBody:

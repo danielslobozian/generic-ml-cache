@@ -15,6 +15,12 @@ from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_
 from generic_ml_cache_core.application.port.inbound.session_admin.set_session_spec_command import (
     SetSessionSpecCommand,
 )
+from generic_ml_cache_core.application.port.inbound.session_report.report_for_session_command import (
+    ReportForSessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_report.report_for_tag_command import (
+    ReportForTagCommand,
+)
 from generic_ml_cache_core.application.port.inbound.session_tags.list_session_tags_command import (
     ListSessionTagsCommand,
 )
@@ -24,7 +30,6 @@ from generic_ml_cache_core.application.port.inbound.session_tags.tag_session_com
 from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_command import (
     UntagSessionCommand,
 )
-from generic_ml_cache_core.application.usecase.session_report import build_session_report
 
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli._compose import build_use_cases
@@ -145,15 +150,8 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
         return _cmd_session_report_by_tag(wired, tag, args.json)
 
     assert session_id is not None
-    events = wired.metrics.session_events(str(session_id))
-    tags = wired.metrics.session_tags(str(session_id))
-    # Join each event's execution to its token usage (the current execution per key).
-    usage_by_key = {}
-    for key in {e.execution_key for e in events if e.execution_key}:
-        execution = wired.repository.find_current(key)
-        if execution is not None:
-            usage_by_key[key] = execution.token_usage
-    report = build_session_report(str(session_id), events, usage_by_key)
+    report = wired.session_report.report_for_session(ReportForSessionCommand(str(session_id)))
+    tags = wired.session_tags.list_tags(ListSessionTagsCommand(str(session_id)))
 
     if args.json:
         import json
@@ -170,31 +168,22 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
 def _cmd_session_report_by_tag(  # NOSONAR — always 0 by design
     wired, tag: str, as_json: bool
 ) -> int:
-    session_ids = wired.metrics.session_ids_for_tag(tag)
-    if not session_ids:
+    result = wired.session_report.report_for_tag(ReportForTagCommand(tag))
+    if result.session_count == 0:
         print(f"no sessions tagged {tag!r}")
         return 0
-    # Collect events from all matching sessions; build one merged report.
-    all_events = []
-    for session_id in session_ids:
-        all_events.extend(wired.metrics.session_events(session_id))
-    usage_by_key = {}
-    for key in {e.execution_key for e in all_events if e.execution_key}:
-        execution = wired.repository.find_current(key)
-        if execution is not None:
-            usage_by_key[key] = execution.token_usage
-    report = build_session_report(tag, all_events, usage_by_key)
+    report = result.report
 
     if as_json:
         import json
 
         payload = _session_report_json(report, [tag])
         payload["tag"] = tag
-        payload["session_count"] = len(session_ids)
+        payload["session_count"] = result.session_count
         del payload["session"]
         print(json.dumps(payload, indent=2))
         return 0
-    lines = [f"tag         : {tag}", f"sessions    : {len(session_ids)}"]
+    lines = [f"tag         : {tag}", f"sessions    : {result.session_count}"]
     print("\n".join(lines))
     print(_render_session_report(report))
     return 0  # NOSONAR — always 0: all paths are success (found or not-found)

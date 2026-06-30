@@ -19,6 +19,7 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.session_admin_service import SessionAdminService
+from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
 
 
@@ -43,6 +44,7 @@ class ApplicationApi:
     purge: PurgeService
     session_tags: SessionTagsService
     session_admin: SessionAdminService
+    session_report: SessionReportService
     blob_store: BlobStorePort
     repository: ExecutionRepositoryPort
     metrics: MetricsPort

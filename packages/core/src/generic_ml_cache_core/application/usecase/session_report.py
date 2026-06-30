@@ -22,63 +22,18 @@ Design rulings this encodes (see the usage model):
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 
+from generic_ml_cache_core.application.domain.model.session.session_report import (
+    DayActivity,
+    ModelUsage,
+    SessionReport,
+)
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.out.metrics_port import SessionEventRow
 
 #: Events where a real client call ran (vs. a HIT replay or an offline MISS).
 EXECUTED_EVENTS = frozenset({"record", "run", "would_hit", "would_miss"})
 _HIT = "hit"
-
-
-@dataclass(frozen=True)
-class ModelUsage:
-    """Token usage for one (client/provider, model) within a session."""
-
-    client: str
-    model: str
-    spent_input: int
-    spent_output: int
-    cache_read_tokens: int
-    cache_write_tokens: int
-    reasoning_tokens: int
-    saved_tokens: int
-    executions: int
-    hits: int
-
-    @property
-    def spent_tokens(self) -> int:
-        return self.spent_input + self.spent_output
-
-
-@dataclass(frozen=True)
-class DayActivity:
-    """Activity counts for one day of a session (model-agnostic, no tokens)."""
-
-    day: str
-    invocations: int
-    executions: int
-    hits: int
-
-
-@dataclass(frozen=True)
-class SessionReport:
-    """The roll-up for one session: headline counts, per-model token usage, per-day activity."""
-
-    session_id: str
-    invocations: int
-    executions: int
-    hits: int
-    unknown_usage: int
-    span_start: str | None
-    span_end: str | None
-    by_model: list[ModelUsage]
-    by_day: list[DayActivity]
-
-    @property
-    def day_count(self) -> int:
-        return len(self.by_day)
 
 
 def _tokens(usage: TokenUsage | None) -> int | None:
