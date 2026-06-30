@@ -13,50 +13,18 @@ from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
-from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (
-    EncryptingBlobStore,
-    TokenRequiredBlobStore,
-)
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (
-    FilesystemEncryptionManifestStore,
-)
-from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import StoreEncryptor
 from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
 from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
     StructlogDiagnosticsAdapter,
 )
-from generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint import (
-    FilesystemFileFingerprint,
-)
-from generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter import (
-    HttpGatewayForwardAdapter,
-)
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
-from generic_ml_cache_adapters.adapter.out.metrics.journal_metrics import JournalMetrics
-from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
-    ExecutionRepository,
-)
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
-    FilesystemStoreLock,
-)
-from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.db import DbConnection
-from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_bootstrap.discovery.composition import catalog_for, default_resolver
+from generic_ml_cache_bootstrap.application import build_application_api
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
 from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
-from generic_ml_cache_core.application.usecase.probe_service import ProbeService
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
-from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
-    RunMlExecutionService,
-)
-from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
-from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 from generic_ml_cache_core.common.errors import CacheError
 
 from generic_ml_cache_daemon import __version__
@@ -139,71 +107,34 @@ def create_app(
         _diag = NullDiagnosticsAdapter()
     _conn_factory = _db_conn_factory(store_root)
     _encryption_token = os.environ.get("GMLCACHE_TOKEN") or None
-    _blob_dir = store_root / "blobs"
-    _raw_store: BlobStorePort = FilesystemBlobStore(_blob_dir)
-    _manifest = FilesystemEncryptionManifestStore(store_root).load()
-    if _manifest is None:
-        _blob_store: BlobStorePort = _raw_store
-    elif _encryption_token is None:
-        _blob_store = TokenRequiredBlobStore(_raw_store)
-    else:
-        from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
 
-        _cipher = AesGcmCipher()
-        _data_key = _cipher.open_envelope(_encryption_token, _manifest)
-        _blob_store = EncryptingBlobStore(_raw_store, _cipher, _data_key)
-    StoreEncryptor(
-        store_root, FilesystemEncryptionManifestStore(store_root), FilesystemStoreLock(store_root)
-    ).recover()
-    _clock = SystemClock()
-    run_migrations(_conn_factory, _diag)
-    _repository = ExecutionRepository(_conn_factory, _clock)
-    _metrics = JournalMetrics(AccessRegistry(_conn_factory, diag=_diag))
-    _file_fingerprint = FilesystemFileFingerprint()
-    # Resolve every whitelisted client to an instance, keyed by client NAME. The
-    # service selects by command.client and dispatches the method by kind (a CLI
-    # adapter answers managed; an API adapter answers API — passthrough is not
-    # exposed over REST). An unknown/non-whitelisted client is rejected at /run
-    # before it reaches the service.
-    _catalog = catalog_for(whitelist)
-    _resolver = default_resolver()
-    _runners: dict[str, RegisteredAdapter] = {}
-    for _d in _catalog.list_adapters():
-        if _d.boundary is AdapterBoundary.API:
-            _runners[_d.client_name] = cast(
-                RegisteredAdapter, _resolver.resolve_runner(_d.adapter_id)
-            )
-        else:
-            _runners[_d.client_name] = cast(
-                RegisteredAdapter, _resolver.resolve_local_client(_d.adapter_id)
-            )
-    _purge = PurgeService(_repository, _blob_store, _metrics, diag=_diag)
-    _gateway_forward = HttpGatewayForwardAdapter()
-    _run_gateway = RunMlGatewayService(
-        blob_store=_blob_store,
-        gateway_forward_port=_gateway_forward,
-        repository=_repository,
-        metrics=_metrics,
-        diag=_diag,
-    )
-    wired_use_cases = ApplicationApi(
-        run_ml=RunMlExecutionService(
-            _file_fingerprint,
-            _runners,
-            _blob_store,
-            _repository,
-            _metrics,
-            purge_service=_purge,
-            max_size=max_size,
-            workspace=FilesystemWorkspace(),
-            diag=_diag,
-        ),
-        probe=ProbeService(_file_fingerprint, _repository),
-        purge=_purge,
-        blob_store=_blob_store,
-        repository=_repository,
-        metrics=_metrics,
-        run_gateway=_run_gateway,
+    # The daemon wires every whitelisted client (the CLI wires one selected
+    # client). The service selects by command.client and dispatches by kind: a
+    # CLI adapter answers managed; an API adapter answers API — passthrough is
+    # not exposed over REST. An unknown/non-whitelisted client is rejected at
+    # /run before it reaches the service.
+    def _runners(
+        catalog: AdapterCatalogPort, resolver: AdapterResolverPort
+    ) -> dict[str, RegisteredAdapter]:
+        runners: dict[str, RegisteredAdapter] = {}
+        for descriptor in catalog.list_adapters():
+            if descriptor.boundary is AdapterBoundary.API:
+                runners[descriptor.client_name] = cast(
+                    RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id)
+                )
+            else:
+                runners[descriptor.client_name] = cast(
+                    RegisteredAdapter, resolver.resolve_local_client(descriptor.adapter_id)
+                )
+        return runners
+
+    wired_use_cases = build_application_api(
+        _conn_factory,
+        store_root,
+        _runners,
+        encryption_token=_encryption_token,
+        max_size=max_size,
+        whitelist=whitelist,
         diag=_diag,
     )
 

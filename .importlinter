@@ -36,39 +36,18 @@ source_modules =
 forbidden_modules =
     generic_ml_cache_adapters.adapter.out
 ignore_imports =
-    # CLI private composition root — legitimate adapter assembly
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.clock.system_clock
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.metrics.access_registry
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.metrics.journal_metrics
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.execution_repository
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store
+    # The bulk application wiring moved to generic_ml_cache_bootstrap (the
+    # composition root), so the long list of _compose/app -> adapter.out edges is
+    # gone. What remains are the few adapters the drivers still touch directly:
+    # CLI encryption helpers (store encrypt/decrypt + the stub adapter for demos)
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
-    # CLI shared composition helpers (encryption, diagnostics)
+    # CLI + daemon pick their own diagnostics adapter (logging is driver policy)
     generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
     generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
-    # Daemon composition root (inline in app.py)
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.clock.system_clock
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.metrics.access_registry
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.metrics.journal_metrics
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.persistence.execution_repository
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
     # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
