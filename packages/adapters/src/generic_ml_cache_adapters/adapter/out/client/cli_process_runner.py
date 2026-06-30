@@ -17,8 +17,9 @@ import signal
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from generic_ml_cache_core.common.errors import CommandLineTooLong, RunInterrupted
 
@@ -47,7 +48,7 @@ def _command_line_limit() -> tuple[str, int, str]:
     return ("total", arg_max, "this OS's total argument limit (ARG_MAX)")
 
 
-def _check_command_line_size(argv: List[str]) -> None:
+def _check_command_line_size(argv: list[str]) -> None:
     scope, limit, label = _command_line_limit()
     sizes = [len(arg.encode("utf-8")) for arg in argv]
     measured = max(sizes) if scope == "arg" else sum(sizes) + len(argv)
@@ -64,12 +65,12 @@ def _check_command_line_size(argv: List[str]) -> None:
 
 def _communicate_streaming(  # noqa: C901
     proc: subprocess.Popen,
-    stdin_text: Optional[str],
+    stdin_text: str | None,
     timeout: float | None,
     on_line: Callable[[str], None],
 ) -> tuple[str, str]:
-    out_lines: List[str] = []
-    err_chunks: List[str] = []
+    out_lines: list[str] = []
+    err_chunks: list[str] = []
 
     def _feed_stdin() -> None:
         if stdin_text is not None and proc.stdin is not None:
@@ -128,12 +129,12 @@ class CliProcessRunner:
 
     def run(  # noqa: C901
         self,
-        argv: List[str],
+        argv: list[str],
         cwd: Path,
-        stdin_payload: Optional[str] = None,
+        stdin_payload: str | None = None,
         timeout: float | None = None,
-        env: Optional[dict] = None,
-        on_line: Optional[Callable[[str], None]] = None,
+        env: dict | None = None,
+        on_line: Callable[[str], None] | None = None,
     ) -> tuple[str, str, int]:
         """Launch ``argv`` in ``cwd``, honour stop signals, return (stdout, stderr, exit)."""
         _check_command_line_size(argv)
@@ -155,8 +156,8 @@ class CliProcessRunner:
         )
 
         stopped: dict[str, int | None] = {"signum": None}
-        previous: Dict[int, Any] = {}
-        installed: List[int] = []
+        previous: dict[int, Any] = {}
+        installed: list[int] = []
 
         def _on_stop(signum, _frame):
             stopped["signum"] = signum

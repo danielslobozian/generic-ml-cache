@@ -51,7 +51,7 @@ def _state_style(state: str):
     }.get(state, ())
 
 
-def _job_state(store: "async_jobs.JobStore", job_id: str):
+def _job_state(store: async_jobs.JobStore, job_id: str):
     """(status dict or None, derived state) for a job, applying the liveness probe."""
     status = store.read_status(job_id)
     held = async_jobs.job_lock_held(store.lock_path(job_id))

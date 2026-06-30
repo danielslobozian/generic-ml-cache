@@ -7,8 +7,9 @@ from __future__ import annotations
 import argparse
 import os
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional, cast
+from typing import cast
 
 from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
@@ -43,8 +44,8 @@ def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:
     Precedence: --log-level flag > GMLCACHE_LOG_LEVEL env > config key > off (quiet).
     Log file:   --log-file flag  > GMLCACHE_LOG_FILE env  > config key > <store>/gmlcache.log.
     """
-    level: Optional[str] = getattr(args, "log_level", None)
-    log_file_flag: Optional[str] = getattr(args, "log_file", None)
+    level: str | None = getattr(args, "log_level", None)
+    log_file_flag: str | None = getattr(args, "log_file", None)
     try:
         settings = config.resolve_settings(
             config.load(),
@@ -61,7 +62,7 @@ def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:
     return StructlogDiagnosticsAdapter(log_file, level=str(resolved_level))
 
 
-def _store_root() -> Optional[Path]:
+def _store_root() -> Path | None:
     try:
         return Path(str(config.resolve_settings(config.load())["store"][0]))
     except ConfigError as exc:
@@ -71,21 +72,21 @@ def _store_root() -> Optional[Path]:
         return None
 
 
-def _resolve_token(args: argparse.Namespace) -> Optional[str]:
+def _resolve_token(args: argparse.Namespace) -> str | None:
     """The encryption token for this call: the --token flag, else GMLCACHE_TOKEN.
     A token is a secret, so it is never read from the config file."""
     flag = getattr(args, "token", None)
     return flag if flag else (os.environ.get("GMLCACHE_TOKEN") or None)
 
 
-def _resolve_session(args: argparse.Namespace) -> Optional[str]:
+def _resolve_session(args: argparse.Namespace) -> str | None:
     """The session id for this run: the --session flag, else GMLCACHE_SESSION. A session
     groups a workflow's calls; it is journal metadata, never part of the cache key."""
     flag = getattr(args, "session", None)
     return flag if flag else (os.environ.get("GMLCACHE_SESSION") or None)
 
 
-def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str:
+def _read_text_arg(inline: str | None, path: str | None, name: str) -> str:
     if inline is not None and path is not None:
         raise SystemExit(f"error: pass only one of --{name} / --{name}-file")
     if path is not None:
@@ -93,15 +94,15 @@ def _read_text_arg(inline: Optional[str], path: Optional[str], name: str) -> str
     return inline if inline is not None else ""
 
 
-def _resolve_input_file_paths(raw_paths) -> List[str]:
+def _resolve_input_file_paths(raw_paths) -> list[str]:
     """Declared input files, resolved to absolute (path-sensitive keying). The
     use case's fingerprint adapter validates readability and raises on a bad one."""
     return [str(Path(raw).resolve()) for raw in (raw_paths or [])]
 
 
-def _resolve_allow_paths(raw_paths) -> List[str]:
+def _resolve_allow_paths(raw_paths) -> list[str]:
     """Declared scan folders: validated directories, normalised to absolute."""
-    resolved: List[str] = []
+    resolved: list[str] = []
     for raw in raw_paths or []:
         path = Path(raw)
         if not path.is_dir():

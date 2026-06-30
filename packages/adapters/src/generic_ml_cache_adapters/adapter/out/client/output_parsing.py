@@ -11,10 +11,10 @@ behavior, not a core port contract.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 
-def final_result_object(stdout: str) -> Optional[Dict[str, Any]]:
+def final_result_object(stdout: str) -> dict[str, Any] | None:
     """Return the client's final result object, whether its output arrived as a
     single JSON object (``--output-format json``) or as the last ``type:result``
     line of an NDJSON stream (``--output-format stream-json``).

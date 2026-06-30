@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
@@ -24,11 +23,11 @@ _DEFAULT_INTERVAL = 3600.0  # seconds between eviction sweeps
 class EvictionStats:
     """Last-run snapshot exposed via GET /info."""
 
-    last_run_at: Optional[float] = None  # Unix epoch, None = never run
+    last_run_at: float | None = None  # Unix epoch, None = never run
     last_executions_removed: int = 0
     last_bytes_freed: int = 0
-    max_size: Optional[int] = None  # bytes, None = disabled
-    max_age: Optional[float] = None  # seconds, None = disabled
+    max_size: int | None = None  # bytes, None = disabled
+    max_age: float | None = None  # seconds, None = disabled
     interval: float = _DEFAULT_INTERVAL
 
 
@@ -50,7 +49,7 @@ class EvictionScheduler:
         self._purge = purge
         self._stats = stats
         self._interval = interval
-        self._task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
+        self._task: asyncio.Task | None = None  # type: ignore[type-arg]
 
     def start(self) -> None:
         """Schedule the recurring eviction task on the running event loop."""

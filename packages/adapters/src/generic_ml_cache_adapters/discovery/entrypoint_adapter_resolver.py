@@ -10,7 +10,7 @@ with the per-run config; API runners take none.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, cast
+from typing import cast
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -31,11 +31,11 @@ class EntryPointAdapterResolver(AdapterResolverPort):
 
     def __init__(self, group: str = ADAPTER_ENTRYPOINT_GROUP) -> None:
         self._group = group
-        self._by_id: Optional[Dict[str, type]] = None
+        self._by_id: dict[str, type] | None = None
 
-    def _classes(self) -> Dict[str, type]:
+    def _classes(self) -> dict[str, type]:
         if self._by_id is None:
-            mapping: Dict[str, type] = {}
+            mapping: dict[str, type] = {}
             for ep in iter_entry_points(self._group):
                 try:
                     cls = ep.load()
@@ -58,9 +58,9 @@ class EntryPointAdapterResolver(AdapterResolverPort):
     def resolve_local_client(
         self,
         adapter_id: str,
-        executable_override: Optional[str] = None,
-        timeout: Optional[float] = None,
-        stream_path: Optional[str] = None,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
     ) -> LocalClientPort:
         cls = self._class_for(adapter_id)
         return cast(

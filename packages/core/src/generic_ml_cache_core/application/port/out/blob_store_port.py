@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class BlobStorePort(ABC):
@@ -20,7 +19,7 @@ class BlobStorePort(ABC):
     """
 
     @abstractmethod
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         """Return the stored bytes for ``key``, or None if not present."""
 
     @abstractmethod

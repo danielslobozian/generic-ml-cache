@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.encryption.encryption_manifest import (
     EncryptionManifest,
@@ -25,7 +24,7 @@ class EncryptionManifestStorePort(ABC):
     """
 
     @abstractmethod
-    def load(self) -> Optional[EncryptionManifest]:
+    def load(self) -> EncryptionManifest | None:
         """Return the stored manifest, or None when the store is public."""
 
     @abstractmethod

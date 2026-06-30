@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
@@ -71,7 +72,7 @@ class GatewayRequest:
         """Return whether this request may be cached."""
         return True
 
-    def parse_token_usage(self, response_body_bytes: bytes) -> Optional[TokenUsage]:
+    def parse_token_usage(self, response_body_bytes: bytes) -> TokenUsage | None:
         """Parse Anthropic token usage from the upstream response body."""
         try:
             usage = json.loads(response_body_bytes).get("usage", {})

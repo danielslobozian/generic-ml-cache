@@ -18,8 +18,9 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, List, Optional
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
@@ -47,9 +48,9 @@ class CliRuntime:
     def __init__(
         self,
         client,
-        executable_override: Optional[str] = None,
-        timeout: Optional[float] = None,
-        stream_path: Optional[str] = None,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
     ) -> None:
         self._client = client
         self._executable_override = executable_override
@@ -71,13 +72,13 @@ class CliRuntime:
     def supports(self, kind: ExecutionKind) -> bool:
         return kind in (ExecutionKind.LOCAL_MANAGED, ExecutionKind.LOCAL_PASSTHROUGH)
 
-    def version_argv(self, executable: str) -> List[str]:
+    def version_argv(self, executable: str) -> list[str]:
         return [executable, "--version"]
 
-    def models_argv(self, executable: str) -> Optional[List[str]]:
+    def models_argv(self, executable: str) -> list[str] | None:
         return None
 
-    def resolve_executable(self, override: Optional[str]) -> str:
+    def resolve_executable(self, override: str | None) -> str:
         candidate = override or self._client.default_executable
         if any(sep in candidate for sep in ("/", "\\")):
             p = Path(candidate)
@@ -116,7 +117,7 @@ class CliRuntime:
         stream_path = request.stream_path or self._stream_path
 
         writer = StreamWriter(Path(stream_path)) if stream_path else None
-        on_line: Optional[Callable[[str], None]] = None
+        on_line: Callable[[str], None] | None = None
         if writer is not None:
             writer.event(
                 "run.start",
@@ -203,9 +204,9 @@ class CliRuntime:
 
 def wire_cli_client(
     adapter,
-    executable_override: Optional[str] = None,
-    timeout: Optional[float] = None,
-    stream_path: Optional[str] = None,
+    executable_override: str | None = None,
+    timeout: float | None = None,
+    stream_path: str | None = None,
 ) -> CliRuntime:
     """Compose a CliRuntime into ``adapter`` and expose the never-overridden
     LocalClientPort surface as delegations to it.

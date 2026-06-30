@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
@@ -17,7 +15,7 @@ from generic_ml_cache_core.common.checksum import text_checksum
 
 class FakeFingerprint(FileFingerprintPort):
     def __init__(self) -> None:
-        self.fingerprinted: List[str] = []
+        self.fingerprinted: list[str] = []
 
     def fingerprint(self, path: str) -> str:
         self.fingerprinted.append(path)

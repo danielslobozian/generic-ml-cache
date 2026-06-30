@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 import pytest
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
@@ -41,7 +39,7 @@ class _ListingAdapter(ApiClientPort, ModelListingPort):
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         return [
             ModelInfo(id="model-a", name="Model A"),
             ModelInfo(id="model-b", name="Model B"),
@@ -71,7 +69,7 @@ class _FailingListAdapter(ApiClientPort, ModelListingPort):
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         raise RuntimeError("connection refused")
 
 

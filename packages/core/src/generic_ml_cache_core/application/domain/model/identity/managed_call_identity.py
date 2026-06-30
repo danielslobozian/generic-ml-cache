@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
@@ -32,14 +31,14 @@ class ManagedCallIdentity(CallIdentity):
     effort: str
     context_fingerprint: str
     prompt_fingerprint: str
-    input_file_fingerprints: Dict[str, str] = field(default_factory=dict)
-    client_args_fingerprint: Optional[str] = None
-    system_fingerprint: Optional[str] = None
-    grants: FrozenSet[str] = field(default_factory=frozenset)
-    allow_paths: FrozenSet[str] = field(default_factory=frozenset)
+    input_file_fingerprints: dict[str, str] = field(default_factory=dict)
+    client_args_fingerprint: str | None = None
+    system_fingerprint: str | None = None
+    grants: frozenset[str] = field(default_factory=frozenset)
+    allow_paths: frozenset[str] = field(default_factory=frozenset)
 
     def generate_key(self) -> str:
-        key_data: Dict[str, str] = {
+        key_data: dict[str, str] = {
             "kind": ExecutionKind.LOCAL_MANAGED.value,
             "client": self.client,
             "model": self.model,

@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -188,7 +187,6 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 
 def _cmd_stats(args: argparse.Namespace) -> int:
     import json
-    from typing import Dict
 
     try:
         settings = config.resolve_settings(config.load())
@@ -196,7 +194,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    max_size_bytes: Optional[int] = (
+    max_size_bytes: int | None = (
         int(settings["max_size"][0])  # type: ignore[arg-type]
         if settings["max_size"][0] is not None
         else None
@@ -206,7 +204,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     summaries = wired.repository.current_execution_summaries()
     store_bytes = wired.repository.total_stored_bytes()
     access = wired.metrics.event_counts()
-    by_client_model: Dict[tuple, int] = {}
+    by_client_model: dict[tuple, int] = {}
     for summary in summaries:
         by_client_model[(summary.client, summary.model)] = (
             by_client_model.get((summary.client, summary.model), 0) + 1

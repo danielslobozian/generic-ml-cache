@@ -7,7 +7,7 @@ from __future__ import annotations
 import io
 import urllib.error
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +23,7 @@ from generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter import Gemi
 # Mirrors the actual curl response from the real API (gemini-3.5-flash).
 # The part has both "text" and "thoughtSignature" — the adapter must take
 # only the text and ignore thoughtSignature.
-_FIXTURE_RESPONSE: Dict[str, Any] = {
+_FIXTURE_RESPONSE: dict[str, Any] = {
     "candidates": [
         {
             "content": {
@@ -50,7 +50,7 @@ _FIXTURE_RESPONSE: Dict[str, Any] = {
 }
 
 # Response that includes cachedContentTokenCount (cache hit scenario).
-_FIXTURE_CACHED_RESPONSE: Dict[str, Any] = {
+_FIXTURE_CACHED_RESPONSE: dict[str, Any] = {
     "candidates": [
         {
             "content": {
@@ -75,7 +75,7 @@ def _adapter(api_key: str = "test-key") -> GeminiDirectAdapter:
     return GeminiDirectAdapter(api_key=api_key)
 
 
-def _patch_post(adapter: GeminiDirectAdapter, response: Dict[str, Any]):
+def _patch_post(adapter: GeminiDirectAdapter, response: dict[str, Any]):
     """Monkeypatch _post to return a fixture without touching the network."""
     adapter._post = lambda url, body: response  # type: ignore[assignment]
 
@@ -377,7 +377,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
 # list_models()
 # ---------------------------------------------------------------------------
 
-_MODELS_RESPONSE: Dict[str, Any] = {
+_MODELS_RESPONSE: dict[str, Any] = {
     "models": [
         {
             "name": "models/gemini-2.5-flash",

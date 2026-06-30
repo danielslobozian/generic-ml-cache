@@ -12,7 +12,8 @@ dependency lives, out of core.
 from __future__ import annotations
 
 import warnings
-from typing import Dict, List, Optional, Sequence, cast
+from collections.abc import Sequence
+from typing import cast
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -33,11 +34,11 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
 
     def __init__(self, group: str = ADAPTER_ENTRYPOINT_GROUP) -> None:
         self._group = group
-        self._descriptors: Optional[List[AdapterDescriptor]] = None
-        self._sources: Dict[str, str] = {}
+        self._descriptors: list[AdapterDescriptor] | None = None
+        self._sources: dict[str, str] = {}
 
-    def _scan(self) -> List[AdapterDescriptor]:
-        descriptors: List[AdapterDescriptor] = []
+    def _scan(self) -> list[AdapterDescriptor]:
+        descriptors: list[AdapterDescriptor] = []
         for ep in iter_entry_points(self._group):
             ep_key = getattr(ep, "name", str(ep))
             try:
@@ -77,7 +78,7 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
             self._sources[descriptor.adapter_id] = describe_source(ep)
         return descriptors
 
-    def _ensure_loaded(self) -> List[AdapterDescriptor]:
+    def _ensure_loaded(self) -> list[AdapterDescriptor]:
         if self._descriptors is None:
             self._descriptors = self._scan()
         return self._descriptors
@@ -93,7 +94,7 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
             d.client_name == client_name and d.supports_mode(mode) for d in self._ensure_loaded()
         )
 
-    def sources(self) -> Dict[str, str]:
+    def sources(self) -> dict[str, str]:
         """Map each ``adapter_id`` to the distribution that provided it (for doctor)."""
         self._ensure_loaded()
         return dict(self._sources)

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import FrozenSet, List, Optional
 
 
 @dataclass(frozen=True)
@@ -25,8 +24,8 @@ class MlRequest:
     effort: str
     context: str
     prompt: str
-    input_file_paths: List[str] = field(default_factory=list)
-    allow_paths: List[str] = field(default_factory=list)
-    client_args: List[str] = field(default_factory=list)
-    grants: FrozenSet[str] = field(default_factory=frozenset)
-    user_system_prompt: Optional[str] = None
+    input_file_paths: list[str] = field(default_factory=list)
+    allow_paths: list[str] = field(default_factory=list)
+    client_args: list[str] = field(default_factory=list)
+    grants: frozenset[str] = field(default_factory=frozenset)
+    user_system_prompt: str | None = None

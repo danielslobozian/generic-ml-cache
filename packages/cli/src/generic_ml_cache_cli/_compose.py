@@ -10,8 +10,9 @@ directly.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, FrozenSet, Optional, cast
+from typing import cast
 
 from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
 from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (
@@ -66,7 +67,7 @@ from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execut
 
 _BLOBS_DIRNAME = "blobs"
 
-ExecutableOverride = Callable[[str], Optional[str]]
+ExecutableOverride = Callable[[str], str | None]
 
 
 def _recover_store(store_root: Path) -> None:
@@ -77,7 +78,7 @@ def _recover_store(store_root: Path) -> None:
     ).recover()
 
 
-def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> BlobStorePort:
+def _resolve_blob_store(store_root: Path, encryption_token: str | None) -> BlobStorePort:
     blob_store: BlobStorePort = FilesystemBlobStore(store_root / _BLOBS_DIRNAME)
     manifest = FilesystemEncryptionManifestStore(store_root).load()
     if manifest is None:
@@ -92,13 +93,13 @@ def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> Bl
 
 
 def _build_runners(
-    client: Optional[str],
-    kind: Optional[ExecutionKind],
-    executable_override: Optional[ExecutableOverride],
-    timeout: Optional[float],
-    stream_path: Optional[str],
-    whitelist: Optional[FrozenSet[str]] = None,
-) -> Dict[str, RegisteredAdapter]:
+    client: str | None,
+    kind: ExecutionKind | None,
+    executable_override: ExecutableOverride | None,
+    timeout: float | None,
+    stream_path: str | None,
+    whitelist: frozenset[str] | None = None,
+) -> dict[str, RegisteredAdapter]:
     # Keyed by client NAME: the service selects the adapter by command.client and
     # dispatches the method by command.execution_kind. The CLI runs one selected
     # client per invocation, so this is a one-entry map.
@@ -138,14 +139,14 @@ def _build_runners(
 def build_use_cases(
     conn_factory: Callable[[], DbConnection],
     store_root: Path,
-    executable_override: Optional[ExecutableOverride] = None,
-    timeout: Optional[float] = None,
-    encryption_token: Optional[str] = None,
-    stream_path: Optional[str] = None,
-    client: Optional[str] = None,
-    max_size: Optional[int] = None,
-    whitelist: Optional[FrozenSet[str]] = None,
-    diag: Optional[DiagnosticsPort] = None,
+    executable_override: ExecutableOverride | None = None,
+    timeout: float | None = None,
+    encryption_token: str | None = None,
+    stream_path: str | None = None,
+    client: str | None = None,
+    max_size: int | None = None,
+    whitelist: frozenset[str] | None = None,
+    diag: DiagnosticsPort | None = None,
 ) -> WiredUseCases:
     store_root = Path(store_root)
     _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()

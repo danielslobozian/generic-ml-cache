@@ -14,7 +14,6 @@ not break or alter an execution.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 
 class DiagnosticsPort(ABC):
@@ -40,6 +39,6 @@ class DiagnosticsPort(ABC):
         """Emit a WARN-level diagnostic. Must never raise."""
 
     @abstractmethod
-    def error(self, msg: str, exc: Optional[BaseException] = None, **context: object) -> None:
+    def error(self, msg: str, exc: BaseException | None = None, **context: object) -> None:
         """Emit an ERROR-level diagnostic, optionally with a caught exception
         whose traceback the adapter renders. Must never raise."""

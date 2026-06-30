@@ -12,7 +12,6 @@ password-hardening KDF (Argon2id) is needed.
 from __future__ import annotations
 
 import secrets
-from typing import Tuple
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -48,7 +47,7 @@ class AesGcmCipher(CipherPort):
         # carries no shell-special characters.
         return secrets.token_hex(_TOKEN_BYTES)
 
-    def create_envelope(self, token: str) -> Tuple[EncryptionManifest, bytes]:
+    def create_envelope(self, token: str) -> tuple[EncryptionManifest, bytes]:
         data_key = AESGCM.generate_key(bit_length=_KEY_BYTES * 8)
         salt = secrets.token_bytes(_SALT_BYTES)
         wrapped = self._wrap(data_key, token, salt)

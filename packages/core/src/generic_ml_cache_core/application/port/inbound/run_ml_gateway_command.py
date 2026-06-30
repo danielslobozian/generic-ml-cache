@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import (
     GatewayRequest,
@@ -24,5 +23,5 @@ class RunMlGatewayCommand:
     gateway_request: GatewayRequest
     api_token: str
     target_url: str
-    session_id: Optional[str] = None
-    forward_headers: Dict[str, str] = field(default_factory=dict)
+    session_id: str | None = None
+    forward_headers: dict[str, str] = field(default_factory=dict)

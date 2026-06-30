@@ -8,7 +8,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
@@ -46,7 +46,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             "openai", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "OpenAI API"
         )
 
-    def __init__(self, api_key: Optional[str] = None, timeout: float = 120.0) -> None:
+    def __init__(self, api_key: str | None = None, timeout: float = 120.0) -> None:
         self._api_key = api_key
         self._timeout = timeout
 
@@ -69,13 +69,13 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             )
         return key
 
-    def _build_body(self, request: MlRequest) -> Dict[str, Any]:
+    def _build_body(self, request: MlRequest) -> dict[str, Any]:
         system_parts = []
         if request.context:
             system_parts.append(request.context)
         if request.user_system_prompt:
             system_parts.append(request.user_system_prompt)
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": request.model,
             "input": [{"role": "user", "content": request.prompt}],
         }
@@ -83,7 +83,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             body["instructions"] = "\n\n".join(system_parts)
         return body
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Return OpenAI language models owned by openai."""
         data = self._get("/models")
         return [
@@ -92,13 +92,13 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             if m.get("owned_by") == "openai"
         ]
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self._api_key_value()}",
             "Content-Type": "application/json",
         }
 
-    def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             _BASE_URL + path,
@@ -113,7 +113,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"OpenAI API error {exc.code}: {error_body}") from exc
 
-    def _get(self, path: str) -> Dict[str, Any]:
+    def _get(self, path: str) -> dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             _BASE_URL + path,
             headers=self._headers(),
@@ -126,7 +126,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"OpenAI API error {exc.code}: {error_body}") from exc
 
-    def _extract_text(self, response: Dict[str, Any]) -> str:
+    def _extract_text(self, response: dict[str, Any]) -> str:
         # Traverse output[*].content[*] and collect parts with type "output_text".
         texts = []
         for item in response.get("output", []):
@@ -139,7 +139,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
             return "\n"
         return text if text.endswith("\n") else text + "\n"
 
-    def _extract_usage(self, response: Dict[str, Any]) -> TokenUsage:
+    def _extract_usage(self, response: dict[str, Any]) -> TokenUsage:
         u = response.get("usage", {})
         details_in = u.get("input_tokens_details") or {}
         details_out = u.get("output_tokens_details") or {}

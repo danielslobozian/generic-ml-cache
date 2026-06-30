@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
@@ -54,13 +53,13 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         gateway_forward_port: GatewayForwardPort,
         repository: ExecutionRepositoryPort,
         metrics: MetricsPort,
-        diag: Optional[DiagnosticsPort] = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
         self._blob_store = blob_store
         self._gateway_forward_port = gateway_forward_port
         self._repository = repository
         self._metrics = metrics
-        self._diag: Optional[DiagnosticsPort] = diag
+        self._diag: DiagnosticsPort | None = diag
 
     def execute(self, command: RunMlGatewayCommand) -> GatewayResponse:
         """Return a cached response on hit, or forward and record the upstream response."""

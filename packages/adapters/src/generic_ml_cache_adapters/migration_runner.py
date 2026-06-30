@@ -14,8 +14,8 @@ the bootstrap reads ``PRAGMA user_version`` once as a fallback and seeds
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional
 
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
@@ -60,7 +60,7 @@ def _bootstrap_version(conn: DbConnection) -> int:
 
 def run_migrations(
     conn_factory: Callable[[], DbConnection],
-    diag: Optional[DiagnosticsPort] = None,
+    diag: DiagnosticsPort | None = None,
 ) -> None:
     """Apply any pending schema migrations to the database.
 
@@ -116,8 +116,8 @@ def run_migrations(
 
 
 def schema_version(
-    conn_factory: Callable[[], DbConnection], diag: Optional[DiagnosticsPort] = None
-) -> List[dict]:
+    conn_factory: Callable[[], DbConnection], diag: DiagnosticsPort | None = None
+) -> list[dict]:
     """Return the current schema version as a list, or ``[]`` if unmigrated."""
     _t = time.perf_counter()
     if diag:

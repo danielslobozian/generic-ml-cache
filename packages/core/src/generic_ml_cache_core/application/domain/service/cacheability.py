@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 
 def is_call_uncacheable(allow_paths: Sequence[str], scan_trust: bool) -> bool:

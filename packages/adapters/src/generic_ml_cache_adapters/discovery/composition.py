@@ -9,8 +9,6 @@ could compose differently) and add deployment policy such as a whitelist on top.
 
 from __future__ import annotations
 
-from typing import Dict, FrozenSet, List, Optional
-
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
@@ -31,9 +29,9 @@ _PRIMARY_MODE = {
     AdapterBoundary.API: ExecutionKind.API,
 }
 
-_entrypoint_catalog: Optional[EntryPointAdapterCatalog] = None
-_catalog: Optional[CompositeAdapterCatalog] = None
-_resolver: Optional[CompositeAdapterResolver] = None
+_entrypoint_catalog: EntryPointAdapterCatalog | None = None
+_catalog: CompositeAdapterCatalog | None = None
+_resolver: CompositeAdapterResolver | None = None
 
 
 def _entrypoint() -> EntryPointAdapterCatalog:
@@ -59,7 +57,7 @@ def default_resolver() -> AdapterResolverPort:
     return _resolver
 
 
-def catalog_for(whitelist: Optional[FrozenSet[str]] = None) -> AdapterCatalogPort:
+def catalog_for(whitelist: frozenset[str] | None = None) -> AdapterCatalogPort:
     """The default catalog, optionally restricted to the whitelisted clients."""
     catalog = default_catalog()
     if whitelist is not None:
@@ -72,7 +70,7 @@ def _unknown_adapter(name: str, catalog: AdapterCatalogPort) -> UnknownClient:
     return UnknownClient(f"unknown adapter {name!r}; available: {known}")
 
 
-def get_adapter(name: str, whitelist: Optional[FrozenSet[str]] = None) -> object:
+def get_adapter(name: str, whitelist: frozenset[str] | None = None) -> object:
     """Resolve a constructed adapter by client name (a local client or an API
     runner). A convenience over the catalog + resolver; raises :class:`UnknownClient`
     if the client is absent. Lives here, in infrastructure — never in core."""
@@ -87,7 +85,7 @@ def get_adapter(name: str, whitelist: Optional[FrozenSet[str]] = None) -> object
     return resolver.resolve_local_client(descriptor.adapter_id)
 
 
-def execution_kind_for(client: str, whitelist: Optional[FrozenSet[str]] = None) -> ExecutionKind:
+def execution_kind_for(client: str, whitelist: frozenset[str] | None = None) -> ExecutionKind:
     """The primary execution kind for a client (LOCAL_MANAGED for a CLI, API for a
     provider). Raises :class:`UnknownClient` if the client is absent."""
     catalog = catalog_for(whitelist)
@@ -97,11 +95,11 @@ def execution_kind_for(client: str, whitelist: Optional[FrozenSet[str]] = None) 
     return _PRIMARY_MODE[descriptors[0].boundary]
 
 
-def registered_names(whitelist: Optional[FrozenSet[str]] = None) -> List[str]:
+def registered_names(whitelist: frozenset[str] | None = None) -> list[str]:
     return sorted({d.client_name for d in catalog_for(whitelist).list_adapters()})
 
 
-def registered_local_names(whitelist: Optional[FrozenSet[str]] = None) -> List[str]:
+def registered_local_names(whitelist: frozenset[str] | None = None) -> list[str]:
     return sorted(
         {
             d.client_name
@@ -111,11 +109,11 @@ def registered_local_names(whitelist: Optional[FrozenSet[str]] = None) -> List[s
     )
 
 
-def adapter_sources(whitelist: Optional[FrozenSet[str]] = None) -> Dict[str, str]:
+def adapter_sources(whitelist: frozenset[str] | None = None) -> dict[str, str]:
     """Map each entry-point client name to the distribution that provided it."""
     sources = _entrypoint().sources()  # adapter_id -> "<package> <version>"
     visible = {d.client_name for d in catalog_for(whitelist).list_adapters()}
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for descriptor in _entrypoint().list_adapters():
         if descriptor.client_name in visible and descriptor.adapter_id in sources:
             out[descriptor.client_name] = sources[descriptor.adapter_id]

@@ -11,7 +11,6 @@ selection stay lightweight; the resolver turns a chosen id into a real adapter.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import FrozenSet
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
@@ -33,8 +32,8 @@ class AdapterDescriptor:
     adapter_id: str
     client_name: str
     boundary: AdapterBoundary
-    supported_modes: FrozenSet[ExecutionKind]
-    capabilities: FrozenSet[ClientCapability] = field(default_factory=frozenset)
+    supported_modes: frozenset[ExecutionKind]
+    capabilities: frozenset[ClientCapability] = field(default_factory=frozenset)
     display_name: str = ""
     priority: int = 0
 

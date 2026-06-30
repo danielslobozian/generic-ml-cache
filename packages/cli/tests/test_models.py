@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import List, Optional
 
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
@@ -76,13 +75,13 @@ class _ListingAdapter:
     def descriptor(cls):
         return local_cli_descriptor("fakelist", {ClientCapability.LIST_MODELS}, "Fake List")
 
-    def build_argv(self, *a, **k) -> List[str]:  # pragma: no cover - unused here
+    def build_argv(self, *a, **k) -> list[str]:  # pragma: no cover - unused here
         raise NotImplementedError
 
-    def models_argv(self, executable: str) -> Optional[List[str]]:
+    def models_argv(self, executable: str) -> list[str] | None:
         return [executable, "-c", "print('m-one - Model One\\nm-two - Model Two (default)')"]
 
-    def parse_model_list(self, stdout: str) -> List[ModelInfo]:
+    def parse_model_list(self, stdout: str) -> list[ModelInfo]:
         out = []
         for line in stdout.splitlines():
             ident, _, label = line.partition(" - ")

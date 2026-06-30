@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import ContextManager
+from contextlib import AbstractContextManager
 
 
 class StoreLockPort(ABC):
@@ -18,6 +18,6 @@ class StoreLockPort(ABC):
     """
 
     @abstractmethod
-    def acquire(self) -> ContextManager[None]:
+    def acquire(self) -> AbstractContextManager[None]:
         """Acquire the exclusive lock for the duration of the ``with`` block.
         Raises :class:`StoreLocked` immediately if it is already held."""

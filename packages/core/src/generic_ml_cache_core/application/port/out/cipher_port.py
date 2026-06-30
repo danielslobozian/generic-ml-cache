@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Tuple
 
 from generic_ml_cache_core.application.domain.model.encryption.encryption_manifest import (
     EncryptionManifest,
@@ -32,7 +31,7 @@ class CipherPort(ABC):
         accepts an outside password; tokens are generated here and shown once."""
 
     @abstractmethod
-    def create_envelope(self, token: str) -> Tuple[EncryptionManifest, bytes]:
+    def create_envelope(self, token: str) -> tuple[EncryptionManifest, bytes]:
         """Start a new encrypted store under ``token``: generate a random data key,
         wrap it under a key derived from ``token`` + a fresh salt, and return the
         ``(manifest, data_key)``. The data key is returned for immediate use; only

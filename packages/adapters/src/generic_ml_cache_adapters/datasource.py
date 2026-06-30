@@ -10,9 +10,9 @@ construct and inject the factory without importing ``sqlite3`` into core.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from sqlite3 import Connection
-from typing import Callable
 
 
 def sqlite_connection_factory(

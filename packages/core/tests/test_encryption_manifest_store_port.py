@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-from typing import Optional
-
 from generic_ml_cache_core.application.domain.model.encryption.encryption_manifest import (
     EncryptionManifest,
 )
@@ -16,10 +14,10 @@ from generic_ml_cache_core.application.port.out.encryption_manifest_store_port i
 
 
 class _StubManifestStore(EncryptionManifestStorePort):
-    def __init__(self, manifest: Optional[EncryptionManifest]) -> None:
+    def __init__(self, manifest: EncryptionManifest | None) -> None:
         self._manifest = manifest
 
-    def load(self) -> Optional[EncryptionManifest]:
+    def load(self) -> EncryptionManifest | None:
         return self._manifest
 
     def save(self, manifest: EncryptionManifest) -> None:

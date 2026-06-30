@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, List, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -60,7 +60,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
 
     # -- reads ------------------------------------------------------------
 
-    def find_current(self, execution_key: str) -> Optional[MlExecution]:
+    def find_current(self, execution_key: str) -> MlExecution | None:
         connection = self._connect()
         try:
             row = connection.execute(
@@ -73,7 +73,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def find_all(self, execution_key: str) -> List[MlExecution]:
+    def find_all(self, execution_key: str) -> list[MlExecution]:
         connection = self._connect()
         try:
             rows = connection.execute(
@@ -86,7 +86,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
 
     # -- reporting (concrete; beyond the use-case port) -------------------
 
-    def current_execution_summaries(self) -> List["ExecutionSummary"]:
+    def current_execution_summaries(self) -> list[ExecutionSummary]:
         """A uniform reporting view of the current (servable) executions: key,
         kind, and the denormalized client/model — across all identity kinds."""
         connection = self._connect()
@@ -105,7 +105,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
+    def find_current_by_key_prefix(self, key_prefix: str) -> list[MlExecution]:
         """The current executions whose key starts with ``key_prefix`` (so a short
         key from ``list`` is enough to ``inspect``)."""
         connection = self._connect()
@@ -195,7 +195,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_artifacts(
-        connection: DbConnection, execution_id: int, artifacts: List[Artifact]
+        connection: DbConnection, execution_id: int, artifacts: list[Artifact]
     ) -> None:
         for artifact in artifacts:
             connection.execute(
@@ -213,7 +213,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
 
     @staticmethod
     def _insert_token_usage(
-        connection: DbConnection, execution_id: int, token_usage: Optional[TokenUsage]
+        connection: DbConnection, execution_id: int, token_usage: TokenUsage | None
     ) -> None:
         if token_usage is None:
             return
@@ -235,7 +235,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
     # -- tags (a separate annotation; never rewrites an execution) --------
 
     @staticmethod
-    def _current_execution_id(connection: DbConnection, execution_key: str) -> Optional[int]:
+    def _current_execution_id(connection: DbConnection, execution_key: str) -> int | None:
         row = connection.execute(
             "SELECT id FROM executions WHERE execution_key = ? AND state = ? "
             "AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id DESC LIMIT 1",
@@ -243,7 +243,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         ).fetchone()
         return int(row[0]) if row is not None else None
 
-    def add_tags(self, execution_key: str, tags: List[str]) -> None:
+    def add_tags(self, execution_key: str, tags: list[str]) -> None:
         if not tags:
             return
         connection = self._connect()
@@ -262,7 +262,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def tags_for(self, execution_key: str) -> List[str]:
+    def tags_for(self, execution_key: str) -> list[str]:
         connection = self._connect()
         try:
             execution_id = self._current_execution_id(connection, execution_key)
@@ -276,7 +276,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def add_input_artifacts(self, execution_key: str, artifacts: List[Artifact]) -> None:
+    def add_input_artifacts(self, execution_key: str, artifacts: list[Artifact]) -> None:
         if not artifacts:
             return
         connection = self._connect()
@@ -348,7 +348,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         )
 
     @staticmethod
-    def _load_artifacts(connection: DbConnection, execution_id: int) -> List[Artifact]:
+    def _load_artifacts(connection: DbConnection, execution_id: int) -> list[Artifact]:
         rows = connection.execute(
             "SELECT artifact_type, name, encoding, blob_key, size_bytes FROM artifacts "
             "WHERE execution_id = ? ORDER BY id",
@@ -367,7 +367,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         ]
 
     @staticmethod
-    def _load_token_usage(connection: DbConnection, execution_id: int) -> Optional[TokenUsage]:
+    def _load_token_usage(connection: DbConnection, execution_id: int) -> TokenUsage | None:
         row = connection.execute(
             "SELECT input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, "
             "reasoning_tokens, cost_usd, raw_json FROM token_usage WHERE execution_id = ?",
@@ -396,7 +396,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
 
     # -- retention and purge --------------------------------------------------
 
-    def blob_keys_for_execution(self, execution_key: str) -> List[str]:
+    def blob_keys_for_execution(self, execution_key: str) -> list[str]:
         connection = self._connect()
         try:
             rows = connection.execute(
@@ -479,7 +479,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def current_executions_with_sizes(self) -> List[ExecutionSizeEntry]:
+    def current_executions_with_sizes(self) -> list[ExecutionSizeEntry]:
         connection = self._connect()
         try:
             rows = connection.execute(
@@ -500,7 +500,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def executions_by_tag(self, tag: str) -> List[str]:
+    def executions_by_tag(self, tag: str) -> list[str]:
         connection = self._connect()
         try:
             rows = connection.execute(
@@ -514,7 +514,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
         finally:
             connection.close()
 
-    def all_execution_keys(self) -> List[str]:
+    def all_execution_keys(self) -> list[str]:
         connection = self._connect()
         try:
             rows = connection.execute(

@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
 
 from generic_ml_cache_core.application.port.out.store_lock_port import StoreLockPort
 from generic_ml_cache_core.common.errors import StoreLocked

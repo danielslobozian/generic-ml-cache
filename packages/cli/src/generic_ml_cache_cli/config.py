@@ -65,7 +65,6 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
@@ -80,7 +79,7 @@ EXECUTABLES_SECTION = "executables"
 #: built-in defaults; ``timeout`` of ``None`` means "no timeout". The store has
 #: no static default here -- it resolves to :func:`default_store_path` (per-user
 #: data dir) and has no flag/env layer, only the config file.
-DEFAULTS: Dict[str, Optional[str]] = {"mode": "cache", "persist": "cache", "timeout": None}
+DEFAULTS: dict[str, str | None] = {"mode": "cache", "persist": "cache", "timeout": None}
 
 _MODES = {m.value for m in CacheMode}
 _DEPTHS = {d.value for d in PersistenceDepth}
@@ -184,21 +183,21 @@ class FileConfig:
     """Settings read from the config file. ``source`` is the file actually read,
     or ``None`` when no file was present."""
 
-    mode: Optional[str] = None
-    persist: Optional[str] = None
-    store: Optional[str] = None
-    timeout: Optional[float] = None
-    trust_scan: Optional[bool] = None
-    max_size: Optional[int] = None
-    max_age: Optional[float] = None
+    mode: str | None = None
+    persist: str | None = None
+    store: str | None = None
+    timeout: float | None = None
+    trust_scan: bool | None = None
+    max_size: int | None = None
+    max_age: float | None = None
     #: ``None`` means all adapters active; a frozenset restricts to the named set.
-    adapters: Optional[FrozenSet[str]] = None
-    executables: Dict[str, str] = field(default_factory=dict)
-    source: Optional[Path] = None
-    log_level: Optional[str] = None
-    log_file: Optional[str] = None
+    adapters: frozenset[str] | None = None
+    executables: dict[str, str] = field(default_factory=dict)
+    source: Path | None = None
+    log_level: str | None = None
+    log_file: str | None = None
     #: Optional config schema version declared by the file (e.g. ``"1"``).
-    version: Optional[str] = None
+    version: str | None = None
 
 
 #: All valid key names in the [defaults] section.
@@ -227,7 +226,7 @@ class ConfigIssue:
     """A single validation finding from :func:`validate`."""
 
     severity: str  # "error" | "warning"
-    key: Optional[str]
+    key: str | None
     message: str
 
 
@@ -283,7 +282,7 @@ def _parse_bool(raw: str, where: str) -> bool:
     raise ConfigError(f"invalid boolean {raw!r} {where}; expected true or false")
 
 
-def _parse_adapters(raw: str, where: str) -> Optional[FrozenSet[str]]:
+def _parse_adapters(raw: str, where: str) -> frozenset[str] | None:
     """Parse ``adapters = *`` (all) or ``adapters = claude, cursor`` (named filter).
 
     Returns ``None`` for the wildcard (meaning all adapters active), or a
@@ -300,7 +299,7 @@ def _parse_adapters(raw: str, where: str) -> Optional[FrozenSet[str]]:
     return names
 
 
-def load(path: Optional[Path] = None) -> FileConfig:
+def load(path: Path | None = None) -> FileConfig:
     """Read the config file if it exists; a missing file yields empty defaults."""
     p = path or resolve_config_path()
     if not p.is_file():
@@ -314,7 +313,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
 
     section = parser[SECTION] if parser.has_section(SECTION) else None
 
-    def get(key: str) -> Optional[str]:
+    def get(key: str) -> str | None:
         return section.get(key) if section is not None else None
 
     mode = get("mode")
@@ -376,7 +375,7 @@ def load(path: Optional[Path] = None) -> FileConfig:
     )
 
 
-def write_default_config(path: Optional[Path] = None) -> Tuple[Path, bool]:
+def write_default_config(path: Path | None = None) -> tuple[Path, bool]:
     """Create the config file with documented defaults, if it is absent.
 
     Returns ``(path, created)``; ``created`` is ``False`` when a file already
@@ -393,7 +392,7 @@ def write_default_config(path: Optional[Path] = None) -> Tuple[Path, bool]:
     return p, True
 
 
-def _check_enum_keys(sec: "configparser.SectionProxy", issues: List[ConfigIssue]) -> None:
+def _check_enum_keys(sec: configparser.SectionProxy, issues: list[ConfigIssue]) -> None:
     """Validate enum-valued keys and the version key; append issues in-place."""
     mode = sec.get("mode")
     if mode is not None and mode not in _MODES:
@@ -433,9 +432,9 @@ def _check_enum_keys(sec: "configparser.SectionProxy", issues: List[ConfigIssue]
         )
 
 
-def _validate_defaults_section(sec: "configparser.SectionProxy") -> List[ConfigIssue]:
+def _validate_defaults_section(sec: configparser.SectionProxy) -> list[ConfigIssue]:
     """Validate every key in the [defaults] section; return all issues found."""
-    issues: List[ConfigIssue] = []
+    issues: list[ConfigIssue] = []
 
     for key in sec:
         if key not in _KNOWN_DEFAULTS_KEYS:
@@ -471,7 +470,7 @@ def _validate_defaults_section(sec: "configparser.SectionProxy") -> List[ConfigI
     return issues
 
 
-def validate(path: Optional[Path] = None) -> List[ConfigIssue]:
+def validate(path: Path | None = None) -> list[ConfigIssue]:
     """Parse the config file and return all validation issues without raising.
 
     A missing file is not an error — it yields an empty list. Issues are
@@ -479,7 +478,7 @@ def validate(path: Optional[Path] = None) -> List[ConfigIssue]:
     whether to exit non-zero.
     """
     p = path or resolve_config_path()
-    issues: List[ConfigIssue] = []
+    issues: list[ConfigIssue] = []
 
     if not p.is_file():
         return issues
@@ -507,7 +506,7 @@ def validate(path: Optional[Path] = None) -> List[ConfigIssue]:
     return issues
 
 
-def _pick(flag, env, file_value, default) -> Tuple[object, str]:
+def _pick(flag, env, file_value, default) -> tuple[object, str]:
     """First non-empty of flag > env > file > default, with its provenance."""
     if flag is not None:
         return flag, "flag"
@@ -521,12 +520,12 @@ def _pick(flag, env, file_value, default) -> Tuple[object, str]:
 def resolve_settings(
     file_cfg: FileConfig,
     *,
-    mode_flag: Optional[str] = None,
-    persist_flag: Optional[str] = None,
-    timeout_flag: Optional[float] = None,
-    log_level_flag: Optional[str] = None,
-    log_file_flag: Optional[str] = None,
-) -> Dict[str, Tuple[object, str]]:
+    mode_flag: str | None = None,
+    persist_flag: str | None = None,
+    timeout_flag: float | None = None,
+    log_level_flag: str | None = None,
+    log_file_flag: str | None = None,
+) -> dict[str, tuple[object, str]]:
     """Resolve each setting to ``(value, source)`` by the documented precedence.
 
     ``source`` is one of ``flag`` / ``env`` / ``config`` / ``default`` so callers
@@ -603,9 +602,7 @@ def resolve_settings(
     }
 
 
-def executable_for(
-    file_cfg: FileConfig, client: str, *, flag: Optional[str] = None
-) -> Optional[str]:
+def executable_for(file_cfg: FileConfig, client: str, *, flag: str | None = None) -> str | None:
     """The executable override to hand the adapter for ``client``.
 
     Precedence is ``--executable`` flag > ``[executables]`` config entry, and

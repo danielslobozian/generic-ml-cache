@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
 
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 
@@ -26,7 +25,7 @@ class FilesystemBlobStore(BlobStorePort):
     def _path_for(self, key: str) -> Path:
         return self._root / key
 
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         path = self._path_for(key)
         if not path.exists():
             return None

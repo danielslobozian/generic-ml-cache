@@ -13,7 +13,7 @@ are the adapter's private implementation (it composes a CliRuntime for them).
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
@@ -47,19 +47,19 @@ class LocalClientPort(Protocol):
         answer. No workspace, no isolation, no artifact capture — a raw relay."""
         ...
 
-    def resolve_executable(self, override: Optional[str]) -> str:
+    def resolve_executable(self, override: str | None) -> str:
         """Resolve the client's executable (an explicit path or a PATH lookup)."""
         ...
 
-    def version_argv(self, executable: str) -> List[str]:
+    def version_argv(self, executable: str) -> list[str]:
         """Argv that prints the client's version string. Used by ``doctor``."""
         ...
 
-    def models_argv(self, executable: str) -> Optional[List[str]]:
+    def models_argv(self, executable: str) -> list[str] | None:
         """Argv to enumerate available models, or ``None`` if unsupported."""
         ...
 
-    def parse_model_list(self, stdout: str) -> List[ModelInfo]:
+    def parse_model_list(self, stdout: str) -> list[ModelInfo]:
         """Structure the client's raw model-list output into ``ModelInfo`` objects.
         Only called when :meth:`models_argv` is non-``None``."""
         ...

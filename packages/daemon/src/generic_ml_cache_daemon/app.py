@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Callable, FrozenSet, Optional, cast
+from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -94,7 +95,7 @@ _CAPTURE_ENV_PATH = "GMLCACHE_GATEWAY_CAPTURE_PATH"
 _CAPTURE_FILENAME = "gateway-capture.ndjson"
 
 
-def _resolve_capture_path(store_root: Path) -> Optional[Path]:
+def _resolve_capture_path(store_root: Path) -> Path | None:
     """Return the capture file path when capture is enabled, else None."""
     if not os.environ.get(_CAPTURE_ENV_FLAG):
         return None
@@ -107,12 +108,12 @@ def _resolve_capture_path(store_root: Path) -> Optional[Path]:
 def create_app(
     store_root: Path,
     *,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     enable_metrics: bool = False,
-    max_size: Optional[int] = None,
-    max_age: Optional[float] = None,
+    max_size: int | None = None,
+    max_age: float | None = None,
     eviction_interval: float = 3600.0,
-    whitelist: Optional[FrozenSet[str]] = None,
+    whitelist: frozenset[str] | None = None,
 ) -> FastAPI:
     """Create and configure the daemon FastAPI application.
 

@@ -9,17 +9,14 @@ It belongs in the adapters/infrastructure package, never in core.
 from __future__ import annotations
 
 import importlib.metadata
-import sys
-from typing import List
 
 ADAPTER_ENTRYPOINT_GROUP = "gmlcache.adapters"
 ADAPTER_CONTRACT_VERSION = "1"
 
 
-def iter_entry_points(group: str = ADAPTER_ENTRYPOINT_GROUP) -> List:
+def iter_entry_points(group: str = ADAPTER_ENTRYPOINT_GROUP) -> list:
     """Return the entry points in ``group`` (Python 3.9-safe)."""
-    if sys.version_info >= (3, 10):
-        return list(importlib.metadata.entry_points(group=group))
+    return list(importlib.metadata.entry_points(group=group))
     return list(importlib.metadata.entry_points().get(group, []))  # type: ignore[union-attr]
 
 

@@ -12,7 +12,6 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.encryption.encryption_manifest import (
     EncryptionManifest,
@@ -30,7 +29,7 @@ class FilesystemEncryptionManifestStore(EncryptionManifestStorePort):
     def __init__(self, store_root: Path) -> None:
         self._path = Path(store_root) / _FILENAME
 
-    def load(self) -> Optional[EncryptionManifest]:
+    def load(self) -> EncryptionManifest | None:
         if not self._path.is_file():
             return None
         data = json.loads(self._path.read_text(encoding="utf-8"))

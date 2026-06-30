@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 import urllib.error
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,7 +24,7 @@ from generic_ml_cache_adapters.adapter.out.api.openai_direct_adapter import Open
 # Fixtures — derived from a real Responses API call
 # ---------------------------------------------------------------------------
 
-_FIXTURE_RESPONSE: Dict[str, Any] = {
+_FIXTURE_RESPONSE: dict[str, Any] = {
     "id": "resp_0f440ab3bd3a8c88006a3c3f3d975481",
     "object": "response",
     "model": "gpt-4.1-mini-2025-04-14",
@@ -55,7 +55,7 @@ _FIXTURE_RESPONSE: Dict[str, Any] = {
 }
 
 # Response that includes non-zero cache and reasoning counts.
-_FIXTURE_CACHED_RESPONSE: Dict[str, Any] = {
+_FIXTURE_CACHED_RESPONSE: dict[str, Any] = {
     "id": "resp_02",
     "object": "response",
     "model": "gpt-4.1-mini-2025-04-14",
@@ -82,7 +82,7 @@ def _adapter(api_key: str = "test-key") -> OpenAIDirectAdapter:
     return OpenAIDirectAdapter(api_key=api_key)
 
 
-def _patch_post(adapter: OpenAIDirectAdapter, response: Dict[str, Any]):
+def _patch_post(adapter: OpenAIDirectAdapter, response: dict[str, Any]):
     adapter._post = lambda path, body: response  # type: ignore[assignment]
 
 
@@ -389,7 +389,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
 # list_models()
 # ---------------------------------------------------------------------------
 
-_MODELS_RESPONSE: Dict[str, Any] = {
+_MODELS_RESPONSE: dict[str, Any] = {
     "object": "list",
     "data": [
         {"id": "gpt-4.1", "object": "model", "created": 1744143600, "owned_by": "openai"},

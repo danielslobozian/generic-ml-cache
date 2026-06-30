@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
@@ -61,7 +61,7 @@ class ClaudeCliAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         # The prompt and context are delivered on stdin (see stdin_payload), never
         # as an argv argument, so an arbitrarily large prompt cannot hit the OS
         # single-argument size limit. With -p/--print and no prompt argument,
@@ -116,8 +116,8 @@ class ClaudeCliAdapter:
             return ParsedOutput(text=stdout, usage=None)
 
         _usage_val = doc.get("usage")
-        block: Dict[str, Any] = _usage_val if isinstance(_usage_val, dict) else {}
-        raw: Dict[str, Any] = {}
+        block: dict[str, Any] = _usage_val if isinstance(_usage_val, dict) else {}
+        raw: dict[str, Any] = {}
         for key in ("usage", "modelUsage", "total_cost_usd"):
             if key in doc:
                 raw[key] = doc[key]
@@ -134,7 +134,7 @@ class ClaudeCliAdapter:
         )
         return ParsedOutput(text=ensure_trailing_newline(text), usage=usage)
 
-    def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
+    def stdin_payload(self, context, prompt, system_prompt) -> str | None:
         # Prompt + context go to the client on stdin. The system prompt is a
         # separate, small argv flag (--append-system-prompt), so it stays in argv.
         return f"{context}\n\n{prompt}" if context else prompt

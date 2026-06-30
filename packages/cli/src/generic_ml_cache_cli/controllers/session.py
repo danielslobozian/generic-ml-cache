@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
@@ -25,7 +24,7 @@ from generic_ml_cache_cli.presenters.session import (
 )
 
 
-def _parse_spec_args(args: argparse.Namespace) -> "Optional[SessionSpec]":
+def _parse_spec_args(args: argparse.Namespace) -> SessionSpec | None:
     """Return a SessionSpec from --client/--model/--effort, or None if all are absent.
     Raises ValueError on a partial spec (some but not all flags supplied).
     """

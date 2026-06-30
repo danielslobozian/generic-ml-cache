@@ -21,8 +21,8 @@ Design rulings this encodes (see the usage model):
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional
 
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.out.metrics_port import SessionEventRow
@@ -71,17 +71,17 @@ class SessionReport:
     executions: int
     hits: int
     unknown_usage: int
-    span_start: Optional[str]
-    span_end: Optional[str]
-    by_model: List[ModelUsage]
-    by_day: List[DayActivity]
+    span_start: str | None
+    span_end: str | None
+    by_model: list[ModelUsage]
+    by_day: list[DayActivity]
 
     @property
     def day_count(self) -> int:
         return len(self.by_day)
 
 
-def _tokens(usage: Optional[TokenUsage]) -> Optional[int]:
+def _tokens(usage: TokenUsage | None) -> int | None:
     """Total reported tokens for a usage, or None if the call reported none."""
     if usage is None or (usage.input_tokens is None and usage.output_tokens is None):
         return None
@@ -91,15 +91,15 @@ def _tokens(usage: Optional[TokenUsage]) -> Optional[int]:
 def build_session_report(
     session_id: str,
     events: Iterable[SessionEventRow],
-    usage_by_key: Dict[str, TokenUsage],
+    usage_by_key: dict[str, TokenUsage],
 ) -> SessionReport:
     """Aggregate a session's journal rows into a :class:`SessionReport`.
 
     ``events`` are rows with ``ts`` / ``event`` / ``client`` / ``model`` / ``execution_key``
     (oldest first); ``usage_by_key`` maps an execution key to its :class:`TokenUsage`.
     """
-    models: Dict[tuple, Dict[str, int]] = {}
-    days: Dict[str, Dict[str, int]] = {}
+    models: dict[tuple, dict[str, int]] = {}
+    days: dict[str, dict[str, int]] = {}
     invocations = executions = hits = unknown = 0
 
     for row in events:

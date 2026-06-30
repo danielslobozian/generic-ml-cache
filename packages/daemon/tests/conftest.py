@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, Tuple
 
 import pytest
 from fastapi import FastAPI
@@ -23,7 +23,7 @@ def client(tmp_path: Path) -> Generator[TestClient, None, None]:
 
 
 @pytest.fixture
-def app_and_client(tmp_path: Path) -> Generator[Tuple[FastAPI, TestClient], None, None]:
+def app_and_client(tmp_path: Path) -> Generator[tuple[FastAPI, TestClient], None, None]:
     """Return (app, TestClient) so tests can seed wired internals directly."""
     application = create_app(tmp_path)
     with TestClient(application) as tc:

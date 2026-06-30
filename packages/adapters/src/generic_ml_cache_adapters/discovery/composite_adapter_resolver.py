@@ -10,7 +10,7 @@ knows the id wins.
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from collections.abc import Iterable
 
 from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
 from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
@@ -22,14 +22,14 @@ class CompositeAdapterResolver(AdapterResolverPort):
     """An AdapterResolverPort that delegates to the first resolver that succeeds."""
 
     def __init__(self, resolvers: Iterable[AdapterResolverPort]) -> None:
-        self._resolvers: List[AdapterResolverPort] = list(resolvers)
+        self._resolvers: list[AdapterResolverPort] = list(resolvers)
 
     def resolve_local_client(
         self,
         adapter_id: str,
-        executable_override: Optional[str] = None,
-        timeout: Optional[float] = None,
-        stream_path: Optional[str] = None,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
     ) -> LocalClientPort:
         for resolver in self._resolvers:
             try:

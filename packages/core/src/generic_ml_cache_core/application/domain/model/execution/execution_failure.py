@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import Optional
 
 
 class FailureReason(enum.Enum):
@@ -29,4 +28,4 @@ class ExecutionFailure:
 
     reason: FailureReason
     message: str
-    exit_code: Optional[int] = None
+    exit_code: int | None = None

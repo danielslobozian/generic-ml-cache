@@ -8,7 +8,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
@@ -45,7 +45,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             "gemini", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Google Gemini API"
         )
 
-    def __init__(self, api_key: Optional[str] = None, timeout: float = 120.0) -> None:
+    def __init__(self, api_key: str | None = None, timeout: float = 120.0) -> None:
         self._api_key = api_key
         self._timeout = timeout
 
@@ -69,14 +69,14 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             )
         return key
 
-    def _build_body(self, request: MlRequest) -> Dict[str, Any]:
+    def _build_body(self, request: MlRequest) -> dict[str, Any]:
         system_parts = []
         if request.context:
             system_parts.append({"text": request.context})
         if request.user_system_prompt:
             system_parts.append({"text": request.user_system_prompt})
         contents = [{"role": "user", "parts": [{"text": request.prompt}]}]
-        body: Dict[str, Any] = {"contents": contents}
+        body: dict[str, Any] = {"contents": contents}
         if system_parts:
             body["systemInstruction"] = {"parts": system_parts}
         if request.effort:
@@ -84,7 +84,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             body["generationConfig"] = {"thinkingConfig": config.to_dict()}
         return body
 
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Return all Gemini models that support generateContent."""
         data = self._get(_BASE_URL)
         result = []
@@ -98,7 +98,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             result.append(ModelInfo(id=model_id, name=display))
         return result
 
-    def _get(self, url: str) -> Dict[str, Any]:
+    def _get(self, url: str) -> dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             url,
             headers={"X-goog-api-key": self._api_key_value()},
@@ -111,7 +111,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Gemini API error {exc.code}: {error_body}") from exc
 
-    def _post(self, url: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    def _post(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             url,
@@ -129,7 +129,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Gemini API error {exc.code}: {error_body}") from exc
 
-    def _extract_text(self, response: Dict[str, Any]) -> str:
+    def _extract_text(self, response: dict[str, Any]) -> str:
         candidates = response.get("candidates", [])
         if not candidates:
             return "\n"
@@ -139,7 +139,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
         text = "".join(p["text"] for p in parts if "text" in p)
         return text if text.endswith("\n") else text + "\n"
 
-    def _extract_usage(self, response: Dict[str, Any]) -> TokenUsage:
+    def _extract_usage(self, response: dict[str, Any]) -> TokenUsage:
         meta = response.get("usageMetadata", {})
         return TokenUsage(
             input_tokens=int_or_none(meta.get("promptTokenCount")),

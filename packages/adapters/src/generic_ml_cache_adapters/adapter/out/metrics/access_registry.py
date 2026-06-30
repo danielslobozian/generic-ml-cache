@@ -11,8 +11,8 @@ without it. Schema is owned by the yoyo migration ``0001.unified-schema``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
@@ -31,10 +31,10 @@ class AccessRegistry:
     def __init__(
         self,
         conn_factory: Callable[[], DbConnection],
-        diag: Optional[DiagnosticsPort] = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
         self._conn_factory = conn_factory
-        self._diag: Optional[DiagnosticsPort] = diag
+        self._diag: DiagnosticsPort | None = diag
 
     def _connect(self) -> DbConnection:
         return self._conn_factory()
@@ -47,11 +47,11 @@ class AccessRegistry:
         self,
         event: str,
         *,
-        match_key: Optional[str],
+        match_key: str | None,
         client: str,
         model: str,
         effort: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> None:
         """Append one access event. Never raises -- failures are swallowed so the
         cache is never affected by the registry being unavailable."""
@@ -78,7 +78,7 @@ class AccessRegistry:
         except Exception as exc:
             self._warn_db_error("record event", exc)
 
-    def hit_counts_by_key(self) -> Dict[str, int]:
+    def hit_counts_by_key(self) -> dict[str, int]:
         """Return {match_key: number-of-hits} across all recorded HIT events
         ({} if unavailable).
 
@@ -101,7 +101,7 @@ class AccessRegistry:
             self._warn_db_error("hit_counts_by_key", exc)
             return {}
 
-    def event_counts(self) -> Dict[str, int]:
+    def event_counts(self) -> dict[str, int]:
         """Return {event: count} across all recorded events ({} if unavailable)."""
         try:
             conn = self._connect()
@@ -116,7 +116,7 @@ class AccessRegistry:
             self._warn_db_error("event_counts", exc)
             return {}
 
-    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+    def session_event_counts(self, session_id: str) -> dict[str, int]:
         """Return {event: count} for one session ({} if unknown or unavailable)."""
         try:
             conn = self._connect()
@@ -132,7 +132,7 @@ class AccessRegistry:
             self._warn_db_error("session_event_counts", exc)
             return {}
 
-    def session_events(self, session_id: str) -> List[Tuple]:
+    def session_events(self, session_id: str) -> list[tuple]:
         """Return (ts, event, client, model, match_key) rows for one session, oldest
         first ([] if unknown or unavailable)."""
         try:
@@ -149,7 +149,7 @@ class AccessRegistry:
             self._warn_db_error("session_events", exc)
             return []
 
-    def execution_keys_for_session(self, session_id: str) -> List[str]:
+    def execution_keys_for_session(self, session_id: str) -> list[str]:
         """Return the distinct execution keys (match_keys) recorded under
         ``session_id`` ([] if unknown or unavailable). Used by the purge service
         to collect every execution that belongs to a session."""
@@ -216,7 +216,7 @@ class AccessRegistry:
         except Exception as exc:
             self._warn_db_error("remove_session_tag", exc)
 
-    def session_tags_for_id(self, session_id: str) -> List[str]:
+    def session_tags_for_id(self, session_id: str) -> list[str]:
         """Return the distinct tags attached to ``session_id`` ([] if unknown or unavailable)."""
         try:
             conn = self._connect()
@@ -232,7 +232,7 @@ class AccessRegistry:
             self._warn_db_error("session_tags_for_id", exc)
             return []
 
-    def session_ids_for_tag(self, tag: str) -> List[str]:
+    def session_ids_for_tag(self, tag: str) -> list[str]:
         """Return the distinct session ids carrying ``tag`` ([] if unknown or unavailable)."""
         try:
             conn = self._connect()
@@ -282,7 +282,7 @@ class AccessRegistry:
         except Exception as exc:
             self._warn_db_error("clear_session_spec", exc)
 
-    def session_spec_for_id(self, session_id: str) -> Optional[SessionSpec]:
+    def session_spec_for_id(self, session_id: str) -> SessionSpec | None:
         """Return the execution spec for ``session_id``, or None if unset."""
         try:
             conn = self._connect()
@@ -298,7 +298,7 @@ class AccessRegistry:
             self._warn_db_error("session_spec_for_id", exc)
             return None
 
-    def list_session_ids(self) -> List[str]:
+    def list_session_ids(self) -> list[str]:
         """Return all known session IDs, unioned across events, tags, and specs tables."""
         try:
             conn = self._connect()
@@ -315,7 +315,7 @@ class AccessRegistry:
             self._warn_db_error("list_session_ids", exc)
             return []
 
-    def last_access(self) -> Dict[str, float]:
+    def last_access(self) -> dict[str, float]:
         """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
         ({} if unavailable). An execution absent here has never been seen by the
         registry; the caller falls back to file age for it."""
@@ -331,7 +331,7 @@ class AccessRegistry:
         except Exception as exc:
             self._warn_db_error("last_access", exc)
             return {}
-        out: Dict[str, float] = {}
+        out: dict[str, float] = {}
         for key, ts in rows:
             try:
                 out[key] = datetime.fromisoformat(ts).timestamp()

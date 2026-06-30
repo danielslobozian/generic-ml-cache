@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, List, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
@@ -40,13 +40,13 @@ class MlExecution:
     execution_kind: ExecutionKind
     output_persisted: bool
     input_persisted: bool = False
-    artifacts: List[Artifact] = field(default_factory=list)
-    token_usage: Optional[TokenUsage] = None
-    failure: Optional[ExecutionFailure] = None
-    superseded_at: Optional[datetime] = None
+    artifacts: list[Artifact] = field(default_factory=list)
+    token_usage: TokenUsage | None = None
+    failure: ExecutionFailure | None = None
+    superseded_at: datetime | None = None
 
 
-def normalize_tags(raw_tags: Iterable[str]) -> List[str]:
+def normalize_tags(raw_tags: Iterable[str]) -> list[str]:
     """Normalise user-supplied tags: trim, drop blanks, de-duplicate, sort.
 
     Tags are metadata, never part of the cache key. Normalising at the boundary

@@ -9,7 +9,6 @@ client runner, blob store, SQLite repository, and metrics — with the fake clie
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional
 
 from generic_ml_cache_adapters.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
@@ -32,7 +31,7 @@ def _factory(tmp_path):
     return _connect
 
 
-def _stdout(execution) -> Optional[bytes]:
+def _stdout(execution) -> bytes | None:
     for artifact in execution.artifacts:
         if artifact.artifact_type is ArtifactType.STDOUT:
             return artifact.content

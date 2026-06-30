@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, cast
+from typing import cast
 
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import run_migrations, schema_version

@@ -10,7 +10,7 @@ descriptor; the composition root hands its ``adapter_id`` to the resolver.
 
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,

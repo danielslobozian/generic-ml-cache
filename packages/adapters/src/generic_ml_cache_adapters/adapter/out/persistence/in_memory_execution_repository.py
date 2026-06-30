@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Dict, List, Optional, Set
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -39,16 +38,16 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
 
     def __init__(self, clock: ClockPort) -> None:
         self._clock = clock
-        self._by_key: Dict[str, List[MlExecution]] = {}
-        self._tags_by_key: Dict[str, Set[str]] = {}
+        self._by_key: dict[str, list[MlExecution]] = {}
+        self._tags_by_key: dict[str, set[str]] = {}
 
-    def find_current(self, execution_key: str) -> Optional[MlExecution]:
+    def find_current(self, execution_key: str) -> MlExecution | None:
         for execution in self._by_key.get(execution_key, []):
             if self._is_servable(execution):
                 return replace(execution)
         return None
 
-    def find_all(self, execution_key: str) -> List[MlExecution]:
+    def find_all(self, execution_key: str) -> list[MlExecution]:
         return [replace(execution) for execution in self._by_key.get(execution_key, [])]
 
     def save(self, execution: MlExecution) -> None:
@@ -62,18 +61,18 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
                     prior.superseded_at = superseded_at
         history.append(stored)
 
-    def add_tags(self, execution_key: str, tags: List[str]) -> None:
+    def add_tags(self, execution_key: str, tags: list[str]) -> None:
         # Tags the key's current execution; a no-op when there is none.
         if not tags or self.find_current(execution_key) is None:
             return
         self._tags_by_key.setdefault(execution_key, set()).update(tags)
 
-    def tags_for(self, execution_key: str) -> List[str]:
+    def tags_for(self, execution_key: str) -> list[str]:
         if self.find_current(execution_key) is None:
             return []
         return sorted(self._tags_by_key.get(execution_key, set()))
 
-    def add_input_artifacts(self, execution_key: str, artifacts: List[Artifact]) -> None:
+    def add_input_artifacts(self, execution_key: str, artifacts: list[Artifact]) -> None:
         # Back-fill the input onto the key's current execution; idempotent and a
         # no-op when there is none or it already carries input.
         if not artifacts:
@@ -89,7 +88,7 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
 
     # -- retention and purge --------------------------------------------------
 
-    def blob_keys_for_execution(self, execution_key: str) -> List[str]:
+    def blob_keys_for_execution(self, execution_key: str) -> list[str]:
         return list(
             {
                 a.blob_key
@@ -126,7 +125,7 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
             for a in execution.artifacts
         )
 
-    def current_executions_with_sizes(self) -> List[ExecutionSizeEntry]:
+    def current_executions_with_sizes(self) -> list[ExecutionSizeEntry]:
         return [
             ExecutionSizeEntry(
                 execution_key=key,
@@ -138,7 +137,7 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
             if self._is_servable(execution)
         ]
 
-    def executions_by_tag(self, tag: str) -> List[str]:
+    def executions_by_tag(self, tag: str) -> list[str]:
         return [
             key
             for key, executions in self._by_key.items()
@@ -146,12 +145,12 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
             and tag in self._tags_by_key.get(key, set())
         ]
 
-    def all_execution_keys(self) -> List[str]:
+    def all_execution_keys(self) -> list[str]:
         return list(self._by_key.keys())
 
     # -- reporting ------------------------------------------------------------
 
-    def current_execution_summaries(self) -> List[ExecutionSummary]:
+    def current_execution_summaries(self) -> list[ExecutionSummary]:
         result = []
         for key, executions in self._by_key.items():
             for execution in executions:
@@ -168,7 +167,7 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
                 )
         return result
 
-    def find_current_by_key_prefix(self, key_prefix: str) -> List[MlExecution]:
+    def find_current_by_key_prefix(self, key_prefix: str) -> list[MlExecution]:
         return [
             replace(execution)
             for key, executions in self._by_key.items()

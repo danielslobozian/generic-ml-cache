@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import BaseModel
 
 
@@ -16,14 +14,14 @@ class SpecBody(BaseModel):
 
 
 class SessionCreateBody(BaseModel):
-    tags: List[str] = []
-    spec: Optional[SpecBody] = None
+    tags: list[str] = []
+    spec: SpecBody | None = None
 
 
 class SessionResponse(BaseModel):
     session_id: str
-    tags: List[str]
-    spec: Optional[SpecBody] = None
+    tags: list[str]
+    spec: SpecBody | None = None
 
 
 class ModelUsageBody(BaseModel):
@@ -41,12 +39,12 @@ class ModelUsageBody(BaseModel):
 
 class SessionStatsResponse(BaseModel):
     session_id: str
-    tags: List[str]
-    spec: Optional[SpecBody] = None
+    tags: list[str]
+    spec: SpecBody | None = None
     calls: int
     hits: int
     hit_rate: float
-    by_model: List[ModelUsageBody] = []
+    by_model: list[ModelUsageBody] = []
 
 
 class TagBody(BaseModel):
@@ -54,4 +52,4 @@ class TagBody(BaseModel):
 
 
 class SessionListResponse(BaseModel):
-    session_ids: List[str]
+    session_ids: list[str]

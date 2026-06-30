@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Dict, List, Optional, Tuple, cast
+from typing import cast
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -69,14 +69,14 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
     def __init__(
         self,
         file_fingerprint: FileFingerprintPort,
-        runners: Dict[str, RegisteredAdapter],
+        runners: dict[str, RegisteredAdapter],
         blob_store: BlobStorePort,
         repository: ExecutionRepositoryPort,
         metrics: MetricsPort,
-        purge_service: Optional[PurgeService] = None,
-        max_size: Optional[int] = None,
-        workspace: Optional[WorkspacePort] = None,
-        diag: Optional[DiagnosticsPort] = None,
+        purge_service: PurgeService | None = None,
+        max_size: int | None = None,
+        workspace: WorkspacePort | None = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
         super().__init__(blob_store, repository, metrics, diag)
         self._file_fingerprint = file_fingerprint
@@ -224,7 +224,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
     def _execution_kind(self, command: RunMlExecutionCommand) -> ExecutionKind:
         return command.execution_kind
 
-    def _journal_fields(self, command: RunMlExecutionCommand) -> Tuple[str, str, str]:
+    def _journal_fields(self, command: RunMlExecutionCommand) -> tuple[str, str, str]:
         if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             return command.client, "", ""
         return command.client, command.model, command.effort
@@ -232,16 +232,16 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
     def _is_uncacheable(self, command: RunMlExecutionCommand) -> bool:
         return command.is_uncacheable
 
-    def _execution_tags(self, command: RunMlExecutionCommand) -> List[str]:
+    def _execution_tags(self, command: RunMlExecutionCommand) -> list[str]:
         return normalize_tags(command.tags)
 
     def _input_parts(
         self, command: RunMlExecutionCommand
-    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+    ) -> list[tuple[ArtifactType, str | None, bytes]]:
         if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             payload = json.dumps(list(command.native_args))
             return [(ArtifactType.INPUT_ARGS, None, payload.encode("utf-8"))]
-        parts: List[Tuple[ArtifactType, Optional[str], bytes]] = []
+        parts: list[tuple[ArtifactType, str | None, bytes]] = []
         if command.context:
             parts.append((ArtifactType.INPUT_CONTEXT, None, command.context.encode("utf-8")))
         parts.append((ArtifactType.INPUT_PROMPT, None, command.prompt.encode("utf-8")))

@@ -28,10 +28,10 @@ import re
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, List, Optional
 
 from generic_ml_cache_adapters.stream import StreamWriter
 from generic_ml_cache_core.common.errors import StoreLocked
@@ -99,7 +99,7 @@ class JobStore:
         except ValueError:
             return False  # an invalid id never names a real job
 
-    def list_ids(self) -> List[str]:
+    def list_ids(self) -> list[str]:
         if not self._jobs.exists():
             return []
         return sorted(p.name for p in self._jobs.iterdir() if p.is_dir() and p.name != "locks")
@@ -111,7 +111,7 @@ class JobStore:
     def read_spec(self, job_id: str) -> dict:
         return json.loads(self._spec_path(job_id).read_text(encoding="utf-8"))
 
-    def read_status(self, job_id: str) -> Optional[dict]:
+    def read_status(self, job_id: str) -> dict | None:
         try:
             return json.loads(self._status_path(job_id).read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -179,7 +179,7 @@ def job_lock_held(lock_path: Path) -> bool:
         connection.close()
 
 
-def derived_state(status: Optional[dict], lock_held: bool) -> str:
+def derived_state(status: dict | None, lock_held: bool) -> str:
     """The reported state: terminal as stored; a stored ``running`` with no live
     worker (lock free) is reported as :data:`INTERRUPTED`."""
     if status is None:
@@ -193,7 +193,7 @@ def derived_state(status: Optional[dict], lock_held: bool) -> str:
 # -- detached spawn -----------------------------------------------------------
 
 
-def spawn_worker(store_root: Path, job_id: str, token: Optional[str] = None) -> None:
+def spawn_worker(store_root: Path, job_id: str, token: str | None = None) -> None:
     """Launch a detached ``gmlcache`` worker for ``job_id``. The child is fully
     detached (new session / process group, no console, I/O to devnull), so it
     outlives this command. Cross-platform (POSIX setsid; Windows DETACHED_PROCESS).

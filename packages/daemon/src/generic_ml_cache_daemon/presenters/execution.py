@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -17,13 +17,13 @@ class ExecutionSummaryResponse(BaseModel):
 
 
 class ExecutionListResponse(BaseModel):
-    executions: List[ExecutionSummaryResponse]
+    executions: list[ExecutionSummaryResponse]
     total: int
 
 
 class GlobalStatsResponse(BaseModel):
     executions: int
-    event_counts: Dict[str, int]
+    event_counts: dict[str, int]
 
 
 class PurgeByAll(BaseModel):
@@ -50,7 +50,7 @@ class PurgeBySessionTag(BaseModel):
     target: str
 
 
-PurgeBody = Union[PurgeByAll, PurgeByKey, PurgeByTag, PurgeBySession, PurgeBySessionTag]
+PurgeBody = PurgeByAll | PurgeByKey | PurgeByTag | PurgeBySession | PurgeBySessionTag
 
 
 class PurgeResponse(BaseModel):

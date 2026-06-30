@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from generic_ml_cache_adapters.discovery.composition import registered_names
@@ -48,7 +46,7 @@ def get_info(request: Request) -> InfoResponse:
     store_root: str = str(request.app.state.store_root)
     session_id: str | None = request.app.state.session_id
     whitelist = request.app.state.whitelist
-    all_adapter_names: List[str] = registered_names(whitelist=whitelist)
+    all_adapter_names: list[str] = registered_names(whitelist=whitelist)
     stats = request.app.state.eviction_stats
     return InfoResponse(
         version=__version__,

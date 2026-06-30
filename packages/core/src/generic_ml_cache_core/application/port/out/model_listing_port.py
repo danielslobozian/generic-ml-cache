@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, List
+from typing import ClassVar
 
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 
@@ -27,7 +27,7 @@ class ModelListingPort(ABC):
     """The unique adapter name, shared with MlRunnerPort (e.g. ``"anthropic"``)."""
 
     @abstractmethod
-    def list_models(self) -> List[ModelInfo]:
+    def list_models(self) -> list[ModelInfo]:
         """Return all models this provider exposes.
 
         Raises on a transport failure so the caller can surface the reason.

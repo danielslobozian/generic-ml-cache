@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
@@ -44,4 +43,4 @@ class WiredUseCases:
     repository: ExecutionRepositoryPort
     metrics: MetricsPort
     run_gateway: RunMlGatewayUseCase
-    diag: Optional[DiagnosticsPort] = None
+    diag: DiagnosticsPort | None = None

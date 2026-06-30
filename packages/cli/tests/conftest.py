@@ -12,7 +12,6 @@ from __future__ import annotations
 import base64
 import sys
 from pathlib import Path
-from typing import List
 
 import pytest
 from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
@@ -54,7 +53,7 @@ class FakeAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         return [
             executable,
             FAKE_SCRIPT,
@@ -116,7 +115,7 @@ class FakeStdinAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         return [
             executable,
             FAKE_SCRIPT,

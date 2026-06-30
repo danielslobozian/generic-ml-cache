@@ -19,7 +19,7 @@ Each field is length-prefixed before hashing so that, e.g., ``{"context": "ab",
 from __future__ import annotations
 
 import hashlib
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 # Control characters used purely as internal framing while hashing. They never
 # touch user data and never appear in the stored record on disk.

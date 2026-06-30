@@ -4,12 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from generic_ml_cache_cli.presenters.shared import _activity_bar, _comma
 
 
-def _render_session_report(report, tags: Optional[list] = None) -> str:
+def _render_session_report(report, tags: list | None = None) -> str:
     lines = [f"session     : {report.session_id}"]
     if tags:
         lines.append(f"tags        : {', '.join(sorted(tags))}")

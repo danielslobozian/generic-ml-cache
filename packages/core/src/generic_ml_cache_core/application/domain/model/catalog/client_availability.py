@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -18,4 +17,4 @@ class ClientAvailability:
 
     client_name: str
     available: bool
-    candidates: Tuple[AdapterDescriptor, ...] = ()
+    candidates: tuple[AdapterDescriptor, ...] = ()

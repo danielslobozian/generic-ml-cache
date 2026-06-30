@@ -9,7 +9,7 @@ and core then sees only the permitted universe — it never learns a whitelist e
 
 from __future__ import annotations
 
-from typing import FrozenSet, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -23,7 +23,7 @@ class WhitelistAdapterCatalog(AdapterCatalogPort):
 
     def __init__(self, inner: AdapterCatalogPort, allowed_clients: Iterable[str]) -> None:
         self._inner = inner
-        self._allowed: FrozenSet[str] = frozenset(allowed_clients)
+        self._allowed: frozenset[str] = frozenset(allowed_clients)
 
     def list_adapters(self) -> Sequence[AdapterDescriptor]:
         return [d for d in self._inner.list_adapters() if d.client_name in self._allowed]

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 
 class GeminiEffortType(Enum):
@@ -35,7 +35,7 @@ class GeminiEffortType(Enum):
 # Effort strings our system understands → thinkingBudget token counts for
 # 2.5 models. Values chosen to spread across the 0–32768 documented range:
 # low ≈ 3 %, medium ≈ 25 %, high ≈ 75 %.
-_LEVEL_TO_BUDGET: Dict[str, int] = {
+_LEVEL_TO_BUDGET: dict[str, int] = {
     "low": 1024,
     "medium": 8192,
     "high": 24576,
@@ -92,7 +92,7 @@ class GeminiThinkingConfig:
     budget: int = 0
 
     @classmethod
-    def from_effort(cls, effort: str, model: str) -> "GeminiThinkingConfig":
+    def from_effort(cls, effort: str, model: str) -> GeminiThinkingConfig:
         """Translate our generic ``effort`` string for ``model``.
 
         For budget models: named levels (``"low"``, ``"medium"``, ``"high"``)
@@ -115,7 +115,7 @@ class GeminiThinkingConfig:
     def is_budget(self) -> bool:
         return self.effort_type is GeminiEffortType.BUDGET
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Return the ``thinkingConfig`` dict to embed in ``generationConfig``."""
         if self.is_budget:
             return {"thinkingBudget": self.budget}

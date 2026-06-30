@@ -8,7 +8,7 @@ compliant connection — SQLite, PostgreSQL, MariaDB — satisfies the contract.
 
 from __future__ import annotations
 
-from typing import Any, List, Protocol
+from typing import Any, Protocol
 
 
 class DbCursor(Protocol):
@@ -17,7 +17,7 @@ class DbCursor(Protocol):
 
     def fetchone(self) -> Any: ...
 
-    def fetchall(self) -> List[Any]: ...
+    def fetchall(self) -> list[Any]: ...
 
 
 class DbConnection(Protocol):

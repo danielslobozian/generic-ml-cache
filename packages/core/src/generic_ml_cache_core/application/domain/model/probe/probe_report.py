@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
@@ -23,4 +22,4 @@ class ProbeReport:
 
     status: ProbeStatus
     execution_key: str
-    execution: Optional[MlExecution] = None
+    execution: MlExecution | None = None

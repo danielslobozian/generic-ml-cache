@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict
 
 
 @dataclass(frozen=True)
@@ -34,4 +33,4 @@ class Snapshot:
     post-run diff can tell which files the client created or modified. Core treats
     it as opaque and only hands it back to the WorkspacePort."""
 
-    digests: Dict[str, str] = field(default_factory=dict)
+    digests: dict[str, str] = field(default_factory=dict)

@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Optional
 
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli.composition import _store_root
@@ -38,15 +37,15 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
     if store_root is None:
         return 4
 
-    session_id: Optional[str] = getattr(args, "session", None) or None
+    session_id: str | None = getattr(args, "session", None) or None
     enable_metrics: bool = getattr(args, "metrics", False)
     host: str = args.host
     port: int = args.port
 
     _daemon_cfg = config.load()
     settings = config.resolve_settings(_daemon_cfg)
-    max_size: Optional[int] = settings["max_size"][0]  # type: ignore[assignment]
-    max_age: Optional[float] = settings["max_age"][0]  # type: ignore[assignment]
+    max_size: int | None = settings["max_size"][0]  # type: ignore[assignment]
+    max_age: float | None = settings["max_age"][0]  # type: ignore[assignment]
 
     application = create_app(
         store_root,
@@ -128,7 +127,7 @@ def _cmd_status_line(args: argparse.Namespace) -> int:  # NOSONAR — always 0 b
     import urllib.error
     import urllib.request
 
-    session_id: Optional[str] = getattr(args, "session", None) or os.environ.get("GMLCACHE_SESSION")
+    session_id: str | None = getattr(args, "session", None) or os.environ.get("GMLCACHE_SESSION")
     if not session_id:
         return 0
 

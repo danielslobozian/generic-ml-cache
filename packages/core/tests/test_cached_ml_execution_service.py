@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -78,7 +77,7 @@ class _TagSvc(_RunSvc):
 class _Cmd:
     cache_mode: CacheMode = CacheMode.CACHE
     persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
-    session_id: Optional[str] = "sess-1"
+    session_id: str | None = "sess-1"
     _is_uncacheable: bool = False
     _should_persist: bool = True
 

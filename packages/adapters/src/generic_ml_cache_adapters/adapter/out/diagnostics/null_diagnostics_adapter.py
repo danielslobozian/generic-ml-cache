@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
 
@@ -21,5 +19,5 @@ class NullDiagnosticsAdapter(DiagnosticsPort):
     def warn(self, msg: str, **context: object) -> None:
         pass
 
-    def error(self, msg: str, exc: Optional[BaseException] = None, **context: object) -> None:
+    def error(self, msg: str, exc: BaseException | None = None, **context: object) -> None:
         pass

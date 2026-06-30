@@ -10,7 +10,7 @@ constructs concrete classes); core only depends on this port.
 
 from __future__ import annotations
 
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
@@ -23,9 +23,9 @@ class AdapterResolverPort(Protocol):
     def resolve_local_client(
         self,
         adapter_id: str,
-        executable_override: Optional[str] = None,
-        timeout: Optional[float] = None,
-        stream_path: Optional[str] = None,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
     ) -> LocalClientPort:
         """Construct the local CLI client adapter for ``adapter_id`` with the given
         per-run config (PATH override, subprocess timeout, live-stream path)."""

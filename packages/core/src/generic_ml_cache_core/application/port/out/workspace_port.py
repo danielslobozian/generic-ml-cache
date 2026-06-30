@@ -13,7 +13,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional
 
 from generic_ml_cache_core.application.domain.model.run.client_config import (
     CredentialFile,
@@ -33,11 +32,11 @@ class WorkspacePort(ABC):
         """Make a fresh workspace (run folder + private config home)."""
 
     @abstractmethod
-    def write_config(self, workspace: Workspace, config_file: Optional[GrantConfigFile]) -> None:
+    def write_config(self, workspace: Workspace, config_file: GrantConfigFile | None) -> None:
         """Write the client's grant config file into the config home (no-op if None)."""
 
     @abstractmethod
-    def seed_credentials(self, workspace: Workspace, credentials: List[CredentialFile]) -> None:
+    def seed_credentials(self, workspace: Workspace, credentials: list[CredentialFile]) -> None:
         """Copy the client's credential/token files into the config home."""
 
     @abstractmethod
@@ -45,7 +44,7 @@ class WorkspacePort(ABC):
         """Capture the run folder's pre-launch baseline."""
 
     @abstractmethod
-    def capture(self, run_dir: Path, baseline: Snapshot) -> List[GeneratedFile]:
+    def capture(self, run_dir: Path, baseline: Snapshot) -> list[GeneratedFile]:
         """Return the files created or modified since ``baseline``."""
 
     @abstractmethod

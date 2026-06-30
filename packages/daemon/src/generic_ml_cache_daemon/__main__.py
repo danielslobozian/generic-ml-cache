@@ -8,7 +8,6 @@ import argparse
 import os
 import re
 from pathlib import Path
-from typing import FrozenSet, Optional
 
 import uvicorn
 
@@ -21,7 +20,7 @@ _SIZE_UNITS = {"b": 1, "kb": 1024, "mb": 1024**2, "gb": 1024**3, "tb": 1024**4}
 _AGE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
-def _parse_size(raw: str) -> Optional[int]:
+def _parse_size(raw: str) -> int | None:
     m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([a-z]*)", raw.strip().lower().replace(" ", ""))
     if not m:
         return None
@@ -30,7 +29,7 @@ def _parse_size(raw: str) -> Optional[int]:
     return int(float(number) * factor) if factor else None
 
 
-def _parse_age(raw: str) -> Optional[float]:
+def _parse_age(raw: str) -> float | None:
     m = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([a-z]*)", raw.strip().lower().replace(" ", ""))
     if not m:
         return None
@@ -39,7 +38,7 @@ def _parse_age(raw: str) -> Optional[float]:
     return float(number) * factor if factor else None
 
 
-def _parse_adapters(raw: str) -> Optional[FrozenSet[str]]:
+def _parse_adapters(raw: str) -> frozenset[str] | None:
     """Parse GMLCACHE_ADAPTERS: '*'/empty → None (all); 'claude,cursor' → frozenset."""
     text = raw.strip()
     if not text or text == "*":
@@ -47,7 +46,7 @@ def _parse_adapters(raw: str) -> Optional[FrozenSet[str]]:
     return frozenset(name.strip() for name in text.split(",") if name.strip())
 
 
-def main(argv: Optional[list[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     # Parse args first so ``--help`` prints usage and exits *before* any server
     # starts. All cache behaviour is configured by GMLCACHE_* environment variables;
     # the only flags are the bind host/port. ``argv`` defaults to ``sys.argv[1:]``;

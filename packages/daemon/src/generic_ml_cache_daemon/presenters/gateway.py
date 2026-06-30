@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,7 +13,7 @@ class MessageParam(BaseModel):
     role: str
     # The Anthropic API allows content to be either a plain string or a list of
     # typed content blocks (text, image, tool_use, tool_result …).
-    content: Union[str, List[Dict[str, Any]]]
+    content: str | list[dict[str, Any]]
 
 
 class MessagesRequest(BaseModel):
@@ -25,10 +25,10 @@ class MessagesRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str
-    messages: List[MessageParam]
+    messages: list[MessageParam]
     max_tokens: int = 8192
-    system: Optional[Union[str, List[Dict[str, Any]]]] = None
-    session_id: Optional[str] = None
+    system: str | list[dict[str, Any]] | None = None
+    session_id: str | None = None
 
 
 class ContentBlock(BaseModel):
@@ -40,9 +40,9 @@ class MessagesResponse(BaseModel):
     id: str
     type: str = "message"
     role: str = "assistant"
-    content: List[ContentBlock]
+    content: list[ContentBlock]
     model: str
     stop_reason: str = "end_turn"
-    stop_sequence: Optional[str] = None
-    usage: Dict[str, Any]
+    stop_sequence: str | None = None
+    usage: dict[str, Any]
     x_cache_hit: bool = False

@@ -9,7 +9,6 @@ the model string. Best-effort for v0.0.1; correct here as needed.
 from __future__ import annotations
 
 import json
-from typing import List, Optional
 
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
@@ -56,7 +55,7 @@ class CursorCliAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         # cursor-agent takes the prompt ONLY as a positional argument -- its CLI has
         # no stdin/file path for the prompt (verified against `cursor-agent --help`:
         # `[prompt...]`, no `-`, no --prompt-file), unlike claude and codex. Feeding
@@ -192,10 +191,10 @@ class CursorCliAdapter:
         # Transport forced by the client, not a capability door (docs/reference/grants.md).
         return ["--force"] if "net" in grants else []
 
-    def models_argv(self, executable: str) -> Optional[List[str]]:
+    def models_argv(self, executable: str) -> list[str] | None:
         return [executable, "--list-models"]
 
-    def parse_model_list(self, stdout: str) -> List[ModelInfo]:
+    def parse_model_list(self, stdout: str) -> list[ModelInfo]:
         """Parse ``cursor-agent --list-models`` output.
 
         Each model is one ``<id> - <Label>`` line. A header line and a trailing
@@ -203,7 +202,7 @@ class CursorCliAdapter:
         label is lifted into a flag. The id is taken verbatim -- it is exactly
         what a caller passes to ``--model``.
         """
-        models: List[ModelInfo] = []
+        models: list[ModelInfo] = []
         for raw in stdout.splitlines():
             line = raw.strip()
             if not line or " - " not in line:

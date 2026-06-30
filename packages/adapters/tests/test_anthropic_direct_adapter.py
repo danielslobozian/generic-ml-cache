@@ -7,7 +7,7 @@ from __future__ import annotations
 import io
 import urllib.error
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,7 +23,7 @@ from generic_ml_cache_adapters.adapter.out.api.anthropic_direct_adapter import (
 # ---------------------------------------------------------------------------
 
 # Realistic response from the Anthropic Messages API.
-_FIXTURE_RESPONSE: Dict[str, Any] = {
+_FIXTURE_RESPONSE: dict[str, Any] = {
     "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
     "type": "message",
     "role": "assistant",
@@ -42,7 +42,7 @@ _FIXTURE_RESPONSE: Dict[str, Any] = {
 }
 
 # Response that includes cache token counts.
-_FIXTURE_CACHED_RESPONSE: Dict[str, Any] = {
+_FIXTURE_CACHED_RESPONSE: dict[str, Any] = {
     "id": "msg_02",
     "type": "message",
     "role": "assistant",
@@ -62,7 +62,7 @@ def _adapter(api_key: str = "test-key") -> AnthropicDirectAdapter:
     return AnthropicDirectAdapter(api_key=api_key)
 
 
-def _patch_post(adapter: AnthropicDirectAdapter, response: Dict[str, Any]):
+def _patch_post(adapter: AnthropicDirectAdapter, response: dict[str, Any]):
     adapter._post = lambda path, body: response  # type: ignore[assignment]
 
 

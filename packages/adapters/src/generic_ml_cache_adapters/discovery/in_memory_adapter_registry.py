@@ -10,7 +10,8 @@ packaging-discovery — it is just an in-memory map — so core never needs it.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Sequence, cast
+from collections.abc import Sequence
+from typing import cast
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -31,7 +32,7 @@ class InMemoryAdapterRegistry(AdapterCatalogPort, AdapterResolverPort):
     still seen (the merge holds this object, not a snapshot)."""
 
     def __init__(self) -> None:
-        self._classes: Dict[str, type] = {}
+        self._classes: dict[str, type] = {}
 
     def register(self, cls: type) -> None:
         """Register an adapter class (must expose a ``descriptor()`` classmethod)."""
@@ -65,9 +66,9 @@ class InMemoryAdapterRegistry(AdapterCatalogPort, AdapterResolverPort):
     def resolve_local_client(
         self,
         adapter_id: str,
-        executable_override: Optional[str] = None,
-        timeout: Optional[float] = None,
-        stream_path: Optional[str] = None,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
     ) -> LocalClientPort:
         cls = self._class_for(adapter_id)
         return cast(

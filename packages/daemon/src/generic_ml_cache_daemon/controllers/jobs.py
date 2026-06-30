@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
@@ -23,9 +24,9 @@ _SSE_POLL_INTERVAL = 0.1
 
 
 def _job_to_response(job: Job) -> JobResponse:
-    execution_key: Optional[str] = None
-    stdout: Optional[str] = None
-    stderr: Optional[str] = None
+    execution_key: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
     if job.execution is not None:
         execution_key = job.execution.call_identity.generate_key()
         stdout = _extract_artifact(job.execution, _STDOUT)
@@ -52,7 +53,7 @@ def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
 
 
 @router.get("")
-def list_jobs(request: Request) -> Dict[str, Any]:
+def list_jobs(request: Request) -> dict[str, Any]:
     """Return all known job IDs."""
     registry = request.app.state.job_registry
     return {"job_ids": registry.list_ids()}
@@ -79,7 +80,7 @@ async def stream_job(job_id: str, request: Request) -> Any:
     if job is None:
         raise HTTPException(status_code=404, detail=f"job {job_id!r} not found")
 
-    async def generator() -> AsyncIterator[Dict[str, str]]:
+    async def generator() -> AsyncIterator[dict[str, str]]:
         while job.state not in (JobState.DONE, JobState.ERROR):  # pragma: no cover
             yield {"data": json.dumps({"type": "status", "state": job.state.value})}
             await asyncio.sleep(_SSE_POLL_INTERVAL)

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List
 
 import pytest
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
@@ -35,7 +34,7 @@ class FixedClock(ClockPort):
 
 class FakeFingerprint(FileFingerprintPort):
     def __init__(self) -> None:
-        self.fingerprinted: List[str] = []
+        self.fingerprinted: list[str] = []
 
     def fingerprint(self, path: str) -> str:
         self.fingerprinted.append(path)

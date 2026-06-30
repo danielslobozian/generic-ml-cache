@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 try:
     import argcomplete
 except ImportError:  # completion is a convenience; never let its absence break the CLI
@@ -14,7 +12,7 @@ except ImportError:  # completion is a convenience; never let its absence break 
 from generic_ml_cache_cli.infrastructure.parser import build_parser
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     if argcomplete is not None:
         # A no-op unless the shell is requesting completions (it sets _ARGCOMPLETE);

@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import BaseModel
 
 
@@ -15,14 +13,14 @@ class HealthResponse(BaseModel):
 
 class ReadyResponse(BaseModel):
     status: str
-    detail: Optional[str] = None
+    detail: str | None = None
 
 
 class EvictionInfo(BaseModel):
-    max_size: Optional[int] = None
-    max_age: Optional[float] = None
+    max_size: int | None = None
+    max_age: float | None = None
     interval: float
-    last_run_at: Optional[float] = None
+    last_run_at: float | None = None
     last_executions_removed: int = 0
     last_bytes_freed: int = 0
 
@@ -30,6 +28,6 @@ class EvictionInfo(BaseModel):
 class InfoResponse(BaseModel):
     version: str
     store_root: str
-    session_id: Optional[str] = None
-    adapters: List[str]
+    session_id: str | None = None
+    adapters: list[str]
     eviction: EvictionInfo

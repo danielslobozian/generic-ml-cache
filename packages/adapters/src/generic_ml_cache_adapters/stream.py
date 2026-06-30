@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class StreamWriter:
@@ -40,7 +40,7 @@ class StreamWriter:
     unaffected."""
 
     def __init__(self, path: Path) -> None:
-        self._fh: Optional[Any] = None
+        self._fh: Any | None = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             # Text append; newline="\n" writes bare line feeds on every OS (no

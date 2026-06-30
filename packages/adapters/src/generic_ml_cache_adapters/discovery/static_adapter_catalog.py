@@ -9,7 +9,7 @@ discovery; it simply answers questions over the descriptors it was given.
 
 from __future__ import annotations
 
-from typing import Iterable, List, Sequence
+from collections.abc import Iterable, Sequence
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -22,7 +22,7 @@ class StaticAdapterCatalog(AdapterCatalogPort):
     """An AdapterCatalogPort backed by a predefined list of descriptors."""
 
     def __init__(self, descriptors: Iterable[AdapterDescriptor] = ()) -> None:
-        self._descriptors: List[AdapterDescriptor] = list(descriptors)
+        self._descriptors: list[AdapterDescriptor] = list(descriptors)
 
     def list_adapters(self) -> Sequence[AdapterDescriptor]:
         return list(self._descriptors)

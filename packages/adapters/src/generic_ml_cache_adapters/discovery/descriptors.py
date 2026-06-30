@@ -10,7 +10,7 @@ declarative (id, capabilities, display name).
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (

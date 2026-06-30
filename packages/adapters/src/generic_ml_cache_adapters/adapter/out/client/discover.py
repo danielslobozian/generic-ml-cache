@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import subprocess
 import time
-from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.client_status import (
     ClientStatus as ClientStatus,
@@ -36,7 +35,7 @@ from generic_ml_cache_adapters.discovery.composition import (
 _LIST_MODELS_EXIT = "list-models EXIT"
 
 
-def _resolve_local_client(name: str, whitelist: Optional[FrozenSet[str]] = None) -> LocalClientPort:
+def _resolve_local_client(name: str, whitelist: frozenset[str] | None = None) -> LocalClientPort:
     """Resolve a local-managed client adapter by client name, via the catalog +
     resolver. Raises :class:`UnknownClient` if no local adapter serves ``name``."""
     descriptors = list(catalog_for(whitelist).find_by_client_name(name))
@@ -49,8 +48,8 @@ def _resolve_local_client(name: str, whitelist: Optional[FrozenSet[str]] = None)
 
 
 def _probe_version(
-    argv: List[str], timeout: float, diag: Optional[DiagnosticsPort] = None
-) -> Tuple[Optional[str], Optional[str]]:
+    argv: list[str], timeout: float, diag: DiagnosticsPort | None = None
+) -> tuple[str | None, str | None]:
     _t = time.perf_counter()
     if diag:
         diag.debug("probe-version ENTER", argv0=argv[0] if argv else "")
@@ -79,9 +78,9 @@ def _probe_version(
 
 def probe(
     name: str,
-    executable: Optional[str] = None,
+    executable: str | None = None,
     timeout: float = 10.0,
-    diag: Optional[DiagnosticsPort] = None,
+    diag: DiagnosticsPort | None = None,
 ) -> ClientStatus:
     """Probe one registered client: is its executable present, and what version?
 
@@ -118,10 +117,10 @@ def probe(
 
 def probe_all(
     timeout: float = 10.0,
-    executables: Optional[Dict[str, str]] = None,
-    whitelist: Optional[FrozenSet[str]] = None,
-    diag: Optional[DiagnosticsPort] = None,
-) -> List[ClientStatus]:
+    executables: dict[str, str] | None = None,
+    whitelist: frozenset[str] | None = None,
+    diag: DiagnosticsPort | None = None,
+) -> list[ClientStatus]:
     """Probe every registered client, in name order.
 
     ``executables`` optionally maps a client name to the executable to probe
@@ -148,10 +147,10 @@ def probe_all(
 
 def list_models(  # noqa: C901
     name: str,
-    executable: Optional[str] = None,
+    executable: str | None = None,
     timeout: float = 30.0,
-    whitelist: Optional[FrozenSet[str]] = None,
-    diag: Optional[DiagnosticsPort] = None,
+    whitelist: frozenset[str] | None = None,
+    diag: DiagnosticsPort | None = None,
 ) -> ModelListing:
     """List one client's models by relaying its own listing command.
 
@@ -247,10 +246,10 @@ def list_models(  # noqa: C901
 
 def list_models_all(
     timeout: float = 30.0,
-    executables: Optional[Dict[str, str]] = None,
-    whitelist: Optional[FrozenSet[str]] = None,
-    diag: Optional[DiagnosticsPort] = None,
-) -> List[ModelListing]:
+    executables: dict[str, str] | None = None,
+    whitelist: frozenset[str] | None = None,
+    diag: DiagnosticsPort | None = None,
+) -> list[ModelListing]:
     """List models for every registered client, in name order.
 
     ``executables`` optionally maps a client name to the executable to use

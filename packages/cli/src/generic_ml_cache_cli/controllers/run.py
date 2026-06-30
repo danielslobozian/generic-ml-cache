@@ -7,8 +7,8 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
 
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
@@ -53,7 +53,7 @@ from generic_ml_cache_cli.presenters.shared import (
 #: capabilities a caller may open with --grant, sourced from the core domain
 #: vocabulary so the CLI choices, the help, and what the adapters implement can
 #: never drift.
-GRANT_CHOICES: List[str] = list(GRANTS)
+GRANT_CHOICES: list[str] = list(GRANTS)
 _GRANT_HELP = (
     "open a capability for the client -- enablement, not restriction. One of "
     "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "
@@ -153,7 +153,7 @@ def _spec_executable_override(spec: dict):
 
 def _run_cached_execution(
     execute: Callable[[], MlExecution],
-) -> Tuple[Optional[MlExecution], Optional[int]]:
+) -> tuple[MlExecution | None, int | None]:
     """Run a wired ``execute()`` call, translating the failure modes shared by every
     cached command into ``(None, exit_code)``; on success returns ``(execution, None)``.
 
@@ -220,7 +220,7 @@ def _print_run_json(execution: MlExecution, command: RunMlExecutionCommand) -> i
     return _run_exit_code(execution)
 
 
-def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
+def _submit_detached(spec: dict, store_root: Path, token: str | None) -> int:
     """`run --detach`: write the job spec, spawn a detached worker, print the job id."""
     # On an encrypted store the worker needs the token to write its result. It is passed to the
     # worker through its environment (never to disk), the same exposure as a sync call holding

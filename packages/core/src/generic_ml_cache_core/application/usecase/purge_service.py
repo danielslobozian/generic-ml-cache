@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import time
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
@@ -37,12 +36,12 @@ class PurgeService:
         repository: ExecutionRepositoryPort,
         blob_store: BlobStorePort,
         metrics: MetricsPort,
-        diag: Optional[DiagnosticsPort] = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
         self._repository = repository
         self._blob_store = blob_store
         self._metrics = metrics
-        self._diag: Optional[DiagnosticsPort] = diag
+        self._diag: DiagnosticsPort | None = diag
 
     # -- soft purge -----------------------------------------------------------
 
@@ -296,7 +295,7 @@ class PurgeService:
         last_access = self._metrics.last_access()
         sorted_entries = sorted(entries, key=lambda e: _lru_epoch(e, last_access))
 
-        keys_to_evict: List[str] = []
+        keys_to_evict: list[str] = []
         running = current
         for entry in sorted_entries:
             if running <= max_bytes:
@@ -324,14 +323,14 @@ class PurgeService:
 
     # -- private --------------------------------------------------------------
 
-    def _soft_purge_keys(self, keys: List[str]) -> PurgeReport:
+    def _soft_purge_keys(self, keys: list[str]) -> PurgeReport:
         _t = time.perf_counter()
         if self._diag:
             self._diag.debug("soft-purge ENTER", count=len(keys))
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         before = self._repository.total_stored_bytes()
-        all_blob_keys: List[str] = []
+        all_blob_keys: list[str] = []
         for key in keys:
             all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
             self._repository.soft_purge_execution(key)
@@ -352,14 +351,14 @@ class PurgeService:
             )
         return report
 
-    def _hard_delete_keys(self, keys: List[str]) -> PurgeReport:
+    def _hard_delete_keys(self, keys: list[str]) -> PurgeReport:
         _t = time.perf_counter()
         if self._diag:
             self._diag.debug("hard-delete ENTER", count=len(keys))
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         before = self._repository.total_stored_bytes()
-        all_blob_keys: List[str] = []
+        all_blob_keys: list[str] = []
         for key in keys:
             all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
             self._repository.hard_delete_execution(key)
@@ -381,9 +380,9 @@ class PurgeService:
             )
         return report
 
-    def _keys_for_session_tag(self, tag: str) -> List[str]:
+    def _keys_for_session_tag(self, tag: str) -> list[str]:
         seen: set = set()
-        keys: List[str] = []
+        keys: list[str] = []
         for session_id in self._metrics.session_ids_for_tag(tag):
             for key in self._metrics.execution_keys_for_session(session_id):
                 if key not in seen:
@@ -391,7 +390,7 @@ class PurgeService:
                     keys.append(key)
         return keys
 
-    def _remove_orphaned_blobs(self, blob_keys: List[str]) -> int:
+    def _remove_orphaned_blobs(self, blob_keys: list[str]) -> int:
         removed = 0
         for blob_key in set(blob_keys):
             if self._repository.blob_reference_count(blob_key) == 0:
@@ -400,7 +399,7 @@ class PurgeService:
         return removed
 
 
-def _lru_epoch(entry: ExecutionSizeEntry, last_access: Dict[str, float]) -> float:
+def _lru_epoch(entry: ExecutionSizeEntry, last_access: dict[str, float]) -> float:
     if entry.execution_key in last_access:
         return last_access[entry.execution_key]
     try:

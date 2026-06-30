@@ -30,7 +30,7 @@ import threading
 import traceback
 from enum import Enum
 from pathlib import Path
-from typing import IO, Any, Dict, Optional
+from typing import IO, Any
 
 import structlog
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
@@ -146,7 +146,7 @@ def _thread_info_processor(logger: WrappedLogger, method: str, event_dict: Event
 
 def _exc_processor(logger: WrappedLogger, method: str, event_dict: EventDict) -> EventDict:
     """Render the ``exc`` key as a formatted traceback string."""
-    exc: Optional[BaseException] = event_dict.pop("exc", None)
+    exc: BaseException | None = event_dict.pop("exc", None)
     if exc is not None:
         event_dict["traceback"] = "".join(
             traceback.format_exception(type(exc), exc, exc.__traceback__)
@@ -224,7 +224,7 @@ class StructlogDiagnosticsAdapter(DiagnosticsPort):
             renderer,
         ]
         self._log_file = log_file
-        self._file: Optional[IO[str]] = None
+        self._file: IO[str] | None = None
 
     # ------------------------------------------------------------------
     # DiagnosticsPort implementation
@@ -242,7 +242,7 @@ class StructlogDiagnosticsAdapter(DiagnosticsPort):
         if self._min_level <= _LEVEL_ORDER["WARN"]:
             self._emit("WARN", msg, **context)
 
-    def error(self, msg: str, exc: Optional[BaseException] = None, **context: object) -> None:
+    def error(self, msg: str, exc: BaseException | None = None, **context: object) -> None:
         if self._min_level <= _LEVEL_ORDER["ERROR"]:
             if exc is not None:
                 context["exc"] = exc
@@ -254,7 +254,7 @@ class StructlogDiagnosticsAdapter(DiagnosticsPort):
 
     def _emit(self, level: str, msg: str, **context: object) -> None:
         try:
-            event_dict: Dict[str, Any] = {"event": msg, "level": level, **context}
+            event_dict: dict[str, Any] = {"event": msg, "level": level, **context}
             for processor in self._processors:
                 event_dict = processor(None, level.lower(), event_dict)  # type: ignore[arg-type]
             if self._file is None:

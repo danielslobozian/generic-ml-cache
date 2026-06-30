@@ -7,9 +7,10 @@ from __future__ import annotations
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Dict, Generator, Generic, List, Optional, Protocol, Tuple, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -46,7 +47,7 @@ class CacheableExecutionCommand(Protocol):
     @property
     def persistence_depth(self) -> PersistenceDepth: ...
     @property
-    def session_id(self) -> Optional[str]: ...
+    def session_id(self) -> str | None: ...
 
     def should_persist(self, succeeded: bool) -> bool: ...
 
@@ -74,13 +75,13 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         blob_store: BlobStorePort,
         repository: ExecutionRepositoryPort,
         metrics: MetricsPort,
-        diag: Optional[DiagnosticsPort] = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
         self._blob_store = blob_store
         self._repository = repository
         self._metrics = metrics
-        self._diag: Optional[DiagnosticsPort] = diag
-        self._key_locks: Dict[str, threading.Lock] = {}
+        self._diag: DiagnosticsPort | None = diag
+        self._key_locks: dict[str, threading.Lock] = {}
         self._key_locks_guard = threading.Lock()
 
     def execute(self, command: TCommand) -> MlExecution:  # noqa: C901
@@ -184,7 +185,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         """The execution kind to tag the result with for this command."""
 
     @abstractmethod
-    def _journal_fields(self, command: TCommand) -> Tuple[str, str, str]:
+    def _journal_fields(self, command: TCommand) -> tuple[str, str, str]:
         """The (client, model, effort) a journal event records for this command;
         a kind without a model/effort returns empty strings for them."""
 
@@ -196,7 +197,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         """Called once after a successful store. Override to add post-record hooks
         such as quota-based eviction. Default: no-op."""
 
-    def _execution_tags(self, command: TCommand) -> List[str]:
+    def _execution_tags(self, command: TCommand) -> list[str]:
         """User-supplied tags to attach to executions this service records.
         Metadata only — never part of the key. Default: none."""
         return []
@@ -424,7 +425,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
 
     # -- artifacts --------------------------------------------------------
 
-    def _build_artifacts(self, client_run_result: ClientRunResult, store: bool) -> List[Artifact]:
+    def _build_artifacts(self, client_run_result: ClientRunResult, store: bool) -> list[Artifact]:
         artifacts = [
             self._store_artifact(
                 ArtifactType.STDOUT, None, client_run_result.stdout.encode(_TEXT_ENCODING), store
@@ -444,7 +445,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
     def _store_artifact(
         self,
         artifact_type: ArtifactType,
-        artifact_name: Optional[str],
+        artifact_name: str | None,
         content_bytes: bytes,
         store: bool,
     ) -> Artifact:
@@ -453,7 +454,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             self._blob_store.put(blob_key, content_bytes)
         return Artifact.from_content(artifact_type, blob_key, content_bytes, name=artifact_name)
 
-    def _build_input_artifacts(self, command: TCommand, store: bool) -> List[Artifact]:
+    def _build_input_artifacts(self, command: TCommand, store: bool) -> list[Artifact]:
         """The input documents to keep at DATASET depth, content-addressed like
         any artifact. Empty when ``store`` is false (below DATASET, or nothing was
         stored) or when the kind has no recordable input."""
@@ -464,7 +465,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             for (artifact_type, name, content_bytes) in self._input_parts(command)
         ]
 
-    def _input_parts(self, command: TCommand) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+    def _input_parts(self, command: TCommand) -> list[tuple[ArtifactType, str | None, bytes]]:
         """The ``(type, name, bytes)`` input documents this kind would persist at
         DATASET depth. Default: none — a kind whose input is not recorded."""
         return []

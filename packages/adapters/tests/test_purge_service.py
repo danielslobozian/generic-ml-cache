@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import time as _time_module
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -36,9 +35,9 @@ class FixedClock(ClockPort):
 
 class InMemoryBlobStore(BlobStorePort):
     def __init__(self) -> None:
-        self._store: Dict[str, bytes] = {}
+        self._store: dict[str, bytes] = {}
 
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         return self._store.get(key)
 
     def put(self, key: str, output: bytes) -> None:
@@ -56,33 +55,33 @@ class FakeMetrics(MetricsPort):
 
     def __init__(
         self,
-        last_access: Optional[Dict[str, float]] = None,
-        session_keys: Optional[Dict[str, List[str]]] = None,
+        last_access: dict[str, float] | None = None,
+        session_keys: dict[str, list[str]] | None = None,
     ) -> None:
         self._last_access = last_access or {}
         self._session_keys = session_keys or {}
-        self._deleted_keys: List[str] = []
-        self._session_tags_index: Dict[str, List[str]] = {}
+        self._deleted_keys: list[str] = []
+        self._session_tags_index: dict[str, list[str]] = {}
 
     def record_event(self, event, *, execution_key, client, model, effort, session_id=None):
         pass
 
-    def hit_counts_by_key(self) -> Dict[str, int]:
+    def hit_counts_by_key(self) -> dict[str, int]:
         return {}
 
-    def event_counts(self) -> Dict[str, int]:
+    def event_counts(self) -> dict[str, int]:
         return {}
 
-    def session_event_counts(self, session_id: str) -> Dict[str, int]:
+    def session_event_counts(self, session_id: str) -> dict[str, int]:
         return {}
 
-    def session_events(self, session_id: str) -> List[SessionEventRow]:
+    def session_events(self, session_id: str) -> list[SessionEventRow]:
         return []
 
-    def last_access(self) -> Dict[str, float]:
+    def last_access(self) -> dict[str, float]:
         return self._last_access
 
-    def execution_keys_for_session(self, session_id: str) -> List[str]:
+    def execution_keys_for_session(self, session_id: str) -> list[str]:
         return self._session_keys.get(session_id, [])
 
     def delete_events_for_key(self, execution_key: str) -> None:
@@ -100,19 +99,19 @@ class FakeMetrics(MetricsPort):
     def clear_session_spec(self, session_id: str) -> None:
         pass
 
-    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
+    def session_spec(self, session_id: str) -> SessionSpec | None:
         return None
 
-    def list_session_ids(self) -> List[str]:
+    def list_session_ids(self) -> list[str]:
         return []
 
-    def session_tags(self, session_id: str) -> List[str]:
+    def session_tags(self, session_id: str) -> list[str]:
         return []
 
-    def session_ids_for_tag(self, tag: str) -> List[str]:
+    def session_ids_for_tag(self, tag: str) -> list[str]:
         return self._session_tags_index.get(tag, [])
 
-    def _with_session_tags(self, tag_to_sessions: Dict[str, List[str]]) -> "FakeMetrics":
+    def _with_session_tags(self, tag_to_sessions: dict[str, list[str]]) -> FakeMetrics:
         self._session_tags_index = tag_to_sessions
         return self
 
@@ -489,7 +488,7 @@ def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():
 # --- purge_by_session_tag / hard_delete_by_session_tag -----------------------
 
 
-def _svc_with_session_tag(tag: str, session_ids: List[str], key_per_session: Dict[str, str]):
+def _svc_with_session_tag(tag: str, session_ids: list[str], key_per_session: dict[str, str]):
     """Build a PurgeService wired with executions, one per session under ``tag``."""
     repo, store = _repo_with_entries(list(key_per_session.values()))
     metrics = FakeMetrics(
@@ -498,7 +497,7 @@ def _svc_with_session_tag(tag: str, session_ids: List[str], key_per_session: Dic
     return PurgeService(repo, store, metrics), repo
 
 
-def _repo_with_entries(keys: List[str]):
+def _repo_with_entries(keys: list[str]):
     repo = InMemoryExecutionRepository(FixedClock())
     blob_store = InMemoryBlobStore()
     for key in keys:

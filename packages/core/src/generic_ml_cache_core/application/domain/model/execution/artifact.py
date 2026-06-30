@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import Optional
 
 _UTF8 = "utf-8"
 _BINARY = "binary"
@@ -51,9 +50,9 @@ class Artifact:
     artifact_type: ArtifactType
     blob_key: str
     size_bytes: int
-    name: Optional[str] = None
+    name: str | None = None
     encoding: str = _UTF8
-    content: Optional[bytes] = None
+    content: bytes | None = None
 
     @classmethod
     def from_content(
@@ -61,8 +60,8 @@ class Artifact:
         artifact_type: ArtifactType,
         blob_key: str,
         content: bytes,
-        name: Optional[str] = None,
-    ) -> "Artifact":
+        name: str | None = None,
+    ) -> Artifact:
         """Build a hydrated artifact from its bytes, deriving size and encoding.
 
         The caller has already computed ``blob_key`` and stored the bytes; this

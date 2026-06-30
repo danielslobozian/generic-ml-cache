@@ -13,7 +13,6 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import List
 
 import pytest
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
@@ -53,7 +52,7 @@ class _SleepAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         return [executable, "-c", "sleep 30"]
 
 

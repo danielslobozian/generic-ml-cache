@@ -15,8 +15,6 @@ to call), never on the crypto library directly.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.cipher_port import CipherPort
 from generic_ml_cache_core.common.errors import EncryptionTokenRequired
@@ -30,7 +28,7 @@ class EncryptingBlobStore(BlobStorePort):
         self._cipher = cipher
         self._data_key = data_key
 
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         blob = self._inner.get(key)
         if blob is None:
             return None
@@ -55,7 +53,7 @@ class TokenRequiredBlobStore(BlobStorePort):
     def __init__(self, inner: BlobStorePort) -> None:
         self._inner = inner
 
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         raise EncryptionTokenRequired("the store is encrypted — provide the token to read it")
 
     def put(self, key: str, output: bytes) -> None:

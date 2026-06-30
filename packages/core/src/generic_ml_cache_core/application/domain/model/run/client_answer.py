@@ -12,7 +12,6 @@ ClientRunResult.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 
@@ -24,4 +23,4 @@ class ClientAnswer:
     exit_code: int
     stdout: str = ""
     stderr: str = ""
-    token_usage: Optional[TokenUsage] = None
+    token_usage: TokenUsage | None = None

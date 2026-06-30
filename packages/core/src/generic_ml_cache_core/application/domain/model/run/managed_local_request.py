@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import FrozenSet, List, Optional
 
 
 @dataclass(frozen=True)
@@ -24,10 +23,10 @@ class ManagedLocalRequest:
     effort: str
     context: str
     prompt: str
-    user_system_prompt: Optional[str] = None
-    allowed_read_paths: List[str] = field(default_factory=list)
-    add_dir_paths: List[str] = field(default_factory=list)
-    client_args: List[str] = field(default_factory=list)
-    grants: FrozenSet[str] = field(default_factory=frozenset)
-    timeout: Optional[float] = None
-    stream_path: Optional[str] = None
+    user_system_prompt: str | None = None
+    allowed_read_paths: list[str] = field(default_factory=list)
+    add_dir_paths: list[str] = field(default_factory=list)
+    client_args: list[str] = field(default_factory=list)
+    grants: frozenset[str] = field(default_factory=frozenset)
+    timeout: float | None = None
+    stream_path: str | None = None

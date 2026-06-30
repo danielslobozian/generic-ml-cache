@@ -9,7 +9,7 @@ the first catalog wins.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Sequence
+from collections.abc import Iterable, Sequence
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -22,10 +22,10 @@ class CompositeAdapterCatalog(AdapterCatalogPort):
     """An AdapterCatalogPort that unions several catalogs."""
 
     def __init__(self, catalogs: Iterable[AdapterCatalogPort]) -> None:
-        self._catalogs: List[AdapterCatalogPort] = list(catalogs)
+        self._catalogs: list[AdapterCatalogPort] = list(catalogs)
 
     def list_adapters(self) -> Sequence[AdapterDescriptor]:
-        merged: Dict[str, AdapterDescriptor] = {}
+        merged: dict[str, AdapterDescriptor] = {}
         for catalog in self._catalogs:
             for descriptor in catalog.list_adapters():
                 merged.setdefault(descriptor.adapter_id, descriptor)

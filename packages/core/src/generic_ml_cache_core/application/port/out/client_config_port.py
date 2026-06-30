@@ -11,7 +11,8 @@ not implement this; only local clients that run in an isolated config home do.
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol, Sequence, runtime_checkable
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
 from generic_ml_cache_core.application.domain.model.run.client_config import (
     CredentialFile,
@@ -23,16 +24,16 @@ from generic_ml_cache_core.application.domain.model.run.client_config import (
 class ClientConfigPort(Protocol):
     """A client's config-and-credentials knowledge, as pure descriptors."""
 
-    def build_grants_config_file(self, grants: Sequence[str]) -> Optional[GrantConfigFile]:
+    def build_grants_config_file(self, grants: Sequence[str]) -> GrantConfigFile | None:
         """The config file that opens the granted capabilities, or ``None`` if the
         client needs no config file."""
         ...
 
-    def get_token_files(self) -> List[CredentialFile]:
+    def get_token_files(self) -> list[CredentialFile]:
         """Credential/token sources to seed into the config home (may be empty)."""
         ...
 
-    def config_home_env_var(self) -> Optional[str]:
+    def config_home_env_var(self) -> str | None:
         """Env var that must point the client at its config home (e.g.
         ``"CLAUDE_CONFIG_DIR"``), or ``None`` if the client uses no config home."""
         ...

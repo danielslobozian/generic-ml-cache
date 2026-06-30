@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pytest
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
@@ -70,7 +69,7 @@ class FakeWorkspace(WorkspacePort):
     def snapshot(self, run_dir) -> Snapshot:
         return Snapshot()
 
-    def capture(self, run_dir, baseline) -> List:
+    def capture(self, run_dir, baseline) -> list:
         return []
 
     def dispose(self, workspace) -> None:
@@ -83,7 +82,7 @@ class FakeClientRunner:
 
     def __init__(self, *results: ClientRunResult) -> None:
         self._results = list(results) or [ClientRunResult(exit_code=0, stdout="managed out\n")]
-        self.calls: List = []
+        self.calls: list = []
 
     def stage_inputs(self, request, workspace) -> None:
         pass
@@ -101,7 +100,7 @@ class FakeApiClient(ApiClientPort):
         self._results = list(results) or [
             ClientRunResult(exit_code=0, stdout="api reply\n", token_usage=TokenUsage(5, 10))
         ]
-        self.calls: List[MlRequest] = []
+        self.calls: list[MlRequest] = []
 
     def run(self, request: MlRequest) -> ClientRunResult:
         self.calls.append(request)
@@ -116,7 +115,7 @@ class FakePassthroughRunner:
 
     def __init__(self, *results: ClientRunResult) -> None:
         self._results = list(results) or [ClientRunResult(exit_code=0, stdout="native out\n")]
-        self.calls: List = []
+        self.calls: list = []
 
     def execute_passthrough(self, request) -> ClientAnswer:
         self.calls.append(request)
@@ -131,10 +130,10 @@ class FakeFileFingerprint(FileFingerprintPort):
 
 class FakeBlobStore(BlobStorePort):
     def __init__(self) -> None:
-        self.store: Dict[str, bytes] = {}
-        self.puts: List[str] = []
+        self.store: dict[str, bytes] = {}
+        self.puts: list[str] = []
 
-    def get(self, key: str) -> Optional[bytes]:
+    def get(self, key: str) -> bytes | None:
         return self.store.get(key)
 
     def put(self, key: str, output: bytes) -> None:
@@ -147,24 +146,24 @@ class FakeBlobStore(BlobStorePort):
 
 class FakeMetrics(MetricsPort):
     def __init__(self) -> None:
-        self.events: List[dict] = []
+        self.events: list[dict] = []
 
     def record_event(self, event, *, execution_key, client, model, effort, session_id=None) -> None:
         self.events.append({"event": event, "client": client, "model": model})
 
-    def hit_counts_by_key(self) -> Dict[str, int]:
+    def hit_counts_by_key(self) -> dict[str, int]:
         return {}
 
-    def event_counts(self) -> Dict[str, int]:
+    def event_counts(self) -> dict[str, int]:
         return {}
 
-    def session_event_counts(self, session_id) -> Dict[str, int]:
+    def session_event_counts(self, session_id) -> dict[str, int]:
         return {}
 
     def session_events(self, session_id):
         return []
 
-    def last_access(self) -> Dict[str, float]:
+    def last_access(self) -> dict[str, float]:
         return {}
 
     def execution_keys_for_session(self, session_id):
@@ -185,19 +184,19 @@ class FakeMetrics(MetricsPort):
     def clear_session_spec(self, session_id) -> None:
         pass
 
-    def session_spec(self, session_id) -> Optional[SessionSpec]:
+    def session_spec(self, session_id) -> SessionSpec | None:
         return None
 
-    def list_session_ids(self) -> List[str]:
+    def list_session_ids(self) -> list[str]:
         return []
 
-    def session_tags(self, session_id) -> List[str]:
+    def session_tags(self, session_id) -> list[str]:
         return []
 
-    def session_ids_for_tag(self, tag) -> List[str]:
+    def session_ids_for_tag(self, tag) -> list[str]:
         return []
 
-    def event_names(self) -> List[str]:
+    def event_names(self) -> list[str]:
         return [r["event"] for r in self.events]
 
 
@@ -284,9 +283,9 @@ def _runners_for(managed, passthrough, api) -> _AnyClientRunners:
 class _Harness:
     def __init__(
         self,
-        client_runner: Optional[FakeClientRunner] = None,
-        api_client: Optional[ApiClientPort] = None,
-        passthrough_runner: Optional[FakePassthroughRunner] = None,
+        client_runner: FakeClientRunner | None = None,
+        api_client: ApiClientPort | None = None,
+        passthrough_runner: FakePassthroughRunner | None = None,
     ) -> None:
         self.runner = client_runner or FakeClientRunner()
         self.api = api_client or FakeApiClient()
@@ -304,7 +303,7 @@ class _Harness:
         )
 
 
-def _stdout(execution) -> Optional[bytes]:
+def _stdout(execution) -> bytes | None:
     for a in execution.artifacts:
         if a.artifact_type is ArtifactType.STDOUT:
             return a.content
@@ -555,7 +554,7 @@ class _SpyPurge:
     """Minimal stub that records every evict_to_quota call."""
 
     def __init__(self) -> None:
-        self.evict_calls: List[int] = []
+        self.evict_calls: list[int] = []
 
     def evict_to_quota(self, max_bytes: int) -> PurgeReport:
         self.evict_calls.append(max_bytes)
@@ -564,7 +563,7 @@ class _SpyPurge:
     # PurgeService has other methods the hook doesn't call — not needed here.
 
 
-def _harness_with_quota(max_size: Optional[int]) -> tuple:
+def _harness_with_quota(max_size: int | None) -> tuple:
     harness = _Harness()
     spy = _SpyPurge()
     service = RunMlExecutionService(

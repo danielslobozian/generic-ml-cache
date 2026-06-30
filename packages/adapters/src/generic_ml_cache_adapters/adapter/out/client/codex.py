@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
@@ -55,7 +55,7 @@ class CodexCliAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         # Capability doors (sandbox write, network, web-search) now live in
         # $CODEX_HOME/config.toml written by grant_setup -- not in argv. build_argv
         # carries only transport: the exec subcommand, JSON events, the no-git-repo
@@ -89,7 +89,7 @@ class CodexCliAdapter:
         argv.append("-")
         return argv
 
-    def stdin_payload(self, context, prompt, system_prompt) -> Optional[str]:
+    def stdin_payload(self, context, prompt, system_prompt) -> str | None:
         return f"{context}\n\n{prompt}" if context else prompt
 
     def parse_output(self, stdout: str) -> ParsedOutput:  # noqa: C901
@@ -99,8 +99,8 @@ class CodexCliAdapter:
         Codex reports reasoning tokens *separately* from output, reports no
         cache-write count (so that stays unknown), and reports no cost.
         """
-        answer: Optional[str] = None
-        usage_block: Optional[Dict[str, Any]] = None
+        answer: str | None = None
+        usage_block: dict[str, Any] | None = None
         for line in stdout.splitlines():
             line = line.strip()
             if not line:

@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, FrozenSet, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -29,7 +30,7 @@ _STDOUT = ArtifactType.STDOUT
 _STDERR = ArtifactType.STDERR
 
 
-def _build_command(body: RunBody, whitelist: Optional[FrozenSet[str]]) -> RunMlExecutionCommand:
+def _build_command(body: RunBody, whitelist: frozenset[str] | None) -> RunMlExecutionCommand:
     # Resolve the kind over the *whitelisted* catalog: an unknown or non-whitelisted
     # client raises UnknownClient here, which the CacheError handler maps to 400 —
     # the whitelist is enforced at /run, not only at /health.
@@ -46,7 +47,7 @@ def _build_command(body: RunBody, whitelist: Optional[FrozenSet[str]]) -> RunMlE
     )
 
 
-def _extract_artifact(execution: MlExecution, artifact_type: ArtifactType) -> Optional[str]:
+def _extract_artifact(execution: MlExecution, artifact_type: ArtifactType) -> str | None:
     for artifact in execution.artifacts:
         if artifact.artifact_type is artifact_type and artifact.content is not None:
             try:
@@ -73,7 +74,7 @@ def _to_response(execution: MlExecution, cache_hit: bool) -> RunResponse:
     )
 
 
-def _to_dict(response: RunResponse) -> Dict[str, Any]:
+def _to_dict(response: RunResponse) -> dict[str, Any]:
     return response.model_dump()
 
 
@@ -84,7 +85,7 @@ async def _run_in_thread(wired: Any, command: RunMlExecutionCommand) -> MlExecut
 
 async def _sse_generator(
     wired: Any, command: RunMlExecutionCommand
-) -> AsyncIterator[Dict[str, str]]:
+) -> AsyncIterator[dict[str, str]]:
     yield {"data": json.dumps({"type": "accepted"})}
     execution = await _run_in_thread(wired, command)
     hit = _was_cache_hit(execution)

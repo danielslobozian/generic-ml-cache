@@ -28,8 +28,8 @@ import base64
 import json
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from generic_ml_cache_core.application.domain.model.encryption.encryption_manifest import (
     EncryptionManifest,
@@ -61,7 +61,7 @@ class StoreEncryptor:
         store_root: Path,
         manifest_store: EncryptionManifestStorePort,
         lock: StoreLockPort,
-        cipher: Optional[CipherPort] = None,
+        cipher: CipherPort | None = None,
     ) -> None:
         self._root = Path(store_root)
         self._blobs = self._root / _BLOBS

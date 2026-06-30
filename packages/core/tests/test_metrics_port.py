@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Dict, List, Optional
 
 import pytest
 
@@ -18,18 +17,18 @@ class InMemoryMetrics(MetricsPort):
 
     def __init__(self) -> None:
         self._events: list = []
-        self._session_tags: Dict[str, List[str]] = {}
-        self._session_specs: Dict[str, SessionSpec] = {}
+        self._session_tags: dict[str, list[str]] = {}
+        self._session_specs: dict[str, SessionSpec] = {}
 
     def record_event(
         self,
         event: str,
         *,
-        execution_key: Optional[str],
+        execution_key: str | None,
         client: str,
         model: str,
         effort: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> None:
         self._events.append(
             {
@@ -42,21 +41,21 @@ class InMemoryMetrics(MetricsPort):
             }
         )
 
-    def hit_counts_by_key(self) -> Dict[str, int]:
-        counts: Dict[str, int] = defaultdict(int)
+    def hit_counts_by_key(self) -> dict[str, int]:
+        counts: dict[str, int] = defaultdict(int)
         for recorded_event in self._events:
             if recorded_event["event"] == "hit" and recorded_event["execution_key"]:
                 counts[recorded_event["execution_key"]] += 1
         return dict(counts)
 
-    def event_counts(self) -> Dict[str, int]:
-        counts: Dict[str, int] = defaultdict(int)
+    def event_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = defaultdict(int)
         for recorded_event in self._events:
             counts[recorded_event["event"]] += 1
         return dict(counts)
 
-    def session_event_counts(self, session_id: str) -> Dict[str, int]:
-        counts: Dict[str, int] = defaultdict(int)
+    def session_event_counts(self, session_id: str) -> dict[str, int]:
+        counts: dict[str, int] = defaultdict(int)
         for recorded_event in self._events:
             if recorded_event["session_id"] == session_id:
                 counts[recorded_event["event"]] += 1
@@ -75,7 +74,7 @@ class InMemoryMetrics(MetricsPort):
             if e["session_id"] == session_id
         ]
 
-    def last_access(self) -> Dict[str, float]:
+    def last_access(self) -> dict[str, float]:
         return {}
 
     def execution_keys_for_session(self, session_id: str):
@@ -98,10 +97,10 @@ class InMemoryMetrics(MetricsPort):
         if tag in tags:
             tags.remove(tag)
 
-    def session_tags(self, session_id: str) -> List[str]:
+    def session_tags(self, session_id: str) -> list[str]:
         return list(dict.fromkeys(self._session_tags.get(session_id, [])))
 
-    def session_ids_for_tag(self, tag: str) -> List[str]:
+    def session_ids_for_tag(self, tag: str) -> list[str]:
         return list(dict.fromkeys(sid for sid, tags in self._session_tags.items() if tag in tags))
 
     def set_session_spec(self, session_id: str, spec: SessionSpec) -> None:
@@ -110,10 +109,10 @@ class InMemoryMetrics(MetricsPort):
     def clear_session_spec(self, session_id: str) -> None:
         self._session_specs.pop(session_id, None)
 
-    def session_spec(self, session_id: str) -> Optional[SessionSpec]:
+    def session_spec(self, session_id: str) -> SessionSpec | None:
         return self._session_specs.get(session_id)
 
-    def list_session_ids(self) -> List[str]:
+    def list_session_ids(self) -> list[str]:
         all_ids = set(self._tags.keys()) | set(self._session_specs.keys())
         return sorted(all_ids)
 

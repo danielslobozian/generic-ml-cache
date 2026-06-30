@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import BaseModel
 
 
@@ -15,14 +13,14 @@ class JobSubmitBody(BaseModel):
     effort: str = ""
     prompt: str = ""
     context: str = ""
-    tags: List[str] = []
-    session_id: Optional[str] = None
+    tags: list[str] = []
+    session_id: str | None = None
 
 
 class JobResponse(BaseModel):
     job_id: str
     state: str
-    execution_key: Optional[str] = None
-    stdout: Optional[str] = None
-    stderr: Optional[str] = None
-    error: Optional[str] = None
+    execution_key: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    error: str | None = None

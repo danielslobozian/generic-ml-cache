@@ -65,7 +65,7 @@ def _comma(n: int) -> str:
     return f"{n:,}"
 
 
-def _token_str(count: "int | None") -> str:
+def _token_str(count: int | None) -> str:
     """A token count for display: the number, or ``?`` when unknown (None)."""
     return "?" if count is None else str(count)
 
