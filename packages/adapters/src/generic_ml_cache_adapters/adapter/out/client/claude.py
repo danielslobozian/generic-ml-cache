@@ -29,15 +29,17 @@ from generic_ml_cache_core.application.domain.model.usage.usage import (
     float_or_none,
     int_or_none,
 )
+from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
 
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
 from generic_ml_cache_adapters.adapter.out.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
 )
 
 
-class ClaudeCliAdapter:
+class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
     """Adapter for Anthropic's Claude Code CLI. A pure translator: it composes a
     CliRuntime (the shared call engine) and supplies only Claude's hooks."""
 

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
 )
@@ -26,7 +27,7 @@ from generic_ml_cache_bootstrap.discovery.in_memory_adapter_registry import regi
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
 
-class FakeAdapter:
+class FakeAdapter(ComposedLocalClient):
     name = "fake"
     # An absolute path with a separator -> resolve_executable uses it verbatim.
     default_executable = sys.executable
@@ -72,7 +73,7 @@ class FakeAdapter:
         ]
 
 
-class FakeStdinAdapter:
+class FakeStdinAdapter(ComposedLocalClient):
     """Like FakeAdapter but delivers the prompt on stdin."""
 
     name = "fake_stdin"

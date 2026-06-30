@@ -208,22 +208,15 @@ def wire_cli_client(
     timeout: float | None = None,
     stream_path: str | None = None,
 ) -> CliRuntime:
-    """Compose a CliRuntime into ``adapter`` and expose the never-overridden
-    LocalClientPort surface as delegations to it.
+    """Compose a CliRuntime into ``adapter`` by setting ``adapter._call``.
 
     This is the composition seam every standalone local client adapter calls from
-    its ``__init__`` — it replaces the old shared base class. The adapter is left
-    to define only its client-specific hooks (``build_argv``, ``parse_output`` …)
-    and its config knowledge; the call template lives once, in CliRuntime.
+    its ``__init__``. The adapter subclasses :class:`ComposedLocalClient`, which
+    exposes the never-overridden LocalClientPort surface as delegations to this
+    ``_call`` runtime; the adapter itself defines only its client-specific hooks
+    (``build_argv``, ``parse_output`` …) and its config knowledge. The call
+    template lives once, in CliRuntime.
     """
     runtime = CliRuntime(adapter, executable_override, timeout, stream_path)
     adapter._call = runtime
-    adapter.execute_managed = runtime.execute_managed
-    adapter.execute_passthrough = runtime.execute_passthrough
-    adapter.stage_inputs = runtime.stage_inputs
-    adapter.resolve_executable = runtime.resolve_executable
-    adapter.version_argv = runtime.version_argv
-    # Default "no model listing" unless the adapter defines its own (cursor does).
-    if not hasattr(adapter, "models_argv"):
-        adapter.models_argv = runtime.models_argv
     return runtime

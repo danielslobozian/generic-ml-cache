@@ -26,12 +26,14 @@ from generic_ml_cache_core.application.domain.model.run.client_config import (
     GrantConfigFile,
 )
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
+from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
 
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
 from generic_ml_cache_adapters.adapter.out.client.output_parsing import ensure_trailing_newline
 
 
-class CodexCliAdapter:
+class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
     """Adapter for OpenAI's Codex CLI. Composes a CliRuntime and supplies only
     Codex's translation hooks."""
 

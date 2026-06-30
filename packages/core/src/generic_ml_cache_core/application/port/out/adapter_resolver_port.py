@@ -10,16 +10,16 @@ constructs concrete classes); core only depends on this port.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from abc import ABC, abstractmethod
 
 from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 
 
-@runtime_checkable
-class AdapterResolverPort(Protocol):
+class AdapterResolverPort(ABC):
     """Resolve an ``adapter_id`` (from a descriptor) to a concrete adapter."""
 
+    @abstractmethod
     def resolve_local_client(
         self,
         adapter_id: str,
@@ -29,8 +29,7 @@ class AdapterResolverPort(Protocol):
     ) -> LocalClientPort:
         """Construct the local CLI client adapter for ``adapter_id`` with the given
         per-run config (PATH override, subprocess timeout, live-stream path)."""
-        ...
 
+    @abstractmethod
     def resolve_runner(self, adapter_id: str) -> MlRunnerPort:
         """Construct the API runner adapter for ``adapter_id`` (no per-run config)."""
-        ...

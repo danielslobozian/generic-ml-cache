@@ -446,10 +446,24 @@ return blob_path.read_bytes()
 - **Parse at the edge.** Untyped external input (CLI args, JSON, client stdout) is
   converted into typed objects **once, at the adapter boundary**; the core then
   trusts the types. Dicts of loose strings do not travel into the domain.
-- **Ports are explicit `ABC`s** with `@abstractmethod`. An adapter declares the port
-  it implements by subclassing it (the nominal "implements"); a half-built adapter
-  fails to instantiate. (Prefer `ABC` over `Protocol` here: the explicit declaration
-  and the runtime refusal are wanted.)
+- **Ports are explicit `ABC`s with `@abstractmethod` — by default.** An adapter
+  declares the port it implements by subclassing it (the nominal "implements"); a
+  half-built adapter fails to instantiate. The explicit declaration and the runtime
+  refusal are the point. **`Protocol` is allowed only when the type is structural by
+  intent** — a structural supertype narrowed at runtime, or a structural shape over
+  domain/command objects that must not inherit a port. *The test: does/should the
+  implementor write `class X(ThePort)`? Yes ⇒ ABC; satisfied incidentally ⇒
+  Protocol.* When an adapter provides a port's surface by **composition** rather than
+  by defining the methods itself (e.g. a CLI client adapter that delegates
+  `LocalClientPort` to a composed `CliRuntime`), it still subclasses the ABC through a
+  thin delegating base (`ComposedLocalClient`) so the nominal "implements" — and the
+  fail-to-instantiate guarantee — hold; composition is *how* the methods are provided,
+  not a reason to drop to a Protocol. *Failing case: a `LocalClientPort` that adapters
+  only match structurally while its sibling `MlRunnerPort` is an ABC they subclass —
+  the two driven-client ports must enforce conformance the same way.* The only
+  remaining `Protocol`s are the three genuinely-structural ones: `RegisteredAdapter`
+  (a structural supertype narrowed at runtime), `CacheableExecutionCommand`, and
+  `KeyedCallInputs` (structural shapes over command/identity objects).
 - **Ship `py.typed`.** The package publishes its types so consumers (a daemon, the
   workflow engine) get them.
 

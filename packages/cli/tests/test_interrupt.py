@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
@@ -27,7 +28,7 @@ import generic_ml_cache_cli.controllers.run as run_ctrl
 from generic_ml_cache_cli import cli
 
 
-class _SleepAdapter:
+class _SleepAdapter(ComposedLocalClient):
     """A client that just sleeps far longer than the test -- so the only way the
     call ends in time is by being stopped."""
 

@@ -11,8 +11,8 @@ Core sees only the adapter universe it was given.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -20,18 +20,17 @@ from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor i
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 
 
-@runtime_checkable
-class AdapterCatalogPort(Protocol):
+class AdapterCatalogPort(ABC):
     """Read-only view of the adapters available to this execution."""
 
+    @abstractmethod
     def list_adapters(self) -> Sequence[AdapterDescriptor]:
         """Every adapter in this catalog (already filtered by composition policy)."""
-        ...
 
+    @abstractmethod
     def find_by_client_name(self, client_name: str) -> Sequence[AdapterDescriptor]:
         """Descriptors whose ``client_name`` matches (empty if the client is absent)."""
-        ...
 
+    @abstractmethod
     def supports(self, client_name: str, mode: ExecutionKind) -> bool:
         """True if some adapter for ``client_name`` supports the given execution mode."""
-        ...

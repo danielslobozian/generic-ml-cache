@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the standalone CLI client adapters + their shared CliRuntime.
 
-There is no base class: each adapter composes a CliRuntime (via wire_cli_client)
-and supplies only its translation hooks. The adapter's job is to make the call;
-the managed-execution use case owns the workspace and captures artifacts. These
+Each adapter subclasses ComposedLocalClient and composes a CliRuntime (via
+wire_cli_client), supplying only its translation hooks. The base delegates the
+LocalClientPort surface to the runtime, so no call logic is duplicated. The
+adapter's job is to make the call; the managed-execution use case owns the
+workspace and captures artifacts. These
 tests exercise the call against the fake client registered in conftest, driving
 the workspace lifecycle the way the core use case does.
 """
@@ -104,7 +106,7 @@ def test_execute_passthrough_captures_stderr_and_exit():
 
 
 # ---------------------------------------------------------------------------
-# Composition surface — wire_cli_client exposes the call API on a plain class
+# Composition surface — ComposedLocalClient delegates the call API to _call
 # ---------------------------------------------------------------------------
 
 
