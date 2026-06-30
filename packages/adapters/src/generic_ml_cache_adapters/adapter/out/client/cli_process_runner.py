@@ -193,6 +193,16 @@ class CliProcessRunner:
         finally:
             for sig in installed:
                 signal.signal(sig, previous[sig])
+            # Close the subprocess pipes deterministically. communicate() closes
+            # them on the non-streaming path, but the streaming path reads
+            # proc.stdout itself and would otherwise leak the pipe fds until GC
+            # (a ResourceWarning, now an error under -W error).
+            for stream in (proc.stdout, proc.stderr, proc.stdin):
+                if stream is not None:
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
 
         if stopped["signum"] is not None:
             raise RunInterrupted(

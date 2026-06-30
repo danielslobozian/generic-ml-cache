@@ -57,6 +57,11 @@ packages = ["src/generic_ml_cache_adapters"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Treat warnings as errors: a regression lock that catches the next upstream
+# deprecation (or our own) at first appearance (CA9). Add a narrow
+# "ignore::Cat:module" entry with a justification only for an unfixable
+# third-party warning — never blanket.
+filterwarnings = ["error"]
 addopts = "-ra --cov-branch --cov=generic_ml_cache_adapters --cov-fail-under=80"
 timeout = 60
 
