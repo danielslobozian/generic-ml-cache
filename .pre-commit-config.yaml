@@ -60,3 +60,23 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+
+      # Gate 5 — process guards (IaC-1). Encode AGENTS.md process prose as
+      # runnable hooks so the rules can't be "simply not read".
+
+      # No direct commits to main; branch names follow the convention.
+      - id: guard-branch
+        name: branch guard (no commits to main; naming convention)
+        entry: tools/hooks/guard-branch.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      # No AI/assistant attribution in the commit message. Runs at the
+      # commit-msg stage — install once with:
+      #   .venv/bin/pre-commit install --hook-type commit-msg
+      - id: no-ai-attribution
+        name: no AI attribution in commit message
+        entry: tools/hooks/check-commit-msg.sh
+        language: script
+        stages: [commit-msg]
