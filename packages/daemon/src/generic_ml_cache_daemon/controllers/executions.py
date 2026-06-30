@@ -27,7 +27,7 @@ router = APIRouter()
 @router.get("/executions")
 def list_executions(request: Request) -> ExecutionListResponse:
     """Return all current (servable) executions."""
-    summaries = request.app.state.wired.repository.current_execution_summaries()
+    summaries = request.app.state.wired.execution_query.list_summaries()
     items = [
         ExecutionSummaryResponse(
             execution_key=s.execution_key, kind=s.kind, client=s.client, model=s.model
@@ -46,7 +46,7 @@ def list_executions(request: Request) -> ExecutionListResponse:
 )
 def get_execution(key: str, request: Request) -> ExecutionSummaryResponse:
     """Return the execution whose key equals or starts with ``key``."""
-    summaries = request.app.state.wired.repository.current_execution_summaries()
+    summaries = request.app.state.wired.execution_query.list_summaries()
     # exact match first, then prefix
     exact = [s for s in summaries if s.execution_key == key]
     if exact:
@@ -72,7 +72,7 @@ def get_execution(key: str, request: Request) -> ExecutionSummaryResponse:
 def get_stats(request: Request) -> GlobalStatsResponse:
     """Return global store statistics."""
     wired = request.app.state.wired
-    summaries = wired.repository.current_execution_summaries()
+    summaries = wired.execution_query.list_summaries()
     return GlobalStatsResponse(
         executions=len(summaries),
         event_counts=wired.metrics.event_counts(),

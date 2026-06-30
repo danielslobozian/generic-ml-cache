@@ -12,6 +12,15 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
     ArtifactType,
 )
+from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
+    FindCurrentExecutionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.execution_query.find_executions_by_key_prefix_command import (
+    FindExecutionsByKeyPrefixCommand,
+)
+from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_execution_command import (
+    TagsForExecutionCommand,
+)
 from generic_ml_cache_core.common.errors import (
     ConfigError,
     EncryptionTokenRequired,
@@ -146,7 +155,7 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     matches = build_use_cases(
         _db_conn_factory(store_root), store_root, diag=_make_diag(args)
-    ).repository.find_current_by_key_prefix(args.execution)
+    ).execution_query.find_by_key_prefix(FindExecutionsByKeyPrefixCommand(args.execution))
     if not matches:
         print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
         return 4
@@ -201,8 +210,8 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     )
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    summaries = wired.repository.current_execution_summaries()
-    store_bytes = wired.repository.total_stored_bytes()
+    summaries = wired.execution_query.list_summaries()
+    store_bytes = wired.execution_query.total_stored_bytes()
     access = wired.metrics.event_counts()
     by_client_model: dict[tuple, int] = {}
     for summary in summaries:
@@ -391,9 +400,9 @@ def _cmd_list(args: argparse.Namespace) -> int:
             "kind": summary.kind,
             "key": summary.execution_key,
             "hits": hit_counts.get(summary.execution_key, 0),
-            "tags": wired.repository.tags_for(summary.execution_key),
+            "tags": wired.execution_query.tags_for(TagsForExecutionCommand(summary.execution_key)),
         }
-        for summary in wired.repository.current_execution_summaries()
+        for summary in wired.execution_query.list_summaries()
         if (not args.client or summary.client == args.client)
         and (not args.model or summary.model == args.model)
     ]
@@ -428,8 +437,8 @@ def _cmd_tags(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     counts: dict = {}
-    for summary in wired.repository.current_execution_summaries():
-        for tag in wired.repository.tags_for(summary.execution_key):
+    for summary in wired.execution_query.list_summaries():
+        for tag in wired.execution_query.tags_for(TagsForExecutionCommand(summary.execution_key)):
             counts[tag] = counts.get(tag, 0) + 1
 
     tags = [{"tag": tag, "count": counts[tag]} for tag in sorted(counts)]
@@ -500,13 +509,15 @@ def _collect_export_lines(wired, include, exclude) -> tuple:
 
     lines = []
     skipped_no_input = 0
-    for summary in wired.repository.current_execution_summaries():
-        tags = wired.repository.tags_for(summary.execution_key)
+    for summary in wired.execution_query.list_summaries():
+        tags = wired.execution_query.tags_for(TagsForExecutionCommand(summary.execution_key))
         if include and not include & set(tags):
             continue
         if exclude and exclude & set(tags):
             continue
-        execution = wired.repository.find_current(summary.execution_key)
+        execution = wired.execution_query.find_current(
+            FindCurrentExecutionCommand(summary.execution_key)
+        )
         # Only DATASET-depth entries carry the input side of the corpus.
         if execution is None or not execution.input_persisted:
             skipped_no_input += 1
