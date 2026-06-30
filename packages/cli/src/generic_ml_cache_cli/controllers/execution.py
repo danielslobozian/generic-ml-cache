@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
+    ReadArtifactBlobCommand,
+)
 from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
     FindCurrentExecutionCommand,
 )
@@ -201,8 +204,8 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 4
-        out = _stored_artifact_text(execution, wired.blob_store, ArtifactType.STDOUT)
-        err = _stored_artifact_text(execution, wired.blob_store, ArtifactType.STDERR)
+        out = _stored_artifact_text(execution, wired.artifacts, ArtifactType.STDOUT)
+        err = _stored_artifact_text(execution, wired.artifacts, ArtifactType.STDERR)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return 4
@@ -311,9 +314,9 @@ def _cmd_execution_watch(args: argparse.Namespace) -> int:
         time.sleep(0.2)
 
 
-def _materialize_output_files(execution, blob_store, output_dir: Path) -> int:
+def _materialize_output_files(execution, artifacts, output_dir: Path) -> int:
     """Write a stored execution's OUTPUT_FILE artifacts into ``output_dir`` (hydrating
-    content from the blob store). Returns the number of files written."""
+    content via the artifact-content port). Returns the number of files written."""
     output_dir.mkdir(parents=True, exist_ok=True)
     base = output_dir.resolve()
     count = 0
@@ -325,7 +328,7 @@ def _materialize_output_files(execution, blob_store, output_dir: Path) -> int:
             raise ValueError(f"refusing to write outside output dir: {artifact.name!r}")
         content = artifact.content
         if content is None:
-            content = blob_store.get(artifact.blob_key)
+            content = artifacts.read_blob(ReadArtifactBlobCommand(artifact.blob_key))
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content or b"")
         count += 1
@@ -362,7 +365,7 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
         if execution is None:
             print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
             return 4
-        count = _materialize_output_files(execution, wired.blob_store, output_dir)
+        count = _materialize_output_files(execution, wired.artifacts, output_dir)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return 4

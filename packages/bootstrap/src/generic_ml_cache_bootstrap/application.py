@@ -54,6 +54,9 @@ from generic_ml_cache_core.application.port.out.adapter_resolver_port import Ada
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
+from generic_ml_cache_core.application.usecase.artifact_content_service import (
+    ArtifactContentService,
+)
 from generic_ml_cache_core.application.usecase.execution_query_service import ExecutionQueryService
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
@@ -153,6 +156,7 @@ def build_application_api(
         session_report=SessionReportService(metrics, repository),
         execution_query=ExecutionQueryService(repository),
         store_stats=StoreStatsService(metrics),
+        artifacts=ArtifactContentService(blob_store),
         blob_store=blob_store,
         repository=repository,
         metrics=metrics,

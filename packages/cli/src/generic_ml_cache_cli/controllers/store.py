@@ -12,6 +12,9 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
     ArtifactType,
 )
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
+    ReadArtifactBlobCommand,
+)
 from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
     FindCurrentExecutionCommand,
 )
@@ -468,7 +471,7 @@ def _cmd_tags(args: argparse.Namespace) -> int:
     return 0
 
 
-def _export_record(summary, execution, tags, blob_store) -> dict:
+def _export_record(summary, execution, tags, artifacts) -> dict:
     """Assemble one raw corpus record: the stored input parts and the output,
     hydrated from the blob store. Curation is the user's (tags); this never
     judges quality."""
@@ -476,7 +479,9 @@ def _export_record(summary, execution, tags, blob_store) -> dict:
     import json
 
     def text(artifact) -> str:
-        return (blob_store.get(artifact.blob_key) or b"").decode("utf-8", "replace")
+        return (artifacts.read_blob(ReadArtifactBlobCommand(artifact.blob_key)) or b"").decode(
+            "utf-8", "replace"
+        )
 
     input_obj: dict = {}
     stdout = ""
@@ -493,7 +498,7 @@ def _export_record(summary, execution, tags, blob_store) -> dict:
             stdout = text(artifact)
         elif artifact.artifact_type is ArtifactType.OUTPUT_FILE:
             if artifact.encoding == "binary":
-                raw = blob_store.get(artifact.blob_key) or b""
+                raw = artifacts.read_blob(ReadArtifactBlobCommand(artifact.blob_key)) or b""
                 files.append(
                     {"name": artifact.name, "content_base64": base64.b64encode(raw).decode("ascii")}
                 )
@@ -532,7 +537,7 @@ def _collect_export_lines(wired, include, exclude) -> tuple:
         if execution is None or not execution.input_persisted:
             skipped_no_input += 1
             continue
-        lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+        lines.append(json.dumps(_export_record(summary, execution, tags, wired.artifacts)))
     return lines, skipped_no_input
 
 

@@ -17,6 +17,9 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
     ExecutionRepositoryPort,
 )
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.usecase.artifact_content_service import (
+    ArtifactContentService,
+)
 from generic_ml_cache_core.application.usecase.execution_query_service import ExecutionQueryService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.session_admin_service import SessionAdminService
@@ -49,6 +52,7 @@ class ApplicationApi:
     session_report: SessionReportService
     execution_query: ExecutionQueryService
     store_stats: StoreStatsService
+    artifacts: ArtifactContentService
     blob_store: BlobStorePort
     repository: ExecutionRepositoryPort
     metrics: MetricsPort

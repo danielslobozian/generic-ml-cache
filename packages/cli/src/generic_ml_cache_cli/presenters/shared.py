@@ -138,14 +138,18 @@ def _artifact_text(execution: MlExecution, artifact_type: ArtifactType) -> str:
     return ""
 
 
-def _stored_artifact_text(execution: MlExecution, blob_store, artifact_type: ArtifactType) -> str:
-    """Like ``_artifact_text``, but hydrates the bytes from the blob store when a
-    stored execution carries only artifact metadata (``content is None``)."""
+def _stored_artifact_text(execution: MlExecution, artifacts, artifact_type: ArtifactType) -> str:
+    """Like ``_artifact_text``, but hydrates the bytes via the artifact-content
+    port when a stored execution carries only artifact metadata (``content is None``)."""
+    from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
+        ReadArtifactBlobCommand,
+    )
+
     for artifact in execution.artifacts:
         if artifact.artifact_type is artifact_type:
             content = artifact.content
             if content is None:
-                content = blob_store.get(artifact.blob_key)
+                content = artifacts.read_blob(ReadArtifactBlobCommand(artifact.blob_key))
             return (content or b"").decode("utf-8", errors="replace")
     return ""
 
