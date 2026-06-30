@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Dict, Generator, List, Optional, Protocol, Tuple
+from typing import Dict, Generator, Generic, List, Optional, Protocol, Tuple, TypeVar
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -51,7 +51,14 @@ class CacheableExecutionCommand(Protocol):
     def should_persist(self, succeeded: bool) -> bool: ...
 
 
-class CachedMlExecutionService(ABC):
+# The concrete command type a subclass handles. Bound to the protocol so the
+# shared flow can rely on cache_mode/persistence_depth/etc., while each subclass
+# binds the exact command (e.g. RunMlExecutionCommand) — making the hook
+# overrides that narrow to that command type sound (no Liskov violation).
+TCommand = TypeVar("TCommand", bound="CacheableExecutionCommand")
+
+
+class CachedMlExecutionService(ABC, Generic[TCommand]):
     """The record-or-replay flow shared by every kind of cached ML execution.
 
     It owns the cache resolution (offline/cache/refresh), content-addressed
@@ -76,7 +83,7 @@ class CachedMlExecutionService(ABC):
         self._key_locks: Dict[str, threading.Lock] = {}
         self._key_locks_guard = threading.Lock()
 
-    def execute(self, command: CacheableExecutionCommand) -> MlExecution:  # noqa: C901
+    def execute(self, command: TCommand) -> MlExecution:  # noqa: C901
         _t = time.perf_counter()
         call_identity = self._build_identity(command)
         execution_key = call_identity.generate_key()
@@ -165,23 +172,23 @@ class CachedMlExecutionService(ABC):
     # -- kind-specific hooks ----------------------------------------------
 
     @abstractmethod
-    def _build_identity(self, command: CacheableExecutionCommand) -> CallIdentity:
+    def _build_identity(self, command: TCommand) -> CallIdentity:
         """Build the call identity (and thus the key) for this command."""
 
     @abstractmethod
-    def _run_client(self, command: CacheableExecutionCommand) -> ClientRunResult:
+    def _run_client(self, command: TCommand) -> ClientRunResult:
         """Run the client for this command and return its raw result."""
 
     @abstractmethod
-    def _execution_kind(self, command: CacheableExecutionCommand) -> ExecutionKind:
+    def _execution_kind(self, command: TCommand) -> ExecutionKind:
         """The execution kind to tag the result with for this command."""
 
     @abstractmethod
-    def _journal_fields(self, command: CacheableExecutionCommand) -> Tuple[str, str, str]:
+    def _journal_fields(self, command: TCommand) -> Tuple[str, str, str]:
         """The (client, model, effort) a journal event records for this command;
         a kind without a model/effort returns empty strings for them."""
 
-    def _is_uncacheable(self, command: CacheableExecutionCommand) -> bool:
+    def _is_uncacheable(self, command: TCommand) -> bool:
         """Whether this command cannot be cached. Default: always cacheable."""
         return False
 
@@ -189,12 +196,12 @@ class CachedMlExecutionService(ABC):
         """Called once after a successful store. Override to add post-record hooks
         such as quota-based eviction. Default: no-op."""
 
-    def _execution_tags(self, command: CacheableExecutionCommand) -> List[str]:
+    def _execution_tags(self, command: TCommand) -> List[str]:
         """User-supplied tags to attach to executions this service records.
         Metadata only — never part of the key. Default: none."""
         return []
 
-    def _apply_tags(self, execution_key: str, command: CacheableExecutionCommand) -> None:
+    def _apply_tags(self, execution_key: str, command: TCommand) -> None:
         """Attach the command's tags to the current execution for this key,
         idempotently (a no-op when there are none). Tags are a separate
         annotation: adding one never rewrites the execution record."""
@@ -204,7 +211,7 @@ class CachedMlExecutionService(ABC):
 
     # -- resolution paths -------------------------------------------------
 
-    def _serve_offline(self, command: CacheableExecutionCommand, execution_key: str) -> MlExecution:
+    def _serve_offline(self, command: TCommand, execution_key: str) -> MlExecution:
         _t = time.perf_counter()
         if self._diag:
             self._diag.debug("serve-offline ENTER", key=execution_key)
@@ -228,7 +235,7 @@ class CachedMlExecutionService(ABC):
         return result
 
     def _serve_hit(
-        self, command: CacheableExecutionCommand, execution_key: str, current_execution: MlExecution
+        self, command: TCommand, execution_key: str, current_execution: MlExecution
     ) -> MlExecution:
         _t = time.perf_counter()
         if self._diag:
@@ -246,7 +253,7 @@ class CachedMlExecutionService(ABC):
         return hydrated_execution
 
     def _accumulate_input(
-        self, command: CacheableExecutionCommand, execution_key: str, current_execution: MlExecution
+        self, command: TCommand, execution_key: str, current_execution: MlExecution
     ) -> None:
         """If the user now wants the input kept (DATASET) and this entry doesn't yet
         carry it, back-fill it onto the existing entry — the input is in the command,
@@ -259,7 +266,7 @@ class CachedMlExecutionService(ABC):
             self._repository.add_input_artifacts(execution_key, input_artifacts)
 
     def _run_uncacheable(
-        self, command: CacheableExecutionCommand, call_identity: CallIdentity, execution_key: str
+        self, command: TCommand, call_identity: CallIdentity, execution_key: str
     ) -> MlExecution:
         if command.cache_mode is CacheMode.OFFLINE:
             self._record_event(journal_events.MISS, execution_key, command)
@@ -278,7 +285,7 @@ class CachedMlExecutionService(ABC):
 
     def _run_fresh(
         self,
-        command: CacheableExecutionCommand,
+        command: TCommand,
         call_identity: CallIdentity,
         execution_key: str,
         allow_store: bool,
@@ -303,7 +310,7 @@ class CachedMlExecutionService(ABC):
 
     def _run_fresh_locked(
         self,
-        command: CacheableExecutionCommand,
+        command: TCommand,
         call_identity: CallIdentity,
         execution_key: str,
     ) -> MlExecution:
@@ -384,7 +391,7 @@ class CachedMlExecutionService(ABC):
             return execution
 
     def _run_metered(
-        self, command: CacheableExecutionCommand, call_identity: CallIdentity, execution_key: str
+        self, command: TCommand, call_identity: CallIdentity, execution_key: str
     ) -> MlExecution:
         """METER depth: always run and store nothing, but journal whether a stored
         entry existed — so usage analytics can report would-be hit/miss ("you'd
@@ -446,9 +453,7 @@ class CachedMlExecutionService(ABC):
             self._blob_store.put(blob_key, content_bytes)
         return Artifact.from_content(artifact_type, blob_key, content_bytes, name=artifact_name)
 
-    def _build_input_artifacts(
-        self, command: CacheableExecutionCommand, store: bool
-    ) -> List[Artifact]:
+    def _build_input_artifacts(self, command: TCommand, store: bool) -> List[Artifact]:
         """The input documents to keep at DATASET depth, content-addressed like
         any artifact. Empty when ``store`` is false (below DATASET, or nothing was
         stored) or when the kind has no recordable input."""
@@ -459,9 +464,7 @@ class CachedMlExecutionService(ABC):
             for (artifact_type, name, content_bytes) in self._input_parts(command)
         ]
 
-    def _input_parts(
-        self, command: CacheableExecutionCommand
-    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+    def _input_parts(self, command: TCommand) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
         """The ``(type, name, bytes)`` input documents this kind would persist at
         DATASET depth. Default: none — a kind whose input is not recorded."""
         return []
@@ -487,9 +490,7 @@ class CachedMlExecutionService(ABC):
 
     # -- journal ----------------------------------------------------------
 
-    def _record_event(
-        self, event: str, execution_key: str, command: CacheableExecutionCommand
-    ) -> None:
+    def _record_event(self, event: str, execution_key: str, command: TCommand) -> None:
         client, model, effort = self._journal_fields(command)
         self._metrics.record_event(
             event,

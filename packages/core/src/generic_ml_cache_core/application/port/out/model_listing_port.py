@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import ClassVar, List
 
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 
@@ -23,10 +23,8 @@ class ModelListingPort(ABC):
     MlRunnerPort.
     """
 
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """The unique adapter name, shared with MlRunnerPort (e.g. ``"anthropic"``)."""
+    name: ClassVar[str]
+    """The unique adapter name, shared with MlRunnerPort (e.g. ``"anthropic"``)."""
 
     @abstractmethod
     def list_models(self) -> List[ModelInfo]:

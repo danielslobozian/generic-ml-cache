@@ -47,13 +47,16 @@ repos:
         pass_filenames: false
         types: [python]
 
-      # Gate 4 — static type checking (pyright basic mode)
+      # Gate 4 — static type checking (pyright standard mode)
       # Zero errors required. See pyrightconfig.json for scope and settings.
       # `type: ignore` is acceptable only for provably safe casts that cannot
       # be expressed in the type system; a comment must explain why.
+      # --pythonpath names the interpreter explicitly: pyrightconfig.json no
+      # longer carries a venvPath/venv pin (it broke in CI / agent sandboxes
+      # that install globally — see CA2/CA10), so each caller names its env.
       - id: pyright
         name: pyright (static type checking)
-        entry: .venv/bin/pyright
+        entry: .venv/bin/pyright --pythonpath .venv/bin/python
         language: system
         pass_filenames: false
         types: [python]

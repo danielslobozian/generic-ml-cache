@@ -52,7 +52,7 @@ from generic_ml_cache_core.application.usecase.call_identity_building import bui
 from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_checksum
 
 
-class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
+class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], RunMlExecutionUseCase):
     """Record-or-replay any ML execution — managed local, API, or passthrough.
 
     Two orthogonal axes drive a call. The **client name** (``command.client``)
