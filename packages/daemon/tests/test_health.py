@@ -101,13 +101,16 @@ def test_info_adapters_sorted(client: TestClient) -> None:
     assert adapters == sorted(adapters)
 
 
-def test_info_adapters_whitelist_restricts_list(tmp_path: Path) -> None:
+def test_info_adapters_lists_bundled_adapters_despite_whitelist(tmp_path: Path) -> None:
+    # G1: the bundled adapters always load; the whitelist gates only third-party
+    # entry-point plugins, so a whitelist that names none of them hides nothing.
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, whitelist=frozenset({"fake", "fake_stdin"}))
     with TestClient(application) as test_client:
         adapters = test_client.get("/info").json()["adapters"]
-    assert set(adapters).issubset({"fake", "fake_stdin"})
+    assert "claude" in adapters
+    assert len(adapters) >= 6  # the six bundled clients
 
 
 def test_info_adapters_none_whitelist_returns_all(client: TestClient) -> None:
@@ -115,13 +118,15 @@ def test_info_adapters_none_whitelist_returns_all(client: TestClient) -> None:
     assert len(no_filter) >= 1
 
 
-def test_info_adapters_whitelist_unknown_name_returns_empty(tmp_path: Path) -> None:
+def test_info_adapters_unknown_whitelist_name_does_not_hide_builtins(tmp_path: Path) -> None:
+    # An unknown whitelist entry gates no third-party plugin and hides no
+    # bundled/registered adapter — the safe-default set is still present.
     from generic_ml_cache_daemon.app import create_app
 
     application = create_app(tmp_path, whitelist=frozenset({"__nonexistent__"}))
     with TestClient(application) as test_client:
         adapters = test_client.get("/info").json()["adapters"]
-    assert adapters == []
+    assert adapters != []
 
 
 # ---------------------------------------------------------------------------

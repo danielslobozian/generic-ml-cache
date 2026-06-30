@@ -20,6 +20,18 @@ def iter_entry_points(group: str = ADAPTER_ENTRYPOINT_GROUP) -> list:
     return list(importlib.metadata.entry_points().get(group, []))  # type: ignore[union-attr]
 
 
+def distribution_name(ep: object) -> str:
+    """The name of the distribution providing ``ep`` (``""`` if unknown).
+
+    Used to decide trust at load time: an entry point whose distribution is in
+    the trusted set is loaded; others are third-party, off unless whitelisted.
+    """
+    dist = getattr(ep, "dist", None)
+    if dist is None:
+        return ""
+    return (dist.metadata.get("Name", "") or "") if dist.metadata else ""
+
+
 def describe_source(ep: object) -> str:
     """Human-readable "<package> <version>" for the distribution providing ``ep``."""
     dist = getattr(ep, "dist", None)

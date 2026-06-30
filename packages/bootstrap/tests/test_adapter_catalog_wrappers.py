@@ -15,7 +15,6 @@ from generic_ml_cache_core.common.errors import UnknownClient
 from generic_ml_cache_bootstrap.discovery.composite_adapter_catalog import CompositeAdapterCatalog
 from generic_ml_cache_bootstrap.discovery.composite_adapter_resolver import CompositeAdapterResolver
 from generic_ml_cache_bootstrap.discovery.static_adapter_catalog import StaticAdapterCatalog
-from generic_ml_cache_bootstrap.discovery.whitelist_adapter_catalog import WhitelistAdapterCatalog
 
 
 def _d(client_name, adapter_id=None):
@@ -50,18 +49,6 @@ def test_composite_first_wins_on_id_collision():
     got = [d for d in composite.list_adapters() if d.adapter_id == "claude.cli"]
     assert len(got) == 1
     assert got[0].supported_modes == frozenset({ExecutionKind.LOCAL_MANAGED})  # primary won
-
-
-# --- WhitelistAdapterCatalog -------------------------------------------------
-
-
-def test_whitelist_hides_disallowed_clients():
-    inner = StaticAdapterCatalog([_d("claude"), _d("cursor")])
-    catalog = WhitelistAdapterCatalog(inner, {"claude"})
-    assert {d.client_name for d in catalog.list_adapters()} == {"claude"}
-    assert catalog.find_by_client_name("cursor") == []
-    assert catalog.supports("cursor", ExecutionKind.LOCAL_MANAGED) is False
-    assert catalog.supports("claude", ExecutionKind.LOCAL_MANAGED) is True
 
 
 # --- CompositeAdapterResolver ------------------------------------------------

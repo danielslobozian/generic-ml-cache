@@ -174,11 +174,12 @@ def test_non_listing_adapter_does_not_implement_model_listing_port():
 # ---------------------------------------------------------------------------
 
 
-def test_list_api_models_whitelist_excludes_disabled_provider():
+def test_list_api_models_whitelist_does_not_hide_registered_provider():
+    # G1: a registered provider is in-process, never gated by the whitelist
+    # (which only gates third-party entry-point loading).
     register(_ListingAdapter)
     ml = list_api_models("_listing", whitelist=frozenset({"other"}))
-    assert ml.present is False
-    assert "unknown adapter" in (ml.reason or "").lower()
+    assert ml.present is True
 
 
 def test_list_api_models_whitelist_allows_included_provider():

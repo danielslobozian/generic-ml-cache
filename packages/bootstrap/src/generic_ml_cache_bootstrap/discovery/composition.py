@@ -22,7 +22,6 @@ from generic_ml_cache_bootstrap.discovery.entrypoint_adapter_resolver import (
     EntryPointAdapterResolver,
 )
 from generic_ml_cache_bootstrap.discovery.in_memory_adapter_registry import default_registry
-from generic_ml_cache_bootstrap.discovery.whitelist_adapter_catalog import WhitelistAdapterCatalog
 
 _PRIMARY_MODE = {
     AdapterBoundary.LOCAL_CLI: ExecutionKind.LOCAL_MANAGED,
@@ -58,11 +57,17 @@ def default_resolver() -> AdapterResolverPort:
 
 
 def catalog_for(whitelist: frozenset[str] | None = None) -> AdapterCatalogPort:
-    """The default catalog, optionally restricted to the whitelisted clients."""
-    catalog = default_catalog()
-    if whitelist is not None:
-        return WhitelistAdapterCatalog(catalog, whitelist)
-    return catalog
+    """The default catalog.
+
+    ``whitelist`` opts third-party plugins (by entry-point name) into loading;
+    the bundled adapters always load. With no whitelist, only the trusted bundled
+    adapters plus any in-process registrations are visible — the safe default
+    (a package installed for another reason never silently becomes a client).
+    """
+    if whitelist is None:
+        return default_catalog()
+    entrypoint = EntryPointAdapterCatalog(whitelist=whitelist)
+    return CompositeAdapterCatalog([entrypoint, default_registry()])
 
 
 def _unknown_adapter(name: str, catalog: AdapterCatalogPort) -> UnknownClient:

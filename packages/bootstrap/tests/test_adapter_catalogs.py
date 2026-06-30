@@ -64,10 +64,18 @@ def test_entrypoint_catalog_sources_map_ids_to_packages():
 # --- graceful handling of broken / incompatible entry points -----------------
 
 
+class _FakeDist:
+    def __init__(self, name):
+        self.metadata = {"Name": name, "Version": "1.0"}
+
+
 class _FakeEntryPoint:
-    def __init__(self, name, loader):
+    # Defaults to the bundled (trusted) distribution so the broken/descriptor/
+    # version tests exercise the load path; the trust-gate tests override it.
+    def __init__(self, name, loader, dist_name="generic-ml-cache-adapters"):
         self.name = name
         self._loader = loader
+        self.dist = _FakeDist(dist_name)
 
     def load(self):
         return self._loader()
@@ -116,3 +124,52 @@ def test_incompatible_contract_version_is_skipped(monkeypatch):
     catalog = EntryPointAdapterCatalog()
     with pytest.warns(UserWarning):
         assert catalog.list_adapters() == []
+
+
+# --- load-time trust gate (G1) -----------------------------------------------
+
+
+class _AcmeAdapter:
+    name = "acme"
+
+    @classmethod
+    def descriptor(cls):
+        return AdapterDescriptor.api("acme", (), "Acme")
+
+
+def test_untrusted_third_party_plugin_is_never_loaded(monkeypatch):
+    loaded = {"called": False}
+
+    def _loader():
+        loaded["called"] = True
+        return _AcmeAdapter
+
+    monkeypatch.setattr(
+        epc_module,
+        "iter_entry_points",
+        lambda group: [_FakeEntryPoint("acme", _loader, dist_name="acme-sdk")],
+    )
+    catalog = EntryPointAdapterCatalog()  # no whitelist -> safe default
+    assert catalog.list_adapters() == []
+    # The gate is BEFORE ep.load(): the plugin's module code never runs.
+    assert loaded["called"] is False
+
+
+def test_third_party_plugin_loads_only_when_whitelisted(monkeypatch):
+    monkeypatch.setattr(
+        epc_module,
+        "iter_entry_points",
+        lambda group: [_FakeEntryPoint("acme", lambda: _AcmeAdapter, dist_name="acme-sdk")],
+    )
+    catalog = EntryPointAdapterCatalog(whitelist=frozenset({"acme"}))
+    assert [d.client_name for d in catalog.list_adapters()] == ["acme"]
+
+
+def test_bundled_distribution_loads_without_a_whitelist(monkeypatch):
+    monkeypatch.setattr(
+        epc_module,
+        "iter_entry_points",
+        lambda group: [_FakeEntryPoint("acme", lambda: _AcmeAdapter)],  # trusted dist
+    )
+    catalog = EntryPointAdapterCatalog()
+    assert [d.client_name for d in catalog.list_adapters()] == ["acme"]
