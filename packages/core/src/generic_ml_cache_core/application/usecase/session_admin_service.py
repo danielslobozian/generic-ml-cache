@@ -16,6 +16,12 @@ from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_
 from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_spec_use_case import (
     ClearSessionSpecUseCase,
 )
+from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys_for_session_command import (
+    ExecutionKeysForSessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys_for_session_use_case import (
+    ExecutionKeysForSessionUseCase,
+)
 from generic_ml_cache_core.application.port.inbound.session_admin.get_session_spec_command import (
     GetSessionSpecCommand,
 )
@@ -24,6 +30,12 @@ from generic_ml_cache_core.application.port.inbound.session_admin.get_session_sp
 )
 from generic_ml_cache_core.application.port.inbound.session_admin.list_session_ids_use_case import (
     ListSessionIdsUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.sessions_for_tag_command import (
+    SessionsForTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.sessions_for_tag_use_case import (
+    SessionsForTagUseCase,
 )
 from generic_ml_cache_core.application.port.inbound.session_admin.set_session_spec_command import (
     SetSessionSpecCommand,
@@ -39,6 +51,8 @@ class SessionAdminService(
     ClearSessionSpecUseCase,
     GetSessionSpecUseCase,
     ListSessionIdsUseCase,
+    SessionsForTagUseCase,
+    ExecutionKeysForSessionUseCase,
 ):
     """Manage a session's execution spec and enumerate sessions."""
 
@@ -56,3 +70,9 @@ class SessionAdminService(
 
     def list_session_ids(self) -> list[str]:
         return self._metrics.list_session_ids()
+
+    def sessions_for_tag(self, command: SessionsForTagCommand) -> list[str]:
+        return self._metrics.session_ids_for_tag(command.tag)
+
+    def execution_keys_for_session(self, command: ExecutionKeysForSessionCommand) -> list[str]:
+        return self._metrics.execution_keys_for_session(command.session_id)

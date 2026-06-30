@@ -21,6 +21,12 @@ from generic_ml_cache_core.application.port.inbound.execution_query.find_executi
 from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_execution_command import (
     TagsForExecutionCommand,
 )
+from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys_for_session_command import (
+    ExecutionKeysForSessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.sessions_for_tag_command import (
+    SessionsForTagCommand,
+)
 from generic_ml_cache_core.common.errors import (
     ConfigError,
     EncryptionTokenRequired,
@@ -359,8 +365,12 @@ def _cmd_purge(args: argparse.Namespace) -> int:
 def _keys_for_session_tags(wired, wanted_session_tags: list) -> set:
     allowed: set = set()
     for session_tag in wanted_session_tags:
-        for session_id in wired.metrics.session_ids_for_tag(session_tag):
-            allowed.update(wired.metrics.execution_keys_for_session(session_id))
+        for session_id in wired.session_admin.sessions_for_tag(SessionsForTagCommand(session_tag)):
+            allowed.update(
+                wired.session_admin.execution_keys_for_session(
+                    ExecutionKeysForSessionCommand(session_id)
+                )
+            )
     return allowed
 
 

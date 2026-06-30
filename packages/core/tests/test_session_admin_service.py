@@ -28,6 +28,12 @@ class _FakeMetrics:
     def list_session_ids(self) -> list[str]:
         return sorted(self.specs)
 
+    def session_ids_for_tag(self, tag: str) -> list[str]:
+        return ["s1", "s2"] if tag == "t" else []
+
+    def execution_keys_for_session(self, session_id: str) -> list[str]:
+        return {"s1": ["k1", "k2"], "s2": ["k3"]}.get(session_id, [])
+
 
 def test_set_spec_stores_it():
     metrics = _FakeMetrics()
@@ -70,3 +76,22 @@ def test_clear_unknown_session_is_a_noop():
     metrics = _FakeMetrics()
     SessionAdminService(metrics).clear_spec(ClearSessionSpecCommand("nope"))  # type: ignore[arg-type]
     assert metrics.specs == {}
+
+
+def test_sessions_for_tag():
+    from generic_ml_cache_core.application.port.inbound.session_admin.sessions_for_tag_command import (
+        SessionsForTagCommand,
+    )
+
+    svc = SessionAdminService(_FakeMetrics())  # type: ignore[arg-type]
+    assert svc.sessions_for_tag(SessionsForTagCommand("t")) == ["s1", "s2"]
+    assert svc.sessions_for_tag(SessionsForTagCommand("none")) == []
+
+
+def test_execution_keys_for_session():
+    from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys_for_session_command import (
+        ExecutionKeysForSessionCommand,
+    )
+
+    svc = SessionAdminService(_FakeMetrics())  # type: ignore[arg-type]
+    assert svc.execution_keys_for_session(ExecutionKeysForSessionCommand("s1")) == ["k1", "k2"]
