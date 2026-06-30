@@ -9,6 +9,15 @@ import sys
 from pathlib import Path
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+from generic_ml_cache_core.application.port.inbound.session_tags.list_session_tags_command import (
+    ListSessionTagsCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_tags.tag_session_command import (
+    TagSessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_command import (
+    UntagSessionCommand,
+)
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
 
 from generic_ml_cache_cli import config
@@ -194,16 +203,15 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
         return 4
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     for tag in args.add:
-        wired.metrics.add_session_tag(args.session_id, tag)
+        wired.session_tags.tag(TagSessionCommand(args.session_id, tag))
     for tag in args.remove:
-        wired.metrics.remove_session_tag(args.session_id, tag)
+        wired.session_tags.untag(UntagSessionCommand(args.session_id, tag))
+    tags = wired.session_tags.list_tags(ListSessionTagsCommand(args.session_id))
     if not args.json:
-        tags = wired.metrics.session_tags(args.session_id)
         print(f"tags : {', '.join(sorted(tags))}")
     else:
         import json
 
-        tags = wired.metrics.session_tags(args.session_id)
         print(json.dumps({"session": args.session_id, "tags": tags}, indent=2))
     return 0
 

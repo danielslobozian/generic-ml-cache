@@ -60,6 +60,7 @@ from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
     RunMlExecutionService,
 )
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
+from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_bootstrap.discovery.composition import catalog_for, default_resolver
@@ -143,6 +144,7 @@ def build_application_api(
         ),
         probe=ProbeService(file_fingerprint, repository),
         purge=purge,
+        session_tags=SessionTagsService(metrics),
         blob_store=blob_store,
         repository=repository,
         metrics=metrics,

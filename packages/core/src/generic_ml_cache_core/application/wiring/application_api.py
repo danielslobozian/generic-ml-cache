@@ -18,6 +18,7 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
 )
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class ApplicationApi:
     run_ml: RunMlExecutionUseCase
     probe: ProbeUseCase
     purge: PurgeService
+    session_tags: SessionTagsService
     blob_store: BlobStorePort
     repository: ExecutionRepositoryPort
     metrics: MetricsPort
