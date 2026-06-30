@@ -20,7 +20,7 @@ def _cmd_daemon(_args: argparse.Namespace) -> int:
 
 def _cmd_daemon_start(args: argparse.Namespace) -> int:
     try:
-        from generic_ml_cache_daemon.app import create_app  # noqa: PLC0415
+        from generic_ml_cache_daemon.app import create_app
     except ImportError:
         print(
             "error: generic-ml-cache-daemon is not installed. "
@@ -29,7 +29,7 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
         )
         return 1
     try:
-        import uvicorn  # noqa: PLC0415
+        import uvicorn
     except ImportError:
         print("error: uvicorn is not installed (install generic-ml-cache-daemon)", file=sys.stderr)
         return 1
@@ -61,9 +61,9 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
 
 
 def _cmd_daemon_status(args: argparse.Namespace) -> int:
-    import json as _json  # noqa: PLC0415
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+    import json as _json
+    import urllib.error
+    import urllib.request
 
     host: str = args.host
     port: int = args.port
@@ -79,7 +79,7 @@ def _cmd_daemon_status(args: argparse.Namespace) -> int:
             return 1
 
     if getattr(args, "json", False):
-        import json as _json2  # noqa: PLC0415
+        import json as _json2
 
         print(_json2.dumps({"status": status, "host": host, "port": port}))
     else:
@@ -88,9 +88,9 @@ def _cmd_daemon_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_daemon_stop(args: argparse.Namespace) -> int:
-    import signal  # noqa: PLC0415
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+    import signal
+    import urllib.error
+    import urllib.request
 
     host: str = args.host
     port: int = args.port
@@ -125,8 +125,8 @@ def _cmd_status_line(args: argparse.Namespace) -> int:  # NOSONAR — always 0 b
     and prints nothing when no session is active or the daemon is not running —
     the caller decides how to handle absence.
     """
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+    import urllib.error
+    import urllib.request
 
     session_id: Optional[str] = getattr(args, "session", None) or os.environ.get("GMLCACHE_SESSION")
     if not session_id:

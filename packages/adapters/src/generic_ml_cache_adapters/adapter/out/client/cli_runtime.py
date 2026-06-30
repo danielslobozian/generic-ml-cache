@@ -33,10 +33,10 @@ from generic_ml_cache_core.application.domain.model.run.passthrough_request impo
 from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.common.errors import ClientNotFound
-from generic_ml_cache_adapters.stream import StreamWriter
 
 from generic_ml_cache_adapters.adapter.out.client.cli_process_runner import CliProcessRunner
 from generic_ml_cache_adapters.adapter.out.client.prime_directive import build_system_prompt
+from generic_ml_cache_adapters.stream import StreamWriter
 
 _TEXT_ENCODING = "utf-8"
 

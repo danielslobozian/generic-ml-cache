@@ -37,14 +37,14 @@ class HttpGatewayForwardAdapter(GatewayForwardPort):
         """POST the gateway request to ``target_url`` and return the raw response."""
         request_body = gateway_request.serialize_request()
         upstream_headers = self._build_headers(api_token, forward_headers)
-        http_request = urllib.request.Request(
+        http_request = urllib.request.Request(  # noqa: S310 (operator-configured upstream, https)
             target_url,
             data=request_body,
             headers=upstream_headers,
             method="POST",
         )
         try:
-            with urllib.request.urlopen(http_request, timeout=self._timeout) as response:
+            with urllib.request.urlopen(http_request, timeout=self._timeout) as response:  # noqa: S310 (operator-configured upstream, https)
                 response_bytes = response.read()
             return ForwardedResponse(body_bytes=response_bytes, status_code=200)
         except urllib.error.HTTPError as http_error:

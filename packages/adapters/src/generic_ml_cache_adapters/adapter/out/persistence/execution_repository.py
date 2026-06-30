@@ -28,13 +28,13 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
     ExecutionSizeEntry,
     ExecutionSummary,
 )
-from generic_ml_cache_adapters.db import DbConnection
 
 from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
     SerializedIdentity,
     deserialize_identity,
     serialize_identity,
 )
+from generic_ml_cache_adapters.db import DbConnection
 
 #: stored string values of the input artifact types, for the idempotency check.
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)

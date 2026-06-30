@@ -16,10 +16,11 @@ from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter 
 from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
     StructlogDiagnosticsAdapter,
 )
-from generic_ml_cache_cli._compose import build_store_encryptor, load_cipher
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_adapters.db import DbConnection
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ConfigError
+
+from generic_ml_cache_cli._compose import build_store_encryptor, load_cipher
 
 from . import config
 

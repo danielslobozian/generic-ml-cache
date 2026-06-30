@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 import sqlite3
+
 import pytest
 
 pytest.importorskip("cryptography")
 
-from generic_ml_cache_cli._compose import build_use_cases  # noqa: E402
 from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
 from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
     FilesystemEncryptionManifestStore,
@@ -17,11 +17,11 @@ from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest
 from generic_ml_cache_core.application.domain.model.execution.artifact import (  # noqa: E402
     ArtifactType,
 )
-from generic_ml_cache_core.application.domain.model.execution.execution_state import (  # noqa: E402
-    ExecutionState,
-)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import (  # noqa: E402
     ExecutionKind,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_state import (  # noqa: E402
+    ExecutionState,
 )
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402
     RunMlExecutionCommand,
@@ -30,6 +30,8 @@ from generic_ml_cache_core.common.errors import (  # noqa: E402
     EncryptionTokenRequired,
     WrongEncryptionToken,
 )
+
+from generic_ml_cache_cli._compose import build_use_cases  # noqa: E402
 
 _MARKER = "ENCRYPTME-distinctive-123"
 

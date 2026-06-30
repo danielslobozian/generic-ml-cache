@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli.cli import main
-from generic_ml_cache_core.common.errors import ConfigError
 
 
 def _write(path, text):

@@ -9,12 +9,11 @@ import json
 from typing import Any, AsyncIterator, Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 
+from generic_ml_cache_daemon.controllers.run import _build_command, _extract_artifact
 from generic_ml_cache_daemon.jobs import Job, JobState
 from generic_ml_cache_daemon.presenters.job import JobResponse, JobSubmitBody
-from generic_ml_cache_daemon.controllers.run import _build_command, _extract_artifact
 
 router = APIRouter(prefix="/jobs")
 

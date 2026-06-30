@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import subprocess
 
-from generic_ml_cache_cli import cli
 import generic_ml_cache_cli.controllers.run as run_ctrl
+from generic_ml_cache_cli import cli
 
 
 def test_cli_maps_timeout_to_124(monkeypatch):

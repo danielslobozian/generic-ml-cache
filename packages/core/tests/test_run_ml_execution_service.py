@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+from unittest.mock import MagicMock, create_autospec
+
 import pytest
-from unittest.mock import create_autospec, MagicMock
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind

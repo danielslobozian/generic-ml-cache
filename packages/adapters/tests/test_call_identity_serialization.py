@@ -5,12 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
-    SerializedIdentity,
-    deserialize_identity,
-    serialize_identity,
-)
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
     ApiCallIdentity,
 )
@@ -19,6 +13,12 @@ from generic_ml_cache_core.application.domain.model.identity.managed_call_identi
 )
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
+)
+
+from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
+    SerializedIdentity,
+    deserialize_identity,
+    serialize_identity,
 )
 
 

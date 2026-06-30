@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
@@ -63,5 +65,5 @@ def test_from_dict_preserves_raw_block():
 
 def test_is_frozen():
     token_usage = TokenUsage(input_tokens=1)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         token_usage.input_tokens = 2  # type: ignore[misc]

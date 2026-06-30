@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-
 import pytest
+from conftest import write_directive
 
 from generic_ml_cache_cli.cli import main
-from conftest import write_directive
 
 
 def run_cli(args):

@@ -21,9 +21,8 @@ from generic_ml_cache_core.application.domain.model.usage.usage import int_or_no
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 
-from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
-
 from generic_ml_cache_adapters.adapter.out.api._gemini_thinking import GeminiThinkingConfig
+from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -100,13 +99,13 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
         return result
 
     def _get(self, url: str) -> Dict[str, Any]:
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             url,
             headers={"X-goog-api-key": self._api_key_value()},
             method="GET",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
@@ -114,7 +113,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
 
     def _post(self, url: str, body: Dict[str, Any]) -> Dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             url,
             data=data,
             headers={
@@ -124,7 +123,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")

@@ -11,7 +11,6 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_adapters.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -19,6 +18,8 @@ from generic_ml_cache_core.application.domain.model.execution.execution_state im
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
+
+from generic_ml_cache_cli._compose import build_use_cases
 
 
 def _factory(tmp_path):

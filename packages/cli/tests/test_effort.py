@@ -7,6 +7,7 @@ from pathlib import Path
 from generic_ml_cache_adapters.adapter.out.client.claude import ClaudeAdapter
 from generic_ml_cache_adapters.adapter.out.client.codex import CodexAdapter
 from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
+
 from generic_ml_cache_cli.cli import build_parser
 
 RUN_DIR = Path("/tmp/does-not-matter")

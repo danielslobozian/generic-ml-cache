@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from starlette.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # GET /executions — list
 # ---------------------------------------------------------------------------

@@ -7,7 +7,6 @@ from __future__ import annotations
 import secrets
 
 from fastapi import APIRouter, HTTPException, Request
-
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.usecase.session_report import (
     ModelUsage,

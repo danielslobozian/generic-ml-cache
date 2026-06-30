@@ -8,6 +8,7 @@ from typing import Optional
 from unittest.mock import MagicMock
 
 import pytest
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
 from generic_ml_cache_adapters.adapter.out.client.discover import (
     _probe_version,
@@ -16,7 +17,6 @@ from generic_ml_cache_adapters.adapter.out.client.discover import (
     probe,
     probe_all,
 )
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
 
 class RecordingDiag(DiagnosticsPort):

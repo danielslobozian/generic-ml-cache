@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
@@ -151,7 +153,7 @@ def test_client_args_fingerprint_enters_key():
 
 def test_is_frozen():
     identity = _make_identity()
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         identity.client = "codex"  # type: ignore[misc]
 
 

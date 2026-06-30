@@ -8,10 +8,6 @@ from datetime import datetime, timezone
 from typing import List
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
-    InMemoryExecutionRepository,
-)
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -26,6 +22,10 @@ from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
+
+from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
+    InMemoryExecutionRepository,
+)
 
 
 class FixedClock(ClockPort):

@@ -7,12 +7,11 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, Request
-from starlette.responses import Response
-
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import GatewayRequest
 from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
     RunMlGatewayCommand,
 )
+from starlette.responses import Response
 
 from generic_ml_cache_daemon.presenters.gateway import MessagesRequest
 

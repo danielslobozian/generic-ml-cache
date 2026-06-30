@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import sqlite3
 
-from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+
+from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
+from generic_ml_cache_adapters.migration_runner import run_migrations
 
 
 def _make_factory(db_path):

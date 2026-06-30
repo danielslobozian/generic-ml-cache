@@ -8,7 +8,6 @@ from pathlib import Path
 
 from starlette.testclient import TestClient
 
-
 # ---------------------------------------------------------------------------
 # GET /sessions — list
 # ---------------------------------------------------------------------------

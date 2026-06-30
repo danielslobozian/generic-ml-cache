@@ -10,11 +10,11 @@ and is intentionally not tested by killing processes on CI.
 from __future__ import annotations
 
 import pytest
+from generic_ml_cache_core.common.errors import StoreLocked
 
 from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
 )
-from generic_ml_cache_core.common.errors import StoreLocked
 
 
 def test_acquire_and_release(tmp_path):

@@ -10,8 +10,6 @@ from typing import Any, AsyncIterator, Dict, FrozenSet, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
-
 from generic_ml_cache_adapters.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_state import (
@@ -21,6 +19,7 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
+from sse_starlette.sse import EventSourceResponse
 
 from generic_ml_cache_daemon.presenters.run import RunBody, RunResponse
 

@@ -17,8 +17,9 @@ import time
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+
+from generic_ml_cache_adapters.db import DbConnection
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 _CURRENT_VERSION = 1

@@ -16,16 +16,16 @@ from pathlib import Path
 from typing import List
 
 import pytest
-
-from generic_ml_cache_cli import cli
-import generic_ml_cache_cli.controllers.run as run_ctrl
+from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
     ManagedLocalRequest,
 )
 from generic_ml_cache_core.common.errors import RunInterrupted
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
+
+import generic_ml_cache_cli.controllers.run as run_ctrl
+from generic_ml_cache_cli import cli
 
 
 class _SleepAdapter:

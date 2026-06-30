@@ -19,7 +19,8 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from generic_ml_cache_cli.discovery import register  # noqa: E402  # adapter registration seam
 from generic_ml_cache_core.common.errors import UnknownClient  # noqa: E402
+
+from generic_ml_cache_cli.discovery import register  # noqa: E402  # adapter registration seam
 
 __all__ = ["__version__", "register", "UnknownClient"]

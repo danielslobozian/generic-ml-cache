@@ -7,9 +7,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 
 from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 
 
 def test_port_cannot_be_instantiated_directly():

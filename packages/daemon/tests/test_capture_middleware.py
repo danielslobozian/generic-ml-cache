@@ -14,7 +14,6 @@ from starlette.testclient import TestClient
 
 from generic_ml_cache_daemon.infrastructure.capture import GatewayCaptureMiddleware
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

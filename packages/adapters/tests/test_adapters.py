@@ -7,14 +7,13 @@ import sys
 from pathlib import Path
 
 import pytest
+from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
-from generic_ml_cache_core.common.errors import UnknownClient
-from generic_ml_cache_adapters.discovery.composition import get_adapter, registered_names
-from generic_ml_cache_core.common.errors import ClientNotFound
 from generic_ml_cache_adapters.adapter.out.client.prime_directive import (
     PRIME_DIRECTIVE,
     build_system_prompt,
 )
+from generic_ml_cache_adapters.discovery.composition import get_adapter, registered_names
 
 
 def test_builtins_are_registered():
@@ -169,10 +168,11 @@ def _grant(client, tmp_path, grants):
     # The uniform grant door, exercised through the hexagonal split: the adapter
     # supplies the config-file + credential descriptors; the WorkspacePort writes
     # them into the redirected config home; the env points the client at it.
+    from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
+
     from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import (
         FilesystemWorkspace,
     )
-    from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
 
     adapter = get_adapter(client)
     home = tmp_path / "home"
@@ -188,10 +188,11 @@ def _grant(client, tmp_path, grants):
 def _materialize(client, config_home, grants=()):
     """Write a client's config + seed its credentials into ``config_home`` via the
     WorkspacePort, the way the managed use case does."""
+    from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
+
     from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import (
         FilesystemWorkspace,
     )
-    from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
 
     adapter = get_adapter(client)
     workspace = Workspace(run_dir=config_home.parent / "run", config_home=config_home)
@@ -276,9 +277,9 @@ def test_claude_grant_setup_seeds_main_config_and_dir(tmp_path, monkeypatch):
     (fake_home / ".claude").mkdir(parents=True)
     (fake_home / ".claude" / ".credentials.json").write_text("{}", encoding="utf-8")
     (fake_home / ".claude.json").write_text('{"x":1}', encoding="utf-8")
-    from pathlib import Path as _P
+    from pathlib import Path as _PathClass
 
-    monkeypatch.setattr(_P, "home", staticmethod(lambda: fake_home))
+    monkeypatch.setattr(_PathClass, "home", staticmethod(lambda: fake_home))
     cfg = tmp_path / "cfg"
     _materialize("claude", cfg)
     assert (cfg / ".claude.json").read_text() == '{"x":1}'  # main config seeded

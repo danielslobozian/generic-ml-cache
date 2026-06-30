@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 
 

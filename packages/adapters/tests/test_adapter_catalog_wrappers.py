@@ -5,13 +5,13 @@
 from __future__ import annotations
 
 import pytest
-
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.common.errors import UnknownClient
+
 from generic_ml_cache_adapters.discovery.composite_adapter_catalog import CompositeAdapterCatalog
 from generic_ml_cache_adapters.discovery.composite_adapter_resolver import CompositeAdapterResolver
 from generic_ml_cache_adapters.discovery.static_adapter_catalog import StaticAdapterCatalog

@@ -53,13 +53,15 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from generic_ml_cache_core.application.wiring.wired_use_cases import (  # noqa: E402  # fmt: skip
-    WiredUseCases,
-)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402  # fmt: skip
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort  # noqa: E402  # fmt: skip
+from generic_ml_cache_core.application.port.out.ml_runner_port import (
+    MlRunnerPort,  # noqa: E402  # fmt: skip
+)
+from generic_ml_cache_core.application.wiring.wired_use_cases import (  # noqa: E402  # fmt: skip
+    WiredUseCases,
+)
 from generic_ml_cache_core.common.checksum import (  # noqa: E402  # fmt: skip
     checksum_input_data,
     file_content_fingerprint,

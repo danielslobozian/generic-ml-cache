@@ -8,12 +8,11 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from starlette.testclient import TestClient
-
 from generic_ml_cache_core.application.domain.model.gateway.gateway_response import GatewayResponse
 from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
     RunMlGatewayCommand,
 )
+from starlette.testclient import TestClient
 
 _SESSION = "test-session-abc"
 _URL = f"/gateway/claude/{_SESSION}/v1/messages"

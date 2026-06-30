@@ -8,9 +8,6 @@ import time as _time_module
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
-    InMemoryExecutionRepository,
-)
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -18,12 +15,16 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+
+from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
+    InMemoryExecutionRepository,
+)
 
 _MOMENT = datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
 

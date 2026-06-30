@@ -64,7 +64,7 @@ class GatewayCaptureMiddleware(BaseHTTPMiddleware):
         return await self._capture_exchange(request, call_next)
 
     async def _capture_exchange(self, request: Request, call_next) -> Response:
-        import time  # noqa: PLC0415
+        import time
 
         start_ns = time.monotonic_ns()
         request_body_bytes = await request.body()

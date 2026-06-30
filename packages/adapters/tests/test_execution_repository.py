@@ -7,13 +7,6 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
-    ExecutionRepository,
-)
-from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
-    ApiCallIdentity,
-)
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
@@ -21,10 +14,13 @@ from generic_ml_cache_core.application.domain.model.execution.execution_failure 
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
+    ApiCallIdentity,
+)
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
-from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
@@ -33,6 +29,11 @@ from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
 )
+
+from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
+    ExecutionRepository,
+)
+from generic_ml_cache_adapters.migration_runner import run_migrations
 
 _MOMENT = datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
 

@@ -8,8 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from starlette.testclient import TestClient
-
 from generic_ml_cache_core.common.errors import (
     ArtifactBlobMissing,
     CacheError,
@@ -20,6 +18,7 @@ from generic_ml_cache_core.common.errors import (
     UnknownClient,
     WrongEncryptionToken,
 )
+from starlette.testclient import TestClient
 
 
 def _client_raising(exc: Exception, tmp_path: Path) -> TestClient:

@@ -7,12 +7,12 @@ from __future__ import annotations
 import hashlib
 
 import pytest
+from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.common.errors import InputFileError
 
 from generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.common.errors import InputFileError
 
 
 def test_port_cannot_be_instantiated_directly():

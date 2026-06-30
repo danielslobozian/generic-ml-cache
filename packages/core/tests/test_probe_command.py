@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
@@ -44,5 +46,5 @@ def test_carries_no_run_policy():
 
 def test_is_frozen():
     command = _command()
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         command.prompt = "other"  # type: ignore[misc]

@@ -6,11 +6,15 @@ from __future__ import annotations
 
 import argparse
 
-from generic_ml_cache_cli.discovery import registered_local_names, registered_names
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 
 from generic_ml_cache_cli import __version__
+from generic_ml_cache_cli.controllers.config import (
+    _cmd_config,
+    _cmd_config_show,
+    _cmd_config_validate,
+)
 from generic_ml_cache_cli.controllers.daemon import (
     _cmd_daemon,
     _cmd_daemon_start,
@@ -34,8 +38,8 @@ from generic_ml_cache_cli.controllers.execution import (
     _cmd_worker,
 )
 from generic_ml_cache_cli.controllers.run import (
-    GRANT_CHOICES,
     _GRANT_HELP,
+    GRANT_CHOICES,
     _cmd_alias,
     _cmd_run,
 )
@@ -46,11 +50,6 @@ from generic_ml_cache_cli.controllers.session import (
     _cmd_session_start,
     _cmd_session_tag,
     _cmd_session_update,
-)
-from generic_ml_cache_cli.controllers.config import (
-    _cmd_config,
-    _cmd_config_show,
-    _cmd_config_validate,
 )
 from generic_ml_cache_cli.controllers.setup import (
     _cmd_doctor,
@@ -67,6 +66,7 @@ from generic_ml_cache_cli.controllers.store import (
     _cmd_stats,
     _cmd_tags,
 )
+from generic_ml_cache_cli.discovery import registered_local_names, registered_names
 from generic_ml_cache_cli.presenters.shared import _use_color, render_banner
 
 _JSON_HELP = "emit machine-readable JSON"

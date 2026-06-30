@@ -7,18 +7,17 @@ from __future__ import annotations
 import sys
 
 import pytest
-
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.common.errors import UnknownClient
+
 from generic_ml_cache_adapters.discovery.entrypoint_adapter_resolver import (
     EntryPointAdapterResolver,
 )
 from generic_ml_cache_adapters.discovery.in_memory_adapter_registry import InMemoryAdapterRegistry
-
 
 # --- EntryPointAdapterResolver against the real installed adapters -----------
 

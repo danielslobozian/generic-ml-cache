@@ -9,11 +9,10 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from starlette.testclient import TestClient
 
-from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
-
 
 # ---------------------------------------------------------------------------
 # EvictionStats defaults

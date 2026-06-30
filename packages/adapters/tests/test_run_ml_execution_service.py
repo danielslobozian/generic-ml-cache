@@ -9,16 +9,16 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
-    InMemoryExecutionRepository,
-)
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
+from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
@@ -26,18 +26,18 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
-from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
+from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import CacheMiss
+
+from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
+    InMemoryExecutionRepository,
+)
 
 
 class FixedClock(ClockPort):

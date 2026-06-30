@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
@@ -39,5 +41,5 @@ def test_exit_code_is_optional_for_non_exit_causes():
 
 def test_is_frozen():
     failure = ExecutionFailure(reason=FailureReason.NONZERO_EXIT, message="x")
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         failure.message = "y"  # type: ignore[misc]

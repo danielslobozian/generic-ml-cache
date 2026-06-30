@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -71,7 +73,7 @@ def test_defaults():
 
 def test_is_frozen():
     command = _managed()
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         command.prompt = "other"  # type: ignore[misc]
 
 

@@ -18,7 +18,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
 
 
 def _cmd_config_validate(args: argparse.Namespace) -> int:
-    from generic_ml_cache_cli.config import validate  # noqa: PLC0415
+    from generic_ml_cache_cli.config import validate
 
     path = config.resolve_config_path()
     issues = validate(path)
@@ -26,7 +26,7 @@ def _cmd_config_validate(args: argparse.Namespace) -> int:
     errors = [i for i in issues if i.severity == "error"]
 
     if args.json:
-        import json  # noqa: PLC0415
+        import json
 
         print(
             json.dumps(
@@ -69,7 +69,7 @@ def _cmd_config_show(args: argparse.Namespace) -> int:
     path = config.resolve_config_path()
 
     if args.json:
-        import json  # noqa: PLC0415
+        import json
 
         print(
             json.dumps(

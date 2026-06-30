@@ -10,21 +10,19 @@ import sys
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
-from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
-from generic_ml_cache_cli.discovery import execution_kind_for
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.grants import GRANTS
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.domain.model.grants import GRANTS
 from generic_ml_cache_core.common.errors import (
     CacheError,
     CacheMiss,
@@ -35,6 +33,7 @@ from generic_ml_cache_core.common.errors import (
 )
 
 from generic_ml_cache_cli import async_jobs, config
+from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
 from generic_ml_cache_cli.composition import (
     _db_conn_factory,
     _make_diag,
@@ -44,6 +43,7 @@ from generic_ml_cache_cli.composition import (
     _resolve_session,
     _resolve_token,
 )
+from generic_ml_cache_cli.discovery import execution_kind_for
 from generic_ml_cache_cli.presenters.shared import (
     _apply_output_files,
     _artifact_text,

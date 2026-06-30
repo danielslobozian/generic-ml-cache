@@ -53,7 +53,13 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-extend-select = ["C901"]
+extend-select = ["C901", "I", "B", "N", "S310"]
+
+[tool.ruff.lint.per-file-ignores]
+# The domain exceptions are deliberately named for the condition they signal
+# (CacheMiss, UnknownClient, ArtifactBlobMissing, …), not with an -Error suffix.
+# That naming is intentional, so the N818 "error-suffix" rule is a false positive here.
+"src/generic_ml_cache_core/common/errors.py" = ["N818"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

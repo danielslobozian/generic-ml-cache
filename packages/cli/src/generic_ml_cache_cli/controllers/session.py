@@ -9,11 +9,11 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
 
 from generic_ml_cache_cli import config
+from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
     _db_conn_factory,
     _make_diag,

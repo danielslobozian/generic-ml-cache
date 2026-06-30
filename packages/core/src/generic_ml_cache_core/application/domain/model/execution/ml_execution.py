@@ -9,12 +9,12 @@ from datetime import datetime
 from typing import Iterable, List, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
-from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 
 

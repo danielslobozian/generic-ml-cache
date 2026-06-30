@@ -41,17 +41,13 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
 )
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
+from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execution_kind_for
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
-    SelectAdapterForExecutionService,
-)
-from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
@@ -61,7 +57,12 @@ from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
     RunMlExecutionService,
 )
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
-from generic_ml_cache_adapters.db import DbConnection
+from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
+    SelectAdapterForExecutionService,
+)
+from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
+
+from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execution_kind_for
 
 _BLOBS_DIRNAME = "blobs"
 
@@ -83,7 +84,7 @@ def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> Bl
         return blob_store
     if encryption_token is None:
         return TokenRequiredBlobStore(blob_store)
-    from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: PLC0415
+    from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
 
     cipher = AesGcmCipher()
     data_key = cipher.open_envelope(encryption_token, manifest)
@@ -126,7 +127,7 @@ def _build_runners(
     # demos and cache tests can exercise the pipeline without real credentials.
     from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import (
         StubApiClientAdapter,
-    )  # noqa: PLC0415
+    )
 
     stub = cast(RegisteredAdapter, StubApiClientAdapter())
     return {
@@ -198,7 +199,7 @@ def get_encryption_state(store_root: Path) -> EncryptionState:
 def load_cipher():
     """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
     try:
-        from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: PLC0415
+        from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
     except ImportError as exc:  # pragma: no cover
         raise SystemExit(
             "error: encryption needs an optional dependency — install with "

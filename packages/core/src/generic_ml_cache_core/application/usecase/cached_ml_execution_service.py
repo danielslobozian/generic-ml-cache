@@ -12,13 +12,13 @@ from dataclasses import replace
 from typing import Dict, Generator, Generic, List, Optional, Protocol, Tuple, TypeVar
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
-from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
-from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
-from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
-from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (

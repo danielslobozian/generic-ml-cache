@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+
 from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
 
 def test_null_adapter_is_diagnostics_port() -> None:

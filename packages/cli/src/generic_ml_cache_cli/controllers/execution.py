@@ -9,7 +9,6 @@ import os
 import sys
 from pathlib import Path
 
-from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.common.errors import (
     EncryptionTokenRequired,
@@ -18,6 +17,7 @@ from generic_ml_cache_core.common.errors import (
 )
 
 from generic_ml_cache_cli import async_jobs
+from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
     _db_conn_factory,
     _make_diag,
@@ -29,13 +29,13 @@ from generic_ml_cache_cli.controllers.run import (
     _spec_executable_override,
     _spec_whitelist,
 )
-from generic_ml_cache_cli.presenters.shared import _run_exit_code
 from generic_ml_cache_cli.presenters.shared import (
     _AMBER,
     _GREEN,
     _GREY,
     _TEAL,
     _paint,
+    _run_exit_code,
     _stored_artifact_text,
 )
 

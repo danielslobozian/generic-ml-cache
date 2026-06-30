@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from generic_ml_cache_adapters.discovery.composition import get_adapter
 from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
+
+from generic_ml_cache_adapters.discovery.composition import get_adapter
 
 
 def test_real_adapters_are_client_config_ports():

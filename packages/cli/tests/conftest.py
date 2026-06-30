@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import List
 
 import pytest
-
-from generic_ml_cache_cli.discovery import register
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.discovery.descriptors import api_descriptor, local_cli_descriptor
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+
+from generic_ml_cache_cli.discovery import register
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 

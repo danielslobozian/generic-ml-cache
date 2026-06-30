@@ -19,13 +19,12 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 from generic_ml_cache_core.application.domain.model.client_status import (
     ClientStatus as ClientStatus,
 )
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.model_listing import (
     ModelListing as ModelListing,
 )
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
-
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
 from generic_ml_cache_adapters.discovery.composition import (

@@ -8,17 +8,17 @@ import argparse
 import sys
 from pathlib import Path
 
-from generic_ml_cache_cli._compose import get_encryption_state
 from generic_ml_cache_core.common.errors import ConfigError, UnknownClient
 
 from generic_ml_cache_cli import config
+from generic_ml_cache_cli._compose import get_encryption_state
 from generic_ml_cache_cli.composition import _db_conn_factory, _make_diag
 
 
 def _probe_daemon(host: str, port: int) -> bool:
     """Return True if the daemon /health endpoint responds with HTTP 200."""
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+    import urllib.error
+    import urllib.request
 
     url = f"http://{host}:{port}/health"  # NOSONAR — localhost daemon, plain HTTP is correct
     try:
@@ -30,13 +30,14 @@ def _probe_daemon(host: str, port: int) -> bool:
 
 def _doctor_payload(args: argparse.Namespace) -> dict:
     """Collect the full diagnostic payload (no credentials included)."""
-    import os  # noqa: PLC0415
-    import platform  # noqa: PLC0415
-    from dataclasses import asdict  # noqa: PLC0415
+    import os
+    import platform
+    from dataclasses import asdict
 
-    from generic_ml_cache_cli.discovery import adapter_sources  # noqa: PLC0415
-    from generic_ml_cache_adapters.adapter.out.client.discover import probe_all  # noqa: PLC0415
-    from generic_ml_cache_adapters.migration_runner import schema_version  # noqa: PLC0415
+    from generic_ml_cache_adapters.adapter.out.client.discover import probe_all
+    from generic_ml_cache_adapters.migration_runner import schema_version
+
+    from generic_ml_cache_cli.discovery import adapter_sources
 
     file_cfg = config.load()
     settings = config.resolve_settings(file_cfg)
@@ -78,7 +79,7 @@ def _doctor_payload(args: argparse.Namespace) -> dict:
 
 
 def _print_doctor_text(payload: dict) -> None:
-    import platform  # noqa: PLC0415
+    import platform
 
     py_short = sys.version.split()[0]
     print(f"python      : {py_short}  ({platform.system()} {platform.release()})")
@@ -127,7 +128,7 @@ def _print_doctor_text(payload: dict) -> None:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
-    import json  # noqa: PLC0415
+    import json
 
     try:
         payload = _doctor_payload(args)
@@ -140,7 +141,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         return 0
 
     if getattr(args, "bundle", False):
-        from datetime import datetime, timezone  # noqa: PLC0415
+        from datetime import datetime, timezone
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         bundle_path = Path(f"gmlcache-bundle-{ts}.json")

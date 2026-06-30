@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.common.checksum import checksum_input_data
 
 

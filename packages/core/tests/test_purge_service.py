@@ -116,7 +116,7 @@ class TestPurgeBySession:
         report = svc.purge_by_session("empty-sess")
 
         assert report.executions_removed == 0
-        report  # no assertion on soft_purge because _soft_purge_keys short-circuits
+        # no soft_purge assertion: _soft_purge_keys short-circuits on an empty session
 
 
 class TestPurgeBySessionTag:

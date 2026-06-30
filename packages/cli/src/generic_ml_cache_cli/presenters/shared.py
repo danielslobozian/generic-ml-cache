@@ -115,7 +115,7 @@ def render_banner(color: bool = False) -> str:
         f"{rule} {'─' * top_dashes} {off}{vers}{ver}{off}{rule} ─┐{off}"
     )
     rows = []
-    for bar, bar_color, text in zip(bars, bar_colors, texts):
+    for bar, bar_color, text in zip(bars, bar_colors, texts, strict=True):
         bar_cell = f"{bar_color}{bar}{off}" + " " * (bar_w - len(bar))
         used = len(left_pad) + bar_w + len(gap) + len(text)
         rows.append(

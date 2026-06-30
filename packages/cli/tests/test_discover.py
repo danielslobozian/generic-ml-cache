@@ -5,13 +5,14 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from generic_ml_cache_cli.cli import main
 from generic_ml_cache_adapters.adapter.out.client.discover import (
     list_models,
     list_models_all,
     probe,
     probe_all,
 )
+
+from generic_ml_cache_cli.cli import main
 
 
 def test_probe_present_client_reports_version():
@@ -161,8 +162,8 @@ def test_list_models_all_whitelist_restricts_to_named_adapters():
 
 
 def test_list_models_whitelist_blocks_excluded_adapter():
-    from generic_ml_cache_core.common.errors import UnknownClient
     import pytest
+    from generic_ml_cache_core.common.errors import UnknownClient
 
     with pytest.raises(UnknownClient, match="unknown adapter"):
         list_models("fake_stdin", whitelist=frozenset({"fake"}))

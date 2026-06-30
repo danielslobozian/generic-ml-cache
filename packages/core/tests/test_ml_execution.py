@@ -7,9 +7,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
-from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
-    ManagedCallIdentity,
-)
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -19,6 +16,9 @@ from generic_ml_cache_core.application.domain.model.execution.execution_state im
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import (
     MlExecution,
     normalize_tags,
+)
+from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 

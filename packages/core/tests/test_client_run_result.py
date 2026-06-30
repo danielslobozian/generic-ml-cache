@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
+from generic_ml_cache_core.application.domain.model.execution.execution_failure import FailureReason
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.run.client_run_result import (
     ClientRunResult,
     GeneratedFile,
 )
-from generic_ml_cache_core.application.domain.model.execution.execution_failure import FailureReason
-from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 
 
 def test_minimal_result_needs_only_exit_code():
@@ -58,7 +60,7 @@ def test_non_zero_exit_code_is_preserved():
 
 def test_is_frozen():
     result = ClientRunResult(exit_code=0)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         result.exit_code = 1  # type: ignore[misc]
 
 

@@ -109,27 +109,27 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
 
     def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             _BASE_URL + path,
             data=data,
             headers=self._headers(),
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Anthropic API error {exc.code}: {error_body}") from exc
 
     def _get(self, path: str) -> Dict[str, Any]:
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
             _BASE_URL + path,
             headers=self._headers(),
             method="GET",
         )
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")

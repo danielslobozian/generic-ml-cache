@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
@@ -61,7 +63,7 @@ def test_default_encoding_is_utf8():
 
 def test_is_frozen():
     artifact = Artifact(artifact_type=ArtifactType.STDOUT, blob_key="k", size_bytes=0)
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         artifact.blob_key = "other"  # type: ignore[misc]
 
 
