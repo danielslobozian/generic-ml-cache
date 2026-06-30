@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "generic-ml-cache-bootstrap"
+dynamic = ["version"]
+description = "Composition root and plugin discovery for generic-ml-cache: discovers gmlcache.adapters plugins (with load-time whitelisting and provenance trust) and wires the application."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Daniel Slobozian" }]
+keywords = ["cache", "llm", "ai", "hexagonal", "composition-root", "plugins", "discovery"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "generic-ml-cache-core==0.28.*",
+    "generic-ml-cache-adapters==0.28.*",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
+
+[project.urls]
+Homepage = "https://github.com/danielslobozian/generic-ml-cache"
+Repository = "https://github.com/danielslobozian/generic-ml-cache"
+Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
+Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+source = "regex"
+path = "../../VERSION"
+pattern = "^(?P<version>[^\\n]+)"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/generic_ml_cache_bootstrap"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Treat warnings as errors: a regression lock that catches the next upstream
+# deprecation (or our own) at first appearance (CA9). Add a narrow
+# "ignore::Cat:module" entry with a justification only for an unfixable
+# third-party warning — never blanket.
+filterwarnings = ["error"]
+addopts = "-ra --cov-branch --cov=generic_ml_cache_bootstrap --cov-fail-under=80"
+timeout = 60
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+extend-select = ["C901", "I", "B", "N", "S310", "UP"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
