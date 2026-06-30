@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from generic_ml_cache_adapters.discovery.composition import execution_kind_for
+from generic_ml_cache_bootstrap.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState

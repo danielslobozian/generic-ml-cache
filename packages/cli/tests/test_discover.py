@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from generic_ml_cache_adapters.adapter.out.client.discover import (
+from generic_ml_cache_bootstrap.discovery.client_discover import (
     list_models,
     list_models_all,
     probe,

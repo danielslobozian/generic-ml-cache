@@ -71,9 +71,6 @@ ignore_imports =
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
     generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
-    # `gmlcache doctor` and `gmlcache models` probe live adapters — read-only observational imports
-    generic_ml_cache_cli.controllers.setup -> generic_ml_cache_adapters.adapter.out.client.discover
-    generic_ml_cache_cli.controllers.setup -> generic_ml_cache_adapters.adapter.out.api.api_discover
     # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
     generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app
 

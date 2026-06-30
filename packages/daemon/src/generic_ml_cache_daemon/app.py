@@ -45,8 +45,8 @@ from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock imp
 from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
 from generic_ml_cache_adapters.db import DbConnection
-from generic_ml_cache_adapters.discovery.composition import catalog_for, default_resolver
 from generic_ml_cache_adapters.migration_runner import run_migrations
+from generic_ml_cache_bootstrap.discovery.composition import catalog_for, default_resolver
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter

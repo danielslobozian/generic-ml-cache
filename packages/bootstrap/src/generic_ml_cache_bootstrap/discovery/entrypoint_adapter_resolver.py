@@ -20,7 +20,7 @@ from generic_ml_cache_core.application.port.out.local_client_port import LocalCl
 from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
-from generic_ml_cache_adapters.discovery._entrypoints import (
+from generic_ml_cache_bootstrap.discovery._entrypoints import (
     ADAPTER_ENTRYPOINT_GROUP,
     iter_entry_points,
 )

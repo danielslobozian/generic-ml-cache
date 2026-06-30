@@ -34,8 +34,8 @@ def _doctor_payload(args: argparse.Namespace) -> dict:
     import platform
     from dataclasses import asdict
 
-    from generic_ml_cache_adapters.adapter.out.client.discover import probe_all
     from generic_ml_cache_adapters.migration_runner import schema_version
+    from generic_ml_cache_bootstrap.discovery.client_discover import probe_all
 
     from generic_ml_cache_cli.discovery import adapter_sources
 
@@ -177,8 +177,8 @@ def _print_model_listing(ml) -> None:
 def _cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
-    from generic_ml_cache_adapters.adapter.out.client.discover import list_models, list_models_all
+    from generic_ml_cache_bootstrap.discovery.api_discover import list_api_models
+    from generic_ml_cache_bootstrap.discovery.client_discover import list_models, list_models_all
 
     try:
         file_cfg = config.load()

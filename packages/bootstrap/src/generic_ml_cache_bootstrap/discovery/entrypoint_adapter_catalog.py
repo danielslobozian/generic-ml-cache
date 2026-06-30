@@ -21,7 +21,7 @@ from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor i
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
 
-from generic_ml_cache_adapters.discovery._entrypoints import (
+from generic_ml_cache_bootstrap.discovery._entrypoints import (
     ADAPTER_CONTRACT_VERSION,
     ADAPTER_ENTRYPOINT_GROUP,
     describe_source,

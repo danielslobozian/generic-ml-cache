@@ -7,7 +7,7 @@ import sys
 
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
-from generic_ml_cache_adapters.adapter.out.client.discover import list_models
+from generic_ml_cache_bootstrap.discovery.client_discover import list_models
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
 )
@@ -132,7 +132,7 @@ def test_models_cli_routes_unknown_client_to_api_registry(capsys, monkeypatch):
         ],
     )
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.api.api_discover.list_api_models",
+        "generic_ml_cache_bootstrap.discovery.api_discover.list_api_models",
         lambda provider, **kw: fake_listing,
     )
     rc = main(["models", "gemini"])
@@ -153,7 +153,7 @@ def test_models_cli_api_provider_json_output(capsys, monkeypatch):
         models=[ModelInfo(id="gemini-2.5-flash", name="Gemini 2.5 Flash")],
     )
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.api.api_discover.list_api_models",
+        "generic_ml_cache_bootstrap.discovery.api_discover.list_api_models",
         lambda provider, **kw: fake_listing,
     )
     rc = main(["models", "gemini", "--json"])
@@ -168,7 +168,7 @@ def test_models_cli_unknown_api_provider_still_returns_zero(capsys, monkeypatch)
     from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
 
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.api.api_discover.list_api_models",
+        "generic_ml_cache_bootstrap.discovery.api_discover.list_api_models",
         lambda provider, **kw: ModelListing(
             name=provider, present=False, supported=False, reason="unknown API provider"
         ),

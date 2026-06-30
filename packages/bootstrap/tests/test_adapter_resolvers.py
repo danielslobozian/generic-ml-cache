@@ -14,10 +14,10 @@ from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor i
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.common.errors import UnknownClient
 
-from generic_ml_cache_adapters.discovery.entrypoint_adapter_resolver import (
+from generic_ml_cache_bootstrap.discovery.entrypoint_adapter_resolver import (
     EntryPointAdapterResolver,
 )
-from generic_ml_cache_adapters.discovery.in_memory_adapter_registry import InMemoryAdapterRegistry
+from generic_ml_cache_bootstrap.discovery.in_memory_adapter_registry import InMemoryAdapterRegistry
 
 # --- EntryPointAdapterResolver against the real installed adapters -----------
 

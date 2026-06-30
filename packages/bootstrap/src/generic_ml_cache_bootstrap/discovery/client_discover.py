@@ -26,7 +26,7 @@ from generic_ml_cache_core.application.port.out.diagnostics_port import Diagnost
 from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
-from generic_ml_cache_adapters.discovery.composition import (
+from generic_ml_cache_bootstrap.discovery.composition import (
     catalog_for,
     default_resolver,
     registered_local_names,

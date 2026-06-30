@@ -8,7 +8,7 @@ import pytest
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.common.errors import UnknownClient
 
-from generic_ml_cache_adapters.discovery.composition import execution_kind_for
+from generic_ml_cache_bootstrap.discovery.composition import execution_kind_for
 
 
 def test_local_managed_adapter_resolves_to_local_managed():

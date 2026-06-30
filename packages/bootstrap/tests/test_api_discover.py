@@ -18,9 +18,9 @@ from generic_ml_cache_core.application.port.out.api_client_port import ApiClient
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
-from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
-from generic_ml_cache_adapters.discovery.composition import get_adapter, registered_names
-from generic_ml_cache_adapters.discovery.in_memory_adapter_registry import register
+from generic_ml_cache_bootstrap.discovery.api_discover import list_api_models
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter, registered_names
+from generic_ml_cache_bootstrap.discovery.in_memory_adapter_registry import register
 
 _RUN = ClientCapability.RUN
 _LIST = ClientCapability.LIST_MODELS

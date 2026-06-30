@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter
 from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
     ManagedLocalRequest,
@@ -22,7 +23,6 @@ from generic_ml_cache_core.application.domain.model.run.passthrough_request impo
 )
 
 from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
-from generic_ml_cache_adapters.discovery.composition import get_adapter
 
 
 def _fake_adapter():

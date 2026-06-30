@@ -14,7 +14,7 @@ from generic_ml_cache_core.application.domain.model.model_listing import ModelLi
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
-from generic_ml_cache_adapters.discovery.composition import get_adapter
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter
 
 
 def list_api_models(

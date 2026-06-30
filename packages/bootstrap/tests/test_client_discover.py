@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for adapter.out.client.discover — probe and list-models functions."""
+"""Tests for bootstrap.discovery.client_discover — probe and list-models functions."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 
-from generic_ml_cache_adapters.adapter.out.client.discover import (
+from generic_ml_cache_bootstrap.discovery.client_discover import (
     _probe_version,
     list_models,
     list_models_all,
@@ -48,7 +48,7 @@ def test_probe_version_success(monkeypatch) -> None:
     mock_proc.stdout = "claude 1.0.0\n"
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     version, detail = _probe_version(["claude", "--version"], timeout=5.0)
@@ -61,7 +61,7 @@ def test_probe_version_no_output_yields_none_version(monkeypatch) -> None:
     mock_proc.stdout = ""
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     version, detail = _probe_version(["claude", "--version"], timeout=5.0)
@@ -71,7 +71,7 @@ def test_probe_version_no_output_yields_none_version(monkeypatch) -> None:
 
 def test_probe_version_launch_failure(monkeypatch) -> None:
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         MagicMock(side_effect=FileNotFoundError("not found")),
     )
     diag = RecordingDiag()
@@ -86,7 +86,7 @@ def test_probe_version_logs_enter_exit(monkeypatch) -> None:
     mock_proc.stdout = "v1\n"
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     diag = RecordingDiag()
@@ -117,7 +117,7 @@ def test_probe_found_client_logs_enter_exit(monkeypatch) -> None:
     mock_proc.stdout = "version 2\n"
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     # Use "sh" — guaranteed to exist everywhere; patch resolve_executable to succeed
@@ -142,7 +142,7 @@ def test_probe_all_returns_list_for_each_registered_client(monkeypatch) -> None:
     mock_proc.stdout = "v1\n"
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     diag = RecordingDiag()
@@ -195,7 +195,7 @@ def test_list_models_launch_failure(monkeypatch) -> None:
         pytest.skip("sh not on PATH")
 
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         MagicMock(side_effect=OSError("exec failed")),
     )
     diag = RecordingDiag()
@@ -219,7 +219,7 @@ def test_list_models_nonzero_returncode(monkeypatch) -> None:
     mock_proc.stdout = ""
     mock_proc.stderr = "auth required"
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     diag = RecordingDiag()
@@ -241,7 +241,7 @@ def test_list_models_success(monkeypatch) -> None:
     mock_proc.stdout = ""
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     diag = RecordingDiag()
@@ -266,7 +266,7 @@ def test_list_models_all_returns_list(monkeypatch) -> None:
     mock_proc.stdout = ""
     mock_proc.stderr = ""
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.client.discover.subprocess.run",
+        "generic_ml_cache_bootstrap.discovery.client_discover.subprocess.run",
         lambda *a, **kw: mock_proc,
     )
     diag = RecordingDiag()

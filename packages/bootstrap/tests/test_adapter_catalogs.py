@@ -11,9 +11,9 @@ from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor i
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 
-from generic_ml_cache_adapters.discovery import entrypoint_adapter_catalog as epc_module
-from generic_ml_cache_adapters.discovery.entrypoint_adapter_catalog import EntryPointAdapterCatalog
-from generic_ml_cache_adapters.discovery.static_adapter_catalog import StaticAdapterCatalog
+from generic_ml_cache_bootstrap.discovery import entrypoint_adapter_catalog as epc_module
+from generic_ml_cache_bootstrap.discovery.entrypoint_adapter_catalog import EntryPointAdapterCatalog
+from generic_ml_cache_bootstrap.discovery.static_adapter_catalog import StaticAdapterCatalog
 
 # --- StaticAdapterCatalog ----------------------------------------------------
 

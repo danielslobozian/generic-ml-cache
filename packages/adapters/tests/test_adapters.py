@@ -7,13 +7,13 @@ import sys
 from pathlib import Path
 
 import pytest
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter, registered_names
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
 from generic_ml_cache_adapters.adapter.out.client.prime_directive import (
     PRIME_DIRECTIVE,
     build_system_prompt,
 )
-from generic_ml_cache_adapters.discovery.composition import get_adapter, registered_names
 
 
 def test_builtins_are_registered():

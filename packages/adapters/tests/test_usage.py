@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import json
 
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter
 from generic_ml_cache_core.application.domain.model.usage.usage import float_or_none, int_or_none
-
-from generic_ml_cache_adapters.discovery.composition import get_adapter
 
 # --- real client output samples (structured mode) ---------------------------
 
