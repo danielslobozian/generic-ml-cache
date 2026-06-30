@@ -64,6 +64,7 @@ from generic_ml_cache_core.application.usecase.run_ml_gateway_service import Run
 from generic_ml_cache_core.application.usecase.session_admin_service import SessionAdminService
 from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
+from generic_ml_cache_core.application.usecase.store_stats_service import StoreStatsService
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_bootstrap.discovery.composition import catalog_for, default_resolver
@@ -151,6 +152,7 @@ def build_application_api(
         session_admin=SessionAdminService(metrics),
         session_report=SessionReportService(metrics, repository),
         execution_query=ExecutionQueryService(repository),
+        store_stats=StoreStatsService(metrics),
         blob_store=blob_store,
         repository=repository,
         metrics=metrics,

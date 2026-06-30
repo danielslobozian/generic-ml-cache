@@ -212,7 +212,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
     summaries = wired.execution_query.list_summaries()
     store_bytes = wired.execution_query.total_stored_bytes()
-    access = wired.metrics.event_counts()
+    access = wired.store_stats.event_counts()
     by_client_model: dict[tuple, int] = {}
     for summary in summaries:
         by_client_model[(summary.client, summary.model)] = (
@@ -392,7 +392,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
 
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    hit_counts = wired.metrics.hit_counts_by_key()
+    hit_counts = wired.store_stats.hit_counts_by_key()
     entries = [
         {
             "client": summary.client,

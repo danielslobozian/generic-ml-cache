@@ -22,6 +22,7 @@ from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.session_admin_service import SessionAdminService
 from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
+from generic_ml_cache_core.application.usecase.store_stats_service import StoreStatsService
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class ApplicationApi:
     session_admin: SessionAdminService
     session_report: SessionReportService
     execution_query: ExecutionQueryService
+    store_stats: StoreStatsService
     blob_store: BlobStorePort
     repository: ExecutionRepositoryPort
     metrics: MetricsPort

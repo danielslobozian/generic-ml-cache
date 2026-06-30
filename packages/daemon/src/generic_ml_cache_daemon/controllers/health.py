@@ -31,7 +31,7 @@ def get_ready(request: Request) -> Response:
     """Readiness: confirm the store is accessible and the daemon can serve requests."""
     wired = request.app.state.wired
     try:
-        wired.metrics.event_counts()
+        wired.store_stats.event_counts()
         return JSONResponse(content=ReadyResponse(status="ready").model_dump())
     except Exception:
         return JSONResponse(

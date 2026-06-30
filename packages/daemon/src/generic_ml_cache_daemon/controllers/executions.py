@@ -75,7 +75,7 @@ def get_stats(request: Request) -> GlobalStatsResponse:
     summaries = wired.execution_query.list_summaries()
     return GlobalStatsResponse(
         executions=len(summaries),
-        event_counts=wired.metrics.event_counts(),
+        event_counts=wired.store_stats.event_counts(),
     )
 
 
