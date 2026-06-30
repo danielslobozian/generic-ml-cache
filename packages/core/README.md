@@ -15,7 +15,7 @@
 The reusable **hexagonal kernel** behind
 [`gmlcache`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/cli):
 record a real ML client (or API) call once, replay it by its content key. It contains
-the domain model, the use cases, and the port contracts — **zero runtime dependencies**.
+the domain model, the use cases, and the port contracts — the pure hexagonal kernel.
 Concrete infrastructure (SQLite, filesystem blob store, ML client runners, API adapters,
 metrics, clock, fingerprinting) lives in
 [`generic-ml-cache-adapters`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/adapters).
@@ -61,9 +61,8 @@ and pass your own adapters. The core never imports any concrete implementation.
 - **Domain model** — executions, polymorphic call identities, artifacts, usage.
 - **Use cases** — managed-local / passthrough / API runs, and probe (check).
 - **Ports** (`application/port/...`) — client runner, blob store, execution repository,
-  metrics, clock, fingerprint, API client.
-- **Adapter registry** — discovers and registers adapters declared via the
-  `gmlcache.adapters` entry-point group at runtime.
+  metrics, clock, fingerprint, API client. The `gmlcache.adapters` entry-point group is
+  discovered and resolved outside core (in the adapters package today).
 - **`WiredUseCases`** — typed container of wired use-case references (constructed by
   the composition root in the adapters or CLI package).
 

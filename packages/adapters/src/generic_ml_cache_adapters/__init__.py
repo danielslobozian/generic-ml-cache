@@ -8,7 +8,7 @@ runners (claude, codex, cursor-agent), REST API adapters (anthropic, openai,
 gemini), metrics, clock, and HTTP gateway forwarding.
 
 ML client adapters are declared via the ``gmlcache.adapters`` entry-point group
-and are discovered automatically by the core registry when this package is
+and are discovered automatically through that group when this package is
 installed.
 """
 
