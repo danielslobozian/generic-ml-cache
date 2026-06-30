@@ -9,6 +9,12 @@ import sys
 from pathlib import Path
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_spec_command import (
+    ClearSessionSpecCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.set_session_spec_command import (
+    SetSessionSpecCommand,
+)
 from generic_ml_cache_core.application.port.inbound.session_tags.list_session_tags_command import (
     ListSessionTagsCommand,
 )
@@ -65,9 +71,9 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
         store_root = Path(str(settings["store"][0]))
         wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
         for tag in tags:
-            wired.metrics.add_session_tag(session_id, tag)
+            wired.session_tags.tag(TagSessionCommand(session_id, tag))
         if spec is not None:
-            wired.metrics.set_session_spec(session_id, spec)
+            wired.session_admin.set_spec(SetSessionSpecCommand(session_id, spec))
     return 0
 
 
@@ -87,7 +93,7 @@ def _cmd_session_update(args: argparse.Namespace) -> int:
     if store_root is None:
         return 4
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    wired.metrics.set_session_spec(args.session_id, spec)
+    wired.session_admin.set_spec(SetSessionSpecCommand(args.session_id, spec))
     if not args.json:
         print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
     else:
@@ -114,7 +120,7 @@ def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
     if store_root is None:
         return 4
     wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    wired.metrics.clear_session_spec(args.session_id)
+    wired.session_admin.clear_spec(ClearSessionSpecCommand(args.session_id))
     if not args.json:
         print(f"spec cleared for session {args.session_id}")
     else:
