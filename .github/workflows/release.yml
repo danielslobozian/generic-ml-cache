@@ -1,7 +1,7 @@
 name: Release to PyPI
 
-# Publishes all four packages to PyPI on a version tag (e.g. v0.28.0), via PyPI Trusted
-# Publishing (OIDC — no API token is stored). The four packages are versioned in
+# Publishes all five packages to PyPI on a version tag (e.g. v0.28.0), via PyPI Trusted
+# Publishing (OIDC — no API token is stored). The five packages are versioned in
 # lockstep from the root VERSION file; bump VERSION, update CHANGELOG, then tag.
 
 on:
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [core, adapters, cli, daemon]
+        package: [core, adapters, bootstrap, cli, daemon]
     steps:
       - uses: actions/checkout@v7
 
@@ -77,6 +77,10 @@ jobs:
           path: dist/
       - uses: actions/download-artifact@v8
         with:
+          name: dist-bootstrap
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
           name: dist-cli
           path: dist/
       - uses: actions/download-artifact@v8
@@ -93,11 +97,12 @@ jobs:
         run: |
           pip install dist/generic_ml_cache_core-*.whl
           pip install dist/generic_ml_cache_adapters-*.whl
+          pip install dist/generic_ml_cache_bootstrap-*.whl
           pip install dist/generic_ml_cache_cli-*.whl
           pip install dist/generic_ml_cache_daemon-*.whl
           gmlcache --version
           python -m generic_ml_cache_daemon --help
-          python -c "import generic_ml_cache_core, generic_ml_cache_adapters, generic_ml_cache_cli, generic_ml_cache_daemon"
+          python -c "import generic_ml_cache_core, generic_ml_cache_adapters, generic_ml_cache_bootstrap, generic_ml_cache_cli, generic_ml_cache_daemon"
 
   # core is published first: all other packages depend on it.
   publish-core:
@@ -132,11 +137,29 @@ jobs:
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
 
-  # cli and daemon both depend on adapters, so adapters must be on PyPI first.
+  # bootstrap (composition root) depends on core + adapters, and cli/daemon
+  # depend on it, so it publishes after adapters and before the drivers.
+  # First release of this package needs its PyPI project + a `pypi-bootstrap`
+  # trusted-publisher (Trusted Publishing is per (owner, repo, workflow, env)).
+  publish-bootstrap:
+    name: Publish generic-ml-cache-bootstrap
+    needs: publish-adapters
+    runs-on: ubuntu-latest
+    environment: pypi-bootstrap
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist-bootstrap
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # cli and daemon depend on bootstrap, so it must be on PyPI first.
   # cli and daemon have no dependency on each other and can publish in parallel.
   publish-cli:
     name: Publish generic-ml-cache-cli
-    needs: publish-adapters
+    needs: publish-bootstrap
     runs-on: ubuntu-latest
     environment: pypi-cli
     permissions:
@@ -150,7 +173,7 @@ jobs:
 
   publish-daemon:
     name: Publish generic-ml-cache-daemon
-    needs: publish-adapters
+    needs: publish-bootstrap
     runs-on: ubuntu-latest
     environment: pypi-daemon
     permissions:

@@ -27,6 +27,7 @@ classifiers = [
 dependencies = [
   "generic-ml-cache-core==0.28.*",
   "generic-ml-cache-adapters==0.28.*",
+  "generic-ml-cache-bootstrap==0.28.*",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
