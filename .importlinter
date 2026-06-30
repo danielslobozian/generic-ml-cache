@@ -96,6 +96,26 @@ source_modules =
 forbidden_modules =
     sqlite3
 
+# Rule 10 — controllers reach the application only through inbound ports.
+# A driving adapter (a CLI command controller, a daemon route) may invoke the
+# domain ONLY via the inbound ports it is handed in the ApplicationApi bundle.
+# It must not import a use-case implementation, an outbound port, or a domain
+# service directly. (Commands/queries under application.port.inbound and domain
+# *models* are fine — those ARE the contract surface.) Composition roots are not
+# under *.controllers, so they remain free to wire. This is the project's
+# ArchUnit for the inbound-port refactor: green = the refactor is complete.
+[importlinter:contract:hex-controllers-inbound-only]
+name = Controllers reach the application only through inbound ports
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    generic_ml_cache_cli.controllers
+    generic_ml_cache_daemon.controllers
+forbidden_modules =
+    generic_ml_cache_core.application.usecase
+    generic_ml_cache_core.application.port.out
+    generic_ml_cache_core.application.domain.service
+
 # Rule 5 — driven adapter sub-packages must not depend on each other.
 # Each adapter knows only about the port interfaces it implements.
 # Cross-adapter wiring happens exclusively in the composition roots.
