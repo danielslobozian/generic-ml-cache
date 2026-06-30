@@ -16,6 +16,25 @@ from generic_ml_cache_core.application.domain.model.identity.managed_call_identi
 )
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
+    EvictStaleCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
+    PurgeByKeyCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_command import (
+    PurgeBySessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_command import (
+    PurgeBySessionTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
+    PurgeByTagCommand,
+)
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.clock_port import ClockPort
 from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
@@ -160,7 +179,7 @@ def test_purge_one_frees_bytes_and_reports_correctly():
     store.put("blob_" + b"answer".hex(), b"answer")
     key = identity.generate_key()
 
-    report = svc.purge_one(key)
+    report = svc.purge_by_key(PurgeByKeyCommand(key))
 
     assert report.executions_removed == 1
     assert report.bytes_freed == len(b"answer")
@@ -174,7 +193,7 @@ def test_purge_one_deletes_blob_from_store():
     repo.save(_execution(identity, content=b"answer"))
     store.put(blob_key, b"answer")
 
-    svc.purge_one(identity.generate_key())
+    svc.purge_by_key(PurgeByKeyCommand(identity.generate_key()))
 
     assert not store.has(blob_key)
 
@@ -184,7 +203,7 @@ def test_purge_one_makes_execution_not_servable():
     identity = _identity()
     repo.save(_execution(identity))
     key = identity.generate_key()
-    svc.purge_one(key)
+    svc.purge_by_key(PurgeByKeyCommand(key))
     assert repo.find_current(key) is None
 
 
@@ -193,14 +212,14 @@ def test_purge_one_preserves_token_usage():
     identity = _identity()
     usage = TokenUsage(input_tokens=10, output_tokens=5, raw={"x": 1})
     repo.save(_execution(identity, token_usage=usage))
-    svc.purge_one(identity.generate_key())
+    svc.purge_by_key(PurgeByKeyCommand(identity.generate_key()))
     history = repo.find_all(identity.generate_key())
     assert history[0].token_usage == usage
 
 
 def test_purge_one_unknown_key_returns_empty_report():
     svc, _, _, _ = _service()
-    report = svc.purge_one("nope")
+    report = svc.purge_by_key(PurgeByKeyCommand("nope"))
     assert report.executions_removed == 0
     assert report.bytes_freed == 0
     assert report.blobs_removed == 0
@@ -219,7 +238,7 @@ def test_purge_by_tag_purges_matching_executions():
     store.put("blob_" + b"bb".hex(), b"bb")
     repo.add_tags(id_a.generate_key(), ["work"])
 
-    report = svc.purge_by_tag("work")
+    report = svc.purge_by_tag(PurgeByTagCommand("work"))
 
     assert report.executions_removed == 1
     assert report.bytes_freed == 3
@@ -229,7 +248,7 @@ def test_purge_by_tag_purges_matching_executions():
 
 def test_purge_by_tag_unknown_tag_returns_empty_report():
     svc, _, _, _ = _service()
-    report = svc.purge_by_tag("nope")
+    report = svc.purge_by_tag(PurgeByTagCommand("nope"))
     assert report.executions_removed == 0
     assert report.bytes_freed == 0
 
@@ -250,7 +269,7 @@ def test_purge_by_session_purges_matching_executions():
     store.put("blob_" + b"aaa".hex(), b"aaa")
     store.put("blob_" + b"bb".hex(), b"bb")
 
-    report = svc.purge_by_session("sess-1")
+    report = svc.purge_by_session(PurgeBySessionCommand("sess-1"))
 
     assert report.executions_removed == 1
     assert not store.has("blob_" + b"aaa".hex())
@@ -259,7 +278,7 @@ def test_purge_by_session_purges_matching_executions():
 
 def test_purge_by_session_unknown_session_returns_empty_report():
     svc, _, _, _ = _service()
-    report = svc.purge_by_session("no-such-session")
+    report = svc.purge_by_session(PurgeBySessionCommand("no-such-session"))
     assert report.executions_removed == 0
 
 
@@ -274,7 +293,7 @@ def test_purge_all_purges_every_current_execution():
         repo.save(_execution(identity, content=content))
         store.put("blob_" + content.hex(), content)
 
-    report = svc.purge_all()
+    report = svc.purge_all(PurgeAllCommand())
 
     assert report.executions_removed == 3
     assert report.bytes_freed > 0
@@ -283,7 +302,7 @@ def test_purge_all_purges_every_current_execution():
 
 def test_purge_all_empty_store_returns_zero_report():
     svc, _, _, _ = _service()
-    report = svc.purge_all()
+    report = svc.purge_all(PurgeAllCommand())
     assert report.executions_removed == 0
     assert report.bytes_freed == 0
     assert report.blobs_removed == 0
@@ -298,7 +317,7 @@ def test_hard_delete_one_removes_all_db_rows():
     repo.save(_execution(identity))
     key = identity.generate_key()
 
-    svc.hard_delete_one(key)
+    svc.purge_by_key(PurgeByKeyCommand(key, hard=True))
 
     assert repo.find_current(key) is None
     assert repo.find_all(key) == []
@@ -311,7 +330,7 @@ def test_hard_delete_one_deletes_blob():
     repo.save(_execution(identity, content=b"answer"))
     store.put(blob_key, b"answer")
 
-    svc.hard_delete_one(identity.generate_key())
+    svc.purge_by_key(PurgeByKeyCommand(identity.generate_key(), hard=True))
 
     assert not store.has(blob_key)
 
@@ -322,14 +341,14 @@ def test_hard_delete_one_records_event_deletion():
     repo.save(_execution(identity))
     key = identity.generate_key()
 
-    svc.hard_delete_one(key)
+    svc.purge_by_key(PurgeByKeyCommand(key, hard=True))
 
     assert key in metrics._deleted_keys
 
 
 def test_hard_delete_one_unknown_key_returns_empty_report():
     svc, _, _, _ = _service()
-    report = svc.hard_delete_one("nope")
+    report = svc.purge_by_key(PurgeByKeyCommand("nope", hard=True))
     assert report.executions_removed == 0
 
 
@@ -344,7 +363,7 @@ def test_hard_delete_all_removes_every_key():
         repo.save(_execution(identity, content=content))
         store.put("blob_" + content.hex(), content)
 
-    report = svc.hard_delete_all()
+    report = svc.purge_all(PurgeAllCommand(hard=True))
 
     assert report.executions_removed == 3
     assert repo.all_execution_keys() == []
@@ -352,7 +371,7 @@ def test_hard_delete_all_removes_every_key():
 
 def test_hard_delete_all_empty_store_returns_zero_report():
     svc, _, _, _ = _service()
-    report = svc.hard_delete_all()
+    report = svc.purge_all(PurgeAllCommand(hard=True))
     assert report.executions_removed == 0
 
 
@@ -384,7 +403,7 @@ def test_shared_blob_not_deleted_when_still_referenced():
         )
     store.put(shared_blob, shared_content)
 
-    svc.purge_one(id_a.generate_key())
+    svc.purge_by_key(PurgeByKeyCommand(id_a.generate_key()))
 
     assert store.has(shared_blob)  # id_b still references it
 
@@ -414,8 +433,8 @@ def test_shared_blob_deleted_after_both_purged():
         )
     store.put(shared_blob, shared_content)
 
-    svc.purge_one(id_a.generate_key())
-    svc.purge_one(id_b.generate_key())
+    svc.purge_by_key(PurgeByKeyCommand(id_a.generate_key()))
+    svc.purge_by_key(PurgeByKeyCommand(id_b.generate_key()))
 
     assert not store.has(shared_blob)
 
@@ -427,7 +446,7 @@ def test_evict_to_quota_no_op_when_under_limit():
     svc, repo, store, _ = _service()
     identity = _identity()
     repo.save(_execution(identity, content=b"small"))
-    report = svc.evict_to_quota(max_bytes=1_000_000)
+    report = svc.evict_to_quota(EvictToQuotaCommand(max_bytes=1_000_000))
     assert report.executions_removed == 0
     assert report.bytes_freed == 0
 
@@ -456,7 +475,7 @@ def test_evict_to_quota_evicts_least_recently_accessed():
 
     # quota is just under the total — need to evict one execution
     total = len(old_content) + len(new_content)
-    report = svc.evict_to_quota(max_bytes=total - 1)
+    report = svc.evict_to_quota(EvictToQuotaCommand(max_bytes=total - 1))
 
     assert report.executions_removed == 1
     # The old (LRU) execution should be gone; new should remain
@@ -479,7 +498,7 @@ def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():
     # service runs without error and evicts exactly enough.
     svc = PurgeService(repo, store, FakeMetrics())
     total = len(b"content_a") + len(b"content_b")
-    report = svc.evict_to_quota(max_bytes=total - 1)
+    report = svc.evict_to_quota(EvictToQuotaCommand(max_bytes=total - 1))
 
     assert report.executions_removed >= 1
     assert report.bytes_freed > 0
@@ -514,13 +533,13 @@ def test_purge_by_session_tag_removes_executions():
         ["s1", "s2"],
         {"s1": "key1", "s2": "key2"},
     )
-    report = svc.purge_by_session_tag("sprint")
+    report = svc.purge_by_session_tag(PurgeBySessionTagCommand("sprint"))
     assert report.executions_removed == 2
 
 
 def test_purge_by_session_tag_unknown_tag_is_noop():
     svc, repo = _svc_with_session_tag("sprint", ["s1"], {"s1": "key1"})
-    report = svc.purge_by_session_tag("ghost")
+    report = svc.purge_by_session_tag(PurgeBySessionTagCommand("ghost"))
     assert report.executions_removed == 0
 
 
@@ -530,7 +549,7 @@ def test_hard_delete_by_session_tag_removes_executions():
         ["s1"],
         {"s1": "key1"},
     )
-    report = svc.hard_delete_by_session_tag("sprint")
+    report = svc.purge_by_session_tag(PurgeBySessionTagCommand("sprint", hard=True))
     assert report.executions_removed == 1
 
 
@@ -541,7 +560,7 @@ def test_purge_by_session_tag_deduplicates_shared_keys():
         session_keys={"s1": ["shared-key"], "s2": ["shared-key"]},
     )._with_session_tags({"tag": ["s1", "s2"]})
     svc = PurgeService(repo, blob_store, metrics)
-    report = svc.purge_by_session_tag("tag")
+    report = svc.purge_by_session_tag(PurgeBySessionTagCommand("tag"))
     assert report.executions_removed == 1
 
 
@@ -570,7 +589,7 @@ def test_evict_stale_removes_entries_older_than_cutoff():
     metrics = FakeMetrics(last_access={old_key: old_epoch, recent_key: recent_epoch})
     svc = PurgeService(repo, blob_store, metrics)
 
-    report = svc.evict_stale(max_age_seconds=3600)
+    report = svc.evict_stale(EvictStaleCommand(max_age_seconds=3600))
     assert report.executions_removed == 1
     assert repo.find_current(old_key) is None or not repo.find_current(old_key).output_persisted
     assert repo.find_current(recent_key) is not None
@@ -590,7 +609,7 @@ def test_evict_stale_noop_when_nothing_is_stale():
     metrics = FakeMetrics(last_access={key1: now - 60, key2: now - 120})
     svc = PurgeService(repo, blob_store, metrics)
 
-    report = svc.evict_stale(max_age_seconds=3600)
+    report = svc.evict_stale(EvictStaleCommand(max_age_seconds=3600))
     assert report.executions_removed == 0
 
 
@@ -601,15 +620,17 @@ def test_evict_stale_fallback_to_created_at_when_no_access_event():
     metrics = FakeMetrics(last_access={})
     svc = PurgeService(repo, blob_store, metrics)
 
-    report = svc.evict_stale(max_age_seconds=60)  # 1 minute — _MOMENT is way older
+    report = svc.evict_stale(
+        EvictStaleCommand(max_age_seconds=60)
+    )  # 1 minute — _MOMENT is way older
     assert report.executions_removed == 1
 
 
 def test_evict_stale_zero_or_negative_max_age_is_noop():
     repo, blob_store = _repo_with_entries(["key1"])
     svc = PurgeService(repo, blob_store, FakeMetrics())
-    assert svc.evict_stale(max_age_seconds=0).executions_removed == 0
-    assert svc.evict_stale(max_age_seconds=-1).executions_removed == 0
+    assert svc.evict_stale(EvictStaleCommand(max_age_seconds=0)).executions_removed == 0
+    assert svc.evict_stale(EvictStaleCommand(max_age_seconds=-1)).executions_removed == 0
 
 
 # --- hard_delete_by_tag / hard_delete_by_session ----------------------------
@@ -623,7 +644,7 @@ def test_hard_delete_by_tag_removes_tagged_execution():
     key = identity.generate_key()
     repo.add_tags(key, ["my-tag"])
 
-    report = svc.hard_delete_by_tag("my-tag")
+    report = svc.purge_by_tag(PurgeByTagCommand("my-tag", hard=True))
 
     assert report.executions_removed == 1
     assert repo.find_current(key) is None
@@ -632,7 +653,7 @@ def test_hard_delete_by_tag_removes_tagged_execution():
 def test_hard_delete_by_tag_unknown_tag_returns_empty_report():
     svc, _, _, _ = _service()
 
-    report = svc.hard_delete_by_tag("nonexistent-tag")
+    report = svc.purge_by_tag(PurgeByTagCommand("nonexistent-tag", hard=True))
 
     assert report.executions_removed == 0
     assert report.bytes_freed == 0
@@ -648,7 +669,7 @@ def test_hard_delete_by_session_removes_matching_executions():
     metrics = FakeMetrics(session_keys={"sess-1": [key]})
     svc = PurgeService(repo, store, metrics)
 
-    report = svc.hard_delete_by_session("sess-1")
+    report = svc.purge_by_session(PurgeBySessionCommand("sess-1", hard=True))
 
     assert report.executions_removed == 1
     assert repo.find_current(key) is None
@@ -657,6 +678,6 @@ def test_hard_delete_by_session_removes_matching_executions():
 def test_hard_delete_by_session_unknown_session_returns_empty_report():
     svc, _, _, _ = _service()
 
-    report = svc.hard_delete_by_session("no-such-session")
+    report = svc.purge_by_session(PurgeBySessionCommand("no-such-session", hard=True))
 
     assert report.executions_removed == 0

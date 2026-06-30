@@ -7,6 +7,19 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Request  # noqa: F401
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
+    PurgeByKeyCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_command import (
+    PurgeBySessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_command import (
+    PurgeBySessionTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
+    PurgeByTagCommand,
+)
 
 from generic_ml_cache_daemon.presenters.execution import (
     ExecutionListResponse,
@@ -84,15 +97,15 @@ def purge(body: Annotated[PurgeBody, Body(discriminator="by")], request: Request
     """Purge (soft-delete) executions by scope."""
     purge_service = request.app.state.wired.purge
     if isinstance(body, PurgeByAll):
-        report = purge_service.purge_all()
+        report = purge_service.purge_all(PurgeAllCommand())
     elif isinstance(body, PurgeByKey):
-        report = purge_service.purge_one(body.target)
+        report = purge_service.purge_by_key(PurgeByKeyCommand(body.target))
     elif isinstance(body, PurgeByTag):
-        report = purge_service.purge_by_tag(body.target)
+        report = purge_service.purge_by_tag(PurgeByTagCommand(body.target))
     elif isinstance(body, PurgeBySession):
-        report = purge_service.purge_by_session(body.target)
+        report = purge_service.purge_by_session(PurgeBySessionCommand(body.target))
     elif isinstance(body, PurgeBySessionTag):
-        report = purge_service.purge_by_session_tag(body.target)
+        report = purge_service.purge_by_session_tag(PurgeBySessionTagCommand(body.target))
     else:  # pragma: no cover
         raise HTTPException(status_code=422, detail="unsupported purge scope")
     return PurgeResponse(

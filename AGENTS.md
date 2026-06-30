@@ -194,16 +194,18 @@ port. The boundary is the test, not the count. The capability services are
 exposed to controllers only through the narrowed `ApplicationApi` bundle (§5);
 the composition root keeps the out-adapters and injects them into the impls.
 
-> **`PurgeService` — a recognised in-between.** Purge is a driving-boundary
-> capability (a controller runs `gmlcache purge`), so by the rule above it
-> belongs behind inbound ports, and it is reached *through the bundle* like every
-> other capability (`wired.purge.purge_by_tag(...)`, never an imported impl — so
-> Rule 10 holds). It is, however, the one capability still exposed as the concrete
-> `PurgeService` rather than a set of formal per-operation `*UseCase` ABCs: its
-> surface is broad (≈12 soft/hard/evict operations) and single-implementation, so
-> minting that many ABCs + command DTOs is ceremony that buys no dependency
-> inversion today. Formalising it (collapsing the hard variants into a `hard`
-> command field per the model above) is a tracked, low-priority refinement.
+> **The core exposes inbound ports to the outside, never implementations.**
+> Everything a driving adapter can invoke from outside the application is an
+> **inbound port** — an `ABC` in `port/inbound/`, reached through the
+> `ApplicationApi` bundle. A `*Service` implementation is never exposed across the
+> boundary; it is wired behind its ports in the composition root and reached only
+> as the port type. This holds for *every* capability without exception — breadth
+> of surface or a single implementation is **not** a licence to skip the ports
+> (purge has many operations and one implementation, and it still gets a full set
+> of per-operation `*UseCase` ABCs + command DTOs, exactly like every other
+> capability). *Failing case: a controller importing or being handed a concrete
+> `…Service` instead of its inbound port — the implementation has leaked across
+> the boundary the ports exist to seal.*
 
 ### The base-use-case hook (post-record side effects)
 

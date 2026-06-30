@@ -17,6 +17,9 @@ from generic_ml_cache_core.application.domain.model.identity.managed_call_identi
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
@@ -188,7 +191,7 @@ class TestAfterRecord:
         purge_mock = create_autospec(PurgeService)
         svc = _make_svc(purge_service=purge_mock, max_size=5000)
         svc._after_record("key")
-        purge_mock.evict_to_quota.assert_called_once_with(5000)
+        purge_mock.evict_to_quota.assert_called_once_with(EvictToQuotaCommand(max_bytes=5000))
 
 
 class TestJournalFields:

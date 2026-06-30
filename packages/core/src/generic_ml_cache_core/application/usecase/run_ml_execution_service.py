@@ -26,6 +26,9 @@ from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequ
 from generic_ml_cache_core.application.domain.model.run.passthrough_request import (
     PassthroughRequest,
 )
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
@@ -219,7 +222,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
 
     def _after_record(self, execution_key: str) -> None:
         if self._purge is not None and self._max_size is not None:
-            self._purge.evict_to_quota(self._max_size)
+            self._purge.evict_to_quota(EvictToQuotaCommand(self._max_size))
 
     def _execution_kind(self, command: RunMlExecutionCommand) -> ExecutionKind:
         return command.execution_kind

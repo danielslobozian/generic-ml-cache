@@ -5,6 +5,25 @@ from __future__ import annotations
 import time
 from unittest.mock import create_autospec
 
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
+    EvictStaleCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
+    PurgeByKeyCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_command import (
+    PurgeBySessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_command import (
+    PurgeBySessionTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
+    PurgeByTagCommand,
+)
 from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.out.execution_repository_port import (
     ExecutionRepositoryPort,
@@ -36,7 +55,7 @@ class TestPurgeOne:
         repo = _repo_with_key()
         svc = _make_svc(repo=repo)
 
-        svc.purge_one("key1")
+        svc.purge_by_key(PurgeByKeyCommand("key1"))
 
         repo.soft_purge_execution.assert_called_once_with("key1")
 
@@ -44,7 +63,7 @@ class TestPurgeOne:
         repo = _repo_with_key()
         svc = _make_svc(repo=repo)
 
-        report = svc.purge_one("key1")
+        report = svc.purge_by_key(PurgeByKeyCommand("key1"))
 
         assert report.executions_removed == 1
 
@@ -53,7 +72,7 @@ class TestPurgeOne:
         repo.find_all.return_value = []
         svc = _make_svc(repo=repo)
 
-        report = svc.purge_one("missing")
+        report = svc.purge_by_key(PurgeByKeyCommand("missing"))
 
         assert report.executions_removed == 0
         assert report.bytes_freed == 0
@@ -64,7 +83,7 @@ class TestPurgeOne:
         repo.find_all.return_value = []
         svc = _make_svc(repo=repo)
 
-        svc.purge_one("missing")
+        svc.purge_by_key(PurgeByKeyCommand("missing"))
 
         repo.soft_purge_execution.assert_not_called()
 
@@ -77,7 +96,7 @@ class TestPurgeByTag:
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo)
 
-        report = svc.purge_by_tag("my-tag")
+        report = svc.purge_by_tag(PurgeByTagCommand("my-tag"))
 
         assert report.executions_removed == 2
         repo.soft_purge_execution.assert_any_call("key1")
@@ -88,7 +107,7 @@ class TestPurgeByTag:
         repo.executions_by_tag.return_value = []
         svc = _make_svc(repo=repo)
 
-        report = svc.purge_by_tag("empty-tag")
+        report = svc.purge_by_tag(PurgeByTagCommand("empty-tag"))
 
         assert report.executions_removed == 0
         repo.soft_purge_execution.assert_not_called()
@@ -103,7 +122,7 @@ class TestPurgeBySession:
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.purge_by_session("sess-1")
+        report = svc.purge_by_session(PurgeBySessionCommand("sess-1"))
 
         assert report.executions_removed == 2
         repo.soft_purge_execution.assert_any_call("key1")
@@ -113,7 +132,7 @@ class TestPurgeBySession:
         metrics.execution_keys_for_session.return_value = []
         svc = _make_svc(metrics=metrics)
 
-        report = svc.purge_by_session("empty-sess")
+        report = svc.purge_by_session(PurgeBySessionCommand("empty-sess"))
 
         assert report.executions_removed == 0
         # no soft_purge assertion: _soft_purge_keys short-circuits on an empty session
@@ -129,7 +148,7 @@ class TestPurgeBySessionTag:
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.purge_by_session_tag("my-tag")
+        report = svc.purge_by_session_tag(PurgeBySessionTagCommand("my-tag"))
 
         assert report.executions_removed == 2
         repo.soft_purge_execution.assert_any_call("key1")
@@ -144,7 +163,7 @@ class TestPurgeBySessionTag:
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.purge_by_session_tag("my-tag")
+        report = svc.purge_by_session_tag(PurgeBySessionTagCommand("my-tag"))
 
         assert report.executions_removed == 1
         assert repo.soft_purge_execution.call_count == 1
@@ -154,7 +173,7 @@ class TestPurgeBySessionTag:
         metrics.session_ids_for_tag.return_value = []
         svc = _make_svc(metrics=metrics)
 
-        report = svc.purge_by_session_tag("unknown-tag")
+        report = svc.purge_by_session_tag(PurgeBySessionTagCommand("unknown-tag"))
 
         assert report.executions_removed == 0
 
@@ -171,7 +190,7 @@ class TestPurgeAll:
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo)
 
-        report = svc.purge_all()
+        report = svc.purge_all(PurgeAllCommand())
 
         assert report.executions_removed == 2
         repo.soft_purge_execution.assert_any_call("key1")
@@ -182,7 +201,7 @@ class TestPurgeAll:
         repo.current_executions_with_sizes.return_value = []
         svc = _make_svc(repo=repo)
 
-        report = svc.purge_all()
+        report = svc.purge_all(PurgeAllCommand())
 
         assert report.executions_removed == 0
         repo.soft_purge_execution.assert_not_called()
@@ -194,7 +213,7 @@ class TestHardDeleteOne:
         metrics = create_autospec(MetricsPort)
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        svc.hard_delete_one("key1")
+        svc.purge_by_key(PurgeByKeyCommand("key1", hard=True))
 
         repo.hard_delete_execution.assert_called_once_with("key1")
         metrics.delete_events_for_key.assert_called_once_with("key1")
@@ -203,7 +222,7 @@ class TestHardDeleteOne:
         repo = _repo_with_key()
         svc = _make_svc(repo=repo)
 
-        report = svc.hard_delete_one("key1")
+        report = svc.purge_by_key(PurgeByKeyCommand("key1", hard=True))
 
         assert report.executions_removed == 1
 
@@ -212,7 +231,7 @@ class TestHardDeleteOne:
         repo.find_all.return_value = []
         svc = _make_svc(repo=repo)
 
-        report = svc.hard_delete_one("missing")
+        report = svc.purge_by_key(PurgeByKeyCommand("missing", hard=True))
 
         assert report.executions_removed == 0
 
@@ -222,7 +241,7 @@ class TestHardDeleteOne:
         metrics = create_autospec(MetricsPort)
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        svc.hard_delete_one("missing")
+        svc.purge_by_key(PurgeByKeyCommand("missing", hard=True))
 
         repo.hard_delete_execution.assert_not_called()
         metrics.delete_events_for_key.assert_not_called()
@@ -237,7 +256,7 @@ class TestHardDeleteByTag:
         metrics = create_autospec(MetricsPort)
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.hard_delete_by_tag("my-tag")
+        report = svc.purge_by_tag(PurgeByTagCommand("my-tag", hard=True))
 
         assert report.executions_removed == 2
         repo.hard_delete_execution.assert_any_call("key1")
@@ -248,7 +267,7 @@ class TestHardDeleteByTag:
         repo.executions_by_tag.return_value = []
         svc = _make_svc(repo=repo)
 
-        report = svc.hard_delete_by_tag("empty-tag")
+        report = svc.purge_by_tag(PurgeByTagCommand("empty-tag", hard=True))
 
         assert report.executions_removed == 0
 
@@ -262,7 +281,7 @@ class TestHardDeleteBySession:
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.hard_delete_by_session("sess-1")
+        report = svc.purge_by_session(PurgeBySessionCommand("sess-1", hard=True))
 
         assert report.executions_removed == 1
         repo.hard_delete_execution.assert_called_once_with("key1")
@@ -278,7 +297,7 @@ class TestHardDeleteAll:
         metrics = create_autospec(MetricsPort)
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.hard_delete_all()
+        report = svc.purge_all(PurgeAllCommand(hard=True))
 
         assert report.executions_removed == 2
         repo.hard_delete_execution.assert_any_call("key1")
@@ -290,7 +309,7 @@ class TestEvictStale:
         repo = create_autospec(ExecutionRepositoryPort)
         svc = _make_svc(repo=repo)
 
-        report = svc.evict_stale(0)
+        report = svc.evict_stale(EvictStaleCommand(0))
 
         assert report.executions_removed == 0
         repo.current_executions_with_sizes.assert_not_called()
@@ -299,7 +318,7 @@ class TestEvictStale:
         repo = create_autospec(ExecutionRepositoryPort)
         svc = _make_svc(repo=repo)
 
-        report = svc.evict_stale(-5)
+        report = svc.evict_stale(EvictStaleCommand(-5))
 
         assert report.executions_removed == 0
         repo.current_executions_with_sizes.assert_not_called()
@@ -315,7 +334,7 @@ class TestEvictStale:
         metrics.last_access.return_value = {"stale-key": 0.0}
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.evict_stale(1)
+        report = svc.evict_stale(EvictStaleCommand(1))
 
         assert report.executions_removed == 1
         repo.soft_purge_execution.assert_called_once_with("stale-key")
@@ -329,7 +348,7 @@ class TestEvictStale:
         metrics.last_access.return_value = {"fresh-key": time.time()}
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.evict_stale(1)
+        report = svc.evict_stale(EvictStaleCommand(1))
 
         assert report.executions_removed == 0
         repo.soft_purge_execution.assert_not_called()
@@ -345,7 +364,7 @@ class TestEvictStale:
         metrics.last_access.return_value = {}
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.evict_stale(1)
+        report = svc.evict_stale(EvictStaleCommand(1))
 
         assert report.executions_removed == 1
 
@@ -356,7 +375,7 @@ class TestEvictToQuota:
         repo.total_stored_bytes.return_value = 100
         svc = _make_svc(repo=repo)
 
-        report = svc.evict_to_quota(500)
+        report = svc.evict_to_quota(EvictToQuotaCommand(500))
 
         assert report.executions_removed == 0
         repo.current_executions_with_sizes.assert_not_called()
@@ -366,7 +385,7 @@ class TestEvictToQuota:
         repo.total_stored_bytes.return_value = 500
         svc = _make_svc(repo=repo)
 
-        report = svc.evict_to_quota(500)
+        report = svc.evict_to_quota(EvictToQuotaCommand(500))
 
         assert report.executions_removed == 0
 
@@ -383,7 +402,7 @@ class TestEvictToQuota:
         metrics.last_access.return_value = {"oldest": 1000.0, "newest": time.time()}
         svc = _make_svc(repo=repo, metrics=metrics)
 
-        report = svc.evict_to_quota(700)
+        report = svc.evict_to_quota(EvictToQuotaCommand(700))
 
         assert report.executions_removed == 1
         repo.soft_purge_execution.assert_called_once_with("oldest")
@@ -400,7 +419,7 @@ class TestEvictToQuota:
         metrics.last_access.return_value = {"key1": 0.0}
         svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 
-        svc.evict_to_quota(500)
+        svc.evict_to_quota(EvictToQuotaCommand(500))
 
         blob.remove.assert_called_once_with("blob-orphan")
 
@@ -416,6 +435,6 @@ class TestEvictToQuota:
         metrics.last_access.return_value = {"key1": 0.0}
         svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 
-        svc.evict_to_quota(500)
+        svc.evict_to_quota(EvictToQuotaCommand(500))
 
         blob.remove.assert_not_called()

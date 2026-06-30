@@ -10,6 +10,12 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
+    EvictStaleCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
 from starlette.testclient import TestClient
 
 from generic_ml_cache_daemon.scheduler import EvictionScheduler, EvictionStats
@@ -54,7 +60,7 @@ def test_run_sweep_calls_evict_to_quota_when_max_size_set():
 
     sched._run_sweep()
 
-    purge.evict_to_quota.assert_called_once_with(1024)
+    purge.evict_to_quota.assert_called_once_with(EvictToQuotaCommand(max_bytes=1024))
     assert stats.last_executions_removed == 2
     assert stats.last_bytes_freed == 500
 
@@ -68,7 +74,7 @@ def test_run_sweep_calls_evict_stale_when_max_age_set():
 
     sched._run_sweep()
 
-    purge.evict_stale.assert_called_once_with(3600.0)
+    purge.evict_stale.assert_called_once_with(EvictStaleCommand(max_age_seconds=3600.0))
     assert stats.last_executions_removed == 1
     assert stats.last_bytes_freed == 100
 

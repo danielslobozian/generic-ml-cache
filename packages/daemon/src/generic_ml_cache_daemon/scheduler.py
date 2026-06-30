@@ -14,6 +14,12 @@ import time
 from dataclasses import dataclass
 
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
+    EvictStaleCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
 _DEFAULT_INTERVAL = 3600.0  # seconds between eviction sweeps
@@ -71,10 +77,10 @@ class EvictionScheduler:
         """Execute one eviction sweep and update stats."""
         report = PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         if self._stats.max_size is not None:
-            r = self._purge.evict_to_quota(self._stats.max_size)
+            r = self._purge.evict_to_quota(EvictToQuotaCommand(self._stats.max_size))
             report = _merge(report, r)
         if self._stats.max_age is not None:
-            r = self._purge.evict_stale(self._stats.max_age)
+            r = self._purge.evict_stale(EvictStaleCommand(self._stats.max_age))
             report = _merge(report, r)
         self._stats.last_run_at = time.time()
         self._stats.last_executions_removed = report.executions_removed

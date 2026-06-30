@@ -24,6 +24,19 @@ from generic_ml_cache_core.application.port.inbound.execution_query.find_executi
 from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_execution_command import (
     TagsForExecutionCommand,
 )
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
+    PurgeByKeyCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_command import (
+    PurgeBySessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_command import (
+    PurgeBySessionTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
+    PurgeByTagCommand,
+)
 from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys_for_session_command import (
     ExecutionKeysForSessionCommand,
 )
@@ -278,18 +291,14 @@ def _cmd_stats(args: argparse.Namespace) -> int:
 
 def _dispatch_purge(svc, key, tag, session, session_tag, hard):
     if key:
-        return svc.hard_delete_one(key) if hard else svc.purge_one(key)
+        return svc.purge_by_key(PurgeByKeyCommand(key, hard=hard))
     if tag:
-        return svc.hard_delete_by_tag(tag) if hard else svc.purge_by_tag(tag)
+        return svc.purge_by_tag(PurgeByTagCommand(tag, hard=hard))
     if session:
-        return svc.hard_delete_by_session(session) if hard else svc.purge_by_session(session)
+        return svc.purge_by_session(PurgeBySessionCommand(session, hard=hard))
     if session_tag:
-        return (
-            svc.hard_delete_by_session_tag(session_tag)
-            if hard
-            else svc.purge_by_session_tag(session_tag)
-        )
-    return svc.hard_delete_all() if hard else svc.purge_all()
+        return svc.purge_by_session_tag(PurgeBySessionTagCommand(session_tag, hard=hard))
+    return svc.purge_all(PurgeAllCommand(hard=hard))
 
 
 def _cmd_purge(args: argparse.Namespace) -> int:

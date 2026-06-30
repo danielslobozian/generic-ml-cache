@@ -19,6 +19,9 @@ from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequ
 from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
@@ -556,8 +559,8 @@ class _SpyPurge:
     def __init__(self) -> None:
         self.evict_calls: list[int] = []
 
-    def evict_to_quota(self, max_bytes: int) -> PurgeReport:
-        self.evict_calls.append(max_bytes)
+    def evict_to_quota(self, command: EvictToQuotaCommand) -> PurgeReport:
+        self.evict_calls.append(command.max_bytes)
         return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
 
     # PurgeService has other methods the hook doesn't call — not needed here.
