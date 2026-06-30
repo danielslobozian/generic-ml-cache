@@ -8,7 +8,9 @@ import sys
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
 from generic_ml_cache_adapters.adapter.out.client.discover import list_models
-from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
@@ -73,7 +75,7 @@ class _ListingAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("fakelist", {ClientCapability.LIST_MODELS}, "Fake List")
+        return AdapterDescriptor.local_cli("fakelist", {ClientCapability.LIST_MODELS}, "Fake List")
 
     def build_argv(self, *a, **k) -> list[str]:  # pragma: no cover - unused here
         raise NotImplementedError

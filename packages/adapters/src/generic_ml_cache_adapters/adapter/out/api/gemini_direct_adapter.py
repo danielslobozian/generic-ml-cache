@@ -10,6 +10,9 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
@@ -22,7 +25,6 @@ from generic_ml_cache_core.application.port.out.api_client_port import ApiClient
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
 
 from generic_ml_cache_adapters.adapter.out.api._gemini_thinking import GeminiThinkingConfig
-from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -41,7 +43,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor(
+        return AdapterDescriptor.api(
             "gemini", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Google Gemini API"
         )
 

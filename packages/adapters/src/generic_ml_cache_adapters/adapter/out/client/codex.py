@@ -13,6 +13,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
@@ -26,7 +29,6 @@ from generic_ml_cache_core.application.domain.model.usage.usage import Usage, in
 
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
 from generic_ml_cache_adapters.adapter.out.client.output_parsing import ensure_trailing_newline
-from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 
 
 class CodexCliAdapter:
@@ -42,7 +44,7 @@ class CodexCliAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("codex", {ClientCapability.RUN}, "OpenAI Codex")
+        return AdapterDescriptor.local_cli("codex", {ClientCapability.RUN}, "OpenAI Codex")
 
     def build_argv(
         self,

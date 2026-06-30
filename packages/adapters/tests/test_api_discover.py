@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 import pytest
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
@@ -17,7 +20,6 @@ from generic_ml_cache_core.common.errors import UnknownClient
 
 from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
 from generic_ml_cache_adapters.discovery.composition import get_adapter, registered_names
-from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
 from generic_ml_cache_adapters.discovery.in_memory_adapter_registry import register
 
 _RUN = ClientCapability.RUN
@@ -34,7 +36,7 @@ class _ListingAdapter(ApiClientPort, ModelListingPort):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor("_listing", {_RUN, _LIST}, "Listing")
+        return AdapterDescriptor.api("_listing", {_RUN, _LIST}, "Listing")
 
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
@@ -53,7 +55,7 @@ class _NonListingAdapter(ApiClientPort):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor("_non-listing", {_RUN}, "NonListing")
+        return AdapterDescriptor.api("_non-listing", {_RUN}, "NonListing")
 
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError
@@ -64,7 +66,7 @@ class _FailingListAdapter(ApiClientPort, ModelListingPort):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor("_fail-listing", {_RUN, _LIST}, "Failing")
+        return AdapterDescriptor.api("_fail-listing", {_RUN, _LIST}, "Failing")
 
     def run(self, request: MlRequest) -> ClientRunResult:
         raise NotImplementedError

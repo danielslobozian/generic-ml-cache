@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.discovery.descriptors import api_descriptor, local_cli_descriptor
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 
 from generic_ml_cache_cli.discovery import register
@@ -35,7 +37,7 @@ class FakeAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("fake", (), "Fake")
+        return AdapterDescriptor.local_cli("fake", (), "Fake")
 
     def prepare(self, run_dir, context, prompt, system_prompt) -> None:
         (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")
@@ -75,7 +77,7 @@ class _FakeApiAdapter(StubApiClientAdapter):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor("fake-api", (), "Fake API")
+        return AdapterDescriptor.api("fake-api", (), "Fake API")
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -98,7 +100,7 @@ class FakeStdinAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("fake_stdin", (), "Fake (stdin)")
+        return AdapterDescriptor.local_cli("fake_stdin", (), "Fake (stdin)")
 
     def prepare(self, run_dir, context, prompt, system_prompt) -> None:
         (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")

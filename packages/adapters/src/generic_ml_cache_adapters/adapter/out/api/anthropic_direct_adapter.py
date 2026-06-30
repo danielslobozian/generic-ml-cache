@@ -10,6 +10,9 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
@@ -20,8 +23,6 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
 from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
-
-from generic_ml_cache_adapters.discovery.descriptors import api_descriptor
 
 _BASE_URL = "https://api.anthropic.com/v1"
 _API_VERSION = "2023-06-01"
@@ -42,7 +43,7 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor(
+        return AdapterDescriptor.api(
             "anthropic", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Anthropic API"
         )
 

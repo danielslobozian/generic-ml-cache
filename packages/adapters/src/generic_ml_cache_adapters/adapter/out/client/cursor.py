@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import json
 
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
@@ -24,7 +27,6 @@ from generic_ml_cache_adapters.adapter.out.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
 )
-from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
 
 
 class CursorCliAdapter:
@@ -40,7 +42,7 @@ class CursorCliAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor(
+        return AdapterDescriptor.local_cli(
             "cursor", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Cursor Agent"
         )
 
