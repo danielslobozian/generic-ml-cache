@@ -70,7 +70,7 @@ class JobRegistry:
             try:
                 execution = fn(*args)
                 job.mark_done(execution)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — in-process job boundary: any failure → job error
                 job.mark_error(str(exc))
 
         self._executor.submit(_run)

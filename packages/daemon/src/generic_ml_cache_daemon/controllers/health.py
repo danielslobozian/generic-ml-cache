@@ -33,7 +33,7 @@ def get_ready(request: Request) -> Response:
     try:
         wired.store_stats.event_counts()
         return JSONResponse(content=ReadyResponse(status="ready").model_dump())
-    except Exception:
+    except Exception:  # noqa: BLE001 — readiness probe: any store failure reports "not ready"
         return JSONResponse(
             status_code=503,
             content=ReadyResponse(status="not ready", detail="store not accessible").model_dump(),

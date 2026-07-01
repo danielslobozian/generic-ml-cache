@@ -101,7 +101,7 @@ def _communicate_streaming(  # noqa: C901
                 out_lines.append(line)
                 try:
                     on_line(line)
-                except Exception:
+                except Exception:  # noqa: BLE001 — a live-stream consumer must not abort capture
                     pass
         except (OSError, ValueError):
             pass

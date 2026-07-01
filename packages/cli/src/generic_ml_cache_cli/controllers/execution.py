@@ -97,7 +97,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                     diag=_make_diag(args),
                 )
                 execution = wired.run_ml.execute(command)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — detached-worker boundary: any failure → job FAILED
                 store.update_status(
                     job_id, state=async_jobs.FAILED, ended_at=async_jobs.now(), error=str(exc)
                 )

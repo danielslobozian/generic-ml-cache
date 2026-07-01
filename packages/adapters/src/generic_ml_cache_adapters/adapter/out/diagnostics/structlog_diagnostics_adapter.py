@@ -261,5 +261,5 @@ class StructlogDiagnosticsAdapter(DiagnosticsPort):
                 self._file = open(self._log_file, "a", encoding="utf-8")
             self._file.write(str(event_dict) + "\n")
             self._file.flush()
-        except Exception:
-            pass  # R5: diagnostics failure must never propagate
+        except Exception:  # noqa: BLE001 — R5: diagnostics failure must never propagate
+            pass

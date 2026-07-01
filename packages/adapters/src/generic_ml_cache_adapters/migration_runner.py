@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.common.errors import MigrationFailed
 
 from generic_ml_cache_adapters.db import DbConnection
 
@@ -54,7 +55,7 @@ def _bootstrap_version(conn: DbConnection) -> int:
     try:
         pragma_row = conn.execute("PRAGMA user_version").fetchone()
         prior_version = int(pragma_row[0]) if pragma_row is not None else 0
-    except Exception:
+    except Exception:  # noqa: BLE001 — PRAGMA is SQLite-only; any DBAPI that rejects it seeds 0
         prior_version = 0
     conn.execute("INSERT INTO schema_version (version) VALUES (?)", (prior_version,))
     conn.commit()
@@ -109,7 +110,7 @@ def run_migrations(
                     version=_CURRENT_VERSION,
                     duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — roll back on ANY failure, then translate (§10)
             conn.execute("ROLLBACK")
             if diag:
                 diag.error(
@@ -118,7 +119,9 @@ def run_migrations(
                     exc=exc,
                     duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                 )
-            raise
+            raise MigrationFailed(
+                f"schema migration from version {version} failed and was rolled back"
+            ) from exc
     finally:
         conn.close()
 
@@ -146,7 +149,7 @@ def schema_version(
                 duration_ms=round((time.perf_counter() - _t) * 1000, 1),
             )
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — status probe: any read failure reports "unmigrated"
         if diag:
             diag.error(
                 "schema-version FAILED",

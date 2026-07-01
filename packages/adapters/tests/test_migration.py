@@ -7,6 +7,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
+import pytest
+from generic_ml_cache_core.common.errors import MigrationFailed
+
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import run_migrations, schema_version
 
@@ -114,17 +117,26 @@ def test_schema_version_returns_empty_on_broken_connection() -> None:
 
 
 def test_migration_rollback_on_failure(tmp_path: Path) -> None:
-    factory = _factory(tmp_path / "gmlcache.sqlite3")
-    # Patch _CURRENT_VERSION to a version whose SQL file doesn't exist so
-    # migration fails inside the transaction and triggers ROLLBACK + error log.
+    db_path = tmp_path / "gmlcache.sqlite3"
+    factory = _factory(db_path)
+    # Patch _CURRENT_VERSION to a version whose SQL file doesn't exist so the run
+    # fails inside the transaction, triggers ROLLBACK, and translates the raw error
+    # to the project's MigrationFailed (§10 — the sqlite3 type never leaks).
     import generic_ml_cache_adapters.migration_runner as _m
 
     original = _m._CURRENT_VERSION
     try:
         _m._CURRENT_VERSION = 99
-        try:
+        with pytest.raises(MigrationFailed):
             run_migrations(factory)
-        except Exception:
-            pass  # expected — we only care that it didn't hang and logged
     finally:
         _m._CURRENT_VERSION = original
+
+    # Rolled back: nothing from the failed run was committed, so the recorded
+    # schema version is untouched (the seeded 0, not a partial 1/2).
+    conn = factory()
+    try:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert version == 0

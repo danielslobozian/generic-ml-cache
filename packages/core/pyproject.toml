@@ -58,7 +58,7 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-extend-select = ["C901", "I", "B", "N", "S310", "UP"]
+extend-select = ["C901", "I", "B", "N", "S310", "UP", "BLE001"]
 
 [tool.ruff.lint.per-file-ignores]
 # The domain exceptions are deliberately named for the condition they signal

@@ -24,7 +24,7 @@ def _probe_daemon(host: str, port: int) -> bool:
     try:
         with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310
             return int(resp.status) == 200
-    except Exception:
+    except Exception:  # noqa: BLE001 — liveness probe: any failure means "daemon not reachable"
         return False
 
 

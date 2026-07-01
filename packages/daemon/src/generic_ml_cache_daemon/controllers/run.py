@@ -52,7 +52,7 @@ def _extract_artifact(execution: MlExecution, artifact_type: ArtifactType) -> st
         if artifact.artifact_type is artifact_type and artifact.content is not None:
             try:
                 return artifact.content.decode("utf-8", errors="replace")
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001  # pragma: no cover — defensive decode guard
                 return None
     return None
 

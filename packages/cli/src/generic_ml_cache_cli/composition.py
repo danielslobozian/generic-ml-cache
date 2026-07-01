@@ -48,7 +48,7 @@ def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:
             log_level_flag=level,
             log_file_flag=log_file_flag,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — logging is non-load-bearing; bad config → silent (null) diag
         return NullDiagnosticsAdapter()
     resolved_level = settings["log_level"][0]
     if not resolved_level:

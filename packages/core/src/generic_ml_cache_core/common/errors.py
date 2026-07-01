@@ -149,6 +149,18 @@ class UnsupportedExecutionMode(CacheError):
     code: ClassVar[str] = "adapter.unsupported_mode"
 
 
+class MigrationFailed(CacheError):
+    """Raised when a database schema migration fails and is rolled back.
+
+    Translates a raw DBAPI/driver error at the migration boundary into the
+    project's own vocabulary (§10), so a caller never sees a leaked ``sqlite3``
+    exception. The failed migration leaves the recorded schema version unchanged —
+    the next startup retries from the last good state.
+    """
+
+    code: ClassVar[str] = "store.migration_failed"
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.
