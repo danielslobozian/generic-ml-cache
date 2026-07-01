@@ -253,11 +253,10 @@ class ExecutionRepository(ExecutionRepositoryPort):
             if execution_id is None:
                 return
             for tag in tags:
+                # Idempotent via UNIQUE(execution_id, tag): re-tagging never duplicates.
                 connection.execute(
-                    "INSERT INTO execution_tags (execution_id, tag) "
-                    "SELECT ?, ? WHERE NOT EXISTS "
-                    "(SELECT 1 FROM execution_tags WHERE execution_id = ? AND tag = ?)",
-                    (execution_id, tag, execution_id, tag),
+                    "INSERT OR IGNORE INTO execution_tags (execution_id, tag) VALUES (?, ?)",
+                    (execution_id, tag),
                 )
             connection.commit()
         finally:

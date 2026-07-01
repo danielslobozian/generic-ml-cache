@@ -65,7 +65,7 @@ def test_doctor_shows_schema_version_after_first_run(tmp_path, monkeypatch, caps
     assert rc == 0
     out = capsys.readouterr().out
     assert "store schema" in out
-    assert "0001.unified-schema" in out
+    assert "0002.integrity-constraints" in out
     assert "migration(s) applied" in out
 
 

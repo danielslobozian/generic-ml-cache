@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -17,6 +16,7 @@ from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter 
 from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
     StructlogDiagnosticsAdapter,
 )
+from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ConfigError
@@ -29,13 +29,9 @@ _DB_NAME = "executions.sqlite3"
 
 
 def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
-    db_path = store_root / _DB_NAME
-
-    def _connect() -> DbConnection:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        return cast(DbConnection, sqlite3.connect(str(db_path)))
-
-    return _connect
+    # The library's canonical factory: it creates the parent dir and, crucially,
+    # sets PRAGMA foreign_keys = ON per connection so the schema's FKs are enforced.
+    return cast("Callable[[], DbConnection]", sqlite_connection_factory(store_root / _DB_NAME))
 
 
 def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:

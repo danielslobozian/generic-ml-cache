@@ -22,7 +22,10 @@ from generic_ml_cache_core.application.port.out.diagnostics_port import Diagnost
 from generic_ml_cache_adapters.db import DbConnection
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
-_CURRENT_VERSION = 1
+_CURRENT_VERSION = 2
+
+#: Applied-migration identifiers, indexed by version number (1-based).
+_MIGRATION_IDS = ("0001.unified-schema", "0002.integrity-constraints")
 
 _CREATE_VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 
@@ -70,6 +73,11 @@ def run_migrations(
     _t = time.perf_counter()
     conn = conn_factory()
     try:
+        # Rebuild-style migrations (create-with-constraints -> copy -> drop -> rename)
+        # must run with foreign keys OFF (SQLite's documented table-rebuild procedure);
+        # the pragma is a no-op inside a transaction, so it is set here, before BEGIN.
+        # Normal connections keep foreign_keys ON (the datasource factory sets it).
+        conn.execute("PRAGMA foreign_keys = OFF")
         version = _bootstrap_version(conn)
         if version >= _CURRENT_VERSION:
             if diag:
@@ -127,11 +135,10 @@ def schema_version(
         conn.execute(_CREATE_VERSION_TABLE)
         row = conn.execute("SELECT version FROM schema_version").fetchone()
         version = int(row[0]) if row is not None else 0
-        result = (
-            []
-            if version == 0
-            else [{"migration_id": "0001.unified-schema", "applied_at_utc": None}]
-        )
+        result = [
+            {"migration_id": _MIGRATION_IDS[v - 1], "applied_at_utc": None}
+            for v in range(1, min(version, len(_MIGRATION_IDS)) + 1)
+        ]
         if diag:
             diag.debug(
                 "schema-version EXIT",

@@ -34,6 +34,10 @@ def sqlite_connection_factory(
 
     def _connect() -> Connection:
         resolved.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(str(resolved), check_same_thread=check_same_thread)
+        connection = sqlite3.connect(str(resolved), check_same_thread=check_same_thread)
+        # SQLite enforces foreign keys only when asked, per connection (OFF by default).
+        # Without this every FK/ON DELETE CASCADE in the schema is silently inert.
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
 
     return _connect

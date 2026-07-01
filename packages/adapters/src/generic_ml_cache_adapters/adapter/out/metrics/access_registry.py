@@ -186,13 +186,14 @@ class AccessRegistry:
             self._warn_db_error("delete_events_for_key", exc)
 
     def add_session_tag(self, session_id: str, tag: str) -> None:
-        """Attach ``tag`` to ``session_id``. Duplicate tags are stored once per call;
-        callers that want idempotency should check first. Non-load-bearing: never raises."""
+        """Attach ``tag`` to ``session_id``. Idempotent: the UNIQUE(session_id, tag)
+        constraint plus ``INSERT OR IGNORE`` means re-tagging is a no-op, never a
+        duplicate row. Non-load-bearing: never raises."""
         try:
             conn = self._connect()
             try:
                 conn.execute(
-                    "INSERT INTO session_tags (session_id, tag) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO session_tags (session_id, tag) VALUES (?, ?)",
                     (session_id, tag),
                 )
                 conn.commit()

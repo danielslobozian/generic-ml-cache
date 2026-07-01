@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,6 +18,7 @@ from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter 
 from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
     StructlogDiagnosticsAdapter,
 )
+from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_bootstrap.application import build_application_api
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
@@ -49,13 +49,13 @@ _LOG_FILE_NAME = "gmlcache.log"
 
 
 def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
-    db_path = store_root / _DB_NAME
-
-    def _connect() -> DbConnection:
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        return cast(DbConnection, sqlite3.connect(str(db_path), check_same_thread=False))
-
-    return _connect
+    # The library's canonical factory: it creates the parent dir and, crucially,
+    # sets PRAGMA foreign_keys = ON per connection so the schema's FKs are enforced.
+    # check_same_thread=False: the daemon shares the factory across its thread pool.
+    return cast(
+        "Callable[[], DbConnection]",
+        sqlite_connection_factory(store_root / _DB_NAME, check_same_thread=False),
+    )
 
 
 _CAPTURE_ENV_FLAG = "GMLCACHE_GATEWAY_CAPTURE"
