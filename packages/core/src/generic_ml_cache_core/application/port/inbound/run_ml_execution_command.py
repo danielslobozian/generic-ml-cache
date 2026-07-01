@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
@@ -35,17 +35,30 @@ class RunMlExecutionCommand:
     context: str = ""
     prompt: str = ""
     user_system_prompt: str | None = None
-    input_file_paths: list[str] = field(default_factory=list)
-    allow_paths: list[str] = field(default_factory=list)
+    input_file_paths: tuple[str, ...] = ()
+    allow_paths: tuple[str, ...] = ()
     scan_trust: bool = False
-    client_args: list[str] = field(default_factory=list)
-    native_args: list[str] = field(default_factory=list)
-    grants: list[str] = field(default_factory=list)
+    client_args: tuple[str, ...] = ()
+    native_args: tuple[str, ...] = ()
+    grants: tuple[str, ...] = ()
     cache_mode: CacheMode = CacheMode.CACHE
     persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
     record_on_error: bool = False
-    tags: list[str] = field(default_factory=list)
+    tags: tuple[str, ...] = ()
     session_id: str | None = None
+
+    def __post_init__(self) -> None:
+        # Accept any iterable input (a parser hands lists) but store immutably, so
+        # this keyed command is deeply stable and hashable.
+        for name in (
+            "input_file_paths",
+            "allow_paths",
+            "client_args",
+            "native_args",
+            "grants",
+            "tags",
+        ):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
 
     @property
     def is_uncacheable(self) -> bool:

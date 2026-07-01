@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import (
     GatewayRequest,
@@ -24,4 +26,7 @@ class RunMlGatewayCommand:
     api_token: str
     target_url: str
     session_id: str | None = None
-    forward_headers: dict[str, str] = field(default_factory=dict)
+    forward_headers: Mapping[str, str] = MappingProxyType({})
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "forward_headers", MappingProxyType(dict(self.forward_headers)))

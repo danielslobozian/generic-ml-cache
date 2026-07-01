@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -24,8 +24,13 @@ class MlRequest:
     effort: str
     context: str
     prompt: str
-    input_file_paths: list[str] = field(default_factory=list)
-    allow_paths: list[str] = field(default_factory=list)
-    client_args: list[str] = field(default_factory=list)
-    grants: frozenset[str] = field(default_factory=frozenset)
+    input_file_paths: tuple[str, ...] = ()
+    allow_paths: tuple[str, ...] = ()
+    client_args: tuple[str, ...] = ()
+    grants: frozenset[str] = frozenset()
     user_system_prompt: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("input_file_paths", "allow_paths", "client_args"):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+        object.__setattr__(self, "grants", frozenset(self.grants))

@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
@@ -31,11 +33,18 @@ class ManagedCallIdentity(CallIdentity):
     effort: str
     context_fingerprint: str
     prompt_fingerprint: str
-    input_file_fingerprints: dict[str, str] = field(default_factory=dict)
+    input_file_fingerprints: Mapping[str, str] = MappingProxyType({})
     client_args_fingerprint: str | None = None
     system_fingerprint: str | None = None
-    grants: frozenset[str] = field(default_factory=frozenset)
-    allow_paths: frozenset[str] = field(default_factory=frozenset)
+    grants: frozenset[str] = frozenset()
+    allow_paths: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "input_file_fingerprints", MappingProxyType(dict(self.input_file_fingerprints))
+        )
+        object.__setattr__(self, "grants", frozenset(self.grants))
+        object.__setattr__(self, "allow_paths", frozenset(self.allow_paths))
 
     def generate_key(self) -> str:
         key_data: dict[str, str] = {

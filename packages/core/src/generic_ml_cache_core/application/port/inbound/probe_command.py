@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from generic_ml_cache_core.application.domain.service.cacheability import is_call_uncacheable
 
@@ -24,11 +24,15 @@ class ProbeCommand:
     context: str
     prompt: str
     user_system_prompt: str | None = None
-    input_file_paths: list[str] = field(default_factory=list)
-    allow_paths: list[str] = field(default_factory=list)
+    input_file_paths: tuple[str, ...] = ()
+    allow_paths: tuple[str, ...] = ()
     scan_trust: bool = False
-    client_args: list[str] = field(default_factory=list)
-    grants: list[str] = field(default_factory=list)
+    client_args: tuple[str, ...] = ()
+    grants: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        for name in ("input_file_paths", "allow_paths", "client_args", "grants"):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
 
     @property
     def is_uncacheable(self) -> bool:

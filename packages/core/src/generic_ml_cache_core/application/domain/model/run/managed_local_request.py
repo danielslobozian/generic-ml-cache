@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -24,9 +24,14 @@ class ManagedLocalRequest:
     context: str
     prompt: str
     user_system_prompt: str | None = None
-    allowed_read_paths: list[str] = field(default_factory=list)
-    add_dir_paths: list[str] = field(default_factory=list)
-    client_args: list[str] = field(default_factory=list)
-    grants: frozenset[str] = field(default_factory=frozenset)
+    allowed_read_paths: tuple[str, ...] = ()
+    add_dir_paths: tuple[str, ...] = ()
+    client_args: tuple[str, ...] = ()
+    grants: frozenset[str] = frozenset()
     timeout: float | None = None
     stream_path: str | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("allowed_read_paths", "add_dir_paths", "client_args"):
+            object.__setattr__(self, name, tuple(getattr(self, name)))
+        object.__setattr__(self, "grants", frozenset(self.grants))

@@ -29,7 +29,7 @@ def test_stub_returns_a_client_run_result_with_no_files():
     result = StubApiClientAdapter().run(_request())
     assert isinstance(result, ClientRunResult)
     assert result.exit_code == 0
-    assert result.files == []
+    assert result.files == ()
 
 
 def test_stub_reply_reflects_model_and_prompt():

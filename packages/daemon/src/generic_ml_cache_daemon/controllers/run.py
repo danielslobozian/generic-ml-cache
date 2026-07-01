@@ -42,7 +42,7 @@ def _build_command(body: RunBody, whitelist: frozenset[str] | None) -> RunMlExec
         effort=body.effort,
         prompt=body.prompt,
         context=body.context,
-        tags=body.tags,
+        tags=tuple(body.tags),
         session_id=body.session_id,
     )
 

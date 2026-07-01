@@ -53,7 +53,7 @@ def serialize_identity(identity: CallIdentity) -> SerializedIdentity:
                 {
                     "context_fingerprint": identity.context_fingerprint,
                     "prompt_fingerprint": identity.prompt_fingerprint,
-                    "input_file_fingerprints": identity.input_file_fingerprints,
+                    "input_file_fingerprints": dict(identity.input_file_fingerprints),
                     "client_args_fingerprint": identity.client_args_fingerprint,
                     "grants": sorted(identity.grants),
                 }

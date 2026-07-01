@@ -317,7 +317,7 @@ def test_run_files_is_empty():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
     result = adapter.run(_request())
-    assert result.files == []
+    assert result.files == ()
 
 
 def test_run_sends_correct_model():

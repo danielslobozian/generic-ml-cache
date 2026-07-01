@@ -174,9 +174,9 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
             context=command.context,
             prompt=command.prompt,
             user_system_prompt=command.user_system_prompt,
-            allowed_read_paths=sorted([*command.input_file_paths, *command.allow_paths]),
-            add_dir_paths=sorted(command.allow_paths),
-            client_args=list(command.client_args),
+            allowed_read_paths=tuple(sorted([*command.input_file_paths, *command.allow_paths])),
+            add_dir_paths=tuple(sorted(command.allow_paths)),
+            client_args=tuple(command.client_args),
             grants=frozenset(command.grants),
         )
         workspace = self._workspace.create()
@@ -199,7 +199,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
             exit_code=answer.exit_code,
             stdout=answer.stdout,
             stderr=answer.stderr,
-            files=files,
+            files=tuple(files),
             token_usage=answer.token_usage,
         )
 
@@ -210,13 +210,13 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         is no workspace and no artifact capture — a passthrough never produces files."""
         client = cast(LocalClientPort, runner)
         answer = client.execute_passthrough(
-            PassthroughRequest(native_args=list(command.native_args))
+            PassthroughRequest(native_args=tuple(command.native_args))
         )
         return ClientRunResult(
             exit_code=answer.exit_code,
             stdout=answer.stdout,
             stderr=answer.stderr,
-            files=[],
+            files=(),
             token_usage=answer.token_usage,
         )
 

@@ -172,7 +172,7 @@ class TestRunClient:
         client.run.assert_not_called()  # old path bypassed
         client.execute_passthrough.assert_called_once()
         assert result.exit_code == 7 and result.stdout == "out" and result.stderr == "err"
-        assert result.files == []  # a passthrough never produces files
+        assert result.files == ()  # a passthrough never produces files
         workspace.create.assert_not_called()  # passthrough needs no workspace
 
 

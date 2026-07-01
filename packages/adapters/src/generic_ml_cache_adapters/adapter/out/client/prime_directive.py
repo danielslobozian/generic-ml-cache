@@ -10,6 +10,8 @@ it is not part of the cached input -- it is operational scaffolding.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 PRIME_DIRECTIVE = (
     "PRIME DIRECTIVE (operational sandbox):\n"
     "You are running inside an isolated working folder created solely for this "
@@ -27,7 +29,7 @@ PRIME_DIRECTIVE = (
 
 def build_system_prompt(
     user_system_prompt: str | None = None,
-    allowed_read_paths: list[str] | None = None,
+    allowed_read_paths: Sequence[str] | None = None,
 ) -> str:
     """Compose the directive with an optional caller-supplied system prompt.
 

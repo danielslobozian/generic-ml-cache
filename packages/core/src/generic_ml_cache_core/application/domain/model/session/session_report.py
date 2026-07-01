@@ -53,8 +53,12 @@ class SessionReport:
     unknown_usage: int
     span_start: str | None
     span_end: str | None
-    by_model: list[ModelUsage]
-    by_day: list[DayActivity]
+    by_model: tuple[ModelUsage, ...]
+    by_day: tuple[DayActivity, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "by_model", tuple(self.by_model))
+        object.__setattr__(self, "by_day", tuple(self.by_day))
 
     @property
     def day_count(self) -> int:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 
 from generic_ml_cache_core.application.domain.model.gateway.forwarded_response import (
     ForwardedResponse,
@@ -32,7 +33,7 @@ class HttpGatewayForwardAdapter(GatewayForwardPort):
         gateway_request: GatewayRequest,
         api_token: str,
         target_url: str,
-        forward_headers: dict,
+        forward_headers: Mapping[str, str],
     ) -> ForwardedResponse:
         """POST the gateway request to ``target_url`` and return the raw response."""
         request_body = gateway_request.serialize_request()
@@ -51,7 +52,7 @@ class HttpGatewayForwardAdapter(GatewayForwardPort):
             error_body_bytes = http_error.read()
             return ForwardedResponse(body_bytes=error_body_bytes, status_code=http_error.code)
 
-    def _build_headers(self, api_token: str, forward_headers: dict) -> dict:
+    def _build_headers(self, api_token: str, forward_headers: Mapping[str, str]) -> dict:
         _skip = {"host", "connection", "content-length", "accept-encoding", "transfer-encoding"}
         upstream_headers = {k: v for k, v in forward_headers.items() if k not in _skip}
         upstream_headers["content-type"] = "application/json"

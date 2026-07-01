@@ -59,15 +59,15 @@ def test_defaults():
     assert command.context == ""
     assert command.prompt == ""
     assert command.user_system_prompt is None
-    assert command.input_file_paths == []
-    assert command.allow_paths == []
+    assert command.input_file_paths == ()
+    assert command.allow_paths == ()
     assert command.scan_trust is False
-    assert command.client_args == []
-    assert command.grants == []
+    assert command.client_args == ()
+    assert command.grants == ()
     assert command.cache_mode is CacheMode.CACHE
     assert command.persistence_depth is PersistenceDepth.CACHE
     assert command.record_on_error is False
-    assert command.tags == []
+    assert command.tags == ()
     assert command.session_id is None
 
 
@@ -79,7 +79,7 @@ def test_is_frozen():
 
 def test_carries_raw_paths_not_fingerprints():
     command = _managed(input_file_paths=["/src/a.py", "/src/b.py"])
-    assert command.input_file_paths == ["/src/a.py", "/src/b.py"]
+    assert command.input_file_paths == ("/src/a.py", "/src/b.py")
 
 
 # --- cacheability (managed) --------------------------------------------------

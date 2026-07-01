@@ -123,7 +123,8 @@ def test_gateway_command_keeps_extra_request_fields(tmp_path: Path) -> None:
         tc.post(_URL, json=body)
         command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
         assert command.gateway_request.body["temperature"] == 0.3
-        assert command.gateway_request.body["tools"] == [{"name": "search"}]
+        # body is deep-frozen: nested arrays become tuples of read-only maps
+        assert command.gateway_request.body["tools"] == ({"name": "search"},)
         assert "session_id" not in command.gateway_request.body
 
 

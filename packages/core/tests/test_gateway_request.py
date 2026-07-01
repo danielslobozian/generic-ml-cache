@@ -21,7 +21,8 @@ class TestAccessors:
     def test_named_accessors_read_from_body(self):
         req = _make(system="s", max_tokens=42)
         assert req.model == "claude-3-5-sonnet-20241022"
-        assert req.messages == [{"role": "user", "content": "hi"}]
+        # body is deep-frozen at construction: messages is a tuple of read-only maps
+        assert req.messages == ({"role": "user", "content": "hi"},)
         assert req.system == "s"
         assert req.max_tokens == 42
 
@@ -75,7 +76,8 @@ class TestSerializeRequest:
         req = _make(messages=[{"role": "user", "content": "test"}], max_tokens=512)
         body = json.loads(req.serialize_request())
         assert body["model"] == req.model
-        assert body["messages"] == req.messages
+        # serialize_request thaws the frozen body back to plain JSON (lists/objects)
+        assert body["messages"] == [{"role": "user", "content": "test"}]
         assert body["max_tokens"] == 512
         assert "system" not in body
 

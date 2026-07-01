@@ -464,6 +464,20 @@ return blob_path.read_bytes()
   remaining `Protocol`s are the three genuinely-structural ones: `RegisteredAdapterPort`
   (a structural supertype narrowed at runtime), `CacheableExecutionCommand`, and
   `KeyedCallInputs` (structural shapes over command/identity objects).
+- **Frozen objects are deeply immutable.** `@dataclass(frozen=True)` freezes only the
+  attribute *bindings*; a `list`/`dict`/`set` field is still mutable in place, so the
+  object is only shallowly immutable — a soundness hole for a cache identity or a
+  command that is keyed on. A frozen object's collection fields are therefore
+  immutable: `tuple[...]` / `frozenset[...]` / `Mapping` backed by `MappingProxyType`,
+  normalized in `__post_init__` (`object.__setattr__`), accepting any iterable input at
+  the boundary. Nested structures are **deep-frozen** via `common/immutable.deep_freeze`
+  — notably `GatewayRequest.body`, which the gateway both keys on and forwards: a mutable
+  body opens a TOCTOU gap between keyed/recorded and forwarded, and one frozen snapshot
+  guarantees keyed ≡ forwarded ≡ recorded. The rare code that must JSON-serialize a
+  frozen structure thaws it once at that boundary (`common/immutable.thaw`;
+  `MappingProxyType` is not `json`-serializable). *Failing case: a `@dataclass(frozen=True)`
+  with a bare `list`/`dict`/`set` field — shallow immutability on a cache identity or
+  command object is a defect.*
 - **Ship `py.typed`.** The package publishes its types so consumers (a daemon, the
   workflow engine) get them.
 

@@ -4,10 +4,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 from generic_ml_cache_core.application.domain.model.usage.usage import float_or_none, int_or_none
+from generic_ml_cache_core.common.immutable import deep_freeze, thaw
 
 
 @dataclass(frozen=True)
@@ -27,7 +30,10 @@ class TokenUsage:
     cache_write_tokens: int | None = None
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
-    raw: dict[str, Any] = field(default_factory=dict)
+    raw: Mapping[str, Any] = MappingProxyType({})
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "raw", deep_freeze(self.raw))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -37,7 +43,7 @@ class TokenUsage:
             "cache_write_tokens": self.cache_write_tokens,
             "reasoning_tokens": self.reasoning_tokens,
             "cost_usd": self.cost_usd,
-            "raw": self.raw,
+            "raw": thaw(self.raw),
         }
 
     @classmethod

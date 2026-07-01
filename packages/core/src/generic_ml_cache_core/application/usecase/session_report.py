@@ -126,6 +126,6 @@ def build_session_report(
         unknown_usage=unknown,
         span_start=by_day[0].day if by_day else None,
         span_end=by_day[-1].day if by_day else None,
-        by_model=by_model,
-        by_day=by_day,
+        by_model=tuple(by_model),
+        by_day=tuple(by_day),
     )

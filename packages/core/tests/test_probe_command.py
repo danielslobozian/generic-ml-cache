@@ -19,11 +19,11 @@ def _command(**overrides) -> ProbeCommand:
 
 def test_defaults():
     command = _command()
-    assert command.input_file_paths == []
-    assert command.allow_paths == []
+    assert command.input_file_paths == ()
+    assert command.allow_paths == ()
     assert command.scan_trust is False
-    assert command.client_args == []
-    assert command.grants == []
+    assert command.client_args == ()
+    assert command.grants == ()
 
 
 def test_plain_call_is_cacheable():

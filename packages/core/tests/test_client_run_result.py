@@ -21,7 +21,7 @@ def test_minimal_result_needs_only_exit_code():
     assert result.exit_code == 0
     assert result.stdout == ""
     assert result.stderr == ""
-    assert result.files == []
+    assert result.files == ()
     assert result.token_usage is None
 
 

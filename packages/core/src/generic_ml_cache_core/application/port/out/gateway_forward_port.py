@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 
 from generic_ml_cache_core.application.domain.model.gateway.forwarded_response import (
     ForwardedResponse,
@@ -28,6 +29,6 @@ class GatewayForwardPort(ABC):
         gateway_request: GatewayRequest,
         api_token: str,
         target_url: str,
-        forward_headers: dict,
+        forward_headers: Mapping[str, str],
     ) -> ForwardedResponse:
         """POST ``gateway_request`` to ``target_url`` and return the raw response."""

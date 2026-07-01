@@ -131,11 +131,11 @@ def _cmd_check(args: argparse.Namespace) -> int:
         context=context,
         prompt=prompt,
         user_system_prompt=system_prompt,
-        input_file_paths=_resolve_input_file_paths(args.input_file),
-        allow_paths=_resolve_allow_paths(args.allow_path),
+        input_file_paths=tuple(_resolve_input_file_paths(args.input_file)),
+        allow_paths=tuple(_resolve_allow_paths(args.allow_path)),
         scan_trust=bool(settings["trust_scan"][0]),
-        client_args=list(getattr(args, "client_arg", None) or []),
-        grants=list(getattr(args, "grant", None) or []),
+        client_args=tuple(getattr(args, "client_arg", None) or []),
+        grants=tuple(getattr(args, "grant", None) or []),
     )
     report = build_use_cases(
         _db_conn_factory(store_root), store_root, diag=_make_diag(args)

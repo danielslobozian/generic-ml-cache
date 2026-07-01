@@ -82,7 +82,7 @@ def test_extended_token_fields_aggregated():
 
 def test_extended_token_fields_zero_on_empty_session():
     r = build_session_report("nope", [], {})
-    assert r.by_model == []
+    assert r.by_model == ()
 
 
 def test_by_day_is_activity_counts_oldest_first():
@@ -97,4 +97,4 @@ def test_by_day_is_activity_counts_oldest_first():
 def test_empty_session():
     r = build_session_report("nope", [], {})
     assert (r.invocations, r.executions, r.hits, r.unknown_usage) == (0, 0, 0, 0)
-    assert (r.span_start, r.span_end, r.by_model, r.by_day) == (None, None, [], [])
+    assert (r.span_start, r.span_end, r.by_model, r.by_day) == (None, None, (), ())

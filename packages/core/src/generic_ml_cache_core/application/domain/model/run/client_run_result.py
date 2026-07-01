@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
@@ -42,11 +42,14 @@ class ClientRunResult:
     exit_code: int
     stdout: str = ""
     stderr: str = ""
-    files: list[GeneratedFile] = field(default_factory=list)
+    files: tuple[GeneratedFile, ...] = ()
     #: Token accounting the runner observed (a structured client or an API), or
     #: None when none was reported. Carried to MlExecution.token_usage by the
     #: shared flow; not stored as output bytes (it is database-bound accounting).
     token_usage: TokenUsage | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "files", tuple(self.files))
 
     @property
     def succeeded(self) -> bool:

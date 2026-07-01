@@ -28,6 +28,7 @@ from generic_ml_cache_core.application.port.out.execution_repository_port import
     ExecutionSizeEntry,
     ExecutionSummary,
 )
+from generic_ml_cache_core.common.immutable import thaw
 
 from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
     SerializedIdentity,
@@ -228,7 +229,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
                 token_usage.cache_write_tokens,
                 token_usage.reasoning_tokens,
                 token_usage.cost_usd,
-                json.dumps(token_usage.raw),
+                json.dumps(thaw(token_usage.raw)),
             ),
         )
 

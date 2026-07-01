@@ -35,8 +35,12 @@ Design rulings this encodes (do not relitigate):
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
+
+from generic_ml_cache_core.common.immutable import deep_freeze, thaw
 
 
 def int_or_none(value: Any) -> int | None:
@@ -94,7 +98,10 @@ class Usage:
     cost_usd: float | None = None
     #: The client's verbatim usage structure (lossless), so unanticipated
     #: client-specific fields stay reachable. Shape is per-client.
-    raw: dict[str, Any] = field(default_factory=dict)
+    raw: Mapping[str, Any] = MappingProxyType({})
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "raw", deep_freeze(self.raw))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -104,5 +111,5 @@ class Usage:
             "cache_write_tokens": self.cache_write_tokens,
             "reasoning_tokens": self.reasoning_tokens,
             "cost_usd": self.cost_usd,
-            "raw": self.raw,
+            "raw": thaw(self.raw),
         }
