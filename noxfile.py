@@ -20,12 +20,14 @@ Usage::
     nox -s tests        # tests for every package (each in its own env)
     nox -s tests -- -k name   # extra args after -- pass through to pytest
     nox -s sonar        # write the per-package coverage XMLs Sonar ingests
+    nox -s wheels       # assert built wheels ship py.typed + migrations (V15)
     nox -s dev          # (re)build the IDE .venv at ./.venv
 """
 
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import nox
@@ -169,6 +171,74 @@ def green(session: nox.Session) -> None:
         with session.chdir(f"packages/{pkg}"):
             session.run("python", "-m", "pytest")
     _run_scrubber_floor(session)
+
+
+# The package whose wheel must also carry the SQL migrations. hatchling includes
+# them only by DEFAULT (no explicit force-include in pyproject), so a src-tree
+# move — e.g. the persistence pass relocating migrations under a sqlite/ folder —
+# could silently drop them from the wheel; the `wheels` session guards that.
+_MIGRATIONS_PACKAGE = "adapters"
+
+
+@nox.session(venv_backend="none")
+def wheels(session: nox.Session) -> None:
+    """V15 — assert the BUILT wheels ship what a source-tree test cannot see:
+    the PEP 561 ``py.typed`` marker in all five, and the SQL migrations in the
+    adapters wheel. release.yml ``twine check``s wheel METADATA but never its
+    CONTENTS, so a packaging regression (a dropped marker, an unpackaged
+    migration) ships silently today. This builds each wheel with uv and inspects
+    its archive members."""
+    import tempfile
+    import zipfile
+
+    output_dir = Path(tempfile.mkdtemp(prefix="gmlc-wheels-"))
+    try:
+        for package in PACKAGES:
+            session.run(
+                "uv",
+                "build",
+                "--wheel",
+                f"packages/{package}",
+                "-o",
+                str(output_dir),
+                external=True,
+            )
+
+        problems: list[str] = []
+        for package in PACKAGES:
+            import_name = _IMPORT_NAME[package]
+            built = list(output_dir.glob(f"{import_name}-*.whl"))
+            if not built:
+                problems.append(f"{package}: no wheel was built")
+                continue
+            members = zipfile.ZipFile(built[0]).namelist()
+
+            if f"{import_name}/py.typed" not in members:
+                problems.append(f"{package}: wheel is missing {import_name}/py.typed")
+
+            if package == _MIGRATIONS_PACKAGE:
+                source_dir = Path(f"packages/{package}/src/{import_name}/migrations")
+                expected = sorted(
+                    sql_file.name for sql_file in source_dir.glob("*.sql")
+                )
+                packaged = {
+                    member.rsplit("/", 1)[1]
+                    for member in members
+                    if member.startswith(f"{import_name}/migrations/")
+                    and member.endswith(".sql")
+                }
+                missing = [name for name in expected if name not in packaged]
+                if missing:
+                    problems.append(f"{package}: wheel is missing migrations {missing}")
+
+        if problems:
+            session.error("wheel-content check FAILED:\n  " + "\n  ".join(problems))
+        session.log(
+            f"wheel-content OK: py.typed present in all {len(PACKAGES)} wheels; "
+            f"{_MIGRATIONS_PACKAGE} migrations packaged"
+        )
+    finally:
+        shutil.rmtree(output_dir, ignore_errors=True)
 
 
 @nox.session(venv_backend="none")

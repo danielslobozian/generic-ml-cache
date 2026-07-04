@@ -112,3 +112,20 @@ jobs:
 
       - name: Check architecture contracts (nox)
         run: nox -s imports
+
+  packaging:
+    name: wheel contents (py.typed + migrations)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install nox + uv
+        run: python -m pip install --upgrade pip nox uv
+
+      - name: Check built wheel contents (nox)
+        run: nox -s wheels
