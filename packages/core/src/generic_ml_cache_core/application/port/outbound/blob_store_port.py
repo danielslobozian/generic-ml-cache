@@ -49,6 +49,19 @@ class BlobStorePort(ABC):
         probe and the real write, so the persist path must still handle failure
         (TOCTOU)."""
 
+    def ensure_available_for_content(self) -> None:  # noqa: B027 — deliberate default: most stores are always content-available; only the token-required stand-in overrides to raise
+        """Raise if the store cannot perform CONTENT operations right now — the one
+        up-front encryption-token gate (S5a). An encrypted store with no token
+        raises :class:`EncryptionTokenRequired` HERE, at entry, so a content op
+        fails before the expensive client call rather than lazily on the first
+        get/put (which today wastes the call on a miss). Reads only the small
+        manifest — no blob I/O, no client call.
+
+        A concrete default no-op: a store that can always serve content (plain
+        filesystem, or an already-token-opened encrypting store) needs no override;
+        only the token-required stand-in opts into the guard. DB-only / metadata
+        commands never call it — they need no token."""
+
     @abstractmethod
     def remove(self, key: BlobKey) -> None:
         """Delete the bytes stored under ``key``; a no-op if nothing is stored.

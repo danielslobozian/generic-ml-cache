@@ -18,7 +18,11 @@ from __future__ import annotations
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.cipher_port import CipherPort
-from generic_ml_cache_core.common.errors import EncryptionTokenRequired
+from generic_ml_cache_core.common.errors import (
+    EncryptionTokenRequired,
+    StoreCorrupt,
+    WrongEncryptionToken,
+)
 
 
 class EncryptingBlobStore(BlobStorePort):
@@ -33,7 +37,15 @@ class EncryptingBlobStore(BlobStorePort):
         blob = self._inner.get(BlobKey(key))
         if blob is None:
             return None
-        return self._cipher.decrypt(self._data_key, blob)
+        try:
+            return self._cipher.decrypt(self._data_key, blob)
+        except WrongEncryptionToken as exc:
+            # The data key already opened the envelope (the token was verified at
+            # wiring), so a CONTENT decrypt failure means the stored blob is corrupt
+            # or tampered — not a token problem. Surface it as corruption so the
+            # serve path self-heals by re-running (S5c → S4), never mislabels it a
+            # wrong token.
+            raise StoreCorrupt(f"blob {key} failed to decrypt with a valid token") from exc
 
     def put(self, key: str, output: bytes) -> None:
         self._inner.put(BlobKey(key), self._cipher.encrypt(self._data_key, output))
@@ -67,6 +79,13 @@ class TokenRequiredBlobStore(BlobStorePort):
 
     def put(self, key: str, output: bytes) -> None:
         raise EncryptionTokenRequired("the store is encrypted — provide the token to record")
+
+    def ensure_available_for_content(self) -> None:
+        # The up-front token gate (S5a): a content op fails HERE, before the client
+        # call, instead of lazily on the first get/put after a wasted run.
+        raise EncryptionTokenRequired(
+            "the store is encrypted — provide the token to run a content operation"
+        )
 
     def exists(self, key: str) -> bool:
         # A presence test reads no content, so it works without the token (like remove).

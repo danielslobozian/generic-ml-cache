@@ -135,6 +135,13 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                     )
                 return result
 
+            # S5a: one up-front encryption-token gate. A content op (read a hit or
+            # write a run) on an encrypted store with no token fails HERE — before
+            # the expensive client call — not lazily on the first blob get/put. A
+            # DB-only METER run touches no blob, so it is exempt.
+            if command.persistence_depth.stores_output:
+                self._blob_store.ensure_available_for_content()
+
             if command.cache_mode is CacheMode.OFFLINE:
                 result = self._serve_offline(command, execution_key)
                 if self._diag:

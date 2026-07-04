@@ -29,6 +29,7 @@ from generic_ml_cache_core.application.usecase.cached_ml_execution_service impor
 )
 from generic_ml_cache_core.common.errors import (
     CacheMiss,
+    EncryptionTokenRequired,
     StoreUnavailable,
 )
 
@@ -496,3 +497,34 @@ class TestDatasetFailFast:
         svc.execute(_Cmd(persistence_depth=PersistenceDepth.CACHE))
 
         runner.assert_called_once()
+
+
+class TestEncryptionTokenGate:
+    def test_content_op_without_token_fails_before_the_client(self):
+        # S5a: an encrypted store with no token fails the gate up front — the
+        # expensive client is never called.
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.return_value = None
+        blob = create_autospec(BlobStorePort)
+        blob.ensure_available_for_content.side_effect = EncryptionTokenRequired("need token")
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        with pytest.raises(EncryptionTokenRequired):
+            svc.execute(_Cmd())  # CACHE depth stores output → gated
+
+        runner.assert_not_called()
+
+    def test_meter_depth_skips_the_token_gate(self):
+        # A DB-only METER run touches no blob, so the token gate is never consulted.
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.return_value = None
+        blob = create_autospec(BlobStorePort)
+        blob.ensure_available_for_content.side_effect = EncryptionTokenRequired("need token")
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        svc.execute(_Cmd(persistence_depth=PersistenceDepth.METER))
+
+        runner.assert_called_once()
+        blob.ensure_available_for_content.assert_not_called()
