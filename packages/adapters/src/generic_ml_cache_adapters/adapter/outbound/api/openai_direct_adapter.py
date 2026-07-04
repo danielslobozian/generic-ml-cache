@@ -23,6 +23,7 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
+from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
 
 _BASE_URL = "https://api.openai.com/v1"
 
@@ -65,7 +66,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
     def _api_key_value(self) -> str:
         key = self._api_key or os.environ.get("OPENAI_API_KEY", "")
         if not key:
-            raise RuntimeError(
+            raise ConfigError(
                 "OPENAI_API_KEY is not set. Export it or pass api_key= to OpenAIDirectAdapter."
             )
         return key
@@ -112,7 +113,9 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenAI API error {exc.code}: {error_body}") from exc
+            raise ProviderApiError(
+                provider="openai", status_code=exc.code, body=error_body
+            ) from exc
 
     def _get(self, path: str) -> dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
@@ -125,7 +128,9 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"OpenAI API error {exc.code}: {error_body}") from exc
+            raise ProviderApiError(
+                provider="openai", status_code=exc.code, body=error_body
+            ) from exc
 
     def _extract_text(self, response: dict[str, Any]) -> str:
         # Traverse output[*].content[*] and collect parts with type "output_text".

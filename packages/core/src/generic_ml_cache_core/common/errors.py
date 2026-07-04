@@ -176,6 +176,26 @@ class PersistenceContractOutdated(CacheError):
     code: ClassVar[str] = "store.contract_outdated"
 
 
+class ProviderApiError(CacheError):
+    """Raised when a provider's HTTP API returns an error response (G-1/V28, §10).
+
+    Translates the foreign ``urllib.error.HTTPError`` at the API-adapter boundary
+    into the project's own vocabulary, so a caller never sees a leaked urllib type.
+    Carries the ``provider`` name, HTTP ``status_code``, and response ``body`` — the
+    status code lets the retry policy (V29) decide retryability (429/5xx retryable,
+    4xx not), and the body is preserved for diagnostics. Java: Spring
+    ``RestClientResponseException`` / ``DataAccessException`` translation.
+    """
+
+    code: ClassVar[str] = "provider.api_error"
+
+    def __init__(self, provider: str, status_code: int, body: str) -> None:
+        self.provider = provider
+        self.status_code = status_code
+        self.body = body
+        super().__init__(f"{provider} API error {status_code}: {body}")
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

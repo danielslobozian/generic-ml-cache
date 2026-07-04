@@ -46,6 +46,7 @@ _CACHE_ERROR_HTTP: dict[str, int] = {
     "crypto.token_required": 401,
     "crypto.state_error": 409,
     "store.locked": 409,
+    "provider.api_error": 502,  # upstream provider returned an error (V28)
 }
 _LOG_FILE_NAME = "gmlcache.log"
 

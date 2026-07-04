@@ -23,6 +23,7 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
+from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
 
 from generic_ml_cache_adapters.adapter.outbound.api._gemini_thinking import GeminiThinkingConfig
 
@@ -66,7 +67,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
     def _api_key_value(self) -> str:
         key = self._api_key or os.environ.get("GEMINI_API_KEY", "")
         if not key:
-            raise RuntimeError(
+            raise ConfigError(
                 "GEMINI_API_KEY is not set. Export it or pass api_key= to GeminiDirectAdapter."
             )
         return key
@@ -111,7 +112,9 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Gemini API error {exc.code}: {error_body}") from exc
+            raise ProviderApiError(
+                provider="gemini", status_code=exc.code, body=error_body
+            ) from exc
 
     def _post(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
@@ -129,7 +132,9 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Gemini API error {exc.code}: {error_body}") from exc
+            raise ProviderApiError(
+                provider="gemini", status_code=exc.code, body=error_body
+            ) from exc
 
     def _extract_text(self, response: dict[str, Any]) -> str:
         candidates = response.get("candidates", [])

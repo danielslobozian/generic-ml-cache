@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
 
 from generic_ml_cache_adapters.adapter.outbound.api.openai_direct_adapter import OpenAIDirectAdapter
 
@@ -354,7 +355,7 @@ def test_run_posts_to_responses_endpoint():
 def test_missing_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     adapter = OpenAIDirectAdapter()
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+    with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
         adapter.run(_request())
 
 
@@ -381,7 +382,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
         adapter = _adapter()
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             adapter.run(_request())
 
 
@@ -444,5 +445,5 @@ def test_list_models_http_error_raises_runtime_error():
         fp=io.BytesIO(error_body),
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             _adapter().list_models()

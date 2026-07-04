@@ -16,6 +16,7 @@ from generic_ml_cache_core.common.errors import (
     EncryptionStateError,
     EncryptionTokenRequired,
     InputFileError,
+    ProviderApiError,
     RunInterrupted,
     StoreLocked,
     UnknownClient,
@@ -41,10 +42,20 @@ def test_base_cache_error_has_fallback_code() -> None:
         (EncryptionTokenRequired, "crypto.token_required"),
         (EncryptionStateError, "crypto.state_error"),
         (StoreLocked, "store.locked"),
+        (ProviderApiError, "provider.api_error"),
     ],
 )
 def test_concrete_error_code(cls, expected: str) -> None:
     assert cls.code == expected
+
+
+def test_provider_api_error_carries_provider_status_and_body() -> None:
+    exc = ProviderApiError(provider="anthropic", status_code=429, body='{"error":"rate"}')
+    assert isinstance(exc, CacheError)
+    assert exc.provider == "anthropic"
+    assert exc.status_code == 429
+    assert exc.body == '{"error":"rate"}'
+    assert "429" in str(exc)  # the status code is in the message (retry policy + diagnostics)
 
 
 def test_code_accessible_on_raised_instance() -> None:

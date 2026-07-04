@@ -23,6 +23,7 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
+from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
 
 _BASE_URL = "https://api.anthropic.com/v1"
 _API_VERSION = "2023-06-01"
@@ -71,7 +72,7 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
     def _api_key_value(self) -> str:
         key = self._api_key or os.environ.get("ANTHROPIC_API_KEY", "")
         if not key:
-            raise RuntimeError(
+            raise ConfigError(
                 "ANTHROPIC_API_KEY is not set. "
                 "Export it or pass api_key= to AnthropicDirectAdapter."
             )
@@ -121,7 +122,9 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Anthropic API error {exc.code}: {error_body}") from exc
+            raise ProviderApiError(
+                provider="anthropic", status_code=exc.code, body=error_body
+            ) from exc
 
     def _get(self, path: str) -> dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)
@@ -134,7 +137,9 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Anthropic API error {exc.code}: {error_body}") from exc
+            raise ProviderApiError(
+                provider="anthropic", status_code=exc.code, body=error_body
+            ) from exc
 
     def _extract_text(self, response: dict[str, Any]) -> str:
         content = response.get("content", [])
