@@ -883,6 +883,32 @@ def test_missing_output_blob_offline_degrades_to_a_clean_miss():
         harness.service.execute(_managed_command(cache_mode=CacheMode.OFFLINE))
 
 
+def test_self_heal_removes_the_corrupt_executions_own_blobs_no_orphan():
+    # X25/X6: a managed run stores STDOUT + STDERR blobs. Corrupt the cassette by
+    # dropping ONE blob; on the next hit the missing blob triggers self-heal, which
+    # must delete the execution's OTHER (still-present) blob too — each blob is
+    # execution-owned, so leaving it behind would be an undiscoverable orphan (the
+    # re-run mints new execution-scoped keys and never reuses the old one).
+    runner = FakeClientRunner(
+        ClientRunResult(exit_code=0, stdout="v1\n"),
+        ClientRunResult(exit_code=0, stdout="v2\n"),
+    )
+    harness = _Harness(client_runner=runner)
+    harness.service.execute(_managed_command())
+
+    first_run_keys = list(harness.blob.store.keys())
+    assert len(first_run_keys) == 2  # STDOUT + STDERR
+    surviving_blob, dropped_blob = first_run_keys
+    del harness.blob.store[dropped_blob]  # corrupt: one blob vanishes
+
+    harness.service.execute(_managed_command())  # hit → self-heal → re-run
+
+    # The corrupt execution's other blob was removed, not orphaned; only the fresh
+    # re-run's (distinct, execution-scoped) blobs remain.
+    assert surviving_blob not in harness.blob.store
+    assert dropped_blob not in harness.blob.store
+
+
 # --- W24: role-port split of LocalClientPort ---------------------------------
 
 

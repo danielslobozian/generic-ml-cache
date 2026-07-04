@@ -267,8 +267,19 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             return self._serve_hit(command, execution_key, current)
         except (StoreCorrupt, ArtifactBlobMissing) as exc:
             self._log_self_heal(execution_key, exc)
-            self._save.remove_execution(current.execution_id)
+            self._remove_execution_and_blobs(current)
             return None
+
+    def _remove_execution_and_blobs(self, execution: MlExecution) -> None:
+        """Quarantine a corrupt execution: drop its rows AND its own blobs. Each blob
+        is owned by exactly one execution (X25), so removing this execution's blobs
+        frees exactly its own bytes and leaves no undiscoverable orphan once the rows
+        that name them are gone — the fresh re-run mints new execution-scoped keys, so
+        the old blobs would otherwise be unreachable garbage (X6). ``remove`` is a
+        no-op for a blob already missing, so the missing-blob self-heal stays clean."""
+        self._save.remove_execution(execution.execution_id)
+        for artifact in execution.artifacts:
+            self._blob_store.remove(artifact.blob_key)
 
     def _log_self_heal(self, execution_key: str, exc: BaseException) -> None:
         if self._diag:
