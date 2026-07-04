@@ -6,7 +6,5 @@
 -- keep a NULL id (they are historical and never re-targeted), while every new row
 -- carries a unique UUID. A UNIQUE index treats the multiple legacy NULLs as
 -- distinct, so it constrains only the real ids.
--- NOTE the migration runner still splits on the statement separator, so this
--- comment uses none.
 ALTER TABLE executions ADD COLUMN execution_id TEXT;
 CREATE UNIQUE INDEX idx_executions_execution_id ON executions(execution_id);

@@ -5,8 +5,7 @@
 -- only STORED, and an execution is servable (output_persisted=1) only when all of
 -- its artifacts are STORED. Plain ADD COLUMN (no FK/unique change, no table rebuild).
 -- Existing rows predate the feature and their blobs already exist, so they default
--- to 'stored' with a NULL persisted_at (unknown, pre-status). NOTE the migration
--- runner splits on the statement separator, so this comment avoids using one.
+-- to 'stored' with a NULL persisted_at (unknown, pre-status).
 ALTER TABLE artifacts ADD COLUMN status TEXT NOT NULL DEFAULT 'stored';
 ALTER TABLE artifacts ADD COLUMN persisted_at TEXT;
 ALTER TABLE artifacts ADD COLUMN status_detail TEXT;
