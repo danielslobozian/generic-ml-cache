@@ -17,6 +17,9 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
     ApiCallIdentity,
 )
+from generic_ml_cache_core.application.domain.model.identity.api_passthrough_call_identity import (
+    ApiPassthroughCallIdentity,
+)
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.identity.gateway_call_identity import (
     GatewayCallIdentity,
@@ -81,6 +84,14 @@ def serialize_identity(identity: CallIdentity) -> SerializedIdentity:
                 }
             ),
         )
+    if isinstance(identity, ApiPassthroughCallIdentity):
+        return SerializedIdentity(
+            kind=ExecutionKind.API_PASSTHROUGH.value,
+            client=identity.client,
+            model="",
+            effort="",
+            identity_json=json.dumps({"body_fingerprint": identity.body_fingerprint}),
+        )
     if isinstance(identity, GatewayCallIdentity):
         return SerializedIdentity(
             kind=_GATEWAY_KIND,
@@ -118,6 +129,11 @@ def deserialize_identity(serialized: SerializedIdentity) -> CallIdentity:
             prompt_fingerprint=fields["prompt_fingerprint"],
             system_fingerprint=fields.get("system_fingerprint"),
             effort=serialized.effort,
+        )
+    if serialized.kind == ExecutionKind.API_PASSTHROUGH.value:
+        return ApiPassthroughCallIdentity(
+            client=serialized.client,
+            body_fingerprint=fields["body_fingerprint"],
         )
     if serialized.kind == _GATEWAY_KIND:
         return GatewayCallIdentity(cache_key=fields["cache_key"])

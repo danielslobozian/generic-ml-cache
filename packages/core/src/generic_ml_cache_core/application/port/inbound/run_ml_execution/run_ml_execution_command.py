@@ -26,6 +26,10 @@ class RunMlExecutionCommand:
     ``client_args``, ``grants``) are meaningful only for LOCAL_MANAGED; they
     default to empty/false and are ignored on other kinds.
     ``native_args`` is meaningful only for LOCAL_PASSTHROUGH.
+    ``raw_body``/``forward_headers`` are meaningful only for API_PASSTHROUGH: the
+    opaque request bytes relayed verbatim (``raw_body`` is keyed on its digest) and
+    the caller's headers forwarded to the upstream (as ``(name, value)`` pairs so the
+    command stays hashable; never keyed or stored).
     """
 
     execution_kind: ExecutionKind
@@ -40,6 +44,8 @@ class RunMlExecutionCommand:
     scan_trust: bool = False
     client_args: tuple[str, ...] = ()
     native_args: tuple[str, ...] = ()
+    raw_body: bytes = b""
+    forward_headers: tuple[tuple[str, str], ...] = ()
     grants: tuple[str, ...] = ()
     cache_mode: CacheMode = CacheMode.CACHE
     persistence_depth: PersistenceDepth = PersistenceDepth.CACHE
@@ -59,12 +65,21 @@ class RunMlExecutionCommand:
             "tags",
         ):
             object.__setattr__(self, name, tuple(getattr(self, name)))
+        # Store the forwarded headers as immutable ``(name, value)`` pairs so the
+        # keyed command stays hashable; a driver hands them as ``headers.items()``.
+        object.__setattr__(
+            self,
+            "forward_headers",
+            tuple((str(name), str(value)) for name, value in self.forward_headers),
+        )
 
     @property
     def is_uncacheable(self) -> bool:
         if self.execution_kind is ExecutionKind.API:
             return False
         if self.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
+            return False
+        if self.execution_kind is ExecutionKind.API_PASSTHROUGH:
             return False
         return is_call_uncacheable(self.allow_paths, self.scan_trust)
 

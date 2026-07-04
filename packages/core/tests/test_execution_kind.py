@@ -19,13 +19,17 @@ def test_api_value():
     assert ExecutionKind.API.value == "api"
 
 
+def test_api_passthrough_value():
+    assert ExecutionKind.API_PASSTHROUGH.value == "api_passthrough"
+
+
 def test_string_roundtrip():
     for execution_kind in ExecutionKind:
         assert ExecutionKind(execution_kind.value) is execution_kind
 
 
-def test_exactly_three_kinds():
-    assert len(ExecutionKind) == 3
+def test_exactly_four_kinds():
+    assert len(ExecutionKind) == 4
 
 
 def test_local_kinds_share_prefix():

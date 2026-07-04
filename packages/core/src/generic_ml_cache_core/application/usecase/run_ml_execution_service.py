@@ -13,9 +13,15 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
     ApiCallIdentity,
 )
+from generic_ml_cache_core.application.domain.model.identity.api_passthrough_call_identity import (
+    ApiPassthroughCallIdentity,
+)
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
+)
+from generic_ml_cache_core.application.domain.model.run.api_passthrough_request import (
+    ApiPassthroughRequest,
 )
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
@@ -33,6 +39,9 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_exec
 )
 from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
+)
+from generic_ml_cache_core.application.port.outbound.api_passthrough_runner_port import (
+    ApiPassthroughRunnerPort,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
@@ -62,7 +71,11 @@ from generic_ml_cache_core.application.usecase.cached_ml_execution_service impor
 )
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
-from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_checksum
+from generic_ml_cache_core.common.checksum import (
+    file_content_fingerprint,
+    fingerprint_arguments,
+    text_checksum,
+)
 from generic_ml_cache_core.common.errors import UnknownClient, UnsupportedExecutionMode
 
 
@@ -109,6 +122,11 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
                 client=command.client,
                 native_args_fingerprint=fingerprint_arguments(command.native_args),
             )
+        if command.execution_kind is ExecutionKind.API_PASSTHROUGH:
+            return ApiPassthroughCallIdentity(
+                client=command.client,
+                body_fingerprint=file_content_fingerprint(command.raw_body),
+            )
         return ApiCallIdentity(
             provider=command.client,
             model=command.model,
@@ -148,28 +166,11 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         elif command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             # The adapter makes the raw call; core packages it (no files).
             result = self._run_passthrough(command, runner)
+        elif command.execution_kind is ExecutionKind.API_PASSTHROUGH:
+            # The relay forwards the raw body verbatim and returns the wire response.
+            result = self._run_api_passthrough(command, runner)
         else:
-            # API: the MlRunnerPort.run path — a single REST call. Check the
-            # capability before use so a miswired registry (an adapter that is not
-            # actually an MlRunnerPort) yields a named error, not an AttributeError
-            # from a blind cast (W18).
-            if not isinstance(runner, MlRunnerPort):
-                raise UnsupportedExecutionMode(
-                    f"client {command.client!r} does not support "
-                    f"{command.execution_kind.value} execution"
-                )
-            request = MlRequest(
-                model=command.model,
-                effort=command.effort,
-                context=command.context,
-                prompt=command.prompt,
-                user_system_prompt=command.user_system_prompt,
-                input_file_paths=command.input_file_paths,
-                allow_paths=command.allow_paths,
-                client_args=command.client_args,
-                grants=frozenset(command.grants),
-            )
-            result = runner.run(request)
+            result = self._run_api(command, runner)
         if self._diag:
             self._diag.debug(
                 "invoking client EXIT",
@@ -249,6 +250,58 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
             token_usage=answer.token_usage,
         )
 
+    def _run_api(
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
+    ) -> ClientRunResult:
+        """The structured API path — a single REST call through MlRunnerPort. Check
+        the capability before use so a miswired registry (an adapter that is not
+        actually an MlRunnerPort) yields a named error, not an AttributeError from a
+        blind cast (W18)."""
+        if not isinstance(runner, MlRunnerPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support "
+                f"{command.execution_kind.value} execution"
+            )
+        request = MlRequest(
+            model=command.model,
+            effort=command.effort,
+            context=command.context,
+            prompt=command.prompt,
+            user_system_prompt=command.user_system_prompt,
+            input_file_paths=command.input_file_paths,
+            allow_paths=command.allow_paths,
+            client_args=command.client_args,
+            grants=frozenset(command.grants),
+        )
+        return runner.run(request)
+
+    def _run_api_passthrough(
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
+    ) -> ClientRunResult:
+        """Relay the raw request bytes through the API-passthrough adapter and
+        package the verbatim wire response as a single stdout blob (no files). The
+        adapter maps the upstream HTTP status onto the answer's exit code, so a 200
+        becomes a servable success and any other status a non-cached failure that is
+        still returned. Check the capability before use so a miswired registry yields
+        a named error, not an AttributeError (W18)."""
+        if not isinstance(runner, ApiPassthroughRunnerPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support API-passthrough execution"
+            )
+        client = runner
+        answer = client.execute_api_passthrough(
+            ApiPassthroughRequest(
+                raw_body=command.raw_body, forward_headers=dict(command.forward_headers)
+            )
+        )
+        return ClientRunResult(
+            exit_code=answer.exit_code,
+            stdout=answer.stdout,
+            stderr=answer.stderr,
+            files=(),
+            token_usage=answer.token_usage,
+        )
+
     def _after_record(self, execution_key: str) -> None:
         if self._purge is not None and self._max_size is not None:
             self._purge.evict_to_quota(EvictToQuotaCommand(self._max_size))
@@ -257,7 +310,10 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         return command.execution_kind
 
     def _journal_fields(self, command: RunMlExecutionCommand) -> tuple[str, str, str]:
-        if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
+        if command.execution_kind in (
+            ExecutionKind.LOCAL_PASSTHROUGH,
+            ExecutionKind.API_PASSTHROUGH,
+        ):
             return command.client, "", ""
         return command.client, command.model, command.effort
 
@@ -273,6 +329,8 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             payload = json.dumps(list(command.native_args))
             return [(ArtifactType.INPUT_ARGS, None, payload.encode("utf-8"))]
+        if command.execution_kind is ExecutionKind.API_PASSTHROUGH:
+            return [(ArtifactType.INPUT_MESSAGES, None, command.raw_body)]
         parts: list[tuple[ArtifactType, str | None, bytes]] = []
         if command.context:
             parts.append((ArtifactType.INPUT_CONTEXT, None, command.context.encode("utf-8")))

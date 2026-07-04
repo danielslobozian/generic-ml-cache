@@ -19,8 +19,14 @@ class ExecutionKind(enum.Enum):
                          stdout/stderr/exit can still be cached.
     API               -- gmlcache calls an ML provider API directly. No local
                          client executable, no filesystem isolation.
+    API_PASSTHROUGH   -- gmlcache relays a raw provider-API request verbatim: the
+                         opaque request bytes are forwarded to the upstream
+                         endpoint and the raw response bytes are cached and
+                         returned. Keyed on the body fingerprint, not a
+                         structured request. Backs the caching HTTP gateway.
     """
 
     LOCAL_MANAGED = "local_managed"
     LOCAL_PASSTHROUGH = "local_passthrough"
     API = "api"
+    API_PASSTHROUGH = "api_passthrough"
