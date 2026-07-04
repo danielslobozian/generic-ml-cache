@@ -54,6 +54,7 @@ from generic_ml_cache_core.application.port.outbound.workspace_port import Works
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import (
     CacheMiss,
+    RunInterrupted,
     UnknownClient,
     UnsupportedExecutionMode,
 )
@@ -772,3 +773,34 @@ def test_wrong_kind_runner_raises_unsupported_execution_mode():
     service = _service_with_runners({"claude": FakeApiClient()})
     with pytest.raises(UnsupportedExecutionMode):
         service.execute(_managed_command(client="claude"))
+
+
+# --- S3c-ii: clean up the in-progress row when the client raises -------------
+
+
+class _RaisingRunner(FakeClientRunner):
+    def __init__(self, exc: BaseException) -> None:
+        super().__init__()
+        self._exc = exc
+
+    def execute_managed(self, request, workspace) -> ClientAnswer:
+        raise self._exc
+
+
+def test_client_raise_marks_the_in_progress_row_failed_not_dangling():
+    harness = _Harness(client_runner=_RaisingRunner(ValueError("provider died")))
+    with pytest.raises(ValueError):
+        harness.service.execute(_managed_command())
+    keys = harness.repo.all_execution_keys()
+    assert len(keys) == 1
+    history = harness.repo.find_all(keys[0])
+    assert len(history) == 1  # one row, transitioned in place — no dangling IN_PROGRESS
+    assert history[0].execution_state is ExecutionState.FAILED
+
+
+def test_run_interrupted_removes_the_in_progress_row_entirely():
+    harness = _Harness(client_runner=_RaisingRunner(RunInterrupted("stopped by signal")))
+    with pytest.raises(RunInterrupted):
+        harness.service.execute(_managed_command())
+    # A requested stop is never recorded — the row is gone.
+    assert harness.repo.all_execution_keys() == []

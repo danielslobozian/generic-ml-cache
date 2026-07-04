@@ -102,6 +102,14 @@ class SaveMlRunPort(ABC):
         read views. Raises ``StoreConsistencyError`` if there is no row to update."""
 
     @abstractmethod
+    def remove_execution(self, execution_id: ExecutionId) -> None:
+        """Delete the single execution identified by ``execution_id`` and its
+        artifact / usage / tag rows — used to clean up an IN_PROGRESS row when the
+        run must NOT be recorded (a requested stop, ``RunInterrupted``). Targets only
+        that one row (never the whole key), so a prior servable run for the same key
+        is untouched. Idempotent — a no-op if the id is already gone (S3c-ii)."""
+
+    @abstractmethod
     def finalize_output_persisted(self, execution_id: ExecutionId) -> None:
         """Mark the execution identified by ``execution_id`` output-persisted
         (servable) and supersede the prior current execution — called once all its

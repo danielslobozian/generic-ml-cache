@@ -52,6 +52,7 @@ class MlRunStore(Protocol):
         self, execution_id: ExecutionId, blob_key: BlobKey, detail: str
     ) -> None: ...
     def finalize_output_persisted(self, execution_id: ExecutionId) -> None: ...
+    def remove_execution(self, execution_id: ExecutionId) -> None: ...
     def blob_reference_count(self, blob_key: BlobKey) -> int: ...
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]: ...
     def soft_purge_execution(self, execution_key: str) -> None: ...
@@ -229,6 +230,24 @@ class MlRunStoreConformance:
         store = self.make_store(tmp_path)
         with pytest.raises(StoreConsistencyError):
             store.finalize_output_persisted(ExecutionId.generate())
+
+    def test_remove_execution_deletes_only_that_row(self, tmp_path: Path) -> None:
+        # Removing the IN_PROGRESS row of an interrupted run must not touch a prior
+        # servable run for the same key (S3c-ii).
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity, b"kept"))
+        interrupted = _in_progress(identity)
+        store.save(interrupted)
+        assert len(store.find_all(key)) == 2
+        store.remove_execution(interrupted.execution_id)
+        remaining = store.find_all(key)
+        assert len(remaining) == 1
+        assert remaining[0].artifacts[0].blob_key == BlobKey("blob" + b"kept".hex())
+
+    def test_remove_execution_is_idempotent(self, tmp_path: Path) -> None:
+        self.make_store(tmp_path).remove_execution(ExecutionId.generate())  # must not raise
 
     def test_runs_awaiting_persistence_lists_the_unfinished_run(self, tmp_path: Path) -> None:
         store = self.make_store(tmp_path)

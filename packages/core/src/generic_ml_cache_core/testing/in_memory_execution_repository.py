@@ -160,6 +160,18 @@ class InMemoryExecutionRepository(
         execution.artifacts[:] = resolved
         return matched
 
+    def remove_execution(self, execution_id: ExecutionId) -> None:
+        located = self._locate_by_id(execution_id)
+        if located is None:
+            return  # already gone — idempotent cleanup
+        execution_key, execution = located
+        self._by_key[execution_key].remove(execution)
+        # If it was the last execution for the key, drop the key entirely so an
+        # interrupted run leaves no trace (matching the durable adapter).
+        if not self._by_key[execution_key]:
+            self._by_key.pop(execution_key)
+            self._tags_by_key.pop(execution_key, None)
+
     def _require_by_id(self, execution_id: ExecutionId) -> tuple[str, MlExecution]:
         located = self._locate_by_id(execution_id)
         if located is None:

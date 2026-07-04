@@ -296,6 +296,28 @@ class SqliteExecutionRepository(
                 (row_id,),
             )
 
+    def remove_execution(self, execution_id: ExecutionId) -> None:
+        with self._write_transaction() as connection:
+            row = connection.execute(
+                "SELECT id, execution_key FROM executions WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+            if row is None:
+                return  # already gone — idempotent cleanup
+            row_id, execution_key = int(row[0]), row[1]
+            connection.execute("DELETE FROM artifacts WHERE execution_id = ?", (row_id,))
+            connection.execute("DELETE FROM token_usage WHERE execution_id = ?", (row_id,))
+            connection.execute("DELETE FROM execution_tags WHERE execution_id = ?", (row_id,))
+            connection.execute("DELETE FROM executions WHERE id = ?", (row_id,))
+            # If this was the last execution for the key, drop the now-orphan identity
+            # so the key leaves no trace (the interrupted run was never recorded).
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM executions WHERE execution_key = ?", (execution_key,)
+            ).fetchone()[0]
+            if not remaining:
+                connection.execute(
+                    "DELETE FROM call_identities WHERE execution_key = ?", (execution_key,)
+                )
+
     @staticmethod
     def _require_row_id(connection: DbConnection, execution_id: ExecutionId) -> int:
         row = connection.execute(

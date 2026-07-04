@@ -18,6 +18,10 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     ArtifactType,
 )
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
+from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
+    ExecutionFailure,
+    FailureReason,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
@@ -39,6 +43,7 @@ from generic_ml_cache_core.common.checksum import file_content_fingerprint
 from generic_ml_cache_core.common.errors import (
     ArtifactBlobMissing,
     CacheMiss,
+    RunInterrupted,
     StoreUnavailable,
 )
 
@@ -391,13 +396,45 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
 
             if self._diag:
                 self._diag.info("cache MISS — running client", key=execution_key)
-            client_run_result = self._run_client(command)
+            try:
+                client_run_result = self._run_client(command)
+            except RunInterrupted:
+                # A requested stop is not a result and must NEVER be recorded — drop
+                # the IN_PROGRESS row entirely, then re-raise (S3c-ii).
+                self._save.remove_execution(in_progress.execution_id)
+                raise
+            except Exception as exc:
+                # The client raised mid-call (not installed, network death, timeout,
+                # provider error). Transition the IN_PROGRESS row to FAILED so no
+                # dangling half-entry survives — it is visible but never servable —
+                # then re-raise the already-named error unchanged (S3c-ii / W2).
+                self._abandon_in_progress_as_failed(in_progress, exc)
+                raise
             should_store = command.should_persist(client_run_result.succeeded)
             if not should_store:
                 return self._record_unstored(
                     command, in_progress, execution_key, client_run_result, _t
                 )
             return self._record_stored(command, in_progress, execution_key, client_run_result, _t)
+
+    def _abandon_in_progress_as_failed(self, in_progress: MlExecution, exc: BaseException) -> None:
+        """Transition the IN_PROGRESS row to FAILED after the client raised, so the
+        run is recorded as a visible failure rather than a dangling half-entry, and
+        never becomes servable (S3c-ii). The named error itself is re-raised by the
+        caller, unchanged."""
+        self._save.record_outcome(
+            replace(
+                in_progress,
+                execution_state=ExecutionState.FAILED,
+                failure=ExecutionFailure(reason=FailureReason.CLIENT_ERROR, message=str(exc)),
+            )
+        )
+        if self._diag:
+            self._diag.error(
+                "client raised — in-progress row marked FAILED",
+                execution_id=in_progress.execution_id,
+                exc=exc,
+            )
 
     def _record_unstored(
         self,
