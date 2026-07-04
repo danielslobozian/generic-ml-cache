@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
@@ -42,6 +43,7 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
 from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
     SqliteExecutionRepository,
 )
+from generic_ml_cache_adapters.db import DbCursor
 from generic_ml_cache_adapters.migration_runner import run_migrations
 
 _MOMENT = datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
@@ -50,6 +52,58 @@ _MOMENT = datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
 class FixedClock(ClockPort):
     def now(self) -> datetime:
         return _MOMENT
+
+
+class _NullCursor:
+    lastrowid: int | None = 0
+    rowcount: int = 0
+
+    def fetchone(self) -> Any:
+        return None
+
+    def fetchall(self) -> list[Any]:
+        return []
+
+
+class _RecordingConnection:
+    """A DbConnection spy that records the transaction calls it receives, so a
+    test can assert the write helper commits on success / rolls back on error."""
+
+    def __init__(self, *, fail_on_execute: bool = False) -> None:
+        self.calls: list[str] = []
+        self._fail_on_execute = fail_on_execute
+
+    def execute(self, sql: str, parameters: Any = ()) -> DbCursor:
+        self.calls.append("execute")
+        if self._fail_on_execute:
+            raise sqlite3.OperationalError("simulated write failure")
+        return _NullCursor()
+
+    def commit(self) -> None:
+        self.calls.append("commit")
+
+    def rollback(self) -> None:
+        self.calls.append("rollback")
+
+    def close(self) -> None:
+        self.calls.append("close")
+
+
+def test_write_commits_then_closes_on_success(tmp_path):
+    connection = _RecordingConnection()
+    repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
+    repository.mark_artifacts_stored("some-key", "some-blob")
+    assert connection.calls == ["execute", "commit", "close"]
+
+
+def test_write_rolls_back_then_closes_on_error(tmp_path):
+    connection = _RecordingConnection(fail_on_execute=True)
+    repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
+    with pytest.raises(sqlite3.OperationalError):
+        repository.mark_artifacts_stored("some-key", "some-blob")
+    # Rollback is explicit — never a silent reliance on close-time auto-rollback —
+    # and commit is never reached on the error path.
+    assert connection.calls == ["execute", "rollback", "close"]
 
 
 def _make_factory(db_path):

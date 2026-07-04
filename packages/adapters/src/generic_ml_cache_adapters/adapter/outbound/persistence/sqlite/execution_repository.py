@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any
 
@@ -89,6 +90,22 @@ class SqliteExecutionRepository(
     def _connect(self) -> DbConnection:
         return self._conn_factory()
 
+    @contextmanager
+    def _write_transaction(self) -> Generator[DbConnection]:
+        """A write connection scoped to one transaction: commit on success, roll
+        back on any error, always close. Makes the rollback explicit rather than
+        leaning on a driver's close-time auto-rollback — the ``DbConnection`` seam
+        is DB-API-shaped, and another engine need not roll back on close."""
+        connection = self._connect()
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     # -- reads ------------------------------------------------------------
 
     def find_current(self, execution_key: str) -> MlExecution | None:
@@ -155,21 +172,16 @@ class SqliteExecutionRepository(
     def save(self, execution: MlExecution) -> None:
         execution_key = execution.call_identity.generate_key()
         stamped_at = self._clock.now()
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             self._upsert_identity(connection, execution_key, execution.call_identity)
             if self._is_servable(execution):
                 self._supersede_prior_current(connection, execution_key, stamped_at)
             execution_id = self._insert_execution(connection, execution_key, execution, stamped_at)
             self._insert_artifacts(connection, execution_id, execution.artifacts)
             self._insert_token_usage(connection, execution_id, execution.token_usage)
-            connection.commit()
-        finally:
-            connection.close()
 
     def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             connection.execute(
                 "UPDATE artifacts SET status = ?, persisted_at = ?, status_detail = NULL "
                 "WHERE blob_key = ? AND execution_id = "
@@ -181,22 +193,15 @@ class SqliteExecutionRepository(
                     execution_key,
                 ),
             )
-            connection.commit()
-        finally:
-            connection.close()
 
     def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             connection.execute(
                 "UPDATE artifacts SET status = ?, status_detail = ? "
                 "WHERE blob_key = ? AND execution_id = "
                 "(SELECT id FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1)",
                 (ArtifactStatus.FAILED.value, detail, blob_key, execution_key),
             )
-            connection.commit()
-        finally:
-            connection.close()
 
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]:
         connection = self._connect()
@@ -220,8 +225,7 @@ class SqliteExecutionRepository(
         return [UnpersistedRun(key, tuple(blob_keys)) for key, blob_keys in grouped.items()]
 
     def finalize_output_persisted(self, execution_key: str) -> None:
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             row = connection.execute(
                 "SELECT id, state FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1",
                 (execution_key,),
@@ -239,9 +243,6 @@ class SqliteExecutionRepository(
                 "UPDATE executions SET output_persisted = 1 WHERE id = ?",
                 (latest_id,),
             )
-            connection.commit()
-        finally:
-            connection.close()
 
     @staticmethod
     def _upsert_identity(
@@ -357,8 +358,7 @@ class SqliteExecutionRepository(
     def add_tags(self, execution_key: str, tags: list[str]) -> None:
         if not tags:
             return
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             execution_id = self._current_execution_id(connection, execution_key)
             if execution_id is None:
                 return
@@ -368,9 +368,6 @@ class SqliteExecutionRepository(
                     "INSERT OR IGNORE INTO execution_tags (execution_id, tag) VALUES (?, ?)",
                     (execution_id, tag),
                 )
-            connection.commit()
-        finally:
-            connection.close()
 
     def tags_for(self, execution_key: str) -> list[str]:
         connection = self._connect()
@@ -389,8 +386,7 @@ class SqliteExecutionRepository(
     def add_input_artifacts(self, execution_key: str, artifacts: list[Artifact]) -> None:
         if not artifacts:
             return
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             execution_id = self._current_execution_id(connection, execution_key)
             if execution_id is None:
                 return
@@ -404,9 +400,6 @@ class SqliteExecutionRepository(
             if already is not None:
                 return
             self._insert_artifacts(connection, execution_id, artifacts)
-            connection.commit()
-        finally:
-            connection.close()
 
     # -- reconstruction ---------------------------------------------------
 
@@ -548,8 +541,7 @@ class SqliteExecutionRepository(
             connection.close()
 
     def soft_purge_execution(self, execution_key: str) -> None:
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             connection.execute(
                 "DELETE FROM artifacts WHERE execution_id IN "
                 "(SELECT id FROM executions WHERE execution_key = ?)",
@@ -559,13 +551,9 @@ class SqliteExecutionRepository(
                 "UPDATE executions SET output_persisted = 0 WHERE execution_key = ?",
                 (execution_key,),
             )
-            connection.commit()
-        finally:
-            connection.close()
 
     def hard_delete_execution(self, execution_key: str) -> None:
-        connection = self._connect()
-        try:
+        with self._write_transaction() as connection:
             connection.execute(
                 "DELETE FROM artifacts WHERE execution_id IN "
                 "(SELECT id FROM executions WHERE execution_key = ?)",
@@ -589,9 +577,6 @@ class SqliteExecutionRepository(
                 "DELETE FROM call_identities WHERE execution_key = ?",
                 (execution_key,),
             )
-            connection.commit()
-        finally:
-            connection.close()
 
     def total_stored_bytes(self) -> int:
         connection = self._connect()
