@@ -169,7 +169,7 @@ def build_application_api(
     session_tags = SessionTagsService(metrics)
     session_admin = SessionAdminService(specs=metrics, sessions=metrics)
     session_report = SessionReportService(
-        report_source=metrics, sessions=metrics, repository=repository
+        report_source=metrics, sessions=metrics, repository=repository, repair_source=repository
     )
     execution_query = ExecutionQueryService(repository)
     store_stats = StoreStatsService(metrics)

@@ -49,11 +49,15 @@ def build_session_report(
     session_id: str,
     events: Iterable[SessionEventRow],
     usage_by_key: dict[str, TokenUsage],
+    failed_persistence_count: int = 0,
 ) -> SessionReport:
     """Aggregate a session's journal rows into a :class:`SessionReport`.
 
     ``events`` are rows with ``ts`` / ``event`` / ``client`` / ``model`` / ``execution_key``
     (oldest first); ``usage_by_key`` maps an execution key to its :class:`TokenUsage`.
+    ``failed_persistence_count`` is how many of the session's runs never finished
+    persisting (C-4) — the caller supplies it, since it is a persistence-store fact,
+    not derivable from the journal alone.
     """
     models: dict[tuple[str, str], dict[str, int]] = {}
     days: dict[str, dict[str, int]] = {}
@@ -133,4 +137,5 @@ def build_session_report(
         span_end=by_day[-1].day if by_day else None,
         by_model=tuple(by_model),
         by_day=tuple(by_day),
+        runs_with_failed_persistence=failed_persistence_count,
     )

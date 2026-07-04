@@ -55,6 +55,10 @@ class SessionReport:
     span_end: str | None
     by_model: tuple[ModelUsage, ...]
     by_day: tuple[DayActivity, ...]
+    #: Runs in this session whose latest execution never finished persisting its
+    #: artifacts (a failed/interrupted blob write, C-4) — not servable until a
+    #: ``gmlcache repair`` reconciles them. 0 for a healthy session.
+    runs_with_failed_persistence: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "by_model", tuple(self.by_model))

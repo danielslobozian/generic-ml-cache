@@ -41,10 +41,18 @@ class _FakeRepo:
         return None  # no token usage available — the report counts it as unknown
 
 
+class _FakeRepair:
+    def __init__(self, awaiting=()):
+        self._awaiting = list(awaiting)
+
+    def runs_awaiting_persistence(self):
+        return self._awaiting
+
+
 def test_report_for_session_counts_events():
     metrics = _FakeMetrics({"s1": [_event(), _event(event="hit")]}, {})
     svc = SessionReportService(  # type: ignore[arg-type]  # duck-typed ports
-        report_source=metrics, sessions=metrics, repository=_FakeRepo()
+        report_source=metrics, sessions=metrics, repository=_FakeRepo(), repair_source=_FakeRepair()
     )
     report = svc.report_for_session(ReportForSessionCommand("s1"))
     assert report.session_id == "s1"
@@ -53,9 +61,24 @@ def test_report_for_session_counts_events():
     assert report.hits == 1
 
 
+def test_report_counts_runs_with_failed_persistence():
+    from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import UnpersistedRun
+
+    metrics = _FakeMetrics({"s1": [_event(execution_key="k1"), _event(execution_key="k2")]}, {})
+    # k1 is awaiting persistence (in the store's repair worklist); k2 is fine.
+    repair = _FakeRepair([UnpersistedRun("k1", ("blob-a",))])
+    svc = SessionReportService(  # type: ignore[arg-type]  # duck-typed ports
+        report_source=metrics, sessions=metrics, repository=_FakeRepo(), repair_source=repair
+    )
+    report = svc.report_for_session(ReportForSessionCommand("s1"))
+    assert report.runs_with_failed_persistence == 1
+
+
 def test_report_for_session_unknown_session_is_empty():
     metrics = _FakeMetrics({}, {})
-    svc = SessionReportService(report_source=metrics, sessions=metrics, repository=_FakeRepo())  # type: ignore[arg-type]
+    svc = SessionReportService(
+        report_source=metrics, sessions=metrics, repository=_FakeRepo(), repair_source=_FakeRepair()
+    )  # type: ignore[arg-type]
     report = svc.report_for_session(ReportForSessionCommand("nope"))
     assert report.invocations == 0
 
@@ -65,7 +88,9 @@ def test_report_for_tag_merges_sessions():
         {"s1": [_event()], "s2": [_event(), _event()]},
         {"t": ["s1", "s2"]},
     )
-    svc = SessionReportService(report_source=metrics, sessions=metrics, repository=_FakeRepo())  # type: ignore[arg-type]
+    svc = SessionReportService(
+        report_source=metrics, sessions=metrics, repository=_FakeRepo(), repair_source=_FakeRepair()
+    )  # type: ignore[arg-type]
     result = svc.report_for_tag(ReportForTagCommand("t"))
     assert result.tag == "t"
     assert result.session_count == 2
@@ -74,7 +99,9 @@ def test_report_for_tag_merges_sessions():
 
 def test_report_for_tag_no_sessions():
     metrics = _FakeMetrics({}, {})
-    svc = SessionReportService(report_source=metrics, sessions=metrics, repository=_FakeRepo())  # type: ignore[arg-type]
+    svc = SessionReportService(
+        report_source=metrics, sessions=metrics, repository=_FakeRepo(), repair_source=_FakeRepair()
+    )  # type: ignore[arg-type]
     result = svc.report_for_tag(ReportForTagCommand("missing"))
     assert result.session_count == 0
     assert result.report.invocations == 0

@@ -36,6 +36,7 @@ from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
     SessionReportSourcePort,
 )
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import ReadMlRunPort
+from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import RepairMlRunsPort
 
 
 class SessionReportService(ReportForSessionUseCase, ReportForTagUseCase):
@@ -46,22 +47,40 @@ class SessionReportService(ReportForSessionUseCase, ReportForTagUseCase):
         report_source: SessionReportSourcePort,
         sessions: SessionQueryPort,
         repository: ReadMlRunPort,
+        repair_source: RepairMlRunsPort,
     ) -> None:
         self._report_source = report_source
         self._sessions = sessions
         self._repository = repository
+        self._repair_source = repair_source
 
     def report_for_session(self, command: ReportForSessionCommand) -> SessionReport:
         events = self._report_source.session_events(command.session_id)
-        return build_session_report(command.session_id, events, self._usage_by_key(events))
+        return build_session_report(
+            command.session_id,
+            events,
+            self._usage_by_key(events),
+            self._failed_persistence_count(events),
+        )
 
     def report_for_tag(self, command: ReportForTagCommand) -> TagSessionReport:
         session_ids = self._sessions.session_ids_for_tag(command.tag)
         events: list[SessionEventRow] = []
         for session_id in session_ids:
             events.extend(self._report_source.session_events(session_id))
-        report = build_session_report(command.tag, events, self._usage_by_key(events))
+        report = build_session_report(
+            command.tag, events, self._usage_by_key(events), self._failed_persistence_count(events)
+        )
         return TagSessionReport(tag=command.tag, report=report, session_count=len(session_ids))
+
+    def _failed_persistence_count(self, events: Iterable[SessionEventRow]) -> int:
+        """How many of the session's runs never finished persisting — the session's
+        execution keys intersected with the store's repair worklist (C-4)."""
+        session_keys = {e.execution_key for e in events if e.execution_key}
+        if not session_keys:
+            return 0
+        awaiting = {run.execution_key for run in self._repair_source.runs_awaiting_persistence()}
+        return len(session_keys & awaiting)
 
     def _usage_by_key(self, events: Iterable[SessionEventRow]) -> dict[str, TokenUsage]:
         usage_by_key: dict[str, TokenUsage] = {}

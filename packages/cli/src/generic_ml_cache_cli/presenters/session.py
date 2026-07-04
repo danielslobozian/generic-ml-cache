@@ -27,6 +27,11 @@ def render_session_report(report: SessionReport, tags: list[str] | None = None) 
     )
     if report.unknown_usage:
         lines.append(f"unknown     : {report.unknown_usage} execution(s) reported no usage")
+    if report.runs_with_failed_persistence:
+        lines.append(
+            f"persist     : {report.runs_with_failed_persistence} run(s) with incomplete "
+            "persistence — run `gmlcache repair`"
+        )
     if report.by_model:
         lines.append("")
         lines.append("by provider / model:")
@@ -60,6 +65,7 @@ def session_report_json(report: SessionReport, tags: list[str]) -> dict[str, obj
         "executions": report.executions,
         "hits": report.hits,
         "unknown_usage": report.unknown_usage,
+        "runs_with_failed_persistence": report.runs_with_failed_persistence,
         "span": {"start": report.span_start, "end": report.span_end, "days": report.day_count},
         "by_model": [
             {
