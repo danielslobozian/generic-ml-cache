@@ -45,6 +45,11 @@ PACKAGES: tuple[str, ...] = tuple(
 # Distribution name -> import package name, for ``--cov=``.
 _IMPORT_NAME: dict[str, str] = {pkg: f"generic_ml_cache_{pkg}" for pkg in PACKAGES}
 
+# The interpreters the test suite is gated on. Mirrors the CI matrix in
+# ``.github/workflows/ci.yml`` so ``nox --python <ver> -s tests`` selects a
+# matching session — each matrix job runs the suite under exactly one of these.
+PYTHON_VERSIONS: tuple[str, ...] = ("3.10", "3.11", "3.12", "3.13")
+
 # The security-critical secret scrubber runs on every command's log path, so a
 # coverage gap there risks leaking tokens. It carries a per-module floor above the
 # package-wide 80% average, which would otherwise hide a regression in this one file (CG8).
@@ -105,7 +110,7 @@ def typecheck(session: nox.Session) -> None:
     session.run("pyright", "--pythonpath", _session_python(session))
 
 
-@nox.session
+@nox.session(python=PYTHON_VERSIONS)
 @nox.parametrize("package", PACKAGES)
 def tests(session: nox.Session, package: str) -> None:
     """Gates 3-5 — per-package test suite (run from the package dir so its own
