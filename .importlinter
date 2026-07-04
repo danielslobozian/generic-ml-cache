@@ -26,10 +26,11 @@ forbidden_modules =
 # checks direct imports only (allow_indirect_imports) — otherwise the legitimate
 # cli/daemon -> bootstrap -> adapter.outbound chain would be flagged.
 #
-# The few remaining ignore_imports are genuinely driver-specific direct edges the
-# split did not (and should not) relocate into the composition root:
-#   * cli._compose wires the stub API adapter for demos (no-credential replay).
-#   * cli.controllers.daemon -> daemon.app is the optional lazy launcher.
+# W28 made this invariant genuinely TRUE: every driver->adapter edge now goes
+# through a bootstrap composition-root hook (diagnostics factory, encryption-ops
+# facade, read-only store-status probe, stub-runners, progress stream) and the
+# drivers no longer declare a runtime dependency on the adapters package at all.
+# So there are NO ignore_imports left to whitelist — the contract stands clean.
 [importlinter:contract:hex-drivers-no-driven-adapters]
 name = Driver packages must not import driven adapter implementations directly
 type = forbidden
@@ -39,12 +40,6 @@ source_modules =
     generic_ml_cache_daemon
 forbidden_modules =
     generic_ml_cache_adapters.adapter.outbound
-ignore_imports =
-    # The bulk application wiring moved to generic_ml_cache_bootstrap (the
-    # composition root), so the long list of _compose/app -> adapter.outbound edges is
-    # gone. What remains are the few adapters the drivers still touch directly:
-    # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
-    generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app
 
 # Rule 3 — domain model purity.
 # Domain objects (entities, value objects, domain events) must not import use cases,

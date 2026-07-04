@@ -30,6 +30,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# `pip install "generic-ml-cache-bootstrap[encryption]"` pulls the adapters'
+# encryption extra (cryptography) at the SAME version — the composition root owns
+# the encryption facade + the encrypting blob store. Lockstep-pinned. The drivers
+# expose their own [encryption] extra through THIS one (they no longer depend on
+# the adapters package directly, W28).
+encryption = ["generic-ml-cache-adapters[encryption]==0.28.*"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [project.urls]

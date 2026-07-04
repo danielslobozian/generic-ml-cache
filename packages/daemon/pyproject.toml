@@ -26,7 +26,6 @@ classifiers = [
 ]
 dependencies = [
   "generic-ml-cache-core==0.28.*",
-  "generic-ml-cache-adapters==0.28.*",
   "generic-ml-cache-bootstrap==0.28.*",
   "fastapi>=0.115",
   "uvicorn>=0.30",
@@ -42,10 +41,11 @@ Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANG
 [project.optional-dependencies]
 # Optional Prometheus /metrics endpoint. Off by default.
 metrics = ["prometheus-client>=0.20"]
-# `pip install "generic-ml-cache-daemon[encryption]"` pulls the adapters' encryption
-# extra (cryptography) at the SAME version — app.py uses encryption_token /
-# EncryptingBlobStore. Lockstep-pinned to the workspace version.
-encryption = ["generic-ml-cache-adapters[encryption]==0.28.*"]
+# `pip install "generic-ml-cache-daemon[encryption]"` pulls the encryption extra
+# (cryptography) at the SAME version — app.py uses encryption_token /
+# EncryptingBlobStore (wired in bootstrap). Routed through bootstrap (the daemon no
+# longer depends on the adapters package directly, W28). Lockstep-pinned.
+encryption = ["generic-ml-cache-bootstrap[encryption]==0.28.*"]
 dev = [
   "pytest>=7",
   "pytest-cov",
