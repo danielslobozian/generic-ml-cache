@@ -15,6 +15,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
@@ -47,9 +48,15 @@ from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
+from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
-from generic_ml_cache_core.common.errors import CacheMiss
+from generic_ml_cache_core.common.errors import (
+    CacheMiss,
+    UnknownClient,
+    UnsupportedExecutionMode,
+)
 from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
@@ -266,11 +273,12 @@ def _passthrough_command(**overrides) -> RunMlExecutionCommand:
     return RunMlExecutionCommand(**base)
 
 
-class _DispatchRunner:
+class _DispatchRunner(LocalClientPort, MlRunnerPort):
     """One fake that answers every execution kind by delegating to the kind-specific
-    fake — so the harness can wire a single client name to all three. (A real client
-    name has one boundary, so it answers only its own kinds; this is a test convenience
-    that lets the existing per-kind fakes and their assertions stay unchanged.)"""
+    fake — so the harness can wire a single client name to all three. It really
+    implements both driven-client ports (a real adapter answers only its own kind;
+    this is a test convenience so the existing per-kind fakes and their assertions
+    stay unchanged), which also satisfies the W18 capability check before dispatch."""
 
     name = "fake"
     execution_kind = ExecutionKind.LOCAL_MANAGED
@@ -291,6 +299,19 @@ class _DispatchRunner:
 
     def run(self, request: MlRequest) -> ClientRunResult:
         return self._api.run(request)
+
+    # -- LocalClientPort probe/listing surface (unused by these tests) --------
+    def resolve_executable(self, override: str | None) -> str:
+        return override or "fake"
+
+    def version_argv(self, executable: str) -> list[str]:
+        return [executable, "--version"]
+
+    def models_argv(self, executable: str) -> list[str] | None:
+        return None
+
+    def parse_model_list(self, stdout: str) -> list[ModelInfo]:
+        return []
 
 
 class _AnyClientRunners(dict):
@@ -717,3 +738,37 @@ def test_eviction_not_triggered_on_failed_run():
     )
     failing_service.execute(_managed_command())
     assert spy.evict_calls == []
+
+
+# --- W18: structured dispatch errors -----------------------------------------
+
+
+def _service_with_runners(runners) -> RunMlExecutionService:
+    repo = InMemoryExecutionRepository(clock=FixedClock())
+    return RunMlExecutionService(
+        FakeFileFingerprint(),
+        runners,
+        FakeBlobStore(),
+        save=repo,
+        read=repo,
+        annotate=repo,
+        record=FakeMetrics(),
+        workspace=FakeWorkspace(),
+    )
+
+
+def test_unknown_client_raises_unknown_client_not_runtime_error():
+    # No runner registered for the requested client — the core fallback raises a
+    # named UnknownClient (drivers map it), never a raw RuntimeError (W18).
+    service = _service_with_runners({})
+    with pytest.raises(UnknownClient):
+        service.execute(_managed_command(client="mistral"))
+
+
+def test_wrong_kind_runner_raises_unsupported_execution_mode():
+    # An API-only adapter (an MlRunnerPort, not a LocalClientPort) is registered but
+    # asked to run a managed local command. The capability is checked before the
+    # cast, so it raises UnsupportedExecutionMode, not an AttributeError (W18).
+    service = _service_with_runners({"claude": FakeApiClient()})
+    with pytest.raises(UnsupportedExecutionMode):
+        service.execute(_managed_command(client="claude"))

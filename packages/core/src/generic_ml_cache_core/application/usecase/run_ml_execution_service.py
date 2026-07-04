@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import time
-from typing import cast
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -59,6 +58,7 @@ from generic_ml_cache_core.application.usecase.cached_ml_execution_service impor
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_checksum
+from generic_ml_cache_core.common.errors import UnknownClient, UnsupportedExecutionMode
 
 
 class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], RunMlExecutionUseCase):
@@ -125,7 +125,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
                     client=command.client,
                     kind=str(command.execution_kind),
                 )
-            raise RuntimeError(
+            raise UnknownClient(
                 f"No runner registered for client {command.client!r}; "
                 "pass client= to build_use_cases or wire a runner for this client"
             )
@@ -144,7 +144,15 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
             # The adapter makes the raw call; core packages it (no files).
             result = self._run_passthrough(command, runner)
         else:
-            # API: the legacy MlRunnerPort.run path — a single REST call.
+            # API: the MlRunnerPort.run path — a single REST call. Check the
+            # capability before use so a miswired registry (an adapter that is not
+            # actually an MlRunnerPort) yields a named error, not an AttributeError
+            # from a blind cast (W18).
+            if not isinstance(runner, MlRunnerPort):
+                raise UnsupportedExecutionMode(
+                    f"client {command.client!r} does not support "
+                    f"{command.execution_kind.value} execution"
+                )
             request = MlRequest(
                 model=command.model,
                 effort=command.effort,
@@ -156,7 +164,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
                 client_args=command.client_args,
                 grants=frozenset(command.grants),
             )
-            result = cast(MlRunnerPort, runner).run(request)
+            result = runner.run(request)
         if self._diag:
             self._diag.debug(
                 "invoking client EXIT",
@@ -175,7 +183,11 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         The client knows *how* (argv, config, parsing); core owns *the workspace*."""
         if self._workspace is None:
             raise RuntimeError("managed execution requires a WorkspacePort; none was injected")
-        client = cast(LocalClientPort, runner)
+        if not isinstance(runner, LocalClientPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support managed local execution"
+            )
+        client = runner
         request = ManagedLocalRequest(
             model=command.model,
             effort=command.effort,
@@ -216,7 +228,11 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
     ) -> ClientRunResult:
         """Relay a native passthrough call through the client and package it. There
         is no workspace and no artifact capture — a passthrough never produces files."""
-        client = cast(LocalClientPort, runner)
+        if not isinstance(runner, LocalClientPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support passthrough local execution"
+            )
+        client = runner
         answer = client.execute_passthrough(
             PassthroughRequest(native_args=tuple(command.native_args))
         )

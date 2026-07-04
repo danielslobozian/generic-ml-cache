@@ -138,12 +138,13 @@ class StoreLocked(CacheError):
 
 
 class UnsupportedExecutionMode(CacheError):
-    """Raised when a local client adapter does not support the requested
-    execution mode (e.g. asking a passthrough-only adapter to run managed).
+    """Raised when a registered adapter does not support the requested execution
+    mode (e.g. an API adapter asked to run managed, or a miswired registry entry).
 
-    The adapter declares its supported modes via ``supports(kind)``. The core
-    checks capability before dispatching so the caller gets a clear, named error
-    rather than a silent wrong-mode execution.
+    Before dispatching, the core narrows the registered adapter to the port the
+    requested mode needs (``MlRunnerPort`` for API, ``LocalClientPort`` for local)
+    and raises this if it does not implement it — a clear, named error instead of
+    an ``AttributeError`` from a blind cast or a silent wrong-mode execution.
     """
 
     code: ClassVar[str] = "adapter.unsupported_mode"
