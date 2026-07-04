@@ -14,6 +14,7 @@ from generic_ml_cache_core.common.errors import (
     CacheMiss,
     EncryptionStateError,
     EncryptionTokenRequired,
+    RunTimedOut,
     StoreLocked,
     StoreUnavailable,
     UnknownClient,
@@ -49,6 +50,7 @@ def _post_run(tc: TestClient):
         (EncryptionTokenRequired("need token"), 401, "crypto.token_required"),
         (ArtifactBlobMissing("blob gone"), 404, "store.blob_missing"),
         (StoreUnavailable("db down"), 503, "store.unavailable"),
+        (RunTimedOut(client="claude", timeout_seconds=0.5), 504, "run.timed_out"),
         (CacheError("unexpected"), 500, "cache.error"),
     ],
 )

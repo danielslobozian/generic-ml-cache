@@ -33,7 +33,7 @@ from generic_ml_cache_core.application.domain.model.run.passthrough_request impo
 )
 from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
-from generic_ml_cache_core.common.errors import ClientNotFound
+from generic_ml_cache_core.common.errors import ClientNotFound, RunTimedOut
 
 from generic_ml_cache_adapters.adapter.outbound.client.cli_process_runner import CliProcessRunner
 from generic_ml_cache_adapters.adapter.outbound.client.prime_directive import build_system_prompt
@@ -170,9 +170,15 @@ class CliRuntime:
                 "stdin_payload", request.context, request.prompt, system_prompt, default=None
             )
 
-            stdout, stderr, returncode = self._process.run(
-                argv, run_dir, stdin_payload, timeout, run_env, on_line
-            )
+            try:
+                stdout, stderr, returncode = self._process.run(
+                    argv, run_dir, stdin_payload, timeout, run_env, on_line
+                )
+            except subprocess.TimeoutExpired as exc:
+                # Translate the stdlib timeout at the client-run boundary (Y4/§10) so no
+                # driver ever sees a raw subprocess type — this adapter surface only ever
+                # raises CacheError. exc.timeout is the configured --timeout (a float).
+                raise RunTimedOut(client=client.name, timeout_seconds=exc.timeout) from exc
             parsed: ParsedOutput = self._hook(
                 "parse_output", stdout, default=ParsedOutput(text=stdout, usage=None)
             )
@@ -205,12 +211,17 @@ class CliRuntime:
     def execute_passthrough(self, request: PassthroughRequest) -> ClientAnswer:
         executable = self.resolve_executable(self._executable_override)
         timeout = request.timeout if request.timeout is not None else self._timeout
-        completed = subprocess.run(
-            [executable, *request.native_args],
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                [executable, *request.native_args],
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            # Same boundary translation as the managed path (Y4/§10): the passthrough
+            # relay must not leak a raw subprocess timeout to the driver either.
+            raise RunTimedOut(client=self._client.name, timeout_seconds=exc.timeout) from exc
         return ClientAnswer(
             exit_code=completed.returncode,
             stdout=completed.stdout.decode(_TEXT_ENCODING, errors="replace"),

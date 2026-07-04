@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -29,6 +28,7 @@ from generic_ml_cache_core.common.errors import (
     CacheMiss,
     EncryptionTokenRequired,
     RunInterrupted,
+    RunTimedOut,
     UnknownClient,
     WrongEncryptionToken,
 )
@@ -227,13 +227,12 @@ def run_cached_execution(
         # conventional "terminated by Ctrl-C".
         print(f"gmlc: {exc}", file=sys.stderr)
         return None, 130
-    except subprocess.TimeoutExpired as exc:
-        # The real call ran past --timeout and was killed before any record. Exit
-        # 124 is the timeout(1) convention, distinct from miss (3) and error (4).
-        print(
-            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
-            file=sys.stderr,
-        )
+    except RunTimedOut as exc:
+        # The real call ran past --timeout and was killed; the adapter translated the
+        # raw subprocess timeout to RunTimedOut (Y4), so the CLI never catches a stdlib
+        # type here. Exit 124 is the timeout(1) convention, distinct from miss (3) and
+        # error (4). Caught before the generic CacheError branch so it keeps its own code.
+        print(f"gmlc: {exc}", file=sys.stderr)
         return None, 124
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)

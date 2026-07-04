@@ -68,6 +68,29 @@ class CommandLineTooLong(CacheError):
     code: ClassVar[str] = "adapter.command_too_long"
 
 
+class RunTimedOut(CacheError):
+    """Raised when a real client run exceeds its ``--timeout`` and is killed (Y4, §10).
+
+    Translates the stdlib ``subprocess.TimeoutExpired`` at the client-run adapter
+    boundary (``CliRuntime`` — both the managed and passthrough paths) into the
+    project's own vocabulary, so no driver ever sees a leaked ``subprocess`` type.
+    Distinct from :class:`RunInterrupted` (a *requested* stop, not a fault): a timeout
+    IS a fault — the client was too slow — so it is a ``CacheError`` and the
+    in-progress row is marked FAILED like any other client failure. Carries the
+    ``client`` name and the ``timeout_seconds`` that was exceeded. Drivers map it
+    cleanly (the daemon to **504 Gateway Timeout**, the CLI to a distinct exit code),
+    never to a generic 500 / traceback. Java: a ``@Repository``-style translator
+    turning a ``ProcessTimeoutException`` into the app's ``RunTimedOut``.
+    """
+
+    code: ClassVar[str] = "run.timed_out"
+
+    def __init__(self, client: str, timeout_seconds: float) -> None:
+        self.client = client
+        self.timeout_seconds = timeout_seconds
+        super().__init__(f"{client} run exceeded the {timeout_seconds}s timeout and was killed")
+
+
 class InputFileError(CacheError):
     """Raised when a declared input file cannot be read for fingerprinting.
 

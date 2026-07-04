@@ -198,6 +198,7 @@ from generic_ml_cache_core.common.errors import (  # noqa: E402  # fmt: skip
     ProviderApiError,
     ProviderProtocolError,
     RunInterrupted,
+    RunTimedOut,
     StoreConsistencyError,
     StoreCorrupt,
     StoreLocked,
@@ -290,6 +291,7 @@ __all__ = [
     "EncryptionStateError",
     "StoreLocked",
     "RunInterrupted",
+    "RunTimedOut",
     # Structured errors consumers branch on (they carry a `code`/`status_code` the
     # drivers map to an exit code / HTTP status) — W22.
     "ProviderApiError",
