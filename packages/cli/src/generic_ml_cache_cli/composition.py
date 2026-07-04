@@ -10,14 +10,9 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import cast
 
-from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter import (
-    NullDiagnosticsAdapter,
-)
-from generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter import (
-    StructlogDiagnosticsAdapter,
-)
 from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 from generic_ml_cache_adapters.db import DbConnection
+from generic_ml_cache_bootstrap.diagnostics import build_diagnostics
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ConfigError
 
@@ -47,13 +42,12 @@ def make_diag(args: argparse.Namespace) -> DiagnosticsPort:
             log_file_flag=log_file_flag,
         )
     except Exception:  # noqa: BLE001 — logging is non-load-bearing; bad config → silent (null) diag
-        return NullDiagnosticsAdapter()
+        return build_diagnostics(None)
     resolved_level = settings["log_level"][0]
     if not resolved_level:
-        return NullDiagnosticsAdapter()
+        return build_diagnostics(None)
     log_file = Path(str(settings["log_file"][0]))
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    return StructlogDiagnosticsAdapter(log_file, level=str(resolved_level))
+    return build_diagnostics(str(resolved_level), log_file)
 
 
 def store_root() -> Path | None:

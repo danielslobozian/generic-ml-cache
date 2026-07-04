@@ -11,13 +11,8 @@ from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter import (
-    NullDiagnosticsAdapter,
-)
-from generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter import (
-    StructlogDiagnosticsAdapter,
-)
 from generic_ml_cache_bootstrap.application import build_application_api
+from generic_ml_cache_bootstrap.diagnostics import build_diagnostics
 from generic_ml_cache_bootstrap.persistence_backend import sqlite_persistence_backend
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
@@ -102,12 +97,10 @@ def create_app(
     """
     log_level = os.environ.get("GMLCACHE_LOG_LEVEL")
     log_file_env = os.environ.get("GMLCACHE_LOG_FILE")
+    log_file = None
     if log_level:
         log_file = Path(log_file_env) if log_file_env else store_root / _LOG_FILE_NAME
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        _diag = StructlogDiagnosticsAdapter(log_file, level=log_level)
-    else:
-        _diag = NullDiagnosticsAdapter()
+    _diag = build_diagnostics(log_level, log_file)
     # The daemon shares its persistence connection across an async thread pool, so it
     # injects a SQLite backend built with check_same_thread=False (the CLI uses the
     # default single-threaded backend). Everything else defaults.
