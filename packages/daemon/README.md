@@ -99,12 +99,14 @@ POST /run
 ### Claude Gateway
 
 ```
-POST /gateway/claude/v1/messages
+POST /gateway/claude/{session_id}/v1/messages
 ```
 
 A cache-transparent proxy for the Anthropic Messages API. Requests that hit the
-cache are returned without a network call to Anthropic. The response shape matches
-the Anthropic Messages API exactly, with one extra field: `x_cache_hit: bool`.
+cache are returned without a network call to Anthropic. The response is the upstream
+Anthropic Messages API response returned **verbatim** — a cache hit is byte-for-byte
+identical to a live call, with no added fields or headers (the passthrough body must
+stay exact for SDK compatibility).
 
 > **⚠️ Security — single-principal, localhost only.** The gateway is a single-user
 > tool. Its passthrough cache is keyed on the request **body only** — deliberately
@@ -122,7 +124,7 @@ no prior assistant turns). Multi-turn support is planned.
 **Example:**
 
 ```bash
-curl http://127.0.0.1:8765/gateway/claude/v1/messages \
+curl http://127.0.0.1:8765/gateway/claude/my-session/v1/messages \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-opus-4-8",
@@ -138,7 +140,7 @@ import anthropic
 
 client = anthropic.Anthropic(
     api_key="...",
-    base_url="http://127.0.0.1:8765/gateway/claude",
+    base_url="http://127.0.0.1:8765/gateway/claude/my-session",
 )
 ```
 
