@@ -42,11 +42,11 @@ def _repo(tmp_path):
     # White-box: build the repository out-port directly (it is no longer on the
     # narrowed ApplicationApi) to assert the stored audit trail.
     from generic_ml_cache_adapters.adapter.outbound.clock.system_clock import SystemClock
-    from generic_ml_cache_adapters.adapter.outbound.persistence.execution_repository import (
-        ExecutionRepository,
+    from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
+        SqliteExecutionRepository,
     )
 
-    return ExecutionRepository(_factory(tmp_path), SystemClock())
+    return SqliteExecutionRepository(_factory(tmp_path), SystemClock())
 
 
 def test_managed_records_then_replays_through_the_whole_stack(tmp_path):

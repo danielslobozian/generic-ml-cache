@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for ExecutionRepository."""
+"""Tests for SqliteExecutionRepository."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ from generic_ml_cache_core.application.port.outbound.execution_repository_port i
     ExecutionRepositoryPort,
 )
 
-from generic_ml_cache_adapters.adapter.outbound.persistence.execution_repository import (
-    ExecutionRepository,
+from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
+    SqliteExecutionRepository,
 )
 from generic_ml_cache_adapters.migration_runner import run_migrations
 
@@ -50,10 +50,10 @@ def _make_factory(db_path):
     return _connect
 
 
-def _repository(tmp_path) -> ExecutionRepository:
+def _repository(tmp_path) -> SqliteExecutionRepository:
     factory = _make_factory(tmp_path / "executions.sqlite3")
     run_migrations(factory)
-    return ExecutionRepository(factory, clock=FixedClock())
+    return SqliteExecutionRepository(factory, clock=FixedClock())
 
 
 def _managed_identity(prompt_fingerprint: str = "p") -> ManagedCallIdentity:

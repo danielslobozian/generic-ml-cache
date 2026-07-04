@@ -39,11 +39,11 @@ from generic_ml_cache_adapters.adapter.outbound.gateway.http_gateway_forward_ada
 )
 from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
 from generic_ml_cache_adapters.adapter.outbound.metrics.journal_metrics import JournalMetrics
-from generic_ml_cache_adapters.adapter.outbound.persistence.execution_repository import (
-    ExecutionRepository,
-)
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
+)
+from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
+    SqliteExecutionRepository,
 )
 from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (
     FilesystemBlobStore,
@@ -133,7 +133,7 @@ def build_application_api(
     clock = SystemClock()
     blob_store = resolve_blob_store(store_root, encryption_token)
     run_migrations(conn_factory, _diag)
-    repository = ExecutionRepository(conn_factory, clock)
+    repository = SqliteExecutionRepository(conn_factory, clock)
     metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
     runners = build_runners(catalog_for(whitelist), default_resolver())

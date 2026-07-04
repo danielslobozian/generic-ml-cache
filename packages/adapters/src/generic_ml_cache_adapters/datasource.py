@@ -1,10 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Connection factory construction for PEP 249 datasources.
+"""SQLite connection-factory construction.
 
-Core accepts a ``Callable[[], Connection]`` for all database access. This module
-provides the canonical factory builder for SQLite, used by the CLI and daemon to
-construct and inject the factory without importing ``sqlite3`` into core.
+Core accepts a ``Callable[[], Connection]`` for all database access and forbids
+importing a driver itself. This module provides the shipped SQLite factory builder,
+used by the CLI and daemon to construct and inject the factory without pulling
+``sqlite3`` into core. It is SQLite-specific (it imports ``sqlite3`` and sets the
+``foreign_keys`` PRAGMA); another engine ships its own factory + adapter.
 """
 
 from __future__ import annotations

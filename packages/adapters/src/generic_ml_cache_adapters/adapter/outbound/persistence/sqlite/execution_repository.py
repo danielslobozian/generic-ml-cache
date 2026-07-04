@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""ExecutionRepository: the durable, append-only execution store."""
+"""SqliteExecutionRepository: the durable, append-only execution store (SQLite)."""
 
 from __future__ import annotations
 
@@ -48,8 +48,14 @@ _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
 _ExecutionRow = tuple[int, str, str, str, int, str | None, str | None, Any, int | None]
 
 
-class ExecutionRepository(ExecutionRepositoryPort):
-    """A durable, append-only execution store over any DBAPI2-compliant connection.
+class SqliteExecutionRepository(ExecutionRepositoryPort):
+    """A durable, append-only execution store backed by SQLite.
+
+    Not a portability layer: the SQL is SQLite-dialect (``INTEGER PRIMARY KEY``,
+    ``INSERT OR IGNORE``, ``lastrowid``, ``?`` placeholders). The ``DbConnection``
+    protocol is the injection seam (core forbids importing a driver; tests inject a
+    fake), but the SQL written against it is SQLite-specific by design — portability
+    is achieved by implementing the port, not by swapping the connection.
 
     The hybrid identity persistence (domain-model §3): the queryable fields are
     real columns; the divergent identity fields ride in a JSON column. Executions
