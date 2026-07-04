@@ -8,7 +8,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    Artifact,
+    ArtifactStatus,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
 )
@@ -44,6 +47,12 @@ class MlExecution:
     token_usage: TokenUsage | None = None
     failure: ExecutionFailure | None = None
     superseded_at: datetime | None = None
+
+    @property
+    def has_failed_persistence(self) -> bool:
+        """True when any artifact's blob write failed (C-4). Such a run is not
+        servable; a repair pass reconciles it against the blob store."""
+        return any(a.status is ArtifactStatus.FAILED for a in self.artifacts)
 
 
 def normalize_tags(raw_tags: Iterable[str]) -> list[str]:

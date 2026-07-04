@@ -182,6 +182,33 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _artifact_status_suffix(artifact: Artifact) -> str:
+    """A ``[pending]``/``[failed]`` marker for a non-STORED artifact (C-4); empty
+    for the normal STORED case, so a healthy execution reads unchanged."""
+    return "" if artifact.is_stored else f" [{artifact.status.value}]"
+
+
+def _print_inspect_artifacts(execution: MlExecution) -> None:
+    output_files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
+    print(f"files  : {len(output_files)}")
+    for artifact in output_files:
+        suffix = _artifact_status_suffix(artifact)
+        print(
+            f"         - {artifact.name} ({artifact.encoding}, {artifact.size_bytes} bytes){suffix}"
+        )
+    input_parts = [a for a in execution.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES]
+    if input_parts:
+        print(f"input  : stored ({len(input_parts)} part(s))")
+        for artifact in input_parts:
+            label = artifact.artifact_type.value.replace("input_", "")
+            suffix = _artifact_status_suffix(artifact)
+            print(f"         - {label} ({artifact.encoding}, {artifact.size_bytes} bytes){suffix}")
+    else:
+        print("input  : not stored")
+    if execution.has_failed_persistence:
+        print("persist: INCOMPLETE — some artifacts failed to store; run `gmlcache repair`")
+
+
 def cmd_inspect(args: argparse.Namespace) -> int:
     try:
         settings = config.resolve_settings(config.load())
@@ -211,18 +238,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     print(f"key    : {execution.call_identity.generate_key()}")
     print(f"kind   : {execution.execution_kind.value}")
     print(f"state  : {execution.execution_state.value}")
-    output_files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
-    print(f"files  : {len(output_files)}")
-    for artifact in output_files:
-        print(f"         - {artifact.name} ({artifact.encoding}, {artifact.size_bytes} bytes)")
-    input_parts = [a for a in execution.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES]
-    if input_parts:
-        print(f"input  : stored ({len(input_parts)} part(s))")
-        for artifact in input_parts:
-            label = artifact.artifact_type.value.replace("input_", "")
-            print(f"         - {label} ({artifact.encoding}, {artifact.size_bytes} bytes)")
-    else:
-        print("input  : not stored")
+    _print_inspect_artifacts(execution)
     usage = execution.token_usage
     if usage is None:
         print("usage  : (none captured)")
@@ -230,6 +246,29 @@ def cmd_inspect(args: argparse.Namespace) -> int:
         print(f"usage  : {usage_summary(usage)}")
         if usage.cost_usd is not None:
             print(f"         cost ~ ${usage.cost_usd:.4f} (client estimate, not authoritative)")
+    return 0
+
+
+def cmd_repair(args: argparse.Namespace) -> int:
+    """Reconcile runs left non-servable by an interrupted/failed blob write against
+    what is actually in the blob store (C-4). Never re-runs the client."""
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    store_root = Path(str(settings["store"][0]))
+    wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
+    report = wired.repair_store.repair()
+    total = report.runs_recovered + report.runs_unrecoverable
+    if total == 0:
+        print("store repair: nothing to reconcile — all runs are fully persisted")
+        return 0
+    print(f"store repair: {total} run(s) had incomplete persistence")
+    print(f"  recovered     : {report.runs_recovered} (blob present — now servable again)")
+    print(f"  unrecoverable : {report.runs_unrecoverable} (blob missing — re-run with --refresh)")
+    print(f"  blobs reconciled: {report.blobs_reconciled}, still missing: {report.blobs_missing}")
     return 0
 
 

@@ -358,6 +358,16 @@ def test_stats_reports_executions_and_access(tmp_path, monkeypatch, capsys):
     assert "record" in out  # access events
 
 
+def test_repair_on_a_fully_persisted_store_reports_nothing(tmp_path, monkeypatch, capsys):
+    # Normal runs persist fully (DB-first finalize), so repair has nothing to reconcile.
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    rc = main(["repair"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "nothing to reconcile" in out
+
+
 def test_stats_shows_store_size(tmp_path, monkeypatch, capsys):
     _record_two_models(monkeypatch, tmp_path)
     capsys.readouterr()

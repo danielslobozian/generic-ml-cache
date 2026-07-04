@@ -63,6 +63,7 @@ from generic_ml_cache_cli.controllers.store import (
     cmd_inspect,
     cmd_list,
     cmd_purge,
+    cmd_repair,
     cmd_stats,
     cmd_tags,
 )
@@ -396,6 +397,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stats.add_argument("--json", action="store_true", help=_JSON_HELP)
     stats.set_defaults(func=cmd_stats)
+
+    repairp = sub.add_parser(
+        "repair",
+        help="reconcile runs left non-servable by an interrupted blob write against the "
+        "blob store (recover those whose blob is present, flag those whose blob is gone)",
+    )
+    repairp.set_defaults(func=cmd_repair)
 
     purgep = sub.add_parser(
         "purge",
