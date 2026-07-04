@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import threading
 
 import pytest
@@ -169,6 +170,11 @@ def test_each_write_mints_a_distinct_temp_file(tmp_path, monkeypatch):
     assert len(set(replaced_temp_names)) == 2
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="atomic last-wins replace of one open target under concurrency is a POSIX "
+    "rename semantic; Windows raises a sharing violation (as with the fcntl/signal skips)",
+)
 def test_concurrent_writes_to_the_same_key_do_not_collide(tmp_path):
     # Content-addressing means two different executions that share a blob write
     # the SAME key with byte-identical content in parallel. A per-write temp lets
