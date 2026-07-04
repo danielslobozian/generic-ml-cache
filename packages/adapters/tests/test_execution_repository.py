@@ -39,7 +39,7 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ReadMlRunPort,
     SaveMlRunPort,
 )
-from generic_ml_cache_core.common.errors import StoreCorrupt
+from generic_ml_cache_core.common.errors import StoreCorrupt, StoreLocked, StoreUnavailable
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
     SqliteExecutionRepository,
@@ -71,14 +71,17 @@ class _RecordingConnection:
     """A DbConnection spy that records the transaction calls it receives, so a
     test can assert the write helper commits on success / rolls back on error."""
 
-    def __init__(self, *, fail_on_execute: bool = False) -> None:
+    def __init__(
+        self, *, fail_on_execute: bool = False, error: BaseException | None = None
+    ) -> None:
         self.calls: list[str] = []
         self._fail_on_execute = fail_on_execute
+        self._error = error or sqlite3.OperationalError("simulated write failure")
 
     def execute(self, sql: str, parameters: Any = ()) -> DbCursor:
         self.calls.append("execute")
         if self._fail_on_execute:
-            raise sqlite3.OperationalError("simulated write failure")
+            raise self._error
         return _NullCursor()
 
     def commit(self) -> None:
@@ -98,14 +101,42 @@ def test_write_commits_then_closes_on_success(tmp_path):
     assert connection.calls == ["execute", "commit", "close"]
 
 
-def test_write_rolls_back_then_closes_on_error(tmp_path):
+def test_write_rolls_back_then_translates_then_closes_on_error(tmp_path):
     connection = _RecordingConnection(fail_on_execute=True)
     repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
-    with pytest.raises(sqlite3.OperationalError):
+    # X1: the raw sqlite3.OperationalError never crosses the port — it is translated
+    # to the project's vocabulary (a non-"locked" operational error is a hard outage →
+    # StoreUnavailable), with the original preserved as __cause__.
+    with pytest.raises(StoreUnavailable) as caught:
         repository.mark_artifacts_stored("some-key", "some-blob")
+    assert isinstance(caught.value.__cause__, sqlite3.OperationalError)
     # Rollback is explicit — never a silent reliance on close-time auto-rollback —
     # and commit is never reached on the error path.
     assert connection.calls == ["execute", "rollback", "close"]
+
+
+def test_read_against_a_malformed_database_translates_to_store_corrupt(tmp_path):
+    # X1: a READ (not just a write) is wrapped — a malformed database image surfaces
+    # as StoreCorrupt, never a raw sqlite3.DatabaseError, so the serve path self-heals
+    # the whole DB file (S4) instead of crashing the driver.
+    db_path = tmp_path / "corrupt.sqlite3"
+    db_path.write_bytes(b"this is not a sqlite database, just junk bytes" * 8)
+    repository = SqliteExecutionRepository(_make_factory(db_path), clock=FixedClock())
+    with pytest.raises(StoreCorrupt) as caught:
+        repository.find_current("any-key")
+    assert isinstance(caught.value.__cause__, sqlite3.DatabaseError)
+
+
+def test_locked_read_translates_to_store_locked(tmp_path):
+    # X1: a "database is locked" OperationalError past the busy-timeout is transient
+    # contention (S2a) → StoreLocked, distinct from a hard StoreUnavailable outage.
+    connection = _RecordingConnection(
+        fail_on_execute=True, error=sqlite3.OperationalError("database is locked")
+    )
+    repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
+    with pytest.raises(StoreLocked):
+        repository.find_current("any-key")
+    assert connection.calls == ["execute", "close"]
 
 
 def _make_factory(db_path):

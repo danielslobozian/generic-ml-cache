@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import datetime
@@ -41,7 +42,12 @@ from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import 
     RepairMlRunsPort,
     UnpersistedRun,
 )
-from generic_ml_cache_core.common.errors import StoreConsistencyError, StoreCorrupt
+from generic_ml_cache_core.common.errors import (
+    StoreConsistencyError,
+    StoreCorrupt,
+    StoreLocked,
+    StoreUnavailable,
+)
 from generic_ml_cache_core.common.immutable import thaw
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
@@ -62,6 +68,30 @@ def _require_artifact_update(rowcount: int, execution_id: str, blob_key: BlobKey
         raise StoreConsistencyError(
             f"no artifact row for execution {execution_id} / blob {blob_key} to update"
         )
+
+
+def _raise_translated(exc: BaseException) -> None:
+    """Translate a raw ``sqlite3`` error at the persistence-adapter boundary into the
+    project's own vocabulary (§10, X1), keeping the original as ``__cause__``: a
+    locked store → :class:`StoreLocked` (transient contention, S2a); a malformed /
+    unreadable database image → :class:`StoreCorrupt` (self-heals on the serve path,
+    S4); an integrity-constraint violation → :class:`StoreConsistencyError`; any other
+    driver error → :class:`StoreUnavailable` (hard outage, S2b). A non-``sqlite3``
+    exception — an already-translated :class:`CacheError`, a ``KeyboardInterrupt`` — is
+    left untouched, so the caller re-raises it unchanged. This is the W19/``_http.py``
+    discipline the provider adapters already follow, extended to the persistence
+    adapter so ``import-linter`` (which sees import edges, not exception propagation)
+    can no longer miss a raw ``sqlite3`` type crossing the port."""
+    if isinstance(exc, sqlite3.IntegrityError):
+        raise StoreConsistencyError(f"store integrity violation: {exc}") from exc
+    if isinstance(exc, sqlite3.OperationalError):
+        if "locked" in str(exc).lower():
+            raise StoreLocked(f"cache database is locked: {exc}") from exc
+        raise StoreUnavailable(f"cache database operation failed: {exc}") from exc
+    if isinstance(exc, sqlite3.DatabaseError):
+        raise StoreCorrupt(f"cache database image is malformed: {exc}") from exc
+    if isinstance(exc, sqlite3.Error):
+        raise StoreUnavailable(f"cache database error: {exc}") from exc
 
 
 #: One ``executions`` row, in ``_EXECUTION_COLUMNS`` order. ``failure_message``
@@ -107,13 +137,32 @@ class SqliteExecutionRepository(
         """A write connection scoped to one transaction: commit on success, roll
         back on any error, always close. Makes the rollback explicit rather than
         leaning on a driver's close-time auto-rollback — the ``DbConnection`` seam
-        is DB-API-shaped, and another engine need not roll back on close."""
+        is DB-API-shaped, and another engine need not roll back on close. A raw
+        ``sqlite3`` error is translated to the project's vocabulary at this boundary
+        (X1) after the rollback, so no driver type crosses the port."""
         connection = self._connect()
         try:
             yield connection
             connection.commit()
-        except BaseException:
+        except BaseException as exc:
             connection.rollback()
+            _raise_translated(exc)
+            raise
+        finally:
+            connection.close()
+
+    @contextmanager
+    def _reading(self) -> Generator[DbConnection]:
+        """A read connection with the same ``sqlite3`` error translation as the write
+        path (X1), always closed. A read against a locked / corrupt / unavailable
+        store is translated at this boundary rather than leaking a raw ``sqlite3.*``
+        type — this is what restores the corrupt-DB self-heal (S4), the CLI exit-4
+        ladder, and the daemon's structured 503 for a failed read."""
+        connection = self._connect()
+        try:
+            yield connection
+        except BaseException as exc:
+            _raise_translated(exc)
             raise
         finally:
             connection.close()
@@ -121,8 +170,7 @@ class SqliteExecutionRepository(
     # -- reads ------------------------------------------------------------
 
     def find_current(self, execution_key: str) -> MlExecution | None:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             row = connection.execute(
                 f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key = ? "
                 "AND state = ? AND output_persisted = 1 AND superseded_at IS NULL "
@@ -130,27 +178,21 @@ class SqliteExecutionRepository(
                 (execution_key, ExecutionState.SUCCESS.value),
             ).fetchone()
             return self._load_execution(connection, row) if row is not None else None
-        finally:
-            connection.close()
 
     def find_all(self, execution_key: str) -> list[MlExecution]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key = ? ORDER BY id",
                 (execution_key,),
             ).fetchall()
             return [self._load_execution(connection, row) for row in rows]
-        finally:
-            connection.close()
 
     # -- reporting (concrete; beyond the use-case port) -------------------
 
     def current_execution_summaries(self) -> list[ExecutionSummary]:
         """A uniform reporting view of the current (servable) executions: key,
         kind, and the denormalized client/model — across all identity kinds."""
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 "SELECT e.execution_key, e.kind, i.client, i.model FROM executions e "
                 "JOIN call_identities i ON i.execution_key = e.execution_key "
@@ -162,22 +204,17 @@ class SqliteExecutionRepository(
                 ExecutionSummary(execution_key=key, kind=kind, client=client, model=model)
                 for (key, kind, client, model) in rows
             ]
-        finally:
-            connection.close()
 
     def find_current_by_key_prefix(self, key_prefix: str) -> list[MlExecution]:
         """The current executions whose key starts with ``key_prefix`` (so a short
         key from ``list`` is enough to ``inspect``)."""
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 f"SELECT {_EXECUTION_COLUMNS} FROM executions WHERE execution_key LIKE ? "
                 "AND state = ? AND output_persisted = 1 AND superseded_at IS NULL ORDER BY id",
                 (key_prefix + "%", ExecutionState.SUCCESS.value),
             ).fetchall()
             return [self._load_execution(connection, row) for row in rows]
-        finally:
-            connection.close()
 
     # -- write ------------------------------------------------------------
 
@@ -242,8 +279,7 @@ class SqliteExecutionRepository(
             _require_artifact_update(cursor.rowcount, execution_id, blob_key)
 
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 "SELECT e.execution_key, e.execution_id, a.blob_key FROM executions e "
                 "JOIN artifacts a ON a.execution_id = e.id "
@@ -253,8 +289,6 @@ class SqliteExecutionRepository(
                 "ORDER BY e.execution_key, a.id",
                 (ArtifactStatus.STORED.value,),
             ).fetchall()
-        finally:
-            connection.close()
         grouped: dict[str, tuple[str, list[BlobKey]]] = {}
         for execution_key, execution_id, blob_key in rows:
             _stored_id, blob_keys = grouped.setdefault(execution_key, (execution_id, []))
@@ -454,8 +488,7 @@ class SqliteExecutionRepository(
                 )
 
     def tags_for(self, execution_key: str) -> list[str]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             execution_id = self._current_execution_id(connection, execution_key)
             if execution_id is None:
                 return []
@@ -464,8 +497,6 @@ class SqliteExecutionRepository(
                 (execution_id,),
             ).fetchall()
             return [tag for (tag,) in rows]
-        finally:
-            connection.close()
 
     def add_input_artifacts(self, execution_key: str, artifacts: list[Artifact]) -> None:
         if not artifacts:
@@ -610,8 +641,7 @@ class SqliteExecutionRepository(
     # -- retention and purge --------------------------------------------------
 
     def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 "SELECT DISTINCT a.blob_key FROM artifacts a "
                 "JOIN executions e ON e.id = a.execution_id "
@@ -619,8 +649,6 @@ class SqliteExecutionRepository(
                 (execution_key,),
             ).fetchall()
             return [BlobKey(key) for (key,) in rows]
-        finally:
-            connection.close()
 
     def soft_purge_execution(self, execution_key: str) -> None:
         with self._write_transaction() as connection:
@@ -661,8 +689,7 @@ class SqliteExecutionRepository(
             )
 
     def total_stored_bytes(self) -> int:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             row = connection.execute(
                 "SELECT COALESCE(SUM(a.size_bytes), 0) FROM artifacts a "
                 "JOIN executions e ON e.id = a.execution_id "
@@ -670,12 +697,9 @@ class SqliteExecutionRepository(
                 (ExecutionState.SUCCESS.value,),
             ).fetchone()
             return int(row[0])
-        finally:
-            connection.close()
 
     def current_executions_with_sizes(self) -> list[ExecutionSizeEntry]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 "SELECT e.execution_key, COALESCE(SUM(a.size_bytes), 0), e.created_at "
                 "FROM executions e LEFT JOIN artifacts a ON a.execution_id = e.id "
@@ -691,12 +715,9 @@ class SqliteExecutionRepository(
                 )
                 for (key, size, created_at) in rows
             ]
-        finally:
-            connection.close()
 
     def executions_by_tag(self, tag: str) -> list[str]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 "SELECT DISTINCT e.execution_key FROM executions e "
                 "JOIN execution_tags et ON et.execution_id = e.id "
@@ -705,18 +726,13 @@ class SqliteExecutionRepository(
                 (tag, ExecutionState.SUCCESS.value),
             ).fetchall()
             return [key for (key,) in rows]
-        finally:
-            connection.close()
 
     def all_execution_keys(self) -> list[str]:
-        connection = self._connect()
-        try:
+        with self._reading() as connection:
             rows = connection.execute(
                 "SELECT execution_key FROM call_identities ORDER BY execution_key"
             ).fetchall()
             return [key for (key,) in rows]
-        finally:
-            connection.close()
 
     @staticmethod
     def _is_servable(execution: MlExecution) -> bool:
