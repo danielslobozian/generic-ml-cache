@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "generic-ml-cache-core"
 dynamic = ["version"]
-description = "Hexagonal core library for generic-ml-cache: domain model, use cases, port contracts, and the adapter registry. Zero runtime dependencies; inject all adapters."
+description = "Hexagonal core library for generic-ml-cache: domain model, use cases, and port contracts. The default adapters ship in generic-ml-cache-adapters; inject a data source to use them."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"

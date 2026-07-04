@@ -126,7 +126,7 @@ def probe_all(
     ``executables`` optionally maps a client name to the executable to probe
     (e.g. from the ``[executables]`` config); a client absent from the mapping
     falls back to its adapter's own ``PATH`` lookup.
-    ``whitelist`` restricts which adapters are considered active.
+    ``whitelist`` opts third-party plugins into loading (by entry-point name); the bundled adapters always load.
     """
     _t = time.perf_counter()
     if diag:
@@ -255,7 +255,7 @@ def list_models_all(
     ``executables`` optionally maps a client name to the executable to use
     (e.g. from the ``[executables]`` config); a client absent from the mapping
     falls back to its adapter's own ``PATH`` lookup.
-    ``whitelist`` restricts which adapters are considered active.
+    ``whitelist`` opts third-party plugins into loading (by entry-point name); the bundled adapters always load.
     """
     _t = time.perf_counter()
     if diag:

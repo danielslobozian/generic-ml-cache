@@ -119,11 +119,11 @@ trust_scan = false
 # periodically soft-purges executions not accessed within this window.
 # max_age = 30d
 
-# Optional: restrict which adapters are active. Default (* / omit) means all installed
-# adapters are available. List adapter names to enable only those; any session that
-# references a disabled adapter fails immediately with a clear error.
+# Optional: opt third-party adapter plugins into loading, by entry-point name. The
+# bundled adapters always load; a third-party plugin loads only if named here (so an
+# untrusted installed plugin never imports on its own). Omit (or *) for bundled only.
 # adapters = *
-# adapters = claude, cursor
+# adapters = my-org-internal-adapter
 
 # Optional: pin a client's executable (off-PATH installs, or a specific build).
 # [executables]
@@ -190,7 +190,8 @@ class FileConfig:
     trust_scan: bool | None = None
     max_size: int | None = None
     max_age: float | None = None
-    #: ``None`` means all adapters active; a frozenset restricts to the named set.
+    #: ``None`` loads the bundled adapters only; a frozenset also opts in the named
+    #: third-party plugins (by entry-point name). Bundled adapters always load.
     adapters: frozenset[str] | None = None
     executables: dict[str, str] = field(default_factory=dict)
     source: Path | None = None
