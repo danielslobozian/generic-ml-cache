@@ -10,6 +10,7 @@ import tempfile
 import uuid
 from pathlib import Path
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 
 #: Sub-directory under the blob root for canary-write health probes. Probe files
@@ -33,7 +34,14 @@ class FilesystemBlobStore(BlobStorePort):
         self._root = Path(root)
 
     def _path_for(self, key: str) -> Path:
-        return self._root / key
+        # Re-validate the key through the core value object at the adapter boundary
+        # (X16): a raw traversal string like "../outside" can masquerade as a BlobKey
+        # (Python does no runtime type check), and this is a PUBLIC, installable
+        # adapter an embedder calls directly — so force the key through BlobKey's own
+        # constructor, which rejects anything that could escape the root, before
+        # resolving ``root / key``. The value object IS the guard (no bespoke
+        # path-check here — that misplaced security is what W7 declined).
+        return self._root / BlobKey(key)
 
     def get(self, key: str) -> bytes | None:
         path = self._path_for(key)
@@ -42,8 +50,8 @@ class FilesystemBlobStore(BlobStorePort):
         return path.read_bytes()
 
     def put(self, key: str, output: bytes) -> None:
+        path = self._path_for(key)  # validate the key before any filesystem side effect
         self._root.mkdir(parents=True, exist_ok=True)
-        path = self._path_for(key)
         temp_descriptor, temp_name = tempfile.mkstemp(dir=self._root, suffix=".tmp")
         temp_path = Path(temp_name)
         try:
@@ -61,7 +69,7 @@ class FilesystemBlobStore(BlobStorePort):
         # Active canary: write a unique probe into a health folder under the blob
         # root and remove it. If the write lands, real writes almost certainly work
         # (this catches an unreachable / read-only / out-of-space store a passive
-        # check would miss). Content-addressed name = always new, no collisions.
+        # check would miss). The probe name is a fresh-token hash — always new.
         try:
             health_dir = self._root / _HEALTH_DIR
             health_dir.mkdir(parents=True, exist_ok=True)

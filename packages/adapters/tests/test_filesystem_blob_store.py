@@ -21,9 +21,9 @@ def test_is_a_blob_store_port(tmp_path):
 
 
 def test_every_blobkey_resolves_strictly_within_the_store_root(tmp_path):
-    # The containment guarantee (W7/W23): the store holds NO traversal defense of its
-    # own — it resolves root / key and trusts the BlobKey type. So every validly
-    # constructed key, whatever its shape, must land strictly under the root.
+    # The containment guarantee (W7/W23/X16): the store holds no BESPOKE traversal
+    # check — it re-wraps the key through BlobKey and resolves root / key. So every
+    # validly constructed key, whatever its shape, must land strictly under the root.
     blob_store = FilesystemBlobStore(tmp_path)
     root = tmp_path.resolve()
     for value in ("a", "a.b-c_d", "x" * 255, "deadbeef.req", "..req"):
@@ -33,12 +33,22 @@ def test_every_blobkey_resolves_strictly_within_the_store_root(tmp_path):
             assert root in path.resolve().parents
 
 
-def test_a_traversal_key_never_reaches_the_store_it_is_unconstructible(tmp_path):
-    # The store needs no ".." check because the boundary is the type: an unsafe key
-    # cannot be constructed, so put/get/remove can never receive one (W7/W23).
+def test_a_raw_traversal_string_is_rejected_at_the_adapter_boundary(tmp_path):
+    # X16: this is a PUBLIC installable adapter an embedder calls DIRECTLY with a raw
+    # str, which Python lets masquerade as a BlobKey. The adapter re-wraps every key
+    # through BlobKey, so a traversal string is rejected at get/put/remove — it never
+    # resolves outside the root. (The prior test raised at BlobKey(bad) construction,
+    # before put was even entered, so it never exercised this boundary.)
+    blob_store = FilesystemBlobStore(tmp_path)
+    outside = tmp_path.parent / "evil"
     for bad in ("../evil", "a/b", "/abs", "..", "."):
         with pytest.raises(ValueError, match="invalid blob key"):
-            FilesystemBlobStore(tmp_path).put(BlobKey(bad), b"data")
+            blob_store.put(bad, b"pwn")  # a raw str, NOT BlobKey(bad)
+        with pytest.raises(ValueError, match="invalid blob key"):
+            blob_store.get(bad)
+        with pytest.raises(ValueError, match="invalid blob key"):
+            blob_store.remove(bad)
+    assert not outside.exists()  # nothing escaped the store root
 
 
 def test_get_unknown_key_returns_none(tmp_path):

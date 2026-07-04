@@ -20,12 +20,14 @@ class BlobStorePort(ABC):
     The key is a validated :class:`BlobKey` — ``<execution_id>_<content fingerprint>``
     the core mints and hands in (W7, X25), NOT a raw string. Each blob is owned by
     exactly one execution (the ``execution_id`` prefix), so deleting an execution
-    deletes exactly its own blobs. Because a ``BlobKey`` is validated at construction
-    to a bounded ``[A-Za-z0-9._-]`` charset with no path separators and no ``.``/``..``,
-    a store may resolve it directly against its root (``root / key``): the TYPE is the
-    containment guarantee, so the store neither re-validates the key nor holds any
-    traversal defense of its own (that logic belongs at the boundary, not in an
-    adapter — an S3 store cannot ``..`` anyway).
+    deletes exactly its own blobs. A ``BlobKey`` is validated at construction to a
+    bounded ``[A-Za-z0-9._-]`` charset with no path separators and no ``.``/``..``, so
+    the TYPE is the containment guarantee — a store never needs a bespoke ``..`` check
+    (misplaced security in an adapter; an S3 store cannot ``..`` anyway). Because Python
+    does no runtime type check, a public installable adapter an embedder calls directly
+    (the shipped filesystem store) re-wraps the incoming key through ``BlobKey`` at its
+    boundary (X16), so a raw traversal string masquerading as a ``BlobKey`` is rejected
+    by the value object itself — reusing the guard, not reimplementing it.
     """
 
     @abstractmethod
