@@ -26,7 +26,7 @@ from generic_ml_cache_core.application.port.outbound.execution_repository_port i
     ExecutionRepositoryPort,
 )
 from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
-from generic_ml_cache_core.application.usecase import journal_events
+from generic_ml_cache_core.common import journal_events
 from generic_ml_cache_core.common.checksum import file_content_fingerprint
 from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
 

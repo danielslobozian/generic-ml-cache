@@ -4,13 +4,51 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import Protocol
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
-from generic_ml_cache_core.common.checksum import checksum_input_data
+from generic_ml_cache_core.common.checksum import (
+    checksum_input_data,
+    fingerprint_arguments,
+    text_checksum,
+)
+
+
+class KeyedCallInputs(Protocol):
+    """The raw, key-determining fields any command must expose to be keyed.
+
+    The *set* of allow-paths is keyed (a different set of folders is a different
+    call). ``scan_trust`` is *not* here — it decides cacheability, not the key, and
+    the folders' contents are never fingerprinted (see ``domain/service/cacheability.py``).
+
+    All attributes are declared as read-only (@property) so frozen dataclasses
+    satisfy this protocol without pyright emitting mutable-attribute mismatches.
+    """
+
+    @property
+    def client(self) -> str: ...
+    @property
+    def model(self) -> str: ...
+    @property
+    def effort(self) -> str: ...
+    @property
+    def context(self) -> str: ...
+    @property
+    def prompt(self) -> str: ...
+    @property
+    def user_system_prompt(self) -> str | None: ...
+    @property
+    def input_file_paths(self) -> Sequence[str]: ...
+    @property
+    def allow_paths(self) -> Sequence[str]: ...
+    @property
+    def client_args(self) -> Sequence[str]: ...
+    @property
+    def grants(self) -> Sequence[str]: ...
 
 
 @dataclass(frozen=True)
@@ -45,6 +83,36 @@ class ManagedCallIdentity(CallIdentity):
         )
         object.__setattr__(self, "grants", frozenset(self.grants))
         object.__setattr__(self, "allow_paths", frozenset(self.allow_paths))
+
+    @classmethod
+    def from_keyed_inputs(
+        cls, keyed_inputs: KeyedCallInputs, input_file_fingerprints: Mapping[str, str]
+    ) -> ManagedCallIdentity:
+        """Assemble the identity from a command's keyed inputs and the already-computed
+        file fingerprints. Text inputs are checksummed here (pure); the file
+        fingerprints are supplied by the caller, which owns the I/O — a domain factory
+        reads no files (the same rule as ``Artifact.from_content``). A probe and a run
+        both call this, so they derive byte-for-byte the same identity."""
+        client_args_fingerprint = (
+            fingerprint_arguments(keyed_inputs.client_args) if keyed_inputs.client_args else None
+        )
+        system_fingerprint = (
+            text_checksum(keyed_inputs.user_system_prompt)
+            if keyed_inputs.user_system_prompt
+            else None
+        )
+        return cls(
+            client=keyed_inputs.client,
+            model=keyed_inputs.model,
+            effort=keyed_inputs.effort,
+            context_fingerprint=text_checksum(keyed_inputs.context),
+            prompt_fingerprint=text_checksum(keyed_inputs.prompt),
+            input_file_fingerprints=input_file_fingerprints,
+            client_args_fingerprint=client_args_fingerprint,
+            system_fingerprint=system_fingerprint,
+            allow_paths=frozenset(keyed_inputs.allow_paths),
+            grants=frozenset(keyed_inputs.grants),
+        )
 
     def generate_key(self) -> str:
         key_data: dict[str, str] = {

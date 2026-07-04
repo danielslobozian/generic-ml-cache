@@ -33,7 +33,7 @@ from generic_ml_cache_core.application.port.outbound.execution_repository_port i
 )
 from generic_ml_cache_core.application.port.outbound.gateway_forward_port import GatewayForwardPort
 from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
-from generic_ml_cache_core.application.usecase import journal_events
+from generic_ml_cache_core.common import journal_events
 
 _SUCCESS_STATUS = 200
 

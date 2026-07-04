@@ -4,7 +4,7 @@
 
 Pure value objects (no ports, no I/O). They live in the domain so an inbound
 port can return them without the port ring importing a use case. The projection
-that builds them from journal rows is ``usecase.session_report.build_session_report``.
+that builds them from journal rows is ``domain.service.session_report.build_session_report``.
 """
 
 from __future__ import annotations

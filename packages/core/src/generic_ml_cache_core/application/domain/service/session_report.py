@@ -23,17 +23,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import SessionEventRow
 from generic_ml_cache_core.application.domain.model.session.session_report import (
     DayActivity,
     ModelUsage,
     SessionReport,
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
-from generic_ml_cache_core.application.port.outbound.metrics_port import SessionEventRow
+from generic_ml_cache_core.common import journal_events
 
 #: Events where a real client call ran (vs. a HIT replay or an offline MISS).
-EXECUTED_EVENTS = frozenset({"record", "run", "would_hit", "would_miss"})
-_HIT = "hit"
+EXECUTED_EVENTS = frozenset(
+    {journal_events.RECORD, journal_events.RUN, journal_events.WOULD_HIT, journal_events.WOULD_MISS}
+)
 
 
 def _tokens(usage: TokenUsage | None) -> int | None:
@@ -77,7 +79,7 @@ def build_session_report(
         )
         usage = usage_by_key.get(row.execution_key) if row.execution_key else None
 
-        if row.event == _HIT:
+        if row.event == journal_events.HIT:
             hits += 1
             day_counts["hits"] += 1
             model_counts["hits"] += 1

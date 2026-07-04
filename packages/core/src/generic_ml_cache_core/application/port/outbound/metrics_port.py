@@ -5,21 +5,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import NamedTuple
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import SessionEventRow
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 
-
-class SessionEventRow(NamedTuple):
-    """One journal event in a session, with the fields a session report needs:
-    the ISO timestamp (for per-day grouping), the event name, the client/provider
-    and model (the token axis), and the execution key (to look up token usage)."""
-
-    ts: str
-    event: str
-    client: str
-    model: str
-    execution_key: str | None
+__all__ = ["MetricsPort", "SessionEventRow"]
 
 
 class MetricsPort(ABC):

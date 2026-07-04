@@ -17,6 +17,7 @@ from generic_ml_cache_core.application.domain.model.session.session_report impor
     TagSessionReport,
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.domain.service.session_report import build_session_report
 from generic_ml_cache_core.application.port.inbound.session_report.report_for_session_command import (
     ReportForSessionCommand,
 )
@@ -36,7 +37,6 @@ from generic_ml_cache_core.application.port.outbound.metrics_port import (
     MetricsPort,
     SessionEventRow,
 )
-from generic_ml_cache_core.application.usecase.session_report import build_session_report
 
 
 class SessionReportService(ReportForSessionUseCase, ReportForTagUseCase):
