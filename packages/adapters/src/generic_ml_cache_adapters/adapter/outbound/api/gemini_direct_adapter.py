@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
 import urllib.request
 from typing import Any
 
@@ -23,9 +22,10 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.domain.model.usage.usage import int_or_none
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
-from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
+from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_adapters.adapter.outbound.api._gemini_thinking import GeminiThinkingConfig
+from generic_ml_cache_adapters.adapter.outbound.api._http import request_json
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -107,14 +107,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             headers={"X-goog-api-key": self._api_key_value()},
             method="GET",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
-            raise ProviderApiError(
-                provider="gemini", status_code=exc.code, body=error_body
-            ) from exc
+        return request_json(req, provider="gemini", timeout=self._timeout)
 
     def _post(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         data = json.dumps(body).encode("utf-8")
@@ -127,14 +120,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             },
             method="POST",
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace")
-            raise ProviderApiError(
-                provider="gemini", status_code=exc.code, body=error_body
-            ) from exc
+        return request_json(req, provider="gemini", timeout=self._timeout)
 
     def _extract_text(self, response: dict[str, Any]) -> str:
         candidates = response.get("candidates", [])
