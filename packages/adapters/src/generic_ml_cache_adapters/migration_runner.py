@@ -3,8 +3,13 @@
 """Migration runner for the unified gmlcache database.
 
 Tracks applied migrations in a ``schema_version`` table — one row, one integer.
-Each migration runs atomically inside a BEGIN / COMMIT block: a crash mid-migration
-leaves the version unchanged so the next startup retries from a clean slate.
+Each migration **file** runs in its own transaction (Flyway-style): the runner wraps
+the file — and its version bump — in one ``BEGIN``/``COMMIT`` and applies it with the
+driver's native ``executescript``, which parses statement boundaries itself (a ``;``
+inside a trigger or string no longer splits the file, unlike the old hand-split). A
+crash mid-file rolls that file back atomically, leaving the store cleanly at the last
+successfully-applied version, from which the next startup resumes. A migration file
+must therefore NOT contain its own transaction control — the runner owns it.
 
 On first use with a store that was previously managed by the PRAGMA-based runner,
 the bootstrap reads ``PRAGMA user_version`` once as a fallback and seeds
@@ -65,13 +70,12 @@ class SqliteStoreMigration(StoreMigrationPort):
         return schema_version(self._conn_factory, self._diag)
 
 
-def _iter_statements(sql: str):
-    """Yield non-empty SQL statements, stripping line comments."""
-    for block in sql.split(";"):
-        lines = [ln for ln in block.splitlines() if not ln.strip().startswith("--")]
-        stmt = "\n".join(lines).strip()
-        if stmt:
-            yield stmt
+def _migration_file(version: int) -> Path:
+    """The ``.sql`` file that migrates the store to ``version``."""
+    try:
+        return next(_MIGRATIONS_DIR.glob(f"{version:04d}.*.sql"))
+    except StopIteration as exc:
+        raise MigrationFailed(f"no migration file found for version {version}") from exc
 
 
 def _bootstrap_version(conn: DbConnection) -> int:
@@ -109,9 +113,10 @@ def run_migrations(
     conn = conn_factory()
     try:
         # Rebuild-style migrations (create-with-constraints -> copy -> drop -> rename)
-        # must run with foreign keys OFF (SQLite's documented table-rebuild procedure);
-        # the pragma is a no-op inside a transaction, so it is set here, before BEGIN.
-        # Normal connections keep foreign_keys ON (the datasource factory sets it).
+        # must run with foreign keys OFF (SQLite's documented table-rebuild procedure).
+        # The pragma is connection-level and a no-op inside a transaction, so it is set
+        # here — before any migration transaction — and persists for every file this
+        # connection applies. Normal connections keep foreign_keys ON (the factory).
         conn.execute("PRAGMA foreign_keys = OFF")
         version = _bootstrap_version(conn)
         if version >= _CURRENT_VERSION:
@@ -124,40 +129,44 @@ def run_migrations(
             return
         if diag:
             diag.info(
-                "applying schema migrations",
-                from_version=version,
-                to_version=_CURRENT_VERSION,
+                "applying schema migrations", from_version=version, to_version=_CURRENT_VERSION
             )
-        conn.execute("BEGIN")
-        try:
-            for v in range(version + 1, _CURRENT_VERSION + 1):
-                sql_file = next(_MIGRATIONS_DIR.glob(f"{v:04d}.*.sql"))
-                if diag:
-                    diag.debug("applying migration", migration=sql_file.name)
-                for stmt in _iter_statements(sql_file.read_text(encoding="utf-8")):
-                    conn.execute(stmt)
-                conn.execute("UPDATE schema_version SET version = ?", (v,))
-            conn.execute("COMMIT")
-            if diag:
-                diag.info(
-                    "migrations complete",
-                    version=_CURRENT_VERSION,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                )
-        except Exception as exc:  # noqa: BLE001 — roll back on ANY failure, then translate (§10)
-            conn.execute("ROLLBACK")
-            if diag:
-                diag.error(
-                    "migration failed — rolled back",
-                    from_version=version,
-                    exc=exc,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                )
-            raise MigrationFailed(
-                f"schema migration from version {version} failed and was rolled back"
-            ) from exc
+        for target in range(version + 1, _CURRENT_VERSION + 1):
+            _apply_migration(conn, target, diag)
+        if diag:
+            diag.info(
+                "migrations complete",
+                version=_CURRENT_VERSION,
+                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+            )
     finally:
         conn.close()
+
+
+def _apply_migration(conn: DbConnection, target: int, diag: DiagnosticsPort | None) -> None:
+    """Apply one migration file atomically, bumping ``schema_version`` in the same
+    transaction so the file and its version commit as a unit (Flyway per-file). A
+    failure rolls this file back and translates the raw error (§10), leaving the store
+    at the last good version."""
+    sql_file = _migration_file(target)
+    if diag:
+        diag.debug("applying migration", migration=sql_file.name)
+    migration_sql = sql_file.read_text(encoding="utf-8")
+    try:
+        # One transaction per file: executescript parses the statements natively (a
+        # ';' inside a trigger/string is safe) and BEGIN..COMMIT makes the whole file
+        # plus its version bump atomic. ``target`` is a trusted int from the shipped
+        # migration range, never external input.
+        conn.executescript(
+            f"BEGIN;\n{migration_sql}\nUPDATE schema_version SET version = {target};\nCOMMIT;"  # noqa: S608 — target is a trusted int, not external input
+        )
+    except Exception as exc:  # noqa: BLE001 — roll this file back on ANY failure, then translate (§10)
+        conn.rollback()
+        if diag:
+            diag.error("migration failed — rolled back", to_version=target, exc=exc)
+        raise MigrationFailed(
+            f"schema migration to version {target} failed and was rolled back"
+        ) from exc
 
 
 def schema_version(

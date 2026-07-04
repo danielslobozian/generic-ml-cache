@@ -27,6 +27,16 @@ class DbCursor(Protocol):
 class DbConnection(Protocol):
     def execute(self, sql: str, parameters: Any = ...) -> DbCursor: ...
 
+    def executescript(self, sql_script: str) -> DbCursor:
+        """Execute a multi-statement SQL script in one native call.
+
+        The driver parses the statement boundaries itself — correctly, even when a
+        ``;`` appears inside a trigger body or a string literal — so callers never
+        hand-split on ``;``. The migration runner relies on this. (DBAPI2 does not
+        mandate this method, but every engine the shipped adapters target provides
+        it; a driver that lacks it needs its own migration adapter.)"""
+        ...
+
     def commit(self) -> None: ...
 
     def rollback(self) -> None: ...

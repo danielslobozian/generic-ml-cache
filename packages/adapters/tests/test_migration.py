@@ -136,12 +136,13 @@ def test_schema_version_returns_empty_on_broken_connection() -> None:
     assert schema_version(_bad) == []
 
 
-def test_migration_rollback_on_failure(tmp_path: Path) -> None:
+def test_missing_migration_file_fails_loud_at_the_last_good_version(tmp_path: Path) -> None:
     db_path = tmp_path / "gmlcache.sqlite3"
     factory = _factory(db_path)
-    # Patch _CURRENT_VERSION to a version whose SQL file doesn't exist so the run
-    # fails inside the transaction, triggers ROLLBACK, and translates the raw error
-    # to the project's MigrationFailed (§10 — the sqlite3 type never leaks).
+    # Patch _CURRENT_VERSION past the shipped files so the run applies 1..4, then finds
+    # no file for version 5 and fails loud with the project's MigrationFailed (§10 — the
+    # StopIteration never leaks). Per-file commits mean the store lands cleanly at the
+    # last successfully-applied version (4), not rolled back to 0.
     import generic_ml_cache_adapters.migration_runner as _m
 
     original = _m._CURRENT_VERSION
@@ -152,14 +153,86 @@ def test_migration_rollback_on_failure(tmp_path: Path) -> None:
     finally:
         _m._CURRENT_VERSION = original
 
-    # Rolled back: nothing from the failed run was committed, so the recorded
-    # schema version is untouched (the seeded 0, not a partial 1/2).
     conn = factory()
     try:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
     finally:
         conn.close()
+    assert version == 4  # the last good version, cleanly applied
+
+
+def _synthetic_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, sql: str
+) -> None:
+    """Point the runner at a temp migrations dir holding one synthetic file (version 1)."""
+    import generic_ml_cache_adapters.migration_runner as _m
+
+    migrations_dir = tmp_path / "migrations"
+    migrations_dir.mkdir()
+    (migrations_dir / name).write_text(sql, encoding="utf-8")
+    monkeypatch.setattr(_m, "_MIGRATIONS_DIR", migrations_dir)
+    monkeypatch.setattr(_m, "_CURRENT_VERSION", 1)
+    monkeypatch.setattr(_m, "_MIGRATION_IDS", (name.removesuffix(".sql"),))
+
+
+def test_a_failing_migration_file_rolls_back_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The second statement fails (table already exists); the whole FILE must roll back
+    # as one transaction, so the table the first statement created is gone and the
+    # version is untouched — Flyway-style per-file atomicity.
+    _synthetic_migration(
+        tmp_path,
+        monkeypatch,
+        "0001.bad.sql",
+        "CREATE TABLE good (x INTEGER);\nCREATE TABLE good (y INTEGER);\n",
+    )
+    factory = _factory(tmp_path / "db.sqlite3")
+    with pytest.raises(MigrationFailed):
+        run_migrations(factory)
+    conn = factory()
+    try:
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert "good" not in tables  # the first statement rolled back with the file
     assert version == 0
+
+
+def test_a_semicolon_inside_a_trigger_body_does_not_split_the_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A trigger body carries ';' between its statements. The old hand-split on ';'
+    # would have run a broken fragment; the native executescript parses it correctly.
+    _synthetic_migration(
+        tmp_path,
+        monkeypatch,
+        "0001.trigger.sql",
+        (
+            "CREATE TABLE t (x INTEGER, y INTEGER);\n"
+            "CREATE TRIGGER t_ai AFTER INSERT ON t BEGIN\n"
+            "  UPDATE t SET y = 1 WHERE x = NEW.x;\n"
+            "  UPDATE t SET y = y + 1 WHERE x = NEW.x;\n"
+            "END;\n"
+        ),
+    )
+    factory = _factory(tmp_path / "db.sqlite3")
+    run_migrations(factory)  # must not raise
+    conn = factory()
+    try:
+        triggers = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger'").fetchall()
+        }
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert "t_ai" in triggers  # the trigger applied whole, ';' in its body and all
+    assert version == 1
 
 
 def test_sqlite_store_migration_is_a_store_migration_port(tmp_path: Path) -> None:
