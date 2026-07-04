@@ -62,11 +62,12 @@ def test_report_for_session_counts_events():
 
 
 def test_report_counts_runs_with_failed_persistence():
+    from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
     from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import UnpersistedRun
 
     metrics = _FakeMetrics({"s1": [_event(execution_key="k1"), _event(execution_key="k2")]}, {})
     # k1 is awaiting persistence (in the store's repair worklist); k2 is fine.
-    repair = _FakeRepair([UnpersistedRun("k1", ("blob-a",))])
+    repair = _FakeRepair([UnpersistedRun("k1", ExecutionId.generate(), ("blob-a",))])
     svc = SessionReportService(  # type: ignore[arg-type]  # duck-typed ports
         report_source=metrics, sessions=metrics, repository=_FakeRepo(), repair_source=repair
     )

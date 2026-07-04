@@ -163,7 +163,9 @@ class TestCacheMode:
         svc.execute(_Cmd())
 
         runner.assert_called_once()
-        assert repo.save.call_count == 2
+        # One row: save inserts IN_PROGRESS, record_outcome transitions it (W1).
+        assert repo.save.call_count == 1
+        assert repo.record_outcome.call_count == 1
 
     def test_miss_records_record_event(self):
         runner = MagicMock(return_value=_make_result())
@@ -181,6 +183,7 @@ class TestCacheMode:
         repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         blob = create_autospec(BlobStorePort)
+        blob.exists.return_value = False  # not already stored -> the write path runs
         svc = _make_svc(repo=repo, blob=blob, runner=runner)
 
         svc.execute(_Cmd())
@@ -206,7 +209,9 @@ class TestRefreshMode:
 
         svc.execute(_Cmd(cache_mode=CacheMode.REFRESH))
 
-        assert repo.save.call_count == 2
+        # One row: save inserts IN_PROGRESS, record_outcome transitions it (W1).
+        assert repo.save.call_count == 1
+        assert repo.record_outcome.call_count == 1
 
 
 class TestOfflineMode:
@@ -328,7 +333,9 @@ class TestFailedRun:
 
         svc.execute(_Cmd())
 
-        assert repo.save.call_count == 2
+        # save inserts IN_PROGRESS, record_outcome transitions it to FAILED; no blobs.
+        assert repo.save.call_count == 1
+        assert repo.record_outcome.call_count == 1
         blob.put.assert_not_called()
 
     def test_failed_run_records_run_not_record_event(self):

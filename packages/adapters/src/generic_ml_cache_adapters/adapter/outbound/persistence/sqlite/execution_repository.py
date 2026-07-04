@@ -41,6 +41,7 @@ from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import 
     RepairMlRunsPort,
     UnpersistedRun,
 )
+from generic_ml_cache_core.common.errors import StoreConsistencyError
 from generic_ml_cache_core.common.immutable import thaw
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
@@ -52,6 +53,16 @@ from generic_ml_cache_adapters.db import DbConnection
 
 #: stored string values of the input artifact types, for the idempotency check.
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
+
+
+def _require_artifact_update(rowcount: int, execution_id: str, blob_key: str) -> None:
+    """A mark_* that updated zero rows means the artifact it was meant to resolve
+    is not there — a stale/mistargeted write. Fail loud rather than no-op (W1)."""
+    if rowcount == 0:
+        raise StoreConsistencyError(
+            f"no artifact row for execution {execution_id} / blob {blob_key} to update"
+        )
+
 
 #: One ``executions`` row, in ``_EXECUTION_COLUMNS`` order. ``failure_message``
 #: is NULL exactly when ``failure_reason`` is (they are written together from one
@@ -181,36 +192,60 @@ class SqliteExecutionRepository(
             self._insert_artifacts(connection, execution_id, execution.artifacts)
             self._insert_token_usage(connection, execution_id, execution.token_usage)
 
-    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
+    def record_outcome(self, execution: MlExecution) -> None:
+        failure = execution.failure
         with self._write_transaction() as connection:
+            row_id = self._require_row_id(connection, execution.execution_id)
             connection.execute(
+                "UPDATE executions SET state = ?, failure_reason = ?, failure_message = ?, "
+                "failure_exit_code = ? WHERE id = ?",
+                (
+                    execution.execution_state.value,
+                    failure.reason.value if failure else None,
+                    failure.message if failure else None,
+                    failure.exit_code if failure else None,
+                    row_id,
+                ),
+            )
+            self._insert_token_usage(connection, row_id, execution.token_usage)
+
+    def persist_artifact(self, execution_id: ExecutionId, artifact: Artifact) -> None:
+        with self._write_transaction() as connection:
+            row_id = self._require_row_id(connection, execution_id)
+            self._insert_artifacts(connection, row_id, [artifact])
+
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None:
+        with self._write_transaction() as connection:
+            cursor = connection.execute(
                 "UPDATE artifacts SET status = ?, persisted_at = ?, status_detail = NULL "
                 "WHERE blob_key = ? AND execution_id = "
-                "(SELECT id FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1)",
+                "(SELECT id FROM executions WHERE execution_id = ?)",
                 (
                     ArtifactStatus.STORED.value,
                     self._clock.now().isoformat(),
                     blob_key,
-                    execution_key,
+                    execution_id,
                 ),
             )
+            _require_artifact_update(cursor.rowcount, execution_id, blob_key)
 
-    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
+    def mark_artifacts_failed(self, execution_id: ExecutionId, blob_key: str, detail: str) -> None:
         with self._write_transaction() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 "UPDATE artifacts SET status = ?, status_detail = ? "
                 "WHERE blob_key = ? AND execution_id = "
-                "(SELECT id FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1)",
-                (ArtifactStatus.FAILED.value, detail, blob_key, execution_key),
+                "(SELECT id FROM executions WHERE execution_id = ?)",
+                (ArtifactStatus.FAILED.value, detail, blob_key, execution_id),
             )
+            _require_artifact_update(cursor.rowcount, execution_id, blob_key)
 
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]:
         connection = self._connect()
         try:
             rows = connection.execute(
-                "SELECT e.execution_key, a.blob_key FROM executions e "
+                "SELECT e.execution_key, e.execution_id, a.blob_key FROM executions e "
                 "JOIN artifacts a ON a.execution_id = e.id "
-                "WHERE e.output_persisted = 0 AND a.status != ? "
+                "WHERE e.output_persisted = 0 AND a.status != ? AND e.execution_id IS NOT NULL "
                 "AND e.id = (SELECT id FROM executions e2 WHERE e2.execution_key = e.execution_key "
                 "ORDER BY e2.id DESC LIMIT 1) "
                 "ORDER BY e.execution_key, a.id",
@@ -218,32 +253,55 @@ class SqliteExecutionRepository(
             ).fetchall()
         finally:
             connection.close()
-        grouped: dict[str, list[str]] = {}
-        for execution_key, blob_key in rows:
-            keys = grouped.setdefault(execution_key, [])
-            if blob_key not in keys:
-                keys.append(blob_key)
-        return [UnpersistedRun(key, tuple(blob_keys)) for key, blob_keys in grouped.items()]
+        grouped: dict[str, tuple[str, list[str]]] = {}
+        for execution_key, execution_id, blob_key in rows:
+            _stored_id, blob_keys = grouped.setdefault(execution_key, (execution_id, []))
+            if blob_key not in blob_keys:
+                blob_keys.append(blob_key)
+        return [
+            UnpersistedRun(key, ExecutionId(execution_id), tuple(blob_keys))
+            for key, (execution_id, blob_keys) in grouped.items()
+        ]
 
-    def finalize_output_persisted(self, execution_key: str) -> None:
+    def finalize_output_persisted(self, execution_id: ExecutionId) -> None:
         with self._write_transaction() as connection:
             row = connection.execute(
-                "SELECT id, state FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1",
-                (execution_key,),
+                "SELECT id, execution_key, state FROM executions WHERE execution_id = ?",
+                (execution_id,),
             ).fetchone()
             if row is None:
-                return
-            latest_id, state = row
+                raise StoreConsistencyError(
+                    f"finalize: no execution row for execution_id {execution_id}"
+                )
+            row_id, execution_key, state = row
+            not_stored = connection.execute(
+                "SELECT COUNT(*) FROM artifacts WHERE execution_id = ? AND status != ?",
+                (row_id, ArtifactStatus.STORED.value),
+            ).fetchone()[0]
+            if not_stored:
+                raise StoreConsistencyError(
+                    f"finalize: execution {execution_id} still has {not_stored} "
+                    "artifact(s) not STORED"
+                )
             # A servable SUCCESS supersedes the prior current — but a recorded
             # FAILURE (record_on_error) is persisted without displacing the good
-            # answer. Supersede FIRST (the new row is still output_persisted=0, so
-            # the supersede query cannot match it), then promote the new row.
+            # answer. Supersede FIRST (this row is still output_persisted=0, so the
+            # supersede query cannot match it), then promote THIS exact row by id.
             if state == ExecutionState.SUCCESS.value:
                 self._supersede_prior_current(connection, execution_key, self._clock.now())
             connection.execute(
                 "UPDATE executions SET output_persisted = 1 WHERE id = ?",
-                (latest_id,),
+                (row_id,),
             )
+
+    @staticmethod
+    def _require_row_id(connection: DbConnection, execution_id: ExecutionId) -> int:
+        row = connection.execute(
+            "SELECT id FROM executions WHERE execution_id = ?", (execution_id,)
+        ).fetchone()
+        if row is None:
+            raise StoreConsistencyError(f"no execution row for execution_id {execution_id}")
+        return int(row[0])
 
     @staticmethod
     def _upsert_identity(

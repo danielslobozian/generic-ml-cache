@@ -7,15 +7,18 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
+
 
 @dataclass(frozen=True)
 class UnpersistedRun:
     """A run whose latest execution never finished persisting: it is not servable
-    (``output_persisted`` is false) and carries the ``blob_keys`` of its artifacts
-    that are not yet STORED. Repair checks each blob's presence and marks it STORED
-    or FAILED accordingly."""
+    (``output_persisted`` is false) and carries the ``execution_id`` and the
+    ``blob_keys`` of its artifacts that are not yet STORED. Repair checks each blob's
+    presence and marks it STORED or FAILED by ``execution_id`` accordingly."""
 
     execution_key: str
+    execution_id: ExecutionId
     blob_keys: tuple[str, ...]
 
 

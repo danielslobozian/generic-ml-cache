@@ -212,6 +212,21 @@ class ProviderProtocolError(ProviderApiError):
     code: ClassVar[str] = "provider.protocol_error"
 
 
+class StoreConsistencyError(CacheError):
+    """Raised when a DB-first write targets an execution that is not there to
+    update — a ``mark_artifacts_*`` / ``finalize`` for an ``execution_id`` with no
+    matching row, or a ``finalize`` while some artifact is not yet STORED.
+
+    In the correct flow this never happens (the row was just inserted and every
+    artifact marked before finalize). Surfacing it loudly instead of silently
+    updating zero rows is the whole point of W1: a mistargeted write must fail,
+    not corrupt the cache in silence. Java: an optimistic-lock / ``@Version``
+    mismatch surfacing as ``OptimisticLockException`` rather than a lost update.
+    """
+
+    code: ClassVar[str] = "store.consistency"
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

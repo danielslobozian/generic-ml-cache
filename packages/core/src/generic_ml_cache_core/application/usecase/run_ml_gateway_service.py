@@ -209,16 +209,16 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         for blob_key, content in ((input_key, input_bytes), (output_key, forwarded.body_bytes)):
             try:
                 self._blob_store.put(blob_key, content)
-                self._repository.mark_artifacts_stored(cache_key, blob_key)
+                self._repository.mark_artifacts_stored(execution.execution_id, blob_key)
             except Exception as exc:  # noqa: BLE001 — surface any blob-write failure as FAILED (§10)
-                self._repository.mark_artifacts_failed(cache_key, blob_key, str(exc))
+                self._repository.mark_artifacts_failed(execution.execution_id, blob_key, str(exc))
                 all_stored = False
                 if self._diag:
                     self._diag.error(
                         "gateway blob write failed", key=cache_key, blob=blob_key, exc=exc
                     )
         if all_stored:
-            self._repository.finalize_output_persisted(cache_key)
+            self._repository.finalize_output_persisted(execution.execution_id)
         self._metrics.record_event(
             journal_events.RECORD,
             execution_key=cache_key,

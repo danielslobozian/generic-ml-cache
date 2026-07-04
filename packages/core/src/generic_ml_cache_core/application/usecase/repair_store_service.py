@@ -40,16 +40,16 @@ class RepairStoreService(RepairStoreUseCase):
             all_present = True
             for blob_key in run.blob_keys:
                 if self._blob_store.get(blob_key) is not None:
-                    self._save.mark_artifacts_stored(run.execution_key, blob_key)
+                    self._save.mark_artifacts_stored(run.execution_id, blob_key)
                     blobs_reconciled += 1
                 else:
                     self._save.mark_artifacts_failed(
-                        run.execution_key, blob_key, "blob missing on repair"
+                        run.execution_id, blob_key, "blob missing on repair"
                     )
                     blobs_missing += 1
                     all_present = False
             if all_present:
-                self._save.finalize_output_persisted(run.execution_key)
+                self._save.finalize_output_persisted(run.execution_id)
                 runs_recovered += 1
             else:
                 runs_unrecoverable += 1

@@ -499,24 +499,40 @@ def test_managed_and_api_keys_never_collide():
 # --- IN_PROGRESS lifecycle ---------------------------------------------------
 
 
-def test_in_progress_recorded_before_final_success():
-    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="ok\n")))
+def test_in_progress_row_is_visible_while_the_client_runs_then_updated_in_place():
+    # W1: one row per run. It is saved IN_PROGRESS before the client is called (so
+    # an external observer sees the in-flight run), then transitioned in place to
+    # SUCCESS — never a second insert whose "latest by key" a racer could steal.
+    seen_during_run: list[list[ExecutionState]] = []
+
+    class _PeekingRunner(FakeClientRunner):
+        def execute_managed(self, request, workspace):
+            seen_during_run.append(
+                [
+                    execution.execution_state
+                    for key in harness.repo.all_execution_keys()
+                    for execution in harness.repo.find_all(key)
+                ]
+            )
+            return super().execute_managed(request, workspace)
+
+    harness = _Harness(client_runner=_PeekingRunner(ClientRunResult(exit_code=0, stdout="ok\n")))
     execution = harness.service.execute(_managed_command())
     key = execution.call_identity.generate_key()
+
+    assert seen_during_run == [[ExecutionState.IN_PROGRESS]]
     history = harness.repo.find_all(key)
-    assert len(history) == 2
-    assert history[0].execution_state is ExecutionState.IN_PROGRESS
-    assert history[1].execution_state is ExecutionState.SUCCESS
+    assert len(history) == 1
+    assert history[0].execution_state is ExecutionState.SUCCESS
 
 
-def test_in_progress_recorded_before_final_failure():
+def test_in_progress_row_transitions_to_failure_in_place():
     harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stderr="err")))
     execution = harness.service.execute(_managed_command())
     key = execution.call_identity.generate_key()
     history = harness.repo.find_all(key)
-    assert len(history) == 2
-    assert history[0].execution_state is ExecutionState.IN_PROGRESS
-    assert history[1].execution_state is ExecutionState.FAILED
+    assert len(history) == 1  # one row, updated in place (no orphan IN_PROGRESS — W2)
+    assert history[0].execution_state is ExecutionState.FAILED
 
 
 def test_uncacheable_run_does_not_record_in_progress():

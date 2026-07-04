@@ -18,12 +18,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
+import pytest
+
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
     ArtifactStatus,
     ArtifactType,
 )
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -31,6 +34,7 @@ from generic_ml_cache_core.application.domain.model.identity.managed_call_identi
     ManagedCallIdentity,
 )
 from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import UnpersistedRun
+from generic_ml_cache_core.common.errors import StoreConsistencyError
 
 
 class MlRunStore(Protocol):
@@ -41,9 +45,13 @@ class MlRunStore(Protocol):
     def find_current(self, execution_key: str) -> MlExecution | None: ...
     def find_all(self, execution_key: str) -> list[MlExecution]: ...
     def save(self, execution: MlExecution) -> None: ...
-    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None: ...
-    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None: ...
-    def finalize_output_persisted(self, execution_key: str) -> None: ...
+    def record_outcome(self, execution: MlExecution) -> None: ...
+    def persist_artifact(self, execution_id: ExecutionId, artifact: Artifact) -> None: ...
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None: ...
+    def mark_artifacts_failed(
+        self, execution_id: ExecutionId, blob_key: str, detail: str
+    ) -> None: ...
+    def finalize_output_persisted(self, execution_id: ExecutionId) -> None: ...
     def blob_reference_count(self, blob_key: str) -> int: ...
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]: ...
     def soft_purge_execution(self, execution_key: str) -> None: ...
@@ -92,6 +100,27 @@ def _pending(identity: ManagedCallIdentity, content: bytes = b"answer") -> MlExe
     )
 
 
+def _in_progress(
+    identity: ManagedCallIdentity,
+    *,
+    execution_id: ExecutionId | None = None,
+    state: ExecutionState = ExecutionState.IN_PROGRESS,
+) -> MlExecution:
+    """An IN_PROGRESS row (no artifacts) as the W1 write path first saves it. Pass
+    ``execution_id`` to build the transition payload for ``record_outcome`` (same
+    id, final state)."""
+    execution = MlExecution(
+        call_identity=identity,
+        execution_state=state,
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        output_persisted=False,
+        artifacts=[],
+    )
+    if execution_id is not None:
+        execution.execution_id = execution_id
+    return execution
+
+
 class MlRunStoreConformance:
     """The behavioral contract for an ml-run persistence store. Subclass + implement
     ``make_store``; the shipped SQLite adapter and the reference fake both pass this."""
@@ -126,11 +155,12 @@ class MlRunStoreConformance:
         identity = _identity()
         key = identity.generate_key()
         blob_key = _artifact().blob_key
-        store.save(_pending(identity))
+        execution = _pending(identity)
+        store.save(execution)
         assert store.find_current(key) is None  # PENDING -> not servable
-        store.mark_artifacts_stored(key, blob_key)
+        store.mark_artifacts_stored(execution.execution_id, blob_key)
         assert store.find_current(key) is None  # stored but not finalized
-        store.finalize_output_persisted(key)
+        store.finalize_output_persisted(execution.execution_id)
         current = store.find_current(key)
         assert current is not None and current.output_persisted is True
 
@@ -141,10 +171,64 @@ class MlRunStoreConformance:
         identity = _identity()
         key = identity.generate_key()
         blob_key = _artifact().blob_key
-        store.save(_pending(identity))
-        store.mark_artifacts_failed(key, blob_key, "disk full")
+        execution = _pending(identity)
+        store.save(execution)
+        store.mark_artifacts_failed(execution.execution_id, blob_key, "disk full")
         assert store.find_current(key) is None
         assert store.blob_reference_count(blob_key) == 0  # FAILED rows hold no reference
+
+    def test_per_document_path_via_persist_artifact(self, tmp_path: Path) -> None:
+        # The service's W1 path: save an IN_PROGRESS row (no artifacts), transition
+        # it, then append + resolve each document one at a time by execution_id.
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        in_progress = _in_progress(identity)
+        store.save(in_progress)
+        store.record_outcome(
+            _in_progress(
+                identity, execution_id=in_progress.execution_id, state=ExecutionState.SUCCESS
+            )
+        )
+        artifact = _artifact(status=ArtifactStatus.PENDING)
+        store.persist_artifact(in_progress.execution_id, artifact)
+        store.mark_artifacts_stored(in_progress.execution_id, artifact.blob_key)
+        store.finalize_output_persisted(in_progress.execution_id)
+        assert store.find_current(key) is not None
+
+    def test_finalize_targets_its_own_row_not_the_latest_by_key(self, tmp_path: Path) -> None:
+        # The W1 corruption fix: with two rows for one key, finalizing the OLDER row
+        # must promote THAT row, not the latest one a concurrent writer inserted.
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        older = _pending(identity, content=b"old")
+        newer = _pending(identity, content=b"new")
+        store.save(older)
+        store.save(newer)  # newer is the latest row by key
+        store.mark_artifacts_stored(older.execution_id, BlobKey("blob" + b"old".hex()))
+        store.finalize_output_persisted(older.execution_id)  # target the OLDER row
+        current = store.find_current(key)
+        assert current is not None
+        assert current.artifacts[0].blob_key == BlobKey("blob" + b"old".hex())
+
+    def test_finalize_requires_every_artifact_stored(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        execution = _pending(identity)  # its artifact is PENDING, never marked STORED
+        store.save(execution)
+        with pytest.raises(StoreConsistencyError):
+            store.finalize_output_persisted(execution.execution_id)
+
+    def test_mark_on_unknown_execution_id_raises(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        with pytest.raises(StoreConsistencyError):
+            store.mark_artifacts_stored(ExecutionId.generate(), _artifact().blob_key)
+
+    def test_finalize_on_unknown_execution_id_raises(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        with pytest.raises(StoreConsistencyError):
+            store.finalize_output_persisted(ExecutionId.generate())
 
     def test_runs_awaiting_persistence_lists_the_unfinished_run(self, tmp_path: Path) -> None:
         store = self.make_store(tmp_path)

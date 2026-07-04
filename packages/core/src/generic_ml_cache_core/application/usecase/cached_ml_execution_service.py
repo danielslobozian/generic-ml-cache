@@ -18,6 +18,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     ArtifactType,
 )
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -277,8 +278,10 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         if input_artifacts:
             # DB-first: attach the PENDING rows to the current execution, then store
             # each blob and flip to STORED/FAILED — no orphaned back-filled blobs.
+            # mark/finalize target the current execution's own execution_id.
             self._annotate.add_input_artifacts(execution_key, input_artifacts)
-            self._persist_artifact_blobs(execution_key, input_artifacts)
+            for artifact in input_artifacts:
+                self._store_blob(current_execution.execution_id, artifact)
 
     def _run_uncacheable(
         self, command: TCommand, call_identity: CallIdentity, execution_key: str
@@ -349,18 +352,20 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                         )
                     return result
 
-            # Write the IN_PROGRESS marker before the client is called so that
-            # external observers (dashboard, probe, inspector) can see the run.
-            self._save.save(
-                MlExecution(
-                    call_identity=call_identity,
-                    execution_state=ExecutionState.IN_PROGRESS,
-                    execution_kind=self._execution_kind(command),
-                    output_persisted=False,
-                    input_persisted=False,
-                    artifacts=[],
-                )
+            # Insert the IN_PROGRESS row before the client is called so external
+            # observers (dashboard, probe, inspector) can see the in-flight run.
+            # This is the ONE row for this call: record_outcome / mark / finalize
+            # update it in place, targeting its execution_id — never a second
+            # insert whose "latest row by key" a concurrent writer could steal (W1).
+            in_progress = MlExecution(
+                call_identity=call_identity,
+                execution_state=ExecutionState.IN_PROGRESS,
+                execution_kind=self._execution_kind(command),
+                output_persisted=False,
+                input_persisted=False,
+                artifacts=[],
             )
+            self._save.save(in_progress)
 
             if self._diag:
                 self._diag.info("cache MISS — running client", key=execution_key)
@@ -368,32 +373,29 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             should_store = command.should_persist(client_run_result.succeeded)
             if not should_store:
                 return self._record_unstored(
-                    command, call_identity, execution_key, client_run_result, _t
+                    command, in_progress, execution_key, client_run_result, _t
                 )
-            return self._record_stored(command, call_identity, execution_key, client_run_result, _t)
+            return self._record_stored(command, in_progress, execution_key, client_run_result, _t)
 
     def _record_unstored(
         self,
         command: TCommand,
-        call_identity: CallIdentity,
+        in_progress: MlExecution,
         execution_key: str,
         client_run_result: ClientRunResult,
         _t: float,
     ) -> MlExecution:
-        """A run that is not persisted (a failure without ``record_on_error``): record
-        the execution with NO artifact rows (they would be unhydratable noise), but
-        return the artifacts hydrated so the caller can show the client's output."""
-        execution = MlExecution(
-            call_identity=call_identity,
+        """A run that is not persisted (a failure without ``record_on_error``):
+        transition the IN_PROGRESS row to its final outcome with NO artifact rows
+        (they would be unhydratable noise), but return the artifacts hydrated so the
+        caller can show the client's output."""
+        execution = replace(
+            in_progress,
             execution_state=client_run_result.outcome(),
-            execution_kind=self._execution_kind(command),
-            output_persisted=False,
-            input_persisted=False,
-            artifacts=[],
             token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
         )
-        self._save.save(execution)
+        self._save.record_outcome(execution)
         if self._diag:
             self._diag.info(
                 "client run complete — not stored",
@@ -413,15 +415,23 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
     def _record_stored(
         self,
         command: TCommand,
-        call_identity: CallIdentity,
+        in_progress: MlExecution,
         execution_key: str,
         client_run_result: ClientRunResult,
         _t: float,
     ) -> MlExecution:
-        """DB-first store: write the rows PENDING (not yet servable, so ``save`` does
-        not supersede), put each blob, then ``finalize`` (supersede + persist) only
-        when every artifact is STORED. A blob-write failure leaves the run recorded
-        but not servable, with the failed artifacts visible for the user to re-run."""
+        """DB-first store: transition the IN_PROGRESS row to its outcome, then persist
+        each document one at a time (insert PENDING → link an already-stored blob or
+        write it → mark STORED/FAILED), and finally ``finalize`` (supersede + persist)
+        only when every artifact is STORED. A blob-write failure leaves the run
+        recorded but not servable, with the failed artifacts visible to re-run."""
+        execution = replace(
+            in_progress,
+            execution_state=client_run_result.outcome(),
+            token_usage=client_run_result.token_usage,
+            failure=client_run_result.failure(),
+        )
+        self._save.record_outcome(execution)
         output_artifacts = self._build_artifacts(client_run_result, status=ArtifactStatus.PENDING)
         # Input rides on a stored output (DATASET is a superset of CACHE).
         store_input = command.persistence_depth.stores_input
@@ -430,21 +440,11 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             if store_input
             else []
         )
-        pending = output_artifacts + input_artifacts
-        execution = MlExecution(
-            call_identity=call_identity,
-            execution_state=client_run_result.outcome(),
-            execution_kind=self._execution_kind(command),
-            output_persisted=False,
-            input_persisted=bool(input_artifacts),
-            artifacts=pending,
-            token_usage=client_run_result.token_usage,
-            failure=client_run_result.failure(),
+        resolved, all_stored = self._persist_documents(
+            execution.execution_id, output_artifacts + input_artifacts
         )
-        self._save.save(execution)
-        resolved, all_stored = self._persist_artifact_blobs(execution_key, pending)
         if all_stored:
-            self._save.finalize_output_persisted(execution_key)
+            self._save.finalize_output_persisted(execution.execution_id)
             if self._diag:
                 self._diag.info("cached RECORD", key=execution_key)
             self._record_event(journal_events.RECORD, execution_key, command)
@@ -463,7 +463,12 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                 duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                 stored=all_stored,
             )
-        return replace(execution, output_persisted=all_stored, artifacts=resolved)
+        return replace(
+            execution,
+            output_persisted=all_stored,
+            input_persisted=bool(input_artifacts),
+            artifacts=resolved,
+        )
 
     def _run_metered(
         self, command: TCommand, call_identity: CallIdentity, execution_key: str
@@ -534,34 +539,44 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             artifact_type, blob_key, content_bytes, name=artifact_name, status=status
         )
 
-    def _persist_artifact_blobs(
-        self, execution_key: str, artifacts: list[Artifact]
+    def _persist_documents(
+        self, execution_id: ExecutionId, artifacts: list[Artifact]
     ) -> tuple[list[Artifact], bool]:
-        """DB-first blob storage: the rows are already PENDING, so put each blob and
-        flip the row to STORED, or to FAILED (with the error detail) if the write
-        fails — a failed write is caught and surfaced, never thrown out of execute().
-        Returns the artifacts with their resolved status and whether all stored."""
+        """Persist each document one at a time against ``execution_id`` (the W1
+        per-document path): insert its PENDING row, then store its blob and resolve
+        the row to STORED/FAILED. Returns the artifacts with their resolved status
+        and whether every one is STORED."""
         resolved: list[Artifact] = []
         all_stored = True
         for artifact in artifacts:
-            try:
-                self._blob_store.put(artifact.blob_key, artifact.content or b"")
-                self._save.mark_artifacts_stored(execution_key, artifact.blob_key)
-                resolved.append(replace(artifact, status=ArtifactStatus.STORED))
-            except Exception as exc:  # noqa: BLE001 — translate ANY blob-write failure to a visible FAILED status (§10)
-                self._save.mark_artifacts_failed(execution_key, artifact.blob_key, str(exc))
-                resolved.append(
-                    replace(artifact, status=ArtifactStatus.FAILED, status_detail=str(exc))
-                )
+            self._save.persist_artifact(execution_id, artifact)
+            stored_artifact = self._store_blob(execution_id, artifact)
+            resolved.append(stored_artifact)
+            if stored_artifact.status is ArtifactStatus.FAILED:
                 all_stored = False
-                if self._diag:
-                    self._diag.error(
-                        "artifact blob write failed",
-                        key=execution_key,
-                        blob=artifact.blob_key,
-                        exc=exc,
-                    )
         return resolved, all_stored
+
+    def _store_blob(self, execution_id: ExecutionId, artifact: Artifact) -> Artifact:
+        """Link an already-stored content-addressed blob (no rewrite) or write it,
+        then mark the artifact STORED; a write failure marks it FAILED with the
+        detail — caught and surfaced, never thrown out of execute() (§10)."""
+        if self._blob_store.exists(artifact.blob_key):
+            self._save.mark_artifacts_stored(execution_id, artifact.blob_key)
+            return replace(artifact, status=ArtifactStatus.STORED)
+        try:
+            self._blob_store.put(artifact.blob_key, artifact.content or b"")
+            self._save.mark_artifacts_stored(execution_id, artifact.blob_key)
+            return replace(artifact, status=ArtifactStatus.STORED)
+        except Exception as exc:  # noqa: BLE001 — translate ANY blob-write failure to a visible FAILED status (§10)
+            self._save.mark_artifacts_failed(execution_id, artifact.blob_key, str(exc))
+            if self._diag:
+                self._diag.error(
+                    "artifact blob write failed",
+                    execution_id=execution_id,
+                    blob=artifact.blob_key,
+                    exc=exc,
+                )
+            return replace(artifact, status=ArtifactStatus.FAILED, status_detail=str(exc))
 
     def _build_input_artifacts(
         self, command: TCommand, status: ArtifactStatus = ArtifactStatus.STORED

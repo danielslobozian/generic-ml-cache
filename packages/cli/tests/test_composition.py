@@ -70,7 +70,9 @@ def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
     assert _stdout(second) == _stdout(first)  # replay reproduces the output
 
     key = first.call_identity.generate_key()
-    assert len(_repo(tmp_path).find_all(key)) == 2  # IN_PROGRESS + SUCCESS from one real run
+    # One row per real run: the IN_PROGRESS row is updated in place to SUCCESS
+    # (W1 — no second insert), and the replay is a cache hit that writes nothing.
+    assert len(_repo(tmp_path).find_all(key)) == 1
     assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
@@ -88,7 +90,8 @@ def test_managed_durable_across_a_fresh_wiring(tmp_path):
     replay = build_use_cases(tmp_path, client="fake").run_ml.execute(command)
     assert b"durable" in _stdout(replay)
     key = replay.call_identity.generate_key()
-    assert len(_repo(tmp_path).find_all(key)) == 2
+    # One row for the real run (updated in place); the fresh-wiring replay hits it.
+    assert len(_repo(tmp_path).find_all(key)) == 1
 
 
 def test_passthrough_records_then_replays(tmp_path):

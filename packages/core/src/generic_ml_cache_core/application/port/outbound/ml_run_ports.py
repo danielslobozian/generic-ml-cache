@@ -23,6 +23,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 
 
@@ -46,42 +47,65 @@ class ExecutionSizeEntry:
 
 
 class SaveMlRunPort(ABC):
-    """Append a new ML run and drive its artifacts' persistence lifecycle (C-4).
+    """Append a new ML run and drive its persistence lifecycle in place (W1, C-4).
 
-    DB-first ordering: ``save`` writes the run with its artifacts ``PENDING`` and
-    ``output_persisted`` still false (so it is not yet servable and does NOT
-    supersede the prior current run). The use case then stores each blob and calls
-    ``mark_artifacts_stored`` / ``mark_artifacts_failed``, and finally
-    ``finalize_output_persisted`` once every artifact is stored — which is the point
-    the run becomes servable and supersedes its predecessor.
+    ONE row per client call, updated in place: ``save`` inserts the IN_PROGRESS
+    row; ``record_outcome`` transitions THAT row (matched by ``execution_id``) to
+    its final SUCCESS/FAILURE with usage; ``persist_artifact`` appends each output
+    document as ``PENDING``; ``mark_artifacts_stored`` / ``mark_artifacts_failed``
+    resolve each; and ``finalize_output_persisted`` flips the run servable once
+    every artifact is STORED. Every post-``save`` step targets ``execution_id`` — the
+    exact row just written — never "the latest row by key", which a concurrent
+    second writer could have inserted (the W1 corruption bug).
     """
 
     @abstractmethod
     def save(self, execution: MlExecution) -> None:
-        """Append a new execution. A servable success (``output_persisted`` true)
-        atomically supersedes the prior current execution for the same key — the
-        supersession happens here, where atomicity belongs, never in the caller. A
-        run saved not-yet-persisted (the C-4 DB-first path) supersedes nothing; that
-        is deferred to ``finalize_output_persisted``."""
+        """Insert a new execution row with its ``execution_id``. A servable success
+        (``output_persisted`` true) atomically supersedes the prior current
+        execution for the same key — the supersession happens here, where atomicity
+        belongs. The DB-first write path saves an IN_PROGRESS row (not servable,
+        supersedes nothing) and defers servability to ``finalize_output_persisted``;
+        a caller may also save an already-complete execution directly (its artifacts
+        are inserted with it)."""
 
     @abstractmethod
-    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
-        """Flip every artifact of the key's latest execution that references
-        ``blob_key`` to ``STORED`` and stamp ``persisted_at`` — the blob is now
-        confirmed in the store. Two artifacts sharing a blob (e.g. empty
-        stdout+stderr) are marked together; one blob backs both."""
+    def record_outcome(self, execution: MlExecution) -> None:
+        """Transition the row identified by ``execution.execution_id`` from
+        IN_PROGRESS to its final state (SUCCESS/FAILURE), writing the failure detail
+        and token usage. Updates the ONE row in place — never inserts a second. The
+        run is still not servable (its artifacts are persisted next). Raises
+        ``StoreConsistencyError`` if no row carries that ``execution_id``."""
 
     @abstractmethod
-    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
-        """Flip every artifact of the key's latest execution that references
-        ``blob_key`` to ``FAILED`` with ``detail`` — the blob write did not land, so
-        the run cannot become servable and the failure is visible in read views."""
+    def persist_artifact(self, execution_id: ExecutionId, artifact: Artifact) -> None:
+        """Append ``artifact`` as a ``PENDING`` row of the execution identified by
+        ``execution_id`` (the per-document DB-first step: the row is written before
+        its blob is stored). Raises ``StoreConsistencyError`` for an unknown id."""
 
     @abstractmethod
-    def finalize_output_persisted(self, execution_key: str) -> None:
-        """Mark the key's latest execution output-persisted (servable) and supersede
-        the prior current execution — called once all its artifacts are ``STORED``.
-        The deferred half of ``save``'s supersession under DB-first ordering."""
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None:
+        """Flip every artifact of the execution identified by ``execution_id`` that
+        references ``blob_key`` to ``STORED`` and stamp ``persisted_at`` — the blob
+        is confirmed in the store. Two artifacts sharing a blob (e.g. empty
+        stdout+stderr) are marked together; one blob backs both. Raises
+        ``StoreConsistencyError`` if no such artifact row exists to update."""
+
+    @abstractmethod
+    def mark_artifacts_failed(self, execution_id: ExecutionId, blob_key: str, detail: str) -> None:
+        """Flip every artifact of the execution identified by ``execution_id`` that
+        references ``blob_key`` to ``FAILED`` with ``detail`` — the blob write did
+        not land, so the run cannot become servable and the failure is visible in
+        read views. Raises ``StoreConsistencyError`` if there is no row to update."""
+
+    @abstractmethod
+    def finalize_output_persisted(self, execution_id: ExecutionId) -> None:
+        """Mark the execution identified by ``execution_id`` output-persisted
+        (servable) and supersede the prior current execution — called once all its
+        artifacts are ``STORED``. The deferred half of ``save``'s supersession under
+        DB-first ordering. Raises ``StoreConsistencyError`` if the id is unknown or
+        any of its artifacts is not yet STORED (finalize must never make a run with a
+        missing blob servable)."""
 
 
 class ReadMlRunPort(ABC):

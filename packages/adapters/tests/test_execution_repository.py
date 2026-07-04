@@ -56,7 +56,8 @@ class FixedClock(ClockPort):
 
 class _NullCursor:
     lastrowid: int | None = 0
-    rowcount: int = 0
+    # A matched row: mark_artifacts_stored's rowcount guard treats 0 as a stale write.
+    rowcount: int = 1
 
     def fetchone(self) -> Any:
         return None
@@ -767,13 +768,13 @@ def test_db_first_pending_run_is_not_servable_until_finalized(tmp_path):
     assert repo.find_current(key) is None
     assert repo.find_all(key)[0].artifacts[0].status is ArtifactStatus.PENDING
 
-    repo.mark_artifacts_stored(key, blob_key)
+    repo.mark_artifacts_stored(execution.execution_id, blob_key)
     stored = repo.find_all(key)[0].artifacts[0]
     assert stored.status is ArtifactStatus.STORED
     assert stored.persisted_at is not None
     assert repo.find_current(key) is None  # still not finalized
 
-    repo.finalize_output_persisted(key)
+    repo.finalize_output_persisted(execution.execution_id)
     current = repo.find_current(key)
     assert current is not None
     assert current.output_persisted is True
@@ -787,7 +788,7 @@ def test_db_first_failed_blob_marks_artifact_failed(tmp_path):
     blob_key = execution.artifacts[0].blob_key
 
     repo.save(execution)
-    repo.mark_artifacts_failed(key, blob_key, "disk full")
+    repo.mark_artifacts_failed(execution.execution_id, blob_key, "disk full")
     failed = repo.find_all(key)[0].artifacts[0]
     assert failed.status is ArtifactStatus.FAILED
     assert failed.status_detail == "disk full"
@@ -806,14 +807,14 @@ def test_finalizing_a_recorded_failure_does_not_supersede_the_good_answer(tmp_pa
 
     good = _pending_execution(identity, content=b"good")
     repo.save(good)
-    repo.mark_artifacts_stored(key, good.artifacts[0].blob_key)
-    repo.finalize_output_persisted(key)
+    repo.mark_artifacts_stored(good.execution_id, good.artifacts[0].blob_key)
+    repo.finalize_output_persisted(good.execution_id)
     assert repo.find_current(key) is not None
 
     failed = _pending_execution(identity, state=ExecutionState.FAILED, content=b"boom")
     repo.save(failed)
-    repo.mark_artifacts_stored(key, failed.artifacts[0].blob_key)
-    repo.finalize_output_persisted(key)
+    repo.mark_artifacts_stored(failed.execution_id, failed.artifacts[0].blob_key)
+    repo.finalize_output_persisted(failed.execution_id)
 
     current = repo.find_current(key)
     assert current is not None

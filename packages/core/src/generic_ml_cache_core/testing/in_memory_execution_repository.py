@@ -11,6 +11,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
     ArtifactStatus,
 )
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
@@ -27,6 +28,16 @@ from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import 
     RepairMlRunsPort,
     UnpersistedRun,
 )
+from generic_ml_cache_core.common.errors import StoreConsistencyError
+
+
+def _require_artifact_update(matched: int, execution_id: ExecutionId, blob_key: str) -> None:
+    """A mark_* that matched no artifact is a stale/mistargeted write — fail loud
+    rather than no-op, matching the SQLite adapter's rowcount guard (W1)."""
+    if matched == 0:
+        raise StoreConsistencyError(
+            f"no artifact row for execution {execution_id} / blob {blob_key} to update"
+        )
 
 
 class InMemoryExecutionRepository(
@@ -73,35 +84,40 @@ class InMemoryExecutionRepository(
                     prior.superseded_at = superseded_at
         history.append(stored)
 
-    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
-        execution = self._latest(execution_key)
-        if execution is None:
-            return
+    def record_outcome(self, execution: MlExecution) -> None:
+        _key, stored = self._require_by_id(execution.execution_id)
+        stored.execution_state = execution.execution_state
+        stored.failure = execution.failure
+        stored.token_usage = execution.token_usage
+
+    def persist_artifact(self, execution_id: ExecutionId, artifact: Artifact) -> None:
+        _key, stored = self._require_by_id(execution_id)
+        stored.artifacts.append(replace(artifact, content=None))
+
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None:
+        _key, execution = self._require_by_id(execution_id)
         persisted_at = self._clock.now().isoformat()
-        execution.artifacts[:] = [
-            replace(a, status=ArtifactStatus.STORED, persisted_at=persisted_at, status_detail=None)
-            if a.blob_key == blob_key
-            else a
-            for a in execution.artifacts
-        ]
+        matched = self._resolve_artifacts(
+            execution, blob_key, status=ArtifactStatus.STORED, persisted_at=persisted_at
+        )
+        _require_artifact_update(matched, execution_id, blob_key)
 
-    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
-        execution = self._latest(execution_key)
-        if execution is None:
-            return
-        execution.artifacts[:] = [
-            replace(a, status=ArtifactStatus.FAILED, status_detail=detail)
-            if a.blob_key == blob_key
-            else a
-            for a in execution.artifacts
-        ]
+    def mark_artifacts_failed(self, execution_id: ExecutionId, blob_key: str, detail: str) -> None:
+        _key, execution = self._require_by_id(execution_id)
+        matched = self._resolve_artifacts(
+            execution, blob_key, status=ArtifactStatus.FAILED, status_detail=detail
+        )
+        _require_artifact_update(matched, execution_id, blob_key)
 
-    def finalize_output_persisted(self, execution_key: str) -> None:
-        execution = self._latest(execution_key)
-        if execution is None:
-            return
+    def finalize_output_persisted(self, execution_id: ExecutionId) -> None:
+        execution_key, execution = self._require_by_id(execution_id)
+        not_stored = sum(1 for a in execution.artifacts if a.status is not ArtifactStatus.STORED)
+        if not_stored:
+            raise StoreConsistencyError(
+                f"finalize: execution {execution_id} still has {not_stored} artifact(s) not STORED"
+            )
         # A servable SUCCESS supersedes the prior current; a recorded FAILURE
-        # (record_on_error) is persisted without displacing the good answer. The new
+        # (record_on_error) is persisted without displacing the good answer. This
         # row is still output_persisted=0 here, so _is_servable excludes it.
         if execution.execution_state is ExecutionState.SUCCESS:
             superseded_at = self._clock.now()
@@ -110,9 +126,49 @@ class InMemoryExecutionRepository(
                     prior.superseded_at = superseded_at
         execution.output_persisted = True
 
-    def _latest(self, execution_key: str) -> MlExecution | None:
-        history = self._by_key.get(execution_key, [])
-        return history[-1] if history else None
+    @staticmethod
+    def _resolve_artifacts(
+        execution: MlExecution,
+        blob_key: str,
+        *,
+        status: ArtifactStatus,
+        persisted_at: str | None = None,
+        status_detail: str | None = None,
+    ) -> int:
+        """Flip every artifact referencing ``blob_key`` to ``status`` in place;
+        return how many rows matched (0 means nothing to update — a stale write)."""
+        matched = 0
+        resolved: list[Artifact] = []
+        for artifact in execution.artifacts:
+            if artifact.blob_key == blob_key:
+                matched += 1
+                resolved.append(
+                    replace(
+                        artifact,
+                        status=status,
+                        persisted_at=persisted_at
+                        if persisted_at is not None
+                        else artifact.persisted_at,
+                        status_detail=status_detail,
+                    )
+                )
+            else:
+                resolved.append(artifact)
+        execution.artifacts[:] = resolved
+        return matched
+
+    def _require_by_id(self, execution_id: ExecutionId) -> tuple[str, MlExecution]:
+        located = self._locate_by_id(execution_id)
+        if located is None:
+            raise StoreConsistencyError(f"no execution row for execution_id {execution_id}")
+        return located
+
+    def _locate_by_id(self, execution_id: ExecutionId) -> tuple[str, MlExecution] | None:
+        for key, history in self._by_key.items():
+            for execution in history:
+                if execution.execution_id == execution_id:
+                    return key, execution
+        return None
 
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]:
         runs: list[UnpersistedRun] = []
@@ -125,7 +181,7 @@ class InMemoryExecutionRepository(
                 if a.status is not ArtifactStatus.STORED and a.blob_key not in blob_keys:
                     blob_keys.append(a.blob_key)
             if blob_keys:
-                runs.append(UnpersistedRun(key, tuple(blob_keys)))
+                runs.append(UnpersistedRun(key, latest.execution_id, tuple(blob_keys)))
         return runs
 
     def add_tags(self, execution_key: str, tags: list[str]) -> None:
