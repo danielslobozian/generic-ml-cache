@@ -203,7 +203,6 @@ class TestCacheMode:
         repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         blob = create_autospec(BlobStorePort)
-        blob.exists.return_value = False  # not already stored -> the write path runs
         svc = _make_svc(repo=repo, blob=blob, runner=runner)
 
         svc.execute(_Cmd())
@@ -507,7 +506,6 @@ class TestDatasetFailFast:
         repo.find_current.return_value = None
         blob = create_autospec(BlobStorePort)
         blob.is_healthy.return_value = False
-        blob.exists.return_value = False
         svc = _make_svc(repo=repo, blob=blob, runner=runner)
 
         svc.execute(_Cmd(persistence_depth=PersistenceDepth.CACHE))

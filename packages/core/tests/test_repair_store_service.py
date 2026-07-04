@@ -42,9 +42,6 @@ class InMemoryBlobStore(BlobStorePort):
     def put(self, key: str, output: bytes) -> None:
         self.store[key] = output
 
-    def exists(self, key: str) -> bool:
-        return key in self.store
-
     def is_healthy(self) -> bool:
         return True
 

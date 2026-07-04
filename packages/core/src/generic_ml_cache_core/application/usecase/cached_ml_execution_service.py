@@ -697,12 +697,10 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         return resolved, all_stored
 
     def _store_blob(self, execution_id: ExecutionId, artifact: Artifact) -> Artifact:
-        """Link an already-stored content-addressed blob (no rewrite) or write it,
-        then mark the artifact STORED; a write failure marks it FAILED with the
-        detail — caught and surfaced, never thrown out of execute() (§10)."""
-        if self._blob_store.exists(artifact.blob_key):
-            self._save.mark_artifacts_stored(execution_id, artifact.blob_key)
-            return replace(artifact, status=ArtifactStatus.STORED)
+        """Write the artifact's blob, then mark it STORED; a write failure marks it
+        FAILED with the detail — caught and surfaced, never thrown out of execute()
+        (§10). The blob is owned by this execution (its key is execution-scoped), so
+        the write is unconditional — no presence check, no dedup link (X25)."""
         try:
             self._blob_store.put(artifact.blob_key, artifact.content or b"")
             self._save.mark_artifacts_stored(execution_id, artifact.blob_key)

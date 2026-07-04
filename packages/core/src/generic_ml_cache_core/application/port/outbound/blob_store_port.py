@@ -37,15 +37,6 @@ class BlobStorePort(ABC):
         """Persist ``output`` under ``key``, overwriting any prior value."""
 
     @abstractmethod
-    def exists(self, key: BlobKey) -> bool:
-        """Return whether a blob is stored under ``key``.
-
-        A cheap, keyless presence test: it fetches no bytes and performs no
-        decryption. The DB-first write path uses it to LINK an already-stored
-        content-addressed blob (mark it STORED without rewriting) instead of
-        putting identical bytes again."""
-
-    @abstractmethod
     def is_healthy(self) -> bool:
         """Return whether the store can actually accept a write RIGHT NOW.
 
@@ -74,7 +65,7 @@ class BlobStorePort(ABC):
     def remove(self, key: BlobKey) -> None:
         """Delete the bytes stored under ``key``; a no-op if nothing is stored.
 
-        Removal is driven by a reference-counted prune (a blob is content-
-        addressed and may be shared by many executions), so a caller removes a
-        key only after confirming no execution still references it.
+        A blob is owned by exactly one execution (its key is execution-scoped),
+        so removing an execution removes exactly its own blobs — no shared-blob
+        reference counting, no presence check.
         """

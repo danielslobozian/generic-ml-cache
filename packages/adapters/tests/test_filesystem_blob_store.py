@@ -82,15 +82,6 @@ def test_is_healthy_leaves_no_probe_files_behind(tmp_path):
     assert not any(health_dir.iterdir())  # the canary is removed after the probe
 
 
-def test_exists_reflects_presence(tmp_path):
-    blob_store = FilesystemBlobStore(tmp_path)
-    assert blob_store.exists("key1") is False
-    blob_store.put("key1", b"value")
-    assert blob_store.exists("key1") is True
-    blob_store.remove("key1")
-    assert blob_store.exists("key1") is False
-
-
 def test_remove_deletes(tmp_path):
     blob_store = FilesystemBlobStore(tmp_path)
     blob_store.put("key1", b"value")
