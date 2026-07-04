@@ -113,16 +113,39 @@ class FilesystemExecutionKeyLock(ExecutionKeyLockPort):
         self._diag = diag
         self._timeout_seconds = timeout_seconds
         self._stripes = tuple(threading.RLock() for _ in range(_STRIPE_COUNT))
+        # Keys this thread already holds the OS lock for, so a nested same-key acquire
+        # is a no-op instead of self-denying: flock treats a second fd on the same file
+        # as a separate holder even within one process, so re-opening + re-locking the
+        # same key would spin the whole timeout out. The in-process stripe is already
+        # re-entrant (RLock); this makes the process-level half re-entrant to match, so
+        # the hit-time input back-fill (Y3) can take the key lock even when it runs
+        # inside the miss path that already holds it (the coalescing re-check).
+        self._held_by_thread = threading.local()
+
+    def _held_keys(self) -> set[str]:
+        keys: set[str] | None = getattr(self._held_by_thread, "keys", None)
+        if keys is None:
+            keys = set()
+            self._held_by_thread.keys = keys
+        return keys
 
     @contextmanager
     def acquire(self, execution_key: str) -> Generator[None]:
         # Thread-level first (fast, in-process), then process-level (the OS file lock).
         with self._stripes[hash(execution_key) % _STRIPE_COUNT]:
+            held = self._held_keys()
+            if execution_key in held:
+                # Re-entrant same-key acquire on this thread: the OS lock is already held
+                # by an outer acquire — nest as a no-op (see __init__).
+                yield
+                return
             fd = self._open_lock_file(execution_key)
             acquired = self._acquire_os_lock(fd, execution_key) if fd is not None else False
+            held.add(execution_key)
             try:
                 yield
             finally:
+                held.discard(execution_key)
                 if fd is not None:
                     if acquired:
                         _unlock(fd)

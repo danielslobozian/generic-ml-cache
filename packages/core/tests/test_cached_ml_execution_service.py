@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from unittest.mock import MagicMock, create_autospec
 
 import pytest
@@ -198,6 +198,9 @@ class _StatefulWriteStore(_MlRunStore):
         self.finalized: set[str] = set()
         self.mark_failed_calls: list[tuple[str, str]] = []
         self.removed_executions: list[str] = []
+        self.input_artifacts_added: list = []
+        #: What find_current returns (a live entry for a back-fill test; None = a miss).
+        self.current: MlExecution | None = None
         self._fail_mark_stored = fail_mark_stored
 
     def save(self, execution):
@@ -226,13 +229,13 @@ class _StatefulWriteStore(_MlRunStore):
         self.finalized.add(execution_id)
 
     def find_current(self, execution_key):
-        return None
+        return self.current
 
     def add_tags(self, execution_key, tags):
         pass
 
     def add_input_artifacts(self, execution_key, artifacts):
-        pass
+        self.input_artifacts_added.extend(artifacts)
 
 
 # ---------------------------------------------------------------------------
@@ -773,3 +776,57 @@ class TestSelfHealRemovalOrder:
         # is intact and the blob is still discoverable for a later repair/purge — the
         # old rows-first order would have deleted the row and orphaned the blob.
         assert repo.removed_executions == []
+
+
+class _InputSvc(_RunSvc):
+    """A service whose kind records one input document, so the hit-time back-fill has
+    something to write (the base _input_parts returns none)."""
+
+    def _input_parts(self, command):
+        return [(ArtifactType.INPUT_CONTEXT, None, b"ctx")]
+
+
+class TestHitTimeInputBackfill:
+    """Y3: the hit-time input back-fill runs under the per-key lock, re-checking the
+    entry under it, so a concurrent same-key purge can't orphan a back-filled blob."""
+
+    def test_backfill_takes_the_per_key_lock_and_stores_the_input(self):
+        repo = _StatefulWriteStore()
+        repo.current = replace(_make_execution(), input_persisted=False)
+        blob = _StatefulBlobStore()
+        spy = _SpyKeyLock()
+        svc = _InputSvc(
+            blob=blob,
+            repo=repo,
+            metrics=create_autospec(RecordCallEventPort),
+            execution_key_lock=spy,
+        )
+        current = replace(_make_execution(), input_persisted=False)
+
+        svc._accumulate_input(_Cmd(persistence_depth=PersistenceDepth.DATASET), "test-key", current)
+
+        assert spy.acquired == ["test-key"]  # the write took the per-key lock (X10 parity)
+        assert repo.input_artifacts_added  # rows attached to the current entry
+        assert blob.blobs  # the input blob was written
+
+    def test_backfill_skips_when_the_entry_is_purged_under_the_lock(self):
+        # Re-check under the lock: a concurrent purge removed the entry between the hit
+        # read and the lock, so find_current now returns None — the back-fill must NOT
+        # attach rows or write a blob, or it would leave an undiscoverable orphan.
+        repo = _StatefulWriteStore()
+        repo.current = None
+        blob = _StatefulBlobStore()
+        spy = _SpyKeyLock()
+        svc = _InputSvc(
+            blob=blob,
+            repo=repo,
+            metrics=create_autospec(RecordCallEventPort),
+            execution_key_lock=spy,
+        )
+        current = replace(_make_execution(), input_persisted=False)
+
+        svc._accumulate_input(_Cmd(persistence_depth=PersistenceDepth.DATASET), "test-key", current)
+
+        assert spy.acquired == ["test-key"]  # the lock was taken to re-check
+        assert repo.input_artifacts_added == []  # nothing attached to the purged entry
+        assert blob.blobs == {}  # NO orphaned input blob

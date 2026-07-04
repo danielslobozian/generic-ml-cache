@@ -356,19 +356,33 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         carry it, back-fill it onto the existing entry — the input is in the command,
         so no re-run is needed. Mirrors how tags accumulate on a hit; the user
         changing their mind to enrich the stored data is their decision."""
+        # Cheap lock-free fast path: nothing to back-fill unless the user now wants
+        # input kept and this entry does not already carry it.
         if not command.persistence_depth.stores_input or current_execution.input_persisted:
             return
-        input_artifacts = self._build_input_artifacts(
-            current_execution.execution_id, command, status=ArtifactStatus.PENDING
-        )
-        if input_artifacts:
+        # Take the per-key lock (Y3) — the SAME lock every writer and PurgeService hold
+        # (X10) — so a concurrent evict/purge of this key cannot delete the rows+blobs
+        # mid-back-fill and orphan an input blob. Re-read UNDER the lock: between the
+        # lock-free hit read and acquiring, the entry may have been purged or superseded,
+        # or another back-fill may already have added the input. The key lock is
+        # re-entrant, so this is safe even on the miss path's coalescing re-check, which
+        # already holds it.
+        with self._execution_key_lock.acquire(execution_key):
+            fresh = self._read.find_current(execution_key)
+            if fresh is None or fresh.input_persisted:
+                return
+            input_artifacts = self._build_input_artifacts(
+                fresh.execution_id, command, status=ArtifactStatus.PENDING
+            )
+            if not input_artifacts:
+                return
             # DB-first: attach the PENDING rows to the current execution, then store
             # each blob and flip to STORED/FAILED — no orphaned back-filled blobs.
             # mark/finalize target the current execution's own execution_id.
             self._annotate.add_input_artifacts(execution_key, input_artifacts)
             with self._content_write_lock():
                 for artifact in input_artifacts:
-                    self._store_blob(current_execution.execution_id, artifact)
+                    self._store_blob(fresh.execution_id, artifact)
 
     def _run_uncacheable(
         self, command: TCommand, call_identity: CallIdentity, execution_key: str

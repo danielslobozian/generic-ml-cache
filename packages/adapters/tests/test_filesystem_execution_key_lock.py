@@ -95,3 +95,18 @@ def test_wait_falls_back_to_a_bounded_ceiling_for_an_unbounded_timeout():
     # An unbounded (None) client timeout must not mean an unbounded wait — it falls
     # back to a bounded ceiling so a hung peer never blocks the user forever (X7).
     assert lock_wait_for_client_timeout(None) == _UNBOUNDED_CLIENT_WAIT_CEILING_SECONDS
+
+
+def test_same_key_reacquire_on_one_thread_is_reentrant_not_a_self_deadlock(tmp_path: Path):
+    # Y3: the hit-time input back-fill can run inside the miss path that already holds
+    # the key lock (the coalescing re-check). A nested same-key acquire on one thread
+    # must be a fast no-op — not spin the whole timeout self-denying its own OS lock.
+    lock = FilesystemExecutionKeyLock(tmp_path, timeout_seconds=30.0)
+    started = time.monotonic()
+    with lock.acquire("k"):
+        with lock.acquire("k"):  # re-entrant: must return immediately, never block
+            pass
+    assert time.monotonic() - started < 1.0  # nowhere near the 30s timeout
+    # The lock is fully released afterwards — a fresh acquire still works.
+    with lock.acquire("k"):
+        pass
