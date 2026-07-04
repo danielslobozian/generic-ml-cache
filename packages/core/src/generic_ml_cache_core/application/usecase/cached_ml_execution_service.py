@@ -86,7 +86,7 @@ TCommand = TypeVar("TCommand", bound="CacheableExecutionCommand")
 class CachedMlExecutionService(ABC, Generic[TCommand]):
     """The record-or-replay flow shared by every kind of cached ML execution.
 
-    It owns the cache resolution (offline/cache/refresh), content-addressed
+    It owns the cache resolution (offline/cache/refresh), execution-owned
     artifact storage, hydration on a hit, and journaling. Each concrete kind
     supplies only what differs through the hooks below — how to build its
     identity, how to run its client, its kind, and (optionally) whether a given
@@ -711,7 +711,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         """Write the artifact's blob, then mark it STORED; a write failure marks it
         FAILED with the detail — caught and surfaced, never thrown out of execute()
         (§10). The blob is owned by this execution (its key is execution-scoped), so
-        the write is unconditional — no presence check, no dedup link (X25)."""
+        the write is unconditional (X25)."""
         try:
             self._blob_store.put(artifact.blob_key, artifact.content or b"")
             self._save.mark_artifacts_stored(execution_id, artifact.blob_key)

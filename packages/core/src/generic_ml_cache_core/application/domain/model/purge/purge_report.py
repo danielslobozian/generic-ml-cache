@@ -12,10 +12,10 @@ class PurgeReport:
     """The outcome of a purge or eviction operation.
 
     ``executions_removed`` is the number of execution keys processed.
-    ``bytes_freed`` is the reduction in stored artifact bytes (from
-    ``total_stored_bytes()`` before vs after — accurate even when blobs are
-    content-addressed and shared). ``blobs_removed`` is the number of blob
-    files actually deleted from the blob store.
+    ``bytes_freed`` is the total size of the blobs removed, summed directly from
+    what was deleted (each blob is owned by one execution, so every removed blob's
+    bytes are freed exactly once). ``blobs_removed`` is the number of blob files
+    actually deleted from the blob store.
     """
 
     executions_removed: int

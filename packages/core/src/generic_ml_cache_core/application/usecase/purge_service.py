@@ -239,9 +239,9 @@ class PurgeService(
 
     def _remove_blobs(self, blob_sizes: dict[BlobKey, int]) -> tuple[int, int]:
         """Remove each collected blob — every one is owned solely by a purged
-        execution (X25), so there is no reference count to check — returning
-        (blobs_removed, bytes_freed) measured directly from what was deleted, not a
-        global before/after total (which a concurrent write would skew)."""
+        execution (X25), so it is deleted directly — returning (blobs_removed,
+        bytes_freed) measured directly from what was deleted, not a global
+        before/after total (which a concurrent write would skew)."""
         bytes_freed = 0
         for blob_key, size_bytes in blob_sizes.items():
             self._blob_store.remove(blob_key)

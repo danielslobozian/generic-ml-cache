@@ -17,10 +17,10 @@ class BlobStorePort(ABC):
     never interprets content. This is what makes it swappable (filesystem, S3,
     in-memory) without touching the core.
 
-    The key is a validated :class:`BlobKey` — a content fingerprint the core mints
-    and hands in (W7), NOT a raw string and NOT "always CallIdentity.generate_key()"
-    (a blob key addresses *content*, not an execution; content is shared across
-    executions and deduplicated). Because a ``BlobKey`` is validated at construction
+    The key is a validated :class:`BlobKey` — ``<execution_id>_<content fingerprint>``
+    the core mints and hands in (W7, X25), NOT a raw string. Each blob is owned by
+    exactly one execution (the ``execution_id`` prefix), so deleting an execution
+    deletes exactly its own blobs. Because a ``BlobKey`` is validated at construction
     to a bounded ``[A-Za-z0-9._-]`` charset with no path separators and no ``.``/``..``,
     a store may resolve it directly against its root (``root / key``): the TYPE is the
     containment guarantee, so the store neither re-validates the key nor holds any
@@ -66,6 +66,5 @@ class BlobStorePort(ABC):
         """Delete the bytes stored under ``key``; a no-op if nothing is stored.
 
         A blob is owned by exactly one execution (its key is execution-scoped),
-        so removing an execution removes exactly its own blobs — no shared-blob
-        reference counting, no presence check.
+        so removing an execution removes exactly its own blobs, deleted directly.
         """

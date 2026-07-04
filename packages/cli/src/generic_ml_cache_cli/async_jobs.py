@@ -3,8 +3,8 @@
 """Detached ("async") execution jobs.
 
 A detached managed run is a separate, OS-detached ``gmlcache`` worker process that does an
-ordinary managed run and records the result into the normal content-addressed cache. The
-launch command returns immediately with a **job id**; the worker outlives it.
+ordinary managed run and records the result into the normal cache. The launch command
+returns immediately with a **job id**; the worker outlives it.
 
 State lives under ``<store>/jobs/``:
 

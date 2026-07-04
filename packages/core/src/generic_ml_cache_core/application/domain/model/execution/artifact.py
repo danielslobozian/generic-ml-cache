@@ -58,8 +58,8 @@ class ArtifactType(enum.Enum):
 class Artifact:
     """One generated document of an execution's output.
 
-    An artifact is a STORED thing: it always has a ``blob_key`` (the content
-    checksum addressing its bytes in the blob store). ``content`` is materialised
+    An artifact is a STORED thing: it always has a ``blob_key`` (the execution-scoped
+    key addressing its bytes in the blob store). ``content`` is materialised
     only when the artifact is hydrated; dehydrated, only the reference remains.
     The use case — never the client runner — computes the key and stores the
     bytes; this object just records the result.

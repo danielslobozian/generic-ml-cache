@@ -6,7 +6,7 @@ The scrubber runs on *every* command's log path, so a bug leaks tokens into
 ``<store>/gmlcache.log`` on every run. Two failure modes matter equally:
 
   * **under-redaction** — a real secret survives into the log (a leak), and
-  * **over-redaction** — an ordinary value (a content-addressed key, a path, a
+  * **over-redaction** — an ordinary value (a SHA-256 checksum, a path, a
     UUID) is destroyed, silently corrupting the log — the *dominant* failure mode.
 
 Both are covered below: positive per-format, our own token, negatives / false
@@ -24,8 +24,9 @@ from generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostic
 )
 
 # A real 64-hex string: shape-identical to our legacy bare GMLCACHE_TOKEN *and* to a
-# SHA-256 content-addressed cache key. It must be preserved by value (else every log
-# line naming a cache key is destroyed) and redacted only by key name / gmlc_ prefix.
+# SHA-256 checksum (a blob key's fingerprint suffix, a content fingerprint). It must be
+# preserved by value (else every log line naming one is destroyed) and redacted only by
+# key name / gmlc_ prefix.
 _BARE_HEX_64 = "a3f5c9e1b7d2486092f456ab7788ccddeeff00112233445566778899aabbccdd"
 
 

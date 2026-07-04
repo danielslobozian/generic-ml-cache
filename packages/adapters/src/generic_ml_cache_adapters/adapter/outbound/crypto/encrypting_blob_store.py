@@ -3,11 +3,11 @@
 """EncryptingBlobStore: transparent at-rest encryption over any blob store.
 
 A decorator that encrypts content on ``put`` and decrypts on ``get``, keyed by the
-in-memory data key. The blob **key stays the plaintext content fingerprint**, so
-content-addressing, dedup, and the execution record are untouched — encryption is a
-storage layer *beneath* the key, never part of it. (Encryption is non-deterministic,
-so the same plaintext stores different ciphertext each time; the key is the plaintext
-hash, so dedup still works.)
+in-memory data key. The blob **key is untouched** (the execution-owned
+``<execution_id>_<content fingerprint>``) — encryption is a storage layer *beneath*
+the key, never part of it, so the execution record and key naming are unaffected.
+(Encryption is non-deterministic, so the same plaintext stores different ciphertext
+each time; the key names the owning execution's artifact, not the ciphertext.)
 
 Pure: it depends only on the ports (a ``BlobStorePort`` to wrap and a ``CipherPort``
 to call), never on the crypto library directly.

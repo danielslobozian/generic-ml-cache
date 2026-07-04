@@ -91,7 +91,7 @@ _PII_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     ),
     # Our own encryption token, carrying the ``gmlc_`` provenance prefix (CG9-bis).
     # The prefix is what makes it value-redactable at all: the token body is bare
-    # lowercase hex, indistinguishable from a SHA-256 content key without the prefix,
+    # lowercase hex, indistinguishable from a SHA-256 checksum without the prefix,
     # so the generic entropy rule below deliberately cannot (and must not) catch it.
     (re.compile(r"gmlc_[0-9a-f]{32,}"), "[secret]"),
     # AWS access key id: a fixed ``AKIA`` prefix + 16 upper-case/digit chars (20 total),
@@ -99,7 +99,7 @@ _PII_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[secret]"),
     # Long opaque strings ≥ 32 chars that look like API keys or encryption tokens.
     # Requires at least one uppercase letter or base64 special char (+/) so that
-    # pure-lowercase-hex strings (SHA-256 content-addressed keys) are left intact.
+    # pure-lowercase-hex strings (SHA-256 checksums / fingerprints) are left intact.
     (
         re.compile(r"[a-z0-9]*[A-Z+/][A-Za-z0-9+/\-_]{30,}={0,2}"),
         "[secret]",
