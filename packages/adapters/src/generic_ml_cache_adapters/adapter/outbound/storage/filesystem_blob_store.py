@@ -4,11 +4,18 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import tempfile
+import uuid
 from pathlib import Path
 
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+
+#: Sub-directory under the blob root for canary-write health probes. Probe files
+#: are content-addressed (always-new names) and removed right after writing, so the
+#: folder stays empty and is never mistaken for a blob.
+_HEALTH_DIR = ".health"
 
 
 class FilesystemBlobStore(BlobStorePort):
@@ -51,3 +58,19 @@ class FilesystemBlobStore(BlobStorePort):
 
     def remove(self, key: str) -> None:
         self._path_for(key).unlink(missing_ok=True)
+
+    def is_healthy(self) -> bool:
+        # Active canary: write a unique probe into a health folder under the blob
+        # root and remove it. If the write lands, real writes almost certainly work
+        # (this catches an unreachable / read-only / out-of-space store a passive
+        # check would miss). Content-addressed name = always new, no collisions.
+        try:
+            health_dir = self._root / _HEALTH_DIR
+            health_dir.mkdir(parents=True, exist_ok=True)
+            token = uuid.uuid4().hex.encode()
+            probe_path = health_dir / hashlib.sha256(token).hexdigest()
+            probe_path.write_bytes(token)
+            probe_path.unlink(missing_ok=True)
+            return True
+        except OSError:
+            return False

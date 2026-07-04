@@ -41,6 +41,24 @@ def test_put_overwrites(tmp_path):
     assert blob_store.get("key1") == b"second"
 
 
+def test_is_healthy_true_for_a_writable_root(tmp_path):
+    assert FilesystemBlobStore(tmp_path).is_healthy() is True
+
+
+def test_is_healthy_false_when_the_root_cannot_be_written(tmp_path):
+    blocker = tmp_path / "blocker"
+    blocker.write_text("i am a file, not a directory")
+    # The root sits under a file, so the health folder cannot be created — unhealthy.
+    assert FilesystemBlobStore(blocker / "store").is_healthy() is False
+
+
+def test_is_healthy_leaves_no_probe_files_behind(tmp_path):
+    store = FilesystemBlobStore(tmp_path)
+    store.is_healthy()
+    health_dir = tmp_path / ".health"
+    assert not any(health_dir.iterdir())  # the canary is removed after the probe
+
+
 def test_exists_reflects_presence(tmp_path):
     blob_store = FilesystemBlobStore(tmp_path)
     assert blob_store.exists("key1") is False

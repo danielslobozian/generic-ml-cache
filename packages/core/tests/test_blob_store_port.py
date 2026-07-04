@@ -24,6 +24,9 @@ class InMemoryBlobStore(BlobStorePort):
     def exists(self, key: str) -> bool:
         return key in self._store
 
+    def is_healthy(self) -> bool:
+        return True
+
     def remove(self, key: str) -> None:
         self._store.pop(key, None)
 
@@ -71,6 +74,10 @@ def test_exists_is_false_after_remove():
     assert blob_store.exists("key1") is False
 
 
+def test_is_healthy_reports_writability():
+    assert InMemoryBlobStore().is_healthy() is True
+
+
 def test_remove_deletes_stored_bytes():
     blob_store = InMemoryBlobStore()
     blob_store.put("key1", b"value")
@@ -106,6 +113,9 @@ def test_port_requires_get_implementation():
         def exists(self, key: str) -> bool:
             return False
 
+        def is_healthy(self) -> bool:
+            return True
+
         def remove(self, key: str) -> None:
             pass
 
@@ -120,6 +130,9 @@ def test_port_requires_put_implementation():
 
         def exists(self, key: str) -> bool:
             return False
+
+        def is_healthy(self) -> bool:
+            return True
 
         def remove(self, key: str) -> None:
             pass
@@ -136,11 +149,32 @@ def test_port_requires_exists_implementation():
         def put(self, key: str, output: bytes) -> None:
             pass
 
+        def is_healthy(self) -> bool:
+            return True
+
         def remove(self, key: str) -> None:
             pass
 
     with pytest.raises(TypeError):
         MissingExists()  # type: ignore[abstract]
+
+
+def test_port_requires_is_healthy_implementation():
+    class MissingIsHealthy(BlobStorePort):
+        def get(self, key: str):
+            return None
+
+        def put(self, key: str, output: bytes) -> None:
+            pass
+
+        def exists(self, key: str) -> bool:
+            return False
+
+        def remove(self, key: str) -> None:
+            pass
+
+    with pytest.raises(TypeError):
+        MissingIsHealthy()  # type: ignore[abstract]
 
 
 def test_port_requires_remove_implementation():
@@ -153,6 +187,9 @@ def test_port_requires_remove_implementation():
 
         def exists(self, key: str) -> bool:
             return False
+
+        def is_healthy(self) -> bool:
+            return True
 
     with pytest.raises(TypeError):
         MissingRemove()  # type: ignore[abstract]

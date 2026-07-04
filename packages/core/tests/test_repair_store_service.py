@@ -45,6 +45,9 @@ class InMemoryBlobStore(BlobStorePort):
     def exists(self, key: str) -> bool:
         return key in self.store
 
+    def is_healthy(self) -> bool:
+        return True
+
     def remove(self, key: str) -> None:
         self.store.pop(key, None)
 

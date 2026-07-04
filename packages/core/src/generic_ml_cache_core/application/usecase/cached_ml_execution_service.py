@@ -36,7 +36,11 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
 )
 from generic_ml_cache_core.common import journal_events
 from generic_ml_cache_core.common.checksum import file_content_fingerprint
-from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
+from generic_ml_cache_core.common.errors import (
+    ArtifactBlobMissing,
+    CacheMiss,
+    StoreUnavailable,
+)
 
 _TEXT_ENCODING = "utf-8"
 _EXECUTE_EXIT = "execute EXIT"
@@ -359,6 +363,16 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                             stored=False,
                         )
                     return result
+
+            # S1.1: at DATASET depth, persisting input+output IS the point of the
+            # call, so if blob storage cannot accept a write, fail fast BEFORE the
+            # expensive client call rather than run and fail to persist. CACHE depth
+            # is best-effort (the answer is still returned), so it does not gate here.
+            if command.persistence_depth.stores_input and not self._blob_store.is_healthy():
+                raise StoreUnavailable(
+                    "blob storage is unavailable; a DATASET run must persist input "
+                    "and output, so it fails fast before the client call (S1.1)"
+                )
 
             # Insert the IN_PROGRESS row before the client is called so external
             # observers (dashboard, probe, inspector) can see the in-flight run.

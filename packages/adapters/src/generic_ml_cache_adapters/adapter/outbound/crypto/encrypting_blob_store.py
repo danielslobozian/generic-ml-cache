@@ -42,6 +42,10 @@ class EncryptingBlobStore(BlobStorePort):
         # Presence is about the ciphertext file, not its plaintext — no decryption.
         return self._inner.exists(BlobKey(key))
 
+    def is_healthy(self) -> bool:
+        # Liveness is about the underlying store, not the cipher.
+        return self._inner.is_healthy()
+
     def remove(self, key: str) -> None:
         self._inner.remove(BlobKey(key))
 
@@ -67,6 +71,10 @@ class TokenRequiredBlobStore(BlobStorePort):
     def exists(self, key: str) -> bool:
         # A presence test reads no content, so it works without the token (like remove).
         return self._inner.exists(BlobKey(key))
+
+    def is_healthy(self) -> bool:
+        # A liveness probe writes no user content, so it needs no token either.
+        return self._inner.is_healthy()
 
     def remove(self, key: str) -> None:
         self._inner.remove(BlobKey(key))

@@ -38,6 +38,18 @@ class BlobStorePort(ABC):
         putting identical bytes again."""
 
     @abstractmethod
+    def is_healthy(self) -> bool:
+        """Return whether the store can actually accept a write RIGHT NOW.
+
+        An ACTIVE canary write, not a passive ping: write a tiny unique probe and
+        report whether it landed — which catches a store that is unreachable, out of
+        credentials, or read-only (a passive check would miss these). Used to
+        fail-fast a DATASET run before an expensive client call it could not persist
+        (S1.1). It is an optimization, not a guarantee: storage can drop between the
+        probe and the real write, so the persist path must still handle failure
+        (TOCTOU)."""
+
+    @abstractmethod
     def remove(self, key: BlobKey) -> None:
         """Delete the bytes stored under ``key``; a no-op if nothing is stored.
 

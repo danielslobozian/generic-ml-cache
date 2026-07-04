@@ -463,3 +463,35 @@ class TestStoreUnavailable:
             svc.execute(_Cmd())
 
         runner.assert_not_called()
+
+
+class TestDatasetFailFast:
+    def test_dataset_run_fails_fast_when_blob_store_is_unhealthy(self):
+        # S1.1: at DATASET depth, persisting input+output is the point — so an
+        # unhealthy blob store fails fast BEFORE the expensive client call.
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.return_value = None
+        blob = create_autospec(BlobStorePort)
+        blob.is_healthy.return_value = False
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        with pytest.raises(StoreUnavailable):
+            svc.execute(_Cmd(persistence_depth=PersistenceDepth.DATASET))
+
+        runner.assert_not_called()
+
+    def test_cache_run_proceeds_even_when_blob_store_is_unhealthy(self):
+        # S1.2: CACHE is best-effort — the answer is still returned, so an unhealthy
+        # store does not gate the client call (only persistence is best-effort).
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.return_value = None
+        blob = create_autospec(BlobStorePort)
+        blob.is_healthy.return_value = False
+        blob.exists.return_value = False
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        svc.execute(_Cmd(persistence_depth=PersistenceDepth.CACHE))
+
+        runner.assert_called_once()
