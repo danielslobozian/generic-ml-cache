@@ -190,16 +190,11 @@ class PurgeMlRunsPort(ABC):
 
     @abstractmethod
     def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]:
-        """Return the distinct blob keys referenced by ALL stored executions for
-        ``execution_key`` (current and historical). Called before a soft purge so
-        the caller can check reference counts before removing blobs."""
-
-    @abstractmethod
-    def blob_reference_count(self, blob_key: BlobKey) -> int:
-        """Return the number of artifact rows across the entire store still
-        referencing ``blob_key``. After a soft purge drops an execution's artifact
-        rows, a count of zero means no other execution references the blob and the
-        caller may safely remove it from the blob store."""
+        """Return the distinct blob keys owned by ALL stored executions for
+        ``execution_key`` (current and historical). Called before a purge to collect
+        the blobs to remove: each blob is owned by exactly one execution, so every
+        key returned belongs solely to this ``execution_key`` and is safe to delete
+        once its rows are gone."""
 
     @abstractmethod
     def soft_purge_execution(self, execution_key: str) -> None:

@@ -235,17 +235,6 @@ class InMemoryExecutionRepository(
             }
         )
 
-    def blob_reference_count(self, blob_key: BlobKey) -> int:
-        # Only STORED artifacts truly reference a blob (a PENDING/FAILED row's blob
-        # may not exist), so only they keep it alive for GC.
-        return sum(
-            1
-            for executions in self._by_key.values()
-            for execution in executions
-            for a in execution.artifacts
-            if a.blob_key == blob_key and a.status is ArtifactStatus.STORED
-        )
-
     def soft_purge_execution(self, execution_key: str) -> None:
         for execution in self._by_key.get(execution_key, []):
             execution.artifacts.clear()

@@ -330,26 +330,6 @@ def test_purge_all_empty_store_returns_zero_report():
     assert report.blobs_removed == 0
 
 
-def test_bytes_freed_counts_a_shared_blob_once():
-    # Two executions with distinct identities but identical content share one
-    # content-addressed blob. The old before/after total summed size_bytes per
-    # artifact, double-counting the shared blob; measuring the removed blobs
-    # directly frees its size exactly once.
-    svc, repo, store, _ = _service()
-    shared_content = b"shared-answer"
-    shared_blob_key = "blob_" + shared_content.hex()
-    repo.save(_execution(_identity("a"), content=shared_content))
-    repo.save(_execution(_identity("b"), content=shared_content))
-    store.put(shared_blob_key, shared_content)
-
-    report = svc.purge_all(PurgeAllCommand())
-
-    assert report.executions_removed == 2
-    assert report.blobs_removed == 1
-    assert report.bytes_freed == len(shared_content)
-    assert not store.has(shared_blob_key)
-
-
 # --- hard delete: hard_delete_one --------------------------------------------
 
 
@@ -415,70 +395,6 @@ def test_hard_delete_all_empty_store_returns_zero_report():
     svc, _, _, _ = _service()
     report = svc.purge_all(PurgeAllCommand(hard=True))
     assert report.executions_removed == 0
-
-
-# --- shared blob: no orphan deletion when still referenced -------------------
-
-
-def test_shared_blob_not_deleted_when_still_referenced():
-    svc, repo, store, _ = _service()
-    id_a = _identity("a")
-    id_b = _identity("b")
-    shared_content = b"shared"
-    shared_blob = "blob_" + shared_content.hex()
-
-    for identity in (id_a, id_b):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=len(shared_content),
-            content=shared_content,
-        )
-        repo.save(
-            MlExecution(
-                call_identity=identity,
-                execution_state=ExecutionState.SUCCESS,
-                execution_kind=ExecutionKind.LOCAL_MANAGED,
-                output_persisted=True,
-                artifacts=[artifact],
-            )
-        )
-    store.put(shared_blob, shared_content)
-
-    svc.purge_by_key(PurgeByKeyCommand(id_a.generate_key()))
-
-    assert store.has(shared_blob)  # id_b still references it
-
-
-def test_shared_blob_deleted_after_both_purged():
-    svc, repo, store, _ = _service()
-    id_a = _identity("a")
-    id_b = _identity("b")
-    shared_content = b"shared"
-    shared_blob = "blob_" + shared_content.hex()
-
-    for identity in (id_a, id_b):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=len(shared_content),
-            content=shared_content,
-        )
-        repo.save(
-            MlExecution(
-                call_identity=identity,
-                execution_state=ExecutionState.SUCCESS,
-                execution_kind=ExecutionKind.LOCAL_MANAGED,
-                output_persisted=True,
-                artifacts=[artifact],
-            )
-        )
-    store.put(shared_blob, shared_content)
-
-    svc.purge_by_key(PurgeByKeyCommand(id_a.generate_key()))
-    svc.purge_by_key(PurgeByKeyCommand(id_b.generate_key()))
-
-    assert not store.has(shared_blob)
 
 
 # --- LRU eviction ------------------------------------------------------------

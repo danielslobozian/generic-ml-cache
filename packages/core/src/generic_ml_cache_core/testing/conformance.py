@@ -53,7 +53,6 @@ class MlRunStore(Protocol):
     ) -> None: ...
     def finalize_output_persisted(self, execution_id: ExecutionId) -> None: ...
     def remove_execution(self, execution_id: ExecutionId) -> None: ...
-    def blob_reference_count(self, blob_key: BlobKey) -> int: ...
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]: ...
     def soft_purge_execution(self, execution_key: str) -> None: ...
 
@@ -165,9 +164,7 @@ class MlRunStoreConformance:
         current = store.find_current(key)
         assert current is not None and current.output_persisted is True
 
-    def test_failed_artifact_blocks_servability_and_does_not_reference_the_blob(
-        self, tmp_path: Path
-    ) -> None:
+    def test_failed_artifact_blocks_servability(self, tmp_path: Path) -> None:
         store = self.make_store(tmp_path)
         identity = _identity()
         key = identity.generate_key()
@@ -175,8 +172,7 @@ class MlRunStoreConformance:
         execution = _pending(identity)
         store.save(execution)
         store.mark_artifacts_failed(execution.execution_id, blob_key, "disk full")
-        assert store.find_current(key) is None
-        assert store.blob_reference_count(blob_key) == 0  # FAILED rows hold no reference
+        assert store.find_current(key) is None  # a FAILED artifact is never servable
 
     def test_per_document_path_via_persist_artifact(self, tmp_path: Path) -> None:
         # The service's W1 path: save an IN_PROGRESS row (no artifacts), transition

@@ -622,19 +622,6 @@ class SqliteExecutionRepository(
         finally:
             connection.close()
 
-    def blob_reference_count(self, blob_key: BlobKey) -> int:
-        connection = self._connect()
-        try:
-            # Only STORED artifacts truly reference a blob; a PENDING/FAILED row's
-            # blob may not exist, so it must not keep a blob alive for GC purposes.
-            row = connection.execute(
-                "SELECT COUNT(*) FROM artifacts WHERE blob_key = ? AND status = ?",
-                (blob_key, ArtifactStatus.STORED.value),
-            ).fetchone()
-            return int(row[0])
-        finally:
-            connection.close()
-
     def soft_purge_execution(self, execution_key: str) -> None:
         with self._write_transaction() as connection:
             connection.execute(

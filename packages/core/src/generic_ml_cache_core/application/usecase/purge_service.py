@@ -181,7 +181,7 @@ class PurgeService(
         blob_sizes = self._blob_sizes_for(keys)
         for key in keys:
             self._repository.soft_purge_execution(key)
-        blobs_removed, bytes_freed = self._remove_orphaned_blobs(blob_sizes)
+        blobs_removed, bytes_freed = self._remove_blobs(blob_sizes)
         report = PurgeReport(
             executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
@@ -201,7 +201,7 @@ class PurgeService(
         for key in keys:
             self._repository.hard_delete_execution(key)
             self._journal.delete_events_for_key(key)
-        blobs_removed, bytes_freed = self._remove_orphaned_blobs(blob_sizes)
+        blobs_removed, bytes_freed = self._remove_blobs(blob_sizes)
         report = PurgeReport(
             executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
@@ -225,10 +225,11 @@ class PurgeService(
         return keys
 
     def _blob_sizes_for(self, keys: list[str]) -> dict[BlobKey, int]:
-        """Map each distinct blob key referenced by ``keys`` to its size, read
-        BEFORE the executions are deleted. A content-addressed blob shared by
-        several executions appears once (its size is invariant), so summing the
-        removed ones counts each freed blob a single time."""
+        """Map each distinct blob key owned by ``keys`` to its size, read BEFORE the
+        executions are deleted. Each blob is owned by exactly one execution (its key
+        is execution-scoped), so a key here belongs solely to these executions and is
+        freed for good once their rows are gone — summing the removed ones counts each
+        freed blob once."""
         blob_sizes: dict[BlobKey, int] = {}
         for key in keys:
             for execution in self._repository.find_all(key):
@@ -236,19 +237,16 @@ class PurgeService(
                     blob_sizes[artifact.blob_key] = artifact.size_bytes
         return blob_sizes
 
-    def _remove_orphaned_blobs(self, blob_sizes: dict[BlobKey, int]) -> tuple[int, int]:
-        """Remove each blob no execution still references, returning
-        (blobs_removed, bytes_freed) measured directly from what was deleted —
-        not a global before/after total (skewed by a concurrent write, and it
-        double-counts a shared blob)."""
-        blobs_removed = 0
+    def _remove_blobs(self, blob_sizes: dict[BlobKey, int]) -> tuple[int, int]:
+        """Remove each collected blob — every one is owned solely by a purged
+        execution (X25), so there is no reference count to check — returning
+        (blobs_removed, bytes_freed) measured directly from what was deleted, not a
+        global before/after total (which a concurrent write would skew)."""
         bytes_freed = 0
         for blob_key, size_bytes in blob_sizes.items():
-            if self._repository.blob_reference_count(blob_key) == 0:
-                self._blob_store.remove(blob_key)
-                blobs_removed += 1
-                bytes_freed += size_bytes
-        return blobs_removed, bytes_freed
+            self._blob_store.remove(blob_key)
+            bytes_freed += size_bytes
+        return len(blob_sizes), bytes_freed
 
 
 def _lru_epoch(entry: ExecutionSizeEntry, last_access: dict[str, float]) -> float:

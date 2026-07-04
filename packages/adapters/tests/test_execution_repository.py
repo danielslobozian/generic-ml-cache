@@ -440,48 +440,6 @@ def test_blob_keys_for_execution_includes_superseded_executions(tmp_path):
     assert "blob_" + b"new".hex() in keys
 
 
-# --- blob_reference_count ----------------------------------------------------
-
-
-def test_blob_reference_count_is_one_for_a_single_execution(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, content=b"answer"))
-    blob_key = "blob_" + b"answer".hex()
-    assert repository.blob_reference_count(blob_key) == 1
-
-
-def test_blob_reference_count_is_zero_for_unknown_blob(tmp_path):
-    assert _repository(tmp_path).blob_reference_count("nope") == 0
-
-
-def test_blob_reference_count_counts_all_referencing_rows(tmp_path):
-    repository = _repository(tmp_path)
-    id_a = _managed_identity(prompt_fingerprint="a")
-    id_b = _managed_identity(prompt_fingerprint="b")
-    shared_blob = "blob_shared"
-
-    # Two executions with identical content (same blob_key — content-addressed)
-    def _shared_execution(identity):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=6,
-            content=b"shared",
-        )
-        return MlExecution(
-            call_identity=identity,
-            execution_state=ExecutionState.SUCCESS,
-            execution_kind=ExecutionKind.LOCAL_MANAGED,
-            output_persisted=True,
-            artifacts=[artifact],
-        )
-
-    repository.save(_shared_execution(id_a))
-    repository.save(_shared_execution(id_b))
-    assert repository.blob_reference_count(shared_blob) == 2
-
-
 # --- soft_purge_execution ----------------------------------------------------
 
 
@@ -517,44 +475,6 @@ def test_soft_purge_preserves_token_usage(tmp_path):
     assert history[0].token_usage == usage
 
 
-def test_soft_purge_reduces_blob_reference_count_to_zero(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, content=b"answer"))
-    blob_key = "blob_" + b"answer".hex()
-    assert repository.blob_reference_count(blob_key) == 1
-    repository.soft_purge_execution(identity.generate_key())
-    assert repository.blob_reference_count(blob_key) == 0
-
-
-def test_soft_purge_does_not_drop_shared_blob_reference(tmp_path):
-    repository = _repository(tmp_path)
-    id_a = _managed_identity(prompt_fingerprint="a")
-    id_b = _managed_identity(prompt_fingerprint="b")
-    shared_blob = "blob_shared"
-
-    def _shared(identity):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=6,
-            content=b"shared",
-        )
-        return MlExecution(
-            call_identity=identity,
-            execution_state=ExecutionState.SUCCESS,
-            execution_kind=ExecutionKind.LOCAL_MANAGED,
-            output_persisted=True,
-            artifacts=[artifact],
-        )
-
-    repository.save(_shared(id_a))
-    repository.save(_shared(id_b))
-    repository.soft_purge_execution(id_a.generate_key())
-    # id_b still holds a reference — blob should not be deleted yet
-    assert repository.blob_reference_count(shared_blob) == 1
-
-
 def test_soft_purge_unknown_key_is_a_no_op(tmp_path):
     _repository(tmp_path).soft_purge_execution("nope")  # must not raise
 
@@ -571,15 +491,6 @@ def test_hard_delete_execution_removes_all_history(tmp_path):
     repository.hard_delete_execution(key)
     assert repository.find_current(key) is None
     assert repository.find_all(key) == []
-
-
-def test_hard_delete_execution_removes_blob_references(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, content=b"answer"))
-    blob_key = "blob_" + b"answer".hex()
-    repository.hard_delete_execution(identity.generate_key())
-    assert repository.blob_reference_count(blob_key) == 0
 
 
 def test_hard_delete_execution_allows_re_save_of_same_key(tmp_path):
@@ -793,8 +704,6 @@ def test_db_first_failed_blob_marks_artifact_failed(tmp_path):
     failed = repo.find_all(key)[0].artifacts[0]
     assert failed.status is ArtifactStatus.FAILED
     assert failed.status_detail == "disk full"
-    # A FAILED artifact does not keep the blob alive for GC.
-    assert repo.blob_reference_count(blob_key) == 0
     # Never finalized -> not servable.
     assert repo.find_current(key) is None
 
