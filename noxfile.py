@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import nox
@@ -80,8 +81,12 @@ def _install_all(session: nox.Session) -> None:
 
 
 def _session_python(session: nox.Session) -> str:
-    """Path to this session's interpreter (to override the IDE-only .venv pin)."""
-    return os.path.join(session.virtualenv.bin, "python")
+    """Path to this session's interpreter (to override the IDE-only .venv pin).
+
+    The executable is ``python.exe`` on Windows and ``python`` elsewhere — uv's
+    ``--python <path>`` needs the exact file, not the extensionless stem."""
+    exe = "python.exe" if sys.platform == "win32" else "python"
+    return os.path.join(session.virtualenv.bin, exe)
 
 
 @nox.session
