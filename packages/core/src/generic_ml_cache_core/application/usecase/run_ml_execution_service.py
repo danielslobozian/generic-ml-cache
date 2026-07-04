@@ -41,13 +41,18 @@ from generic_ml_cache_core.application.port.outbound.diagnostics_port import Dia
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
-from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
+from generic_ml_cache_core.application.port.outbound.managed_local_runner_port import (
+    ManagedLocalRunnerPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     AnnotateMlRunPort,
     ReadMlRunPort,
     SaveMlRunPort,
 )
 from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.passthrough_local_runner_port import (
+    PassthroughLocalRunnerPort,
+)
 from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
     RegisteredAdapterPort,
 )
@@ -183,7 +188,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         The client knows *how* (argv, config, parsing); core owns *the workspace*."""
         if self._workspace is None:
             raise RuntimeError("managed execution requires a WorkspacePort; none was injected")
-        if not isinstance(runner, LocalClientPort):
+        if not isinstance(runner, ManagedLocalRunnerPort):
             raise UnsupportedExecutionMode(
                 f"client {command.client!r} does not support managed local execution"
             )
@@ -228,7 +233,7 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
     ) -> ClientRunResult:
         """Relay a native passthrough call through the client and package it. There
         is no workspace and no artifact capture — a passthrough never produces files."""
-        if not isinstance(runner, LocalClientPort):
+        if not isinstance(runner, PassthroughLocalRunnerPort):
             raise UnsupportedExecutionMode(
                 f"client {command.client!r} does not support passthrough local execution"
             )

@@ -50,6 +50,9 @@ from generic_ml_cache_core.application.port.outbound.file_fingerprint_port impor
 )
 from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
 from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.passthrough_local_runner_port import (
+    PassthroughLocalRunnerPort,
+)
 from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import (
@@ -834,3 +837,25 @@ def test_missing_output_blob_offline_degrades_to_a_clean_miss():
     # OFFLINE cannot re-run, so it is a clean CacheMiss, not a crash or partial serve.
     with pytest.raises(CacheMiss):
         harness.service.execute(_managed_command(cache_mode=CacheMode.OFFLINE))
+
+
+# --- W24: role-port split of LocalClientPort ---------------------------------
+
+
+def test_a_runner_implementing_only_the_passthrough_role_cannot_run_managed():
+    # W24 ISP: a runner that implements only PassthroughLocalRunnerPort (not the
+    # managed role) is rejected for a managed command with a named error — the
+    # capability check narrows to the exact role port the mode needs.
+    class _PassthroughOnly(PassthroughLocalRunnerPort):
+        name = "pass-only"
+        execution_kind = ExecutionKind.LOCAL_PASSTHROUGH
+
+        def resolve_executable(self, override):
+            return override or "x"
+
+        def execute_passthrough(self, request):
+            return _as_answer(ClientRunResult(exit_code=0, stdout="native\n"))
+
+    service = _service_with_runners({"pass-only": _PassthroughOnly()})
+    with pytest.raises(UnsupportedExecutionMode):
+        service.execute(_managed_command(client="pass-only"))
