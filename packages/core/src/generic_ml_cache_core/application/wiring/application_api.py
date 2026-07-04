@@ -81,6 +81,9 @@ from generic_ml_cache_core.application.port.inbound.session_tags.tag_session_use
 from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_use_case import (
     UntagSessionUseCase,
 )
+from generic_ml_cache_core.application.port.inbound.store_repair.repair_store_use_case import (
+    RepairStoreUseCase,
+)
 from generic_ml_cache_core.application.port.inbound.store_stats.event_counts_use_case import (
     EventCountsUseCase,
 )
@@ -162,3 +165,6 @@ class ApplicationApi:
 
     # artifact content — one ArtifactContentService
     read_artifact_blob: ReadArtifactBlobUseCase
+
+    # store repair — one RepairStoreService (C-4 reconcile-against-presence)
+    repair_store: RepairStoreUseCase

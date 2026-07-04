@@ -72,6 +72,7 @@ from generic_ml_cache_core.application.usecase.artifact_content_service import (
 from generic_ml_cache_core.application.usecase.execution_query_service import ExecutionQueryService
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.application.usecase.repair_store_service import RepairStoreService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
     RunMlExecutionService,
 )
@@ -173,6 +174,9 @@ def build_application_api(
     execution_query = ExecutionQueryService(repository)
     store_stats = StoreStatsService(metrics)
     artifact_content = ArtifactContentService(blob_store)
+    repair_store = RepairStoreService(
+        repair_source=repository, save=repository, blob_store=blob_store
+    )
     run_gateway = RunMlGatewayService(
         blob_store=blob_store,
         gateway_forward_port=HttpGatewayForwardAdapter(),
@@ -222,4 +226,5 @@ def build_application_api(
         event_counts=store_stats,
         hit_counts_by_key=store_stats,
         read_artifact_blob=artifact_content,
+        repair_store=repair_store,
     )

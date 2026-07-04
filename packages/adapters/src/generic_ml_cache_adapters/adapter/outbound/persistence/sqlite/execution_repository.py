@@ -34,6 +34,10 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ReadMlRunPort,
     SaveMlRunPort,
 )
+from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import (
+    RepairMlRunsPort,
+    UnpersistedRun,
+)
 from generic_ml_cache_core.common.immutable import thaw
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
@@ -59,6 +63,7 @@ class SqliteExecutionRepository(
     AnnotateMlRunPort,
     InspectMlRunsPort,
     PurgeMlRunsPort,
+    RepairMlRunsPort,
 ):
     """A durable, append-only execution store backed by SQLite.
 
@@ -191,6 +196,27 @@ class SqliteExecutionRepository(
             connection.commit()
         finally:
             connection.close()
+
+    def runs_awaiting_persistence(self) -> list[UnpersistedRun]:
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT e.execution_key, a.blob_key FROM executions e "
+                "JOIN artifacts a ON a.execution_id = e.id "
+                "WHERE e.output_persisted = 0 AND a.status != ? "
+                "AND e.id = (SELECT id FROM executions e2 WHERE e2.execution_key = e.execution_key "
+                "ORDER BY e2.id DESC LIMIT 1) "
+                "ORDER BY e.execution_key, a.id",
+                (ArtifactStatus.STORED.value,),
+            ).fetchall()
+        finally:
+            connection.close()
+        grouped: dict[str, list[str]] = {}
+        for execution_key, blob_key in rows:
+            keys = grouped.setdefault(execution_key, [])
+            if blob_key not in keys:
+                keys.append(blob_key)
+        return [UnpersistedRun(key, tuple(blob_keys)) for key, blob_keys in grouped.items()]
 
     def finalize_output_persisted(self, execution_key: str) -> None:
         connection = self._connect()

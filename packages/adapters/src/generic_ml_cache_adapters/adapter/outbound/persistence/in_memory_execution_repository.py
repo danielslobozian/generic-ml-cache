@@ -23,6 +23,10 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ReadMlRunPort,
     SaveMlRunPort,
 )
+from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import (
+    RepairMlRunsPort,
+    UnpersistedRun,
+)
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
     serialize_identity,
@@ -35,6 +39,7 @@ class InMemoryExecutionRepository(
     AnnotateMlRunPort,
     InspectMlRunsPort,
     PurgeMlRunsPort,
+    RepairMlRunsPort,
 ):
     """An in-memory, append-only implementation of the execution repository.
 
@@ -112,6 +117,20 @@ class InMemoryExecutionRepository(
     def _latest(self, execution_key: str) -> MlExecution | None:
         history = self._by_key.get(execution_key, [])
         return history[-1] if history else None
+
+    def runs_awaiting_persistence(self) -> list[UnpersistedRun]:
+        runs: list[UnpersistedRun] = []
+        for key, history in self._by_key.items():
+            latest = history[-1] if history else None
+            if latest is None or latest.output_persisted:
+                continue
+            blob_keys: list[str] = []
+            for a in latest.artifacts:
+                if a.status is not ArtifactStatus.STORED and a.blob_key not in blob_keys:
+                    blob_keys.append(a.blob_key)
+            if blob_keys:
+                runs.append(UnpersistedRun(key, tuple(blob_keys)))
+        return runs
 
     def add_tags(self, execution_key: str, tags: list[str]) -> None:
         # Tags the key's current execution; a no-op when there is none.
