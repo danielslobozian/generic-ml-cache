@@ -11,6 +11,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     ArtifactStatus,
     ArtifactType,
 )
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -179,7 +180,8 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         forwarded: ForwardedResponse,
     ) -> None:
         input_bytes = command.gateway_request.serialize_request()
-        input_key = f"{cache_key}.req"
+        input_key = BlobKey(f"{cache_key}.req")
+        output_key = BlobKey(cache_key)
         input_artifact = Artifact.from_content(
             artifact_type=ArtifactType.INPUT_MESSAGES,
             blob_key=input_key,
@@ -188,7 +190,7 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         )
         output_artifact = Artifact.from_content(
             artifact_type=ArtifactType.STDOUT,
-            blob_key=cache_key,
+            blob_key=output_key,
             content=forwarded.body_bytes,
             status=ArtifactStatus.PENDING,
         )
@@ -204,7 +206,7 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         )
         self._repository.save(execution)
         all_stored = True
-        for blob_key, content in ((input_key, input_bytes), (cache_key, forwarded.body_bytes)):
+        for blob_key, content in ((input_key, input_bytes), (output_key, forwarded.body_bytes)):
             try:
                 self._blob_store.put(blob_key, content)
                 self._repository.mark_artifacts_stored(cache_key, blob_key)

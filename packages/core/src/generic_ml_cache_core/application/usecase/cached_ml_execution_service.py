@@ -17,6 +17,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     ArtifactStatus,
     ArtifactType,
 )
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -528,7 +529,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         content_bytes: bytes,
         status: ArtifactStatus,
     ) -> Artifact:
-        blob_key = file_content_fingerprint(content_bytes)
+        blob_key = BlobKey(file_content_fingerprint(content_bytes))
         return Artifact.from_content(
             artifact_type, blob_key, content_bytes, name=artifact_name, status=status
         )

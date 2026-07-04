@@ -15,6 +15,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     ArtifactStatus,
     ArtifactType,
 )
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -466,7 +467,10 @@ class SqliteExecutionRepository(
         return [
             Artifact(
                 artifact_type=ArtifactType(artifact_type),
-                blob_key=blob_key,
+                # Parse-at-edge (C-5): a key read from a possibly-corrupted DB row is
+                # validated here — a traversal-unsafe key is rejected before it can
+                # reach the (dumb) blob store.
+                blob_key=BlobKey(blob_key),
                 size_bytes=size_bytes,
                 name=name,
                 encoding=encoding,

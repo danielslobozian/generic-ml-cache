@@ -7,6 +7,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
+import pytest
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
     ArtifactStatus,
@@ -754,3 +755,24 @@ def test_finalizing_a_recorded_failure_does_not_supersede_the_good_answer(tmp_pa
     assert current is not None
     assert current.execution_state is ExecutionState.SUCCESS
     assert current.artifacts[0].blob_key == "blob_" + b"good".hex()
+
+
+def test_corrupt_blob_key_in_db_is_rejected_on_load(tmp_path):
+    # C-5 parse-at-edge: a traversal-unsafe key that somehow reached the DB (row
+    # corruption/tampering) is rejected when the repository reconstructs the
+    # Artifact — it never reaches the blob store.
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+    repo.save(_execution(identity))
+
+    factory = _make_factory(tmp_path / "executions.sqlite3")
+    conn = factory()
+    try:
+        conn.execute("UPDATE artifacts SET blob_key = ?", ("../etc/passwd",))
+        conn.commit()
+    finally:
+        conn.close()
+
+    with pytest.raises(ValueError, match="invalid blob key"):
+        repo.find_current(key)
