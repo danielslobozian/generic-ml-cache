@@ -29,7 +29,7 @@ from generic_ml_cache_core.common.errors import MigrationFailed
 from generic_ml_cache_adapters.db import DbConnection
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
-_CURRENT_VERSION = 4
+_CURRENT_VERSION = 5
 
 #: Applied-migration identifiers, indexed by version number (1-based).
 _MIGRATION_IDS = (
@@ -37,6 +37,7 @@ _MIGRATION_IDS = (
     "0002.integrity-constraints",
     "0003.artifact-status",
     "0004.execution-id",
+    "0005.execution-owned-blobs",
 )
 
 _CREATE_VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"

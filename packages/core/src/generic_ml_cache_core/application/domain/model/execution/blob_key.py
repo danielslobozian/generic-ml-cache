@@ -5,12 +5,19 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
+
+from generic_ml_cache_core.common.checksum import file_content_fingerprint
+
+if TYPE_CHECKING:
+    from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 
 # A blob key addresses one entry in the (dumb) blob store, which resolves it as a
-# single path component (``root / key``). Real keys are content fingerprints
-# (sha-256 hex); the charset also permits a dotted suffix, so this covers every key
-# the system produces while excluding anything that could escape the store root: no
-# ``/`` or ``\``, no whitespace or control chars, bounded length.
+# single path component (``root / key``). A real key is ``<execution_id>_<content
+# fingerprint>`` — a UUID prefix (hyphens) and a sha-256 hex suffix — so the charset
+# permits letters, digits, ``.``, ``_`` and ``-``. This covers every key the system
+# produces while excluding anything that could escape the store root: no ``/`` or
+# ``\``, no whitespace or control chars, bounded length.
 _BLOB_KEY = re.compile(r"[A-Za-z0-9._-]{1,255}")
 
 
@@ -39,3 +46,16 @@ class BlobKey(str):
                 "[A-Za-z0-9._-] string that cannot escape the store root"
             )
         return super().__new__(cls, value)
+
+    @classmethod
+    def for_execution(cls, execution_id: ExecutionId, content_bytes: bytes) -> BlobKey:
+        """Mint the key an execution owns for one artifact's content (X25).
+
+        ``<execution_id>_<content fingerprint>``: the ``execution_id`` prefix gives
+        the blob a single owner, so deleting the execution deletes exactly its own
+        blobs and no two executions ever name the same blob file; the content
+        fingerprint suffix distinguishes the several artifacts of one execution. Key
+        generation lives here on the value object that owns the format (AGENTS §6),
+        not in the store or the use case.
+        """
+        return cls(f"{execution_id}_{file_content_fingerprint(content_bytes)}")

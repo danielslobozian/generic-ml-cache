@@ -26,4 +26,4 @@ def test_reads_applied_migrations_from_a_provisioned_store(tmp_path: Path):
     sqlite_persistence_backend(tmp_path / _DB_NAME).migration.migrate_to_current()
     applied = applied_migrations(tmp_path)
     assert applied  # the store is migrated → non-empty
-    assert applied[-1]["migration_id"] == "0004.execution-id"
+    assert applied[-1]["migration_id"] == "0005.execution-owned-blobs"

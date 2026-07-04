@@ -39,7 +39,6 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     SaveMlRunPort,
 )
 from generic_ml_cache_core.common import journal_events
-from generic_ml_cache_core.common.checksum import file_content_fingerprint
 from generic_ml_cache_core.common.errors import (
     ArtifactBlobMissing,
     CacheMiss,
@@ -341,7 +340,9 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         changing their mind to enrich the stored data is their decision."""
         if not command.persistence_depth.stores_input or current_execution.input_persisted:
             return
-        input_artifacts = self._build_input_artifacts(command, status=ArtifactStatus.PENDING)
+        input_artifacts = self._build_input_artifacts(
+            current_execution.execution_id, command, status=ArtifactStatus.PENDING
+        )
         if input_artifacts:
             # DB-first: attach the PENDING rows to the current execution, then store
             # each blob and flip to STORED/FAILED — no orphaned back-filled blobs.
@@ -380,16 +381,19 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             return self._run_fresh_locked(command, call_identity, execution_key)
         # Uncacheable: no lock, no IN_PROGRESS, no repository write.
         client_run_result = self._run_client(command)
-        artifacts = self._build_artifacts(client_run_result)
         execution = MlExecution(
             call_identity=call_identity,
             execution_state=client_run_result.outcome(),
             execution_kind=self._execution_kind(command),
             output_persisted=False,
             input_persisted=False,
-            artifacts=artifacts,
+            artifacts=[],
             token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
+        )
+        execution = replace(
+            execution,
+            artifacts=self._build_artifacts(execution.execution_id, client_run_result),
         )
         self._record_event(journal_events.RUN, execution_key, command)
         return execution
@@ -519,7 +523,10 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                 duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                 stored=False,
             )
-        return replace(execution, artifacts=self._build_artifacts(client_run_result))
+        return replace(
+            execution,
+            artifacts=self._build_artifacts(execution.execution_id, client_run_result),
+        )
 
     def _record_stored(
         self,
@@ -541,11 +548,15 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             failure=client_run_result.failure(),
         )
         self._save.record_outcome(execution)
-        output_artifacts = self._build_artifacts(client_run_result, status=ArtifactStatus.PENDING)
+        output_artifacts = self._build_artifacts(
+            execution.execution_id, client_run_result, status=ArtifactStatus.PENDING
+        )
         # Input rides on a stored output (DATASET is a superset of CACHE).
         store_input = command.persistence_depth.stores_input
         input_artifacts = (
-            self._build_input_artifacts(command, status=ArtifactStatus.PENDING)
+            self._build_input_artifacts(
+                execution.execution_id, command, status=ArtifactStatus.PENDING
+            )
             if store_input
             else []
         )
@@ -596,9 +607,13 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             execution_kind=self._execution_kind(command),
             output_persisted=False,
             input_persisted=False,
-            artifacts=self._build_artifacts(client_run_result),
+            artifacts=[],
             token_usage=client_run_result.token_usage,
             failure=client_run_result.failure(),
+        )
+        execution = replace(
+            execution,
+            artifacts=self._build_artifacts(execution.execution_id, client_run_result),
         )
         event = journal_events.WOULD_HIT if would_hit else journal_events.WOULD_MISS
         self._record_event(event, execution_key, command)
@@ -614,36 +629,52 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
     # -- artifacts --------------------------------------------------------
 
     def _build_artifacts(
-        self, client_run_result: ClientRunResult, status: ArtifactStatus = ArtifactStatus.STORED
+        self,
+        execution_id: ExecutionId,
+        client_run_result: ClientRunResult,
+        status: ArtifactStatus = ArtifactStatus.STORED,
     ) -> list[Artifact]:
-        """Build the output artifacts (content-addressed, hydrated), WITHOUT writing
-        any blob. ``status`` is ``PENDING`` on the DB-first store path (the blob is
-        put afterwards by ``_persist_artifact_blobs``) and defaults to ``STORED`` for
-        display-only artifacts on the non-persisted paths."""
+        """Build the output artifacts owned by ``execution_id`` (hydrated), WITHOUT
+        writing any blob. ``status`` is ``PENDING`` on the DB-first store path (the
+        blob is put afterwards by ``_persist_documents``) and defaults to ``STORED``
+        for display-only artifacts on the non-persisted paths."""
         artifacts = [
             self._make_artifact(
-                ArtifactType.STDOUT, None, client_run_result.stdout.encode(_TEXT_ENCODING), status
+                execution_id,
+                ArtifactType.STDOUT,
+                None,
+                client_run_result.stdout.encode(_TEXT_ENCODING),
+                status,
             ),
             self._make_artifact(
-                ArtifactType.STDERR, None, client_run_result.stderr.encode(_TEXT_ENCODING), status
+                execution_id,
+                ArtifactType.STDERR,
+                None,
+                client_run_result.stderr.encode(_TEXT_ENCODING),
+                status,
             ),
         ]
         for generated_file in client_run_result.files:
             artifacts.append(
                 self._make_artifact(
-                    ArtifactType.OUTPUT_FILE, generated_file.name, generated_file.content, status
+                    execution_id,
+                    ArtifactType.OUTPUT_FILE,
+                    generated_file.name,
+                    generated_file.content,
+                    status,
                 )
             )
         return artifacts
 
     @staticmethod
     def _make_artifact(
+        execution_id: ExecutionId,
         artifact_type: ArtifactType,
         artifact_name: str | None,
         content_bytes: bytes,
         status: ArtifactStatus,
     ) -> Artifact:
-        blob_key = BlobKey(file_content_fingerprint(content_bytes))
+        blob_key = BlobKey.for_execution(execution_id, content_bytes)
         return Artifact.from_content(
             artifact_type, blob_key, content_bytes, name=artifact_name, status=status
         )
@@ -688,13 +719,16 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             return replace(artifact, status=ArtifactStatus.FAILED, status_detail=str(exc))
 
     def _build_input_artifacts(
-        self, command: TCommand, status: ArtifactStatus = ArtifactStatus.STORED
+        self,
+        execution_id: ExecutionId,
+        command: TCommand,
+        status: ArtifactStatus = ArtifactStatus.STORED,
     ) -> list[Artifact]:
-        """The input documents to keep at DATASET depth, content-addressed like any
-        artifact (no blob written here — the caller stores them DB-first). Empty when
-        the kind has no recordable input."""
+        """The input documents to keep at DATASET depth, owned by ``execution_id``
+        like any artifact (no blob written here — the caller stores them DB-first).
+        Empty when the kind has no recordable input."""
         return [
-            self._make_artifact(artifact_type, name, content_bytes, status)
+            self._make_artifact(execution_id, artifact_type, name, content_bytes, status)
             for (artifact_type, name, content_bytes) in self._input_parts(command)
         ]
 

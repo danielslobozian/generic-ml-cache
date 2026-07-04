@@ -24,9 +24,10 @@ from abc import ABC, abstractmethod
 
 #: The model-contract version this build requires the persistence adapter to
 #: implement. Bumped whenever a migration changes the persisted domain model
-#: (e.g. the C-4 per-artifact status extends it). An adapter reporting a lower
+#: (e.g. the C-4 per-artifact status extended it; X25 re-keys blobs to
+#: ``<execution_id>_<fingerprint>``). An adapter reporting a lower
 #: ``implemented_version()`` is refused at boot.
-CURRENT_MODEL_VERSION = 4
+CURRENT_MODEL_VERSION = 5
 
 
 class StoreMigrationPort(ABC):
