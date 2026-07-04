@@ -27,6 +27,13 @@ _KEY_BYTES = 32  # AES-256
 _NONCE_BYTES = 12  # GCM standard nonce
 _SALT_BYTES = 16
 _TOKEN_BYTES = 32  # 256-bit token
+# Owned, scanner-friendly provenance prefix (GitHub-style ``<prefix>_<secret>``): it
+# lets our own log scrubber and external secret scanners recognise a leaked token by
+# shape, which the bare 64-hex form (indistinguishable from a SHA-256 key) could not.
+# The prefix is presentation only — it is stripped before key derivation, so a
+# ``gmlc_<hex>`` token and the legacy bare ``<hex>`` derive the *same* key (a store
+# encrypted before this change still opens, with either form).
+_TOKEN_PREFIX = "gmlc_"
 
 # Domain-separated HKDF label: the wrapping key has one role only (wrap the data
 # key). The data key is random, never derived from the token, so nothing the store
@@ -42,10 +49,11 @@ class AesGcmCipher(CipherPort):
     """AES-256-GCM + HKDF-SHA256 implementation of the encryption envelope."""
 
     def generate_token(self) -> str:
-        # Hex (not url-safe base64): the token never starts with "-", so it is safe to
-        # pass as a CLI argument value (argparse would read a leading "-" as a flag) and
-        # carries no shell-special characters.
-        return secrets.token_hex(_TOKEN_BYTES)
+        # Hex (not url-safe base64): the token body never starts with "-", so it is safe
+        # to pass as a CLI argument value (argparse would read a leading "-" as a flag)
+        # and carries no shell-special characters. The ``gmlc_`` prefix keeps that
+        # property (letters + underscore) while making the token scanner-recognisable.
+        return _TOKEN_PREFIX + secrets.token_hex(_TOKEN_BYTES)
 
     def create_envelope(self, token: str) -> tuple[EncryptionManifest, bytes]:
         data_key = AESGCM.generate_key(bit_length=_KEY_BYTES * 8)
@@ -76,8 +84,13 @@ class AesGcmCipher(CipherPort):
 
     @staticmethod
     def _derive_kek(token: str, salt: bytes) -> bytes:
+        # Strip the optional provenance prefix so the derived key depends only on the
+        # secret body: a ``gmlc_<hex>`` token and the legacy bare ``<hex>`` key alike
+        # (back-compat). A bare hex string can never carry the prefix (``g``/``m`` are
+        # not hex), so an existing token is never mis-stripped.
+        seed = token.removeprefix(_TOKEN_PREFIX)
         hkdf = HKDF(algorithm=SHA256(), length=_KEY_BYTES, salt=salt, info=_KEK_INFO)
-        return hkdf.derive(token.encode("utf-8"))
+        return hkdf.derive(seed.encode("utf-8"))
 
     @staticmethod
     def _aead_seal(key: bytes, plaintext: bytes, aad: bytes) -> bytes:

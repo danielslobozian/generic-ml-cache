@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 
 import pytest
 
@@ -260,8 +261,8 @@ def test_materialize_refuses_an_unfinished_job(tmp_path, monkeypatch):
 def _encrypt_and_get_token(capsys):
     assert main(["encrypt"]) == 0  # encrypt the (empty) isolated store
     out = capsys.readouterr().out
-    tokens = [w for w in out.split() if len(w) == 64 and all(c in "0123456789abcdef" for c in w)]
-    assert tokens, "encrypt should print a hex token"
+    tokens = [w for w in out.split() if re.fullmatch(r"gmlc_[0-9a-f]{64}", w)]
+    assert tokens, "encrypt should print a gmlc_-prefixed token"
     return tokens[0]
 
 

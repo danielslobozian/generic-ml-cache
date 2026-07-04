@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import re
+import secrets
+
 import pytest
 
 pytest.importorskip("cryptography")  # the optional [encryption] extra
@@ -25,6 +28,34 @@ def test_generated_tokens_are_unique_and_substantial():
     tokens = {cipher.generate_token() for _ in range(100)}
     assert len(tokens) == 100  # no collisions
     assert all(len(t) >= 32 for t in tokens)  # high-entropy, url-safe
+
+
+def test_generated_token_carries_the_gmlc_prefix():
+    # CG9-bis: an owned, scanner-friendly ``gmlc_<64hex>`` shape.
+    assert re.fullmatch(r"gmlc_[0-9a-f]{64}", _cipher().generate_token())
+
+
+def test_prefix_is_stripped_for_key_derivation_back_compat():
+    # A store encrypted with the legacy bare-hex token must open with the ``gmlc_``-
+    # prefixed form of the same secret, and vice versa — the prefix is presentation
+    # only and never changes the derived key.
+    cipher = _cipher()
+    bare = secrets.token_hex(32)
+    prefixed = f"gmlc_{bare}"
+
+    manifest_bare, data_key = cipher.create_envelope(bare)
+    assert cipher.open_envelope(prefixed, manifest_bare) == data_key  # bare store, prefixed key
+
+    manifest_prefixed, data_key2 = cipher.create_envelope(prefixed)
+    assert cipher.open_envelope(bare, manifest_prefixed) == data_key2  # prefixed store, bare key
+
+
+def test_a_different_secret_body_still_fails():
+    # Stripping the prefix must not weaken rejection: a wrong body is still wrong.
+    cipher = _cipher()
+    manifest, _ = cipher.create_envelope("gmlc_" + secrets.token_hex(32))
+    with pytest.raises(WrongEncryptionToken):
+        cipher.open_envelope("gmlc_" + secrets.token_hex(32), manifest)
 
 
 # --- envelope round-trip -----------------------------------------------------

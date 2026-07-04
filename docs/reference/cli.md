@@ -165,7 +165,10 @@ See [Retention and quota](../concepts/retention.md) for the full policy referenc
 ### Encryption
 
 At-rest encryption is **store-wide** and optional. gmlcache generates the token (no outside
-passwords); keep it safe — it is shown once and is unrecoverable if lost.
+passwords); keep it safe — it is shown once and is unrecoverable if lost. The token carries a
+`gmlc_` provenance prefix (`gmlc_<64 hex>`) so a leak is recognisable by shape; configure your
+secret scanner with the pattern `\bgmlc_[0-9a-f]{64}\b`. Tokens issued before the prefix (bare
+64-hex) keep working — the prefix is stripped before key derivation.
 
 <div align="center">
 <img src="../images/gmlcache-encrypt.gif" alt="gmlcache encrypt: record into a public store, encrypt it (token shown once), then the store is locked without the token" width="760">
