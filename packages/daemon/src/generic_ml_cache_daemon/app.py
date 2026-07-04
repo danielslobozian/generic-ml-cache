@@ -157,7 +157,8 @@ def create_app(
         interval=eviction_interval,
     )
     scheduler = EvictionScheduler(
-        wired_use_cases.purge,
+        wired_use_cases.evict_to_quota,
+        wired_use_cases.evict_stale,
         eviction_stats,
         interval=eviction_interval,
     )

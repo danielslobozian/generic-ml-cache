@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_spec_command import (
@@ -31,6 +30,7 @@ from generic_ml_cache_core.application.port.inbound.session_tags.tag_session_com
 from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_command import (
     UntagSessionCommand,
 )
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli._compose import build_use_cases
@@ -79,9 +79,9 @@ def cmd_session_start(args: argparse.Namespace) -> int:
             db_conn_factory(store_root_path), store_root_path, diag=make_diag(args)
         )
         for tag in tags:
-            wired.session_tags.tag(TagSessionCommand(session_id, tag))
+            wired.tag_session.tag(TagSessionCommand(session_id, tag))
         if spec is not None:
-            wired.session_admin.set_spec(SetSessionSpecCommand(session_id, spec))
+            wired.set_session_spec.set_spec(SetSessionSpecCommand(session_id, spec))
     return 0
 
 
@@ -101,7 +101,7 @@ def cmd_session_update(args: argparse.Namespace) -> int:
     if store_root_path is None:
         return 4
     wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
-    wired.session_admin.set_spec(SetSessionSpecCommand(args.session_id, spec))
+    wired.set_session_spec.set_spec(SetSessionSpecCommand(args.session_id, spec))
     if not args.json:
         print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
     else:
@@ -128,7 +128,7 @@ def cmd_session_clear_spec(args: argparse.Namespace) -> int:
     if store_root_path is None:
         return 4
     wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
-    wired.session_admin.clear_spec(ClearSessionSpecCommand(args.session_id))
+    wired.clear_session_spec.clear_spec(ClearSessionSpecCommand(args.session_id))
     if not args.json:
         print(f"spec cleared for session {args.session_id}")
     else:
@@ -153,8 +153,8 @@ def cmd_session_report(args: argparse.Namespace) -> int:
         return _cmd_session_report_by_tag(wired, tag, args.json)
 
     assert session_id is not None
-    report = wired.session_report.report_for_session(ReportForSessionCommand(str(session_id)))
-    tags = wired.session_tags.list_tags(ListSessionTagsCommand(str(session_id)))
+    report = wired.report_for_session.report_for_session(ReportForSessionCommand(str(session_id)))
+    tags = wired.list_session_tags.list_tags(ListSessionTagsCommand(str(session_id)))
 
     if args.json:
         import json
@@ -169,11 +169,11 @@ def cmd_session_report(args: argparse.Namespace) -> int:
 
 
 def _cmd_session_report_by_tag(  # NOSONAR — always 0 by design
-    wired: Any,  # the ApplicationApi bundle; typed after decision B-1
+    wired: ApplicationApi,
     tag: str,
     as_json: bool,
 ) -> int:
-    result = wired.session_report.report_for_tag(ReportForTagCommand(tag))
+    result = wired.report_for_tag.report_for_tag(ReportForTagCommand(tag))
     if result.session_count == 0:
         print(f"no sessions tagged {tag!r}")
         return 0
@@ -203,10 +203,10 @@ def cmd_session_tag(args: argparse.Namespace) -> int:
         return 4
     wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
     for tag in args.add:
-        wired.session_tags.tag(TagSessionCommand(args.session_id, tag))
+        wired.tag_session.tag(TagSessionCommand(args.session_id, tag))
     for tag in args.remove:
-        wired.session_tags.untag(UntagSessionCommand(args.session_id, tag))
-    tags = wired.session_tags.list_tags(ListSessionTagsCommand(args.session_id))
+        wired.untag_session.untag(UntagSessionCommand(args.session_id, tag))
+    tags = wired.list_session_tags.list_tags(ListSessionTagsCommand(args.session_id))
     if not args.json:
         print(f"tags : {', '.join(sorted(tags))}")
     else:

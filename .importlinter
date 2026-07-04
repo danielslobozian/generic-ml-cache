@@ -96,21 +96,36 @@ source_modules =
 forbidden_modules =
     sqlite3
 
-# Rule 10 — controllers reach the application only through inbound ports.
-# A driving adapter (a CLI command controller, a daemon route) may invoke the
-# domain ONLY via the inbound ports it is handed in the ApplicationApi bundle.
-# It must not import a use-case implementation, an outbound port, or a domain
-# service directly. (Commands/queries under application.port.inbound and domain
-# *models* are fine — those ARE the contract surface.) Composition roots are not
-# under *.controllers, so they remain free to wire. This is the project's
-# ArchUnit for the inbound-port refactor: green = the refactor is complete.
+# Rule 10 — driver runtime modules reach the application only through inbound ports.
+# A driving adapter (a CLI command controller, a daemon route, and any driver
+# *runtime* module such as the daemon's eviction scheduler or job registry) may
+# invoke the domain ONLY via the inbound ports it is handed in the ApplicationApi
+# bundle. It must not import a use-case implementation, an outbound port, or a
+# domain service directly. (Commands/queries under application.port.inbound and
+# domain *models* are fine — those ARE the contract surface.) The scope is the
+# driver packages MINUS their composition roots (cli._compose, cli.composition,
+# daemon.app) — those alone are free to wire the concrete graph. Broadened from
+# *.controllers to the runtime modules (V9): Rule 10 previously policed only
+# controllers, so infrastructure like daemon.scheduler could import a concrete
+# PurgeService and escape. This is the project's ArchUnit for the inbound-port
+# refactor: green = the refactor is complete.
 [importlinter:contract:hex-controllers-inbound-only]
-name = Controllers reach the application only through inbound ports
+name = Driver runtime modules reach the application only through inbound ports
 type = forbidden
 allow_indirect_imports = True
 source_modules =
     generic_ml_cache_cli.controllers
+    generic_ml_cache_cli.infrastructure
+    generic_ml_cache_cli.presenters
+    generic_ml_cache_cli.async_jobs
+    generic_ml_cache_cli.config
+    generic_ml_cache_cli.discovery
     generic_ml_cache_daemon.controllers
+    generic_ml_cache_daemon.infrastructure
+    generic_ml_cache_daemon.presenters
+    generic_ml_cache_daemon.scheduler
+    generic_ml_cache_daemon.jobs
+    generic_ml_cache_daemon.metrics
 forbidden_modules =
     generic_ml_cache_core.application.usecase
     generic_ml_cache_core.application.port.outbound

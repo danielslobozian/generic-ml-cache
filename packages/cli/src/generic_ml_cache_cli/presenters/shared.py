@@ -7,12 +7,14 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_use_case import (
+    ReadArtifactBlobUseCase,
+)
 
 from generic_ml_cache_cli import __version__
 
@@ -142,7 +144,7 @@ def artifact_text(execution: MlExecution, artifact_type: ArtifactType) -> str:
 
 def stored_artifact_text(
     execution: MlExecution,
-    artifacts: Any,  # the ArtifactContentService inbound surface; typed after decision B-1
+    artifacts: ReadArtifactBlobUseCase,
     artifact_type: ArtifactType,
 ) -> str:
     """Like ``artifact_text``, but hydrates the bytes via the artifact-content

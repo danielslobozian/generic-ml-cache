@@ -20,6 +20,9 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
     ReadArtifactBlobCommand,
 )
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_use_case import (
+    ReadArtifactBlobUseCase,
+)
 from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
     FindCurrentExecutionCommand,
 )
@@ -48,6 +51,7 @@ from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys
 from generic_ml_cache_core.application.port.inbound.session_admin.sessions_for_tag_command import (
     SessionsForTagCommand,
 )
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 from generic_ml_cache_core.common.errors import (
     ConfigError,
     EncryptionTokenRequired,
@@ -188,7 +192,9 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     matches = build_use_cases(
         db_conn_factory(store_root), store_root, diag=make_diag(args)
-    ).execution_query.find_by_key_prefix(FindExecutionsByKeyPrefixCommand(args.execution))
+    ).find_executions_by_key_prefix.find_by_key_prefix(
+        FindExecutionsByKeyPrefixCommand(args.execution)
+    )
     if not matches:
         print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
         return 4
@@ -239,9 +245,9 @@ def cmd_stats(args: argparse.Namespace) -> int:
     max_size_bytes = config.resolved_max_size(settings)
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
-    summaries = wired.execution_query.list_summaries()
-    store_bytes = wired.execution_query.total_stored_bytes()
-    access = wired.store_stats.event_counts()
+    summaries = wired.list_execution_summaries.list_summaries()
+    store_bytes = wired.total_stored_bytes.total_stored_bytes()
+    access = wired.event_counts.event_counts()
     by_client_model: dict[tuple[str, str], int] = {}
     for summary in summaries:
         by_client_model[(summary.client, summary.model)] = (
@@ -297,7 +303,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
 
 def _dispatch_purge(
-    svc: Any,  # the PurgeService inbound surface; typed after decision B-1
+    wired: ApplicationApi,
     key: str | None,
     tag: str | None,
     session: str | None,
@@ -305,14 +311,16 @@ def _dispatch_purge(
     hard: bool,
 ) -> Any:
     if key:
-        return svc.purge_by_key(PurgeByKeyCommand(key, hard=hard))
+        return wired.purge_by_key.purge_by_key(PurgeByKeyCommand(key, hard=hard))
     if tag:
-        return svc.purge_by_tag(PurgeByTagCommand(tag, hard=hard))
+        return wired.purge_by_tag.purge_by_tag(PurgeByTagCommand(tag, hard=hard))
     if session:
-        return svc.purge_by_session(PurgeBySessionCommand(session, hard=hard))
+        return wired.purge_by_session.purge_by_session(PurgeBySessionCommand(session, hard=hard))
     if session_tag:
-        return svc.purge_by_session_tag(PurgeBySessionTagCommand(session_tag, hard=hard))
-    return svc.purge_all(PurgeAllCommand(hard=hard))
+        return wired.purge_by_session_tag.purge_by_session_tag(
+            PurgeBySessionTagCommand(session_tag, hard=hard)
+        )
+    return wired.purge_all.purge_all(PurgeAllCommand(hard=hard))
 
 
 def cmd_purge(args: argparse.Namespace) -> int:
@@ -359,7 +367,7 @@ def cmd_purge(args: argparse.Namespace) -> int:
 
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
-    report = _dispatch_purge(wired.purge, key, tag, session, session_tag, hard)
+    report = _dispatch_purge(wired, key, tag, session, session_tag, hard)
 
     if args.json:
         print(
@@ -389,14 +397,16 @@ def cmd_purge(args: argparse.Namespace) -> int:
 
 
 def _keys_for_session_tags(
-    wired: Any,  # the ApplicationApi bundle; typed after decision B-1
+    wired: ApplicationApi,
     wanted_session_tags: list[str],
 ) -> set[str]:
     allowed: set[str] = set()
     for session_tag in wanted_session_tags:
-        for session_id in wired.session_admin.sessions_for_tag(SessionsForTagCommand(session_tag)):
+        for session_id in wired.sessions_for_tag.sessions_for_tag(
+            SessionsForTagCommand(session_tag)
+        ):
             allowed.update(
-                wired.session_admin.execution_keys_for_session(
+                wired.execution_keys_for_session.execution_keys_for_session(
                     ExecutionKeysForSessionCommand(session_id)
                 )
             )
@@ -442,7 +452,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
-    hit_counts = wired.store_stats.hit_counts_by_key()
+    hit_counts = wired.hit_counts_by_key.hit_counts_by_key()
     entries: list[_ListedExecution] = [
         {
             "client": summary.client,
@@ -450,9 +460,11 @@ def cmd_list(args: argparse.Namespace) -> int:
             "kind": summary.kind,
             "key": summary.execution_key,
             "hits": hit_counts.get(summary.execution_key, 0),
-            "tags": wired.execution_query.tags_for(TagsForExecutionCommand(summary.execution_key)),
+            "tags": wired.tags_for_execution.tags_for(
+                TagsForExecutionCommand(summary.execution_key)
+            ),
         }
-        for summary in wired.execution_query.list_summaries()
+        for summary in wired.list_execution_summaries.list_summaries()
         if (not args.client or summary.client == args.client)
         and (not args.model or summary.model == args.model)
     ]
@@ -487,8 +499,10 @@ def cmd_tags(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
     counts: dict[str, int] = {}
-    for summary in wired.execution_query.list_summaries():
-        for tag in wired.execution_query.tags_for(TagsForExecutionCommand(summary.execution_key)):
+    for summary in wired.list_execution_summaries.list_summaries():
+        for tag in wired.tags_for_execution.tags_for(
+            TagsForExecutionCommand(summary.execution_key)
+        ):
             counts[tag] = counts.get(tag, 0) + 1
 
     tags = [{"tag": tag, "count": counts[tag]} for tag in sorted(counts)]
@@ -512,7 +526,7 @@ def _export_record(
     summary: Any,  # an ExecutionSummary from the outbound repository port; typed after decision B-1
     execution: MlExecution,
     tags: list[str],
-    artifacts: Any,  # the ArtifactContentService inbound surface; typed after decision B-1
+    artifacts: ReadArtifactBlobUseCase,
 ) -> dict[str, object]:
     """Assemble one raw corpus record: the stored input parts and the output,
     hydrated from the blob store. Curation is the user's (tags); this never
@@ -562,7 +576,7 @@ def _export_record(
 
 
 def _collect_export_lines(
-    wired: Any,  # the ApplicationApi bundle; typed after decision B-1
+    wired: ApplicationApi,
     include: set[str],
     exclude: set[str],
 ) -> tuple[list[str], int]:
@@ -570,20 +584,20 @@ def _collect_export_lines(
 
     lines: list[str] = []
     skipped_no_input = 0
-    for summary in wired.execution_query.list_summaries():
-        tags = wired.execution_query.tags_for(TagsForExecutionCommand(summary.execution_key))
+    for summary in wired.list_execution_summaries.list_summaries():
+        tags = wired.tags_for_execution.tags_for(TagsForExecutionCommand(summary.execution_key))
         if include and not include & set(tags):
             continue
         if exclude and exclude & set(tags):
             continue
-        execution = wired.execution_query.find_current(
+        execution = wired.find_current_execution.find_current(
             FindCurrentExecutionCommand(summary.execution_key)
         )
         # Only DATASET-depth entries carry the input side of the corpus.
         if execution is None or not execution.input_persisted:
             skipped_no_input += 1
             continue
-        lines.append(json.dumps(_export_record(summary, execution, tags, wired.artifacts)))
+        lines.append(json.dumps(_export_record(summary, execution, tags, wired.read_artifact_blob)))
     return lines, skipped_no_input
 
 

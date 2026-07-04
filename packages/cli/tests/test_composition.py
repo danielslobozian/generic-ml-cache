@@ -71,7 +71,7 @@ def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
 
     key = first.call_identity.generate_key()
     assert len(_repo(tmp_path).find_all(key)) == 2  # IN_PROGRESS + SUCCESS from one real run
-    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_managed_durable_across_a_fresh_wiring(tmp_path):
@@ -103,7 +103,7 @@ def test_passthrough_records_then_replays(tmp_path):
     assert first.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
     assert b"pt" in _stdout(first)
     wired.run_ml.execute(command)
-    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_api_records_then_replays_with_the_stub(tmp_path):
@@ -116,7 +116,7 @@ def test_api_records_then_replays_with_the_stub(tmp_path):
     assert first.token_usage is not None
     second = wired.run_ml.execute(command)
     assert _stdout(second) == _stdout(first)
-    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_api_client_routes_to_api_adapter(tmp_path):
@@ -133,4 +133,4 @@ def test_api_client_routes_to_api_adapter(tmp_path):
     assert first.token_usage is not None
     second = wired.run_ml.execute(command)
     assert _stdout(second) == _stdout(first)
-    assert wired.store_stats.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}

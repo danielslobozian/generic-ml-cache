@@ -20,6 +20,7 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 from sse_starlette.sse import EventSourceResponse
 
 from generic_ml_cache_daemon.presenters.run import RunBody, RunResponse
@@ -95,13 +96,13 @@ def _to_dict(response: RunResponse) -> dict[str, Any]:
     return response.model_dump()
 
 
-async def _run_in_thread(wired: Any, command: RunMlExecutionCommand) -> MlExecution:
+async def _run_in_thread(wired: ApplicationApi, command: RunMlExecutionCommand) -> MlExecution:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, wired.run_ml.execute, command)
 
 
 async def _sse_generator(
-    wired: Any, command: RunMlExecutionCommand
+    wired: ApplicationApi, command: RunMlExecutionCommand
 ) -> AsyncIterator[dict[str, str]]:
     yield {"data": json.dumps({"type": "accepted"})}
     execution = await _run_in_thread(wired, command)
@@ -120,7 +121,7 @@ async def run(body: RunBody, request: Request) -> Any:
     - Any other ``Accept`` → JSON: blocks until the execution completes.
     """
     command = build_command(body, request.app.state.whitelist)
-    wired = request.app.state.wired
+    wired: ApplicationApi = request.app.state.wired
 
     if "text/event-stream" in request.headers.get("accept", ""):
         return EventSourceResponse(_sse_generator(wired, command))

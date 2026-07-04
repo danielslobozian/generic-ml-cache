@@ -7,6 +7,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 from generic_ml_cache_bootstrap.discovery.composition import registered_names
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.metrics import is_prometheus_available
@@ -29,9 +30,9 @@ def get_health() -> HealthResponse:
 @router.get("/ready", response_model=ReadyResponse)
 def get_ready(request: Request) -> Response:
     """Readiness: confirm the store is accessible and the daemon can serve requests."""
-    wired = request.app.state.wired
+    wired: ApplicationApi = request.app.state.wired
     try:
-        wired.store_stats.event_counts()
+        wired.event_counts.event_counts()
         return JSONResponse(content=ReadyResponse(status="ready").model_dump())
     except Exception:  # noqa: BLE001 — readiness probe: any store failure reports "not ready"
         return JSONResponse(

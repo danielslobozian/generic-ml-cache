@@ -137,7 +137,16 @@ def build_application_api(
     metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
     runners = build_runners(catalog_for(whitelist), default_resolver())
+    # One application service per capability (grouped by shared machinery); each
+    # is exposed through the segregated per-operation inbound-port fields of
+    # ApplicationApi (B-1), so the same instance is bound to several fields.
     purge = PurgeService(repository, blob_store, metrics, diag=_diag)
+    session_tags = SessionTagsService(metrics)
+    session_admin = SessionAdminService(metrics)
+    session_report = SessionReportService(metrics, repository)
+    execution_query = ExecutionQueryService(repository)
+    store_stats = StoreStatsService(metrics)
+    artifact_content = ArtifactContentService(blob_store)
     run_gateway = RunMlGatewayService(
         blob_store=blob_store,
         gateway_forward_port=HttpGatewayForwardAdapter(),
@@ -158,12 +167,31 @@ def build_application_api(
             diag=_diag,
         ),
         probe=ProbeService(file_fingerprint, repository),
-        purge=purge,
-        session_tags=SessionTagsService(metrics),
-        session_admin=SessionAdminService(metrics),
-        session_report=SessionReportService(metrics, repository),
-        execution_query=ExecutionQueryService(repository),
-        store_stats=StoreStatsService(metrics),
-        artifacts=ArtifactContentService(blob_store),
         run_gateway=run_gateway,
+        purge_by_key=purge,
+        purge_by_tag=purge,
+        purge_by_session=purge,
+        purge_by_session_tag=purge,
+        purge_all=purge,
+        evict_stale=purge,
+        evict_to_quota=purge,
+        tag_session=session_tags,
+        untag_session=session_tags,
+        list_session_tags=session_tags,
+        set_session_spec=session_admin,
+        clear_session_spec=session_admin,
+        get_session_spec=session_admin,
+        list_session_ids=session_admin,
+        sessions_for_tag=session_admin,
+        execution_keys_for_session=session_admin,
+        report_for_session=session_report,
+        report_for_tag=session_report,
+        list_execution_summaries=execution_query,
+        total_stored_bytes=execution_query,
+        tags_for_execution=execution_query,
+        find_current_execution=execution_query,
+        find_executions_by_key_prefix=execution_query,
+        event_counts=store_stats,
+        hit_counts_by_key=store_stats,
+        read_artifact_blob=artifact_content,
     )

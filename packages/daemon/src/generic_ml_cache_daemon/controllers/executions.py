@@ -20,6 +20,7 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_c
 from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
     PurgeByTagCommand,
 )
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_daemon.presenters.execution import (
     ExecutionListResponse,
@@ -39,7 +40,8 @@ router = APIRouter()
 @router.get("/executions")
 def list_executions(request: Request) -> ExecutionListResponse:
     """Return all current (servable) executions."""
-    summaries = request.app.state.wired.execution_query.list_summaries()
+    wired: ApplicationApi = request.app.state.wired
+    summaries = wired.list_execution_summaries.list_summaries()
     items = [
         ExecutionSummaryResponse(
             execution_key=s.execution_key, kind=s.kind, client=s.client, model=s.model
@@ -58,7 +60,8 @@ def list_executions(request: Request) -> ExecutionListResponse:
 )
 def get_execution(key: str, request: Request) -> ExecutionSummaryResponse:
     """Return the execution whose key equals or starts with ``key``."""
-    summaries = request.app.state.wired.execution_query.list_summaries()
+    wired: ApplicationApi = request.app.state.wired
+    summaries = wired.list_execution_summaries.list_summaries()
     # exact match first, then prefix
     exact = [s for s in summaries if s.execution_key == key]
     if exact:
@@ -83,31 +86,33 @@ def get_execution(key: str, request: Request) -> ExecutionSummaryResponse:
 @router.get("/stats")
 def get_stats(request: Request) -> GlobalStatsResponse:
     """Return global store statistics."""
-    wired = request.app.state.wired
-    summaries = wired.execution_query.list_summaries()
+    wired: ApplicationApi = request.app.state.wired
+    summaries = wired.list_execution_summaries.list_summaries()
     return GlobalStatsResponse(
         executions=len(summaries),
-        event_counts=wired.store_stats.event_counts(),
+        event_counts=wired.event_counts.event_counts(),
     )
 
 
 @router.post("/purge", responses={422: {"description": "Unsupported purge scope"}})
 def purge(body: Annotated[PurgeBody, Body(discriminator="by")], request: Request) -> PurgeResponse:
     """Purge (soft-delete) executions by scope."""
-    purge_service = request.app.state.wired.purge
+    wired: ApplicationApi = request.app.state.wired
     if isinstance(body, PurgeByAll):
-        report = purge_service.purge_all(PurgeAllCommand())
+        report = wired.purge_all.purge_all(PurgeAllCommand())
     elif isinstance(body, PurgeByKey):
-        report = purge_service.purge_by_key(PurgeByKeyCommand(body.target))
+        report = wired.purge_by_key.purge_by_key(PurgeByKeyCommand(body.target))
     elif isinstance(body, PurgeByTag):
-        report = purge_service.purge_by_tag(PurgeByTagCommand(body.target))
+        report = wired.purge_by_tag.purge_by_tag(PurgeByTagCommand(body.target))
     elif isinstance(body, PurgeBySession):
-        report = purge_service.purge_by_session(PurgeBySessionCommand(body.target))
+        report = wired.purge_by_session.purge_by_session(PurgeBySessionCommand(body.target))
     else:
         # Exhaustive by construction: the Body(discriminator="by") union admits
         # exactly these five scopes, so the remaining case is PurgeBySessionTag —
         # any invalid discriminator is rejected as 422 before this handler runs.
-        report = purge_service.purge_by_session_tag(PurgeBySessionTagCommand(body.target))
+        report = wired.purge_by_session_tag.purge_by_session_tag(
+            PurgeBySessionTagCommand(body.target)
+        )
     return PurgeResponse(
         executions_removed=report.executions_removed,
         bytes_freed=report.bytes_freed,

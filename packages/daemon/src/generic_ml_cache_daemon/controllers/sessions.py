@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import secrets
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from generic_ml_cache_core.application.domain.model.session.session_report import ModelUsage
@@ -31,6 +30,7 @@ from generic_ml_cache_core.application.port.inbound.session_tags.tag_session_com
 from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_command import (
     UntagSessionCommand,
 )
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_daemon.presenters.session import (
     ModelUsageBody,
@@ -51,40 +51,40 @@ def _spec_to_body(spec: SessionSpec | None) -> SpecBody | None:
     return SpecBody(client=spec.client, model=spec.model, effort=spec.effort)
 
 
-def _session_response(wired: Any, session_id: str) -> SessionResponse:
+def _session_response(wired: ApplicationApi, session_id: str) -> SessionResponse:
     return SessionResponse(
         session_id=session_id,
-        tags=wired.session_tags.list_tags(ListSessionTagsCommand(session_id)),
-        spec=_spec_to_body(wired.session_admin.get_spec(GetSessionSpecCommand(session_id))),
+        tags=wired.list_session_tags.list_tags(ListSessionTagsCommand(session_id)),
+        spec=_spec_to_body(wired.get_session_spec.get_spec(GetSessionSpecCommand(session_id))),
     )
 
 
 @router.get("")
 def list_sessions(request: Request) -> SessionListResponse:
     """Return all known session IDs."""
-    wired = request.app.state.wired
-    return SessionListResponse(session_ids=wired.session_admin.list_session_ids())
+    wired: ApplicationApi = request.app.state.wired
+    return SessionListResponse(session_ids=wired.list_session_ids.list_session_ids())
 
 
 @router.post("", status_code=201)
 def create_session(body: SessionCreateBody, request: Request) -> SessionResponse:
     """Create a new session, optionally seeding it with tags and/or a spec."""
     session_id = secrets.token_hex(8)
-    wired = request.app.state.wired
+    wired: ApplicationApi = request.app.state.wired
     for tag in body.tags:
-        wired.session_tags.tag(TagSessionCommand(session_id, tag))
+        wired.tag_session.tag(TagSessionCommand(session_id, tag))
     if body.spec is not None:
         spec = SessionSpec(client=body.spec.client, model=body.spec.model, effort=body.spec.effort)
-        wired.session_admin.set_spec(SetSessionSpecCommand(session_id, spec))
+        wired.set_session_spec.set_spec(SetSessionSpecCommand(session_id, spec))
     return _session_response(wired, session_id)
 
 
 @router.get("/{session_id}", responses={404: {"description": "Session not found"}})
 def get_session(session_id: str, request: Request) -> SessionResponse:
     """Return tags and spec for a session."""
-    wired = request.app.state.wired
-    tags = wired.session_tags.list_tags(ListSessionTagsCommand(session_id))
-    spec = wired.session_admin.get_spec(GetSessionSpecCommand(session_id))
+    wired: ApplicationApi = request.app.state.wired
+    tags = wired.list_session_tags.list_tags(ListSessionTagsCommand(session_id))
+    spec = wired.get_session_spec.get_spec(GetSessionSpecCommand(session_id))
     if not tags and spec is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
     return SessionResponse(session_id=session_id, tags=tags, spec=_spec_to_body(spec))
@@ -93,13 +93,13 @@ def get_session(session_id: str, request: Request) -> SessionResponse:
 @router.get("/{session_id}/stats")
 def get_session_stats(session_id: str, request: Request) -> SessionStatsResponse:
     """Return call/hit statistics and per-model token usage for a session."""
-    wired = request.app.state.wired
-    report = wired.session_report.report_for_session(ReportForSessionCommand(session_id))
+    wired: ApplicationApi = request.app.state.wired
+    report = wired.report_for_session.report_for_session(ReportForSessionCommand(session_id))
     hit_rate = round(report.hits / report.invocations, 4) if report.invocations > 0 else 0.0
     return SessionStatsResponse(
         session_id=session_id,
-        tags=wired.session_tags.list_tags(ListSessionTagsCommand(session_id)),
-        spec=_spec_to_body(wired.session_admin.get_spec(GetSessionSpecCommand(session_id))),
+        tags=wired.list_session_tags.list_tags(ListSessionTagsCommand(session_id)),
+        spec=_spec_to_body(wired.get_session_spec.get_spec(GetSessionSpecCommand(session_id))),
         calls=report.invocations,
         hits=report.hits,
         hit_rate=hit_rate,
@@ -125,27 +125,27 @@ def _model_usage_body(mu: ModelUsage) -> ModelUsageBody:
 @router.put("/{session_id}/spec", status_code=200)
 def set_session_spec(session_id: str, body: SpecBody, request: Request) -> SessionResponse:
     """Attach or replace the execution spec for a session."""
-    wired = request.app.state.wired
+    wired: ApplicationApi = request.app.state.wired
     spec = SessionSpec(client=body.client, model=body.model, effort=body.effort)
-    wired.session_admin.set_spec(SetSessionSpecCommand(session_id, spec))
+    wired.set_session_spec.set_spec(SetSessionSpecCommand(session_id, spec))
     return _session_response(wired, session_id)
 
 
 @router.delete("/{session_id}/spec", status_code=204)
 def clear_session_spec(session_id: str, request: Request) -> None:
     """Remove the execution spec for a session (no-op if absent)."""
-    request.app.state.wired.session_admin.clear_spec(ClearSessionSpecCommand(session_id))
+    request.app.state.wired.clear_session_spec.clear_spec(ClearSessionSpecCommand(session_id))
 
 
 @router.post("/{session_id}/tags", status_code=201)
 def add_session_tag(session_id: str, body: TagBody, request: Request) -> SessionResponse:
     """Add a tag to a session."""
-    wired = request.app.state.wired
-    wired.session_tags.tag(TagSessionCommand(session_id, body.tag))
+    wired: ApplicationApi = request.app.state.wired
+    wired.tag_session.tag(TagSessionCommand(session_id, body.tag))
     return _session_response(wired, session_id)
 
 
 @router.delete("/{session_id}/tags/{tag}", status_code=204)
 def remove_session_tag(session_id: str, tag: str, request: Request) -> None:
     """Remove a tag from a session (no-op if tag is absent)."""
-    request.app.state.wired.session_tags.untag(UntagSessionCommand(session_id, tag))
+    request.app.state.wired.untag_session.untag(UntagSessionCommand(session_id, tag))

@@ -8,12 +8,14 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
     ReadArtifactBlobCommand,
+)
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_use_case import (
+    ReadArtifactBlobUseCase,
 )
 from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
     FindCurrentExecutionCommand,
@@ -204,15 +206,15 @@ def cmd_execution_result(args: argparse.Namespace) -> int:
             encryption_token=token,
             diag=make_diag(args),
         )
-        execution = wired.execution_query.find_current(FindCurrentExecutionCommand(key))
+        execution = wired.find_current_execution.find_current(FindCurrentExecutionCommand(key))
         if execution is None:
             print(
                 f"gmlc: job {args.job_id} has no stored result (was the cache pruned?)",
                 file=sys.stderr,
             )
             return 4
-        out = stored_artifact_text(execution, wired.artifacts, ArtifactType.STDOUT)
-        err = stored_artifact_text(execution, wired.artifacts, ArtifactType.STDERR)
+        out = stored_artifact_text(execution, wired.read_artifact_blob, ArtifactType.STDOUT)
+        err = stored_artifact_text(execution, wired.read_artifact_blob, ArtifactType.STDERR)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return 4
@@ -324,7 +326,7 @@ def cmd_execution_watch(args: argparse.Namespace) -> int:
 
 def _materialize_output_files(
     execution: MlExecution,
-    artifacts: Any,  # the ArtifactContentService inbound surface; typed after decision B-1
+    artifacts: ReadArtifactBlobUseCase,
     output_dir: Path,
 ) -> int:
     """Write a stored execution's OUTPUT_FILE artifacts into ``output_dir`` (hydrating
@@ -373,11 +375,11 @@ def cmd_execution_materialize(args: argparse.Namespace) -> int:
             encryption_token=token,
             diag=make_diag(args),
         )
-        execution = wired.execution_query.find_current(FindCurrentExecutionCommand(key))
+        execution = wired.find_current_execution.find_current(FindCurrentExecutionCommand(key))
         if execution is None:
             print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
             return 4
-        count = _materialize_output_files(execution, wired.artifacts, output_dir)
+        count = _materialize_output_files(execution, wired.read_artifact_blob, output_dir)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return 4

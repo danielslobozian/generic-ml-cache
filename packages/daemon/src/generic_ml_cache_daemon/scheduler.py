@@ -17,10 +17,15 @@ from generic_ml_cache_core.application.domain.model.purge.purge_report import Pu
 from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
     EvictStaleCommand,
 )
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_use_case import (
+    EvictStaleUseCase,
+)
 from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
     EvictToQuotaCommand,
 )
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_use_case import (
+    EvictToQuotaUseCase,
+)
 
 _DEFAULT_INTERVAL = 3600.0  # seconds between eviction sweeps
 
@@ -47,12 +52,16 @@ class EvictionScheduler:
 
     def __init__(
         self,
-        purge: PurgeService,
+        evict_to_quota: EvictToQuotaUseCase,
+        evict_stale: EvictStaleUseCase,
         stats: EvictionStats,
         *,
         interval: float = _DEFAULT_INTERVAL,
     ) -> None:
-        self._purge = purge
+        # Typed against exactly the two inbound ports the sweep invokes, not the
+        # concrete PurgeService — the scheduler depends only on what it uses (B-1).
+        self._evict_to_quota = evict_to_quota
+        self._evict_stale = evict_stale
         self._stats = stats
         self._interval = interval
         self._task: asyncio.Task[None] | None = None
@@ -77,11 +86,13 @@ class EvictionScheduler:
         """Execute one eviction sweep and update stats."""
         report = PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         if self._stats.max_size is not None:
-            r = self._purge.evict_to_quota(EvictToQuotaCommand(self._stats.max_size))
-            report = _merge(report, r)
+            quota_report = self._evict_to_quota.evict_to_quota(
+                EvictToQuotaCommand(self._stats.max_size)
+            )
+            report = _merge(report, quota_report)
         if self._stats.max_age is not None:
-            r = self._purge.evict_stale(EvictStaleCommand(self._stats.max_age))
-            report = _merge(report, r)
+            stale_report = self._evict_stale.evict_stale(EvictStaleCommand(self._stats.max_age))
+            report = _merge(report, stale_report)
         self._stats.last_run_at = time.time()
         self._stats.last_executions_removed = report.executions_removed
         self._stats.last_bytes_freed = report.bytes_freed
