@@ -63,8 +63,62 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
+# Domain vocabulary the public outbound ports reference — an embedder implementing
+# a port (e.g. SaveMlRunPort) must be able to construct/read these from the stable
+# surface, so they are exported alongside the ports (W21). Reached transitively:
+# MlExecution exposes Artifact/TokenUsage/ExecutionState/ExecutionFailure/…; the
+# annotation-walking test in test_public_api enforces the closure stays complete.
+from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import (  # noqa: E402  # fmt: skip
+    AdapterBoundary,
+)
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (  # noqa: E402  # fmt: skip
+    AdapterDescriptor,
+)
+from generic_ml_cache_core.application.domain.model.catalog.client_capability import (  # noqa: E402  # fmt: skip
+    ClientCapability,
+)
+from generic_ml_cache_core.application.domain.model.execution.artifact import (  # noqa: E402  # fmt: skip
+    Artifact,
+    ArtifactStatus,
+    ArtifactType,
+)
+from generic_ml_cache_core.application.domain.model.execution.blob_key import (  # noqa: E402  # fmt: skip
+    BlobKey,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_failure import (  # noqa: E402  # fmt: skip
+    ExecutionFailure,
+    FailureReason,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_id import (  # noqa: E402  # fmt: skip
+    ExecutionId,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import (  # noqa: E402  # fmt: skip
+    ExecutionKind,
+)
+from generic_ml_cache_core.application.domain.model.execution.execution_state import (  # noqa: E402  # fmt: skip
+    ExecutionState,
+)
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import (  # noqa: E402  # fmt: skip
+    MlExecution,
+)
+from generic_ml_cache_core.application.domain.model.identity.call_identity import (  # noqa: E402  # fmt: skip
+    CallIdentity,
+)
+from generic_ml_cache_core.application.domain.model.run.client_run_result import (  # noqa: E402  # fmt: skip
+    ClientRunResult,
+    GeneratedFile,
+)
+from generic_ml_cache_core.application.domain.model.run.ml_request import (  # noqa: E402  # fmt: skip
+    MlRequest,
+)
 from generic_ml_cache_core.application.domain.model.session.session_event_row import (  # noqa: E402  # fmt: skip
     SessionEventRow,
+)
+from generic_ml_cache_core.application.domain.model.session.session_spec import (  # noqa: E402  # fmt: skip
+    SessionSpec,
+)
+from generic_ml_cache_core.application.domain.model.usage.token_usage import (  # noqa: E402  # fmt: skip
+    TokenUsage,
 )
 from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (  # noqa: E402  # fmt: skip
     RunMlExecutionCommand,
@@ -169,6 +223,28 @@ __all__ = [
     "BlobStorePort",
     "MlRunnerPort",
     "AdapterCatalogPort",
+    # Domain vocabulary the public ports reference — the DTOs/enums an embedder
+    # must construct/read to implement a port (W21). CallIdentity is exported OPAQUE
+    # (its four subclasses stay internal); round-trip it with the serialize pair.
+    "MlExecution",
+    "Artifact",
+    "ArtifactType",
+    "ArtifactStatus",
+    "BlobKey",
+    "ExecutionId",
+    "ExecutionState",
+    "ExecutionKind",
+    "ExecutionFailure",
+    "FailureReason",
+    "TokenUsage",
+    "MlRequest",
+    "ClientRunResult",
+    "GeneratedFile",
+    "AdapterDescriptor",
+    "AdapterBoundary",
+    "ClientCapability",
+    "SessionSpec",
+    "CallIdentity",
     # Checksum utilities
     "checksum_input_data",
     "text_checksum",
