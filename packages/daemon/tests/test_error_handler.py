@@ -15,6 +15,7 @@ from generic_ml_cache_core.common.errors import (
     EncryptionStateError,
     EncryptionTokenRequired,
     StoreLocked,
+    StoreUnavailable,
     UnknownClient,
     WrongEncryptionToken,
 )
@@ -47,6 +48,7 @@ def _post_run(tc: TestClient):
         (WrongEncryptionToken("bad token"), 401, "crypto.wrong_token"),
         (EncryptionTokenRequired("need token"), 401, "crypto.token_required"),
         (ArtifactBlobMissing("blob gone"), 404, "store.blob_missing"),
+        (StoreUnavailable("db down"), 503, "store.unavailable"),
         (CacheError("unexpected"), 500, "cache.error"),
     ],
 )

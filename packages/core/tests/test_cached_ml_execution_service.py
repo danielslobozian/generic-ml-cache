@@ -27,7 +27,11 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )
-from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
+from generic_ml_cache_core.common.errors import (
+    ArtifactBlobMissing,
+    CacheMiss,
+    StoreUnavailable,
+)
 
 # ---------------------------------------------------------------------------
 # Minimal concrete subclass
@@ -444,3 +448,18 @@ class TestStripedKeyLocks:
     def test_same_key_maps_to_the_same_lock(self):
         svc = _make_svc()
         assert svc._lock_for_key("stable-key") is svc._lock_for_key("stable-key")
+
+
+class TestStoreUnavailable:
+    def test_dead_store_fails_loud_without_invoking_the_client(self):
+        # S2b: if the database is a hard outage, the first repo read raises
+        # StoreUnavailable and the expensive client is never called.
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.side_effect = StoreUnavailable("cache database is unavailable")
+        svc = _make_svc(repo=repo, runner=runner)
+
+        with pytest.raises(StoreUnavailable):
+            svc.execute(_Cmd())
+
+        runner.assert_not_called()

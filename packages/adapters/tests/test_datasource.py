@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+import pytest
+from generic_ml_cache_core.common.errors import StoreUnavailable
+
 from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 
 
@@ -50,6 +53,16 @@ def test_factory_enables_wal_and_busy_timeout(tmp_path):
         assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
     finally:
         conn.close()
+
+
+def test_unopenable_db_raises_store_unavailable(tmp_path):
+    # The parent path is a FILE, so mkdir/connect cannot create the DB there — a
+    # hard outage. It must surface as StoreUnavailable, never a raw sqlite3/OS error.
+    blocker = tmp_path / "blocker"
+    blocker.write_text("i am a file, not a directory")
+    factory = sqlite_connection_factory(blocker / "sub" / "db.sqlite3")
+    with pytest.raises(StoreUnavailable):
+        factory()
 
 
 def test_check_same_thread_false_allows_cross_thread_use(tmp_path):

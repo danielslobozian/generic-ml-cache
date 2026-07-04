@@ -212,6 +212,24 @@ class ProviderProtocolError(ProviderApiError):
     code: ClassVar[str] = "provider.protocol_error"
 
 
+class StoreUnavailable(CacheError):
+    """Raised when the cache database cannot be reached at all — a HARD outage: the
+    file cannot be opened, the disk is gone or full, permissions deny it (S2b).
+
+    The database is the one never-optional component (even METER writes usage to it,
+    and a read cannot tell hit from miss without it), so there is no best-effort
+    fallback as there is for blob storage. The tool fails LOUD everywhere — including
+    the gateway — rather than silently degrading into a transparent pass-through that
+    would rack up expensive client calls the user believes are cached. The client is
+    NOT invoked. Drivers map it cleanly (CLI error exit / daemon 503). Distinct from a
+    transient 'database is locked' (S2a), which WAL + busy_timeout makes wait, not
+    fail. Java: a ``DataAccessResourceFailureException`` (cannot obtain a connection),
+    as opposed to a lock-timeout that is retried.
+    """
+
+    code: ClassVar[str] = "store.unavailable"
+
+
 class StoreConsistencyError(CacheError):
     """Raised when a DB-first write targets an execution that is not there to
     update — a ``mark_artifacts_*`` / ``finalize`` for an ``execution_id`` with no
