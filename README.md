@@ -83,9 +83,7 @@ The CLI and the daemon are both inbound drivers over the same engine. The depend
 
 ```python
 from generic_ml_cache_bootstrap.application import build_application_api
-from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
-    RunMlExecutionCommand,
-)
+from generic_ml_cache_core import RunMlExecutionCommand
 
 # build_application_api returns an ApplicationApi — the bundle of inbound-port
 # fields the drivers call. Inject your own PersistenceBackend / blob store to run

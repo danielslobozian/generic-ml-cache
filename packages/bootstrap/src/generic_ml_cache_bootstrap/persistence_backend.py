@@ -3,12 +3,13 @@
 """PersistenceBackend — the DB-backed outbound adapters, bundled as one unit (V33).
 
 The repository, the call journal, and the migration adapter all share ONE database
-over ONE connection, so they are an atomic unit — you cannot have a Postgres
-repository and a SQLite journal "for the same store". Grouping them into a single
-injected bundle kills the bare ``conn_factory`` seam that C-1 exposed: once the
-dialect layer is gone, a free connection factory is a *crossable* seam (a Postgres
-factory handed to SQLite-dialect adapters explodes at runtime). Here the connection
-is owned by / constructed with the dialect adapters, never handed across.
+through ONE connection FACTORY (each operation opens its own connection from it), so
+they are an atomic unit — you cannot have a Postgres repository and a SQLite journal
+"for the same store". Grouping them into a single injected bundle kills the bare
+``conn_factory`` seam that C-1 exposed: once the dialect layer is gone, a free
+connection factory is a *crossable* seam (a Postgres factory handed to SQLite-dialect
+adapters explodes at runtime). Here the connection factory is owned by / constructed
+with the dialect adapters, never handed across.
 
 The bundle is composition plumbing, NOT a hexagonal port: it is a frozen dataclass
 of the individual core outbound ports (the same shape as ``ApplicationApi`` on the

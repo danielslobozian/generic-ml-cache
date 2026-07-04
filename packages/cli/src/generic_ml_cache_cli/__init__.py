@@ -4,9 +4,10 @@
 
 A thin inbound driver: it reads configuration (an INI file), provides the data
 source (store location), and maps the ``gmlcache`` terminal commands onto the
-core library's public APIs. The engine logic lives in generic-ml-cache-core and
-the concrete adapters in generic-ml-cache-adapters, on both of which this package
-depends.
+core library's public APIs. The engine logic lives in generic-ml-cache-core; the
+concrete adapters are assembled by generic-ml-cache-bootstrap (the composition
+root). This package depends on core and bootstrap only — never on the adapters
+package directly (W28 driver isolation).
 """
 
 from __future__ import annotations

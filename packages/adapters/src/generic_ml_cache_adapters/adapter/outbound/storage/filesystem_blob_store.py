@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""FilesystemBlobStore: opaque artifact bytes addressed by content key on disk."""
+"""FilesystemBlobStore: opaque artifact bytes addressed by an execution-owned key on disk."""
 
 from __future__ import annotations
 
