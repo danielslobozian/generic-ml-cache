@@ -49,6 +49,7 @@ from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
     SessionTagsPort,
 )
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
@@ -519,6 +520,58 @@ def test_evict_to_quota_evicts_least_recently_accessed():
     # The old (LRU) execution should be gone; new should remain
     assert repo.find_current(id_old.generate_key()) is None
     assert repo.find_current(id_new.generate_key()) is not None
+
+
+class _RecordingDiag(DiagnosticsPort):
+    def __init__(self) -> None:
+        self.warnings: list[str] = []
+
+    def debug(self, msg: str, **context: object) -> None:
+        pass
+
+    def info(self, msg: str, **context: object) -> None:
+        pass
+
+    def warn(self, msg: str, **context: object) -> None:
+        self.warnings.append(msg)
+
+    def error(self, msg: str, exc: BaseException | None = None, **context: object) -> None:
+        pass
+
+
+class _UnreadableAccessMetrics(FakeMetrics):
+    """A journal whose access data cannot be read (last_access → None)."""
+
+    def last_access(self) -> dict[str, float] | None:
+        return None
+
+
+def _over_quota_service(metrics, diag):
+    repo = InMemoryExecutionRepository(FixedClock())
+    store = InMemoryBlobStore()
+    repo.save(_execution(_identity("a"), content=b"aaaa"))
+    repo.save(_execution(_identity("b"), content=b"bbbb"))
+    store.put("blob_" + b"aaaa".hex(), b"aaaa")
+    store.put("blob_" + b"bbbb".hex(), b"bbbb")
+    return PurgeService(repo, store, metrics, metrics, diag)
+
+
+def test_evict_to_quota_warns_and_still_enforces_when_access_data_unreadable():
+    diag = _RecordingDiag()
+    svc = _over_quota_service(_UnreadableAccessMetrics(), diag)
+    # total is 8 bytes; a 4-byte quota must still evict one execution even though
+    # the LRU access data is unreadable — quota stays enforced on creation time.
+    report = svc.evict_to_quota(EvictToQuotaCommand(max_bytes=4))
+    assert report.executions_removed == 1
+    assert any("degraded" in warning for warning in diag.warnings)
+
+
+def test_evict_to_quota_does_not_warn_when_registry_is_merely_empty():
+    diag = _RecordingDiag()
+    svc = _over_quota_service(FakeMetrics(), diag)  # last_access → {} (empty, normal)
+    svc.evict_to_quota(EvictToQuotaCommand(max_bytes=4))
+    # An empty registry is normal — creation-time ordering, no degraded warning.
+    assert diag.warnings == []
 
 
 def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():

@@ -316,10 +316,13 @@ class AccessRegistry:
             self._warn_db_error("list_session_ids", exc)
             return []
 
-    def last_access(self) -> dict[str, float]:
-        """Return {match_key: latest-event epoch seconds} for LRU eviction ordering
-        ({} if unavailable). An execution absent here has never been seen by the
-        registry; the caller falls back to file age for it."""
+    def last_access(self) -> dict[str, float] | None:
+        """Return {match_key: latest-event epoch seconds} for LRU eviction ordering.
+
+        ``{}`` means the registry is genuinely empty; ``None`` means the read
+        FAILED (a registry-DB error), so the caller can tell a degraded read from
+        an empty registry. An execution absent from a returned dict has never been
+        seen by the registry; the caller falls back to file age for it."""
         try:
             conn = self._connect()
             try:
@@ -331,7 +334,7 @@ class AccessRegistry:
                 conn.close()
         except Exception as exc:
             self._warn_db_error("last_access", exc)
-            return {}
+            return None
         out: dict[str, float] = {}
         for key, ts in rows:
             try:

@@ -124,7 +124,7 @@ class PurgeService(
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         cutoff = time.time() - command.max_age_seconds
         entries = self._repository.current_executions_with_sizes()
-        last_access = self._journal.last_access()
+        last_access = self._access_ordering()
         stale_keys = [e.execution_key for e in entries if _lru_epoch(e, last_access) < cutoff]
         if stale_keys and self._diag:
             self._diag.info("stale eviction triggered", stale_count=len(stale_keys))
@@ -136,7 +136,7 @@ class PurgeService(
         if current <= command.max_bytes:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         entries = self._repository.current_executions_with_sizes()
-        last_access = self._journal.last_access()
+        last_access = self._access_ordering()
         sorted_entries = sorted(entries, key=lambda e: _lru_epoch(e, last_access))
         keys_to_evict: list[str] = []
         running = current
@@ -155,6 +155,21 @@ class PurgeService(
         return self._soft_purge_keys(keys_to_evict)
 
     # -- private --------------------------------------------------------------
+
+    def _access_ordering(self) -> dict[str, float]:
+        """The LRU input for eviction ordering. A ``None`` from the journal means
+        the access data could not be read: keep enforcing quota but order by
+        creation time (an empty map makes every key fall back to it) and warn
+        loudly that eviction is running degraded, rather than silently evicting on
+        the wrong ordering. An empty dict is a genuinely-empty registry — normal."""
+        last_access = self._journal.last_access()
+        if last_access is None:
+            if self._diag:
+                self._diag.warn(
+                    "eviction degraded — access data unavailable, ordering by creation time"
+                )
+            return {}
+        return last_access
 
     def _purge(self, keys: list[str], hard: bool) -> PurgeReport:
         return self._hard_delete_keys(keys) if hard else self._soft_purge_keys(keys)

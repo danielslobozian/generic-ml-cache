@@ -73,7 +73,7 @@ class JournalMetrics(
             for (ts, event, client, model, key) in self._registry.session_events(session_id)
         ]
 
-    def last_access(self) -> dict[str, float]:
+    def last_access(self) -> dict[str, float] | None:
         return self._registry.last_access()
 
     def execution_keys_for_session(self, session_id: str) -> list[str]:

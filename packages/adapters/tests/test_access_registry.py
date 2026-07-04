@@ -125,8 +125,10 @@ def test_session_ids_for_tag_returns_empty_list_when_registry_unavailable():
     assert _broken().session_ids_for_tag("tag-sprint3") == []
 
 
-def test_last_access_returns_empty_dict_when_registry_unavailable():
-    assert _broken().last_access() == {}
+def test_last_access_returns_none_when_registry_unavailable():
+    # None (read failed) is distinct from {} (genuinely empty) so eviction can
+    # tell a degraded read from an empty registry and warn accordingly (W20).
+    assert _broken().last_access() is None
 
 
 # --- session spec -----------------------------------------------------------

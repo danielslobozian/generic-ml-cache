@@ -100,11 +100,16 @@ class PurgeJournalPort(ABC):
     """The journal's retention side — LRU input and event erasure (purge only)."""
 
     @abstractmethod
-    def last_access(self) -> dict[str, float]:
-        """Return {execution_key: epoch_seconds} of the latest event per key.
+    def last_access(self) -> dict[str, float] | None:
+        """Return {execution_key: epoch_seconds} of the latest event per key,
+        for LRU eviction ordering.
 
-        Used for LRU eviction ordering. An empty dict is the correct response
-        when no data is available.
+        An empty dict means the registry is genuinely empty (no access recorded
+        yet) — normal, and eviction orders by creation time for those keys.
+        ``None`` means the access data could not be READ (a registry error): the
+        caller keeps enforcing quota but on creation-time ordering, and must warn
+        that eviction is running degraded. The two must be distinguishable so a
+        read failure is never mistaken for an empty registry.
         """
 
     @abstractmethod
