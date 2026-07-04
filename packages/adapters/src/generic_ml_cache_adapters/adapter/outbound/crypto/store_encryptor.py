@@ -163,7 +163,7 @@ class StoreEncryptor:
         if self._staging.exists():
             self._blobs.mkdir(parents=True, exist_ok=True)
             for staged in self._staging.iterdir():
-                if staged.is_file() and "." not in staged.name:
+                if staged.is_file() and not staged.name.endswith(".tmp"):
                     os.replace(staged, self._blobs / staged.name)
             shutil.rmtree(self._staging, ignore_errors=True)
         if marker["op"] == "enable":
@@ -181,8 +181,11 @@ class StoreEncryptor:
     def _blob_files(self) -> list[Path]:
         if not self._blobs.exists():
             return []
-        # a blob is named by its content fingerprint (hex, no dots); skip *.tmp leftovers.
-        return [p for p in self._blobs.iterdir() if p.is_file() and "." not in p.name]
+        # A blob key may legally contain a dot (BlobKey's charset is [A-Za-z0-9._-]), so
+        # filter on the actual scratch suffix — skip only the .tmp leftovers, never a
+        # dotted key (Y8): the old "no dots" test silently left a dotted-key blob
+        # untransformed on enable() and unmovable on disable().
+        return [p for p in self._blobs.iterdir() if p.is_file() and not p.name.endswith(".tmp")]
 
 
 def _dump_manifest(manifest: EncryptionManifest) -> dict[str, str | int]:

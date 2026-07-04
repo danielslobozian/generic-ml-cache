@@ -111,6 +111,24 @@ def test_enable_then_disable_round_trips_byte_identical(tmp_path):
     assert {k: blobs.get(k) for k in items} == items  # plaintext restored exactly
 
 
+def test_enable_disable_transforms_a_dotted_key_blob(tmp_path):
+    # Y8: a BlobKey may legally contain a dot ([A-Za-z0-9._-]); the encryptor must
+    # transform it, not skip it as a *.tmp leftover. The old "no dots" filter left a
+    # dotted-key blob PLAINTEXT on enable() and unmovable on disable().
+    store = tmp_path / "store"
+    key = "exec1.deadbeef"  # a dotted execution-owned key
+    _seed(store, {key: b"PLAINMARKER-dotted"})
+    token = _token()
+    enc = _encryptor(store)
+
+    enc.enable(token)
+    assert b"PLAINMARKER-dotted" not in _raw(store, key)  # encrypted, NOT skipped
+    assert _read_decrypted(store, token, key) == b"PLAINMARKER-dotted"
+
+    enc.disable(token)
+    assert FilesystemBlobStore(store / "blobs").get(key) == b"PLAINMARKER-dotted"  # restored
+
+
 # --- rotate ------------------------------------------------------------------
 
 
