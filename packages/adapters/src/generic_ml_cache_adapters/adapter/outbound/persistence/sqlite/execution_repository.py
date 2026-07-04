@@ -21,6 +21,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_failure 
     ExecutionFailure,
     FailureReason,
 )
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -56,7 +57,7 @@ _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
 #: is NULL exactly when ``failure_reason`` is (they are written together from one
 #: ``ExecutionFailure``) — a correlation the type system cannot express, so it
 #: stays ``Any`` and is only read behind the ``failure_reason`` guard.
-_ExecutionRow = tuple[int, str, str, str, int, str | None, str | None, Any, int | None]
+_ExecutionRow = tuple[int, str, str, str, int, str | None, str | None, Any, int | None, str | None]
 
 
 class SqliteExecutionRepository(
@@ -285,8 +286,8 @@ class SqliteExecutionRepository(
         failure = execution.failure
         cursor = connection.execute(
             "INSERT INTO executions (execution_key, kind, state, output_persisted, superseded_at, "
-            "failure_reason, failure_message, failure_exit_code, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "failure_reason, failure_message, failure_exit_code, created_at, execution_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 execution_key,
                 execution.execution_kind.value,
@@ -297,6 +298,7 @@ class SqliteExecutionRepository(
                 failure.message if failure else None,
                 failure.exit_code if failure else None,
                 stamped_at.isoformat(),
+                execution.execution_id,
             ),
         )
         return int(cursor.lastrowid or 0)
@@ -405,7 +407,7 @@ class SqliteExecutionRepository(
 
     def _load_execution(self, connection: DbConnection, row: _ExecutionRow) -> MlExecution:
         (
-            execution_id,
+            row_id,
             execution_key,
             kind,
             state,
@@ -414,17 +416,21 @@ class SqliteExecutionRepository(
             failure_reason,
             failure_message,
             failure_exit_code,
+            execution_id,
         ) = row
-        artifacts = self._load_artifacts(connection, execution_id)
+        artifacts = self._load_artifacts(connection, row_id)
         return MlExecution(
             call_identity=self._load_identity(connection, execution_key),
             execution_state=ExecutionState(state),
             execution_kind=ExecutionKind(kind),
             output_persisted=bool(output_persisted),
+            # A legacy pre-0004 row has no stored id; mint one (it is historical and
+            # never re-targeted, so a fresh surrogate is harmless).
+            execution_id=ExecutionId(execution_id) if execution_id else ExecutionId.generate(),
             # Derived, not a column: input is persisted iff INPUT_* artifacts exist.
             input_persisted=any(a.artifact_type in INPUT_ARTIFACT_TYPES for a in artifacts),
             artifacts=artifacts,
-            token_usage=self._load_token_usage(connection, execution_id),
+            token_usage=self._load_token_usage(connection, row_id),
             failure=(
                 ExecutionFailure(
                     reason=FailureReason(failure_reason),
@@ -647,5 +653,5 @@ class SqliteExecutionRepository(
 
 _EXECUTION_COLUMNS = (
     "id, execution_key, kind, state, output_persisted, superseded_at, "
-    "failure_reason, failure_message, failure_exit_code"
+    "failure_reason, failure_message, failure_exit_code, execution_id"
 )

@@ -15,6 +15,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
 )
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
@@ -42,6 +43,9 @@ class MlExecution:
     execution_state: ExecutionState
     execution_kind: ExecutionKind
     output_persisted: bool
+    #: Surrogate identity, minted at construction (before persistence). The DB-first
+    #: write path targets mark/finalize by this id, never "the latest row by key".
+    execution_id: ExecutionId = field(default_factory=ExecutionId.generate)
     input_persisted: bool = False
     artifacts: list[Artifact] = field(default_factory=list[Artifact])
     token_usage: TokenUsage | None = None

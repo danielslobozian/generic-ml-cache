@@ -172,6 +172,16 @@ def test_find_current_is_none_for_unknown_key(tmp_path):
     assert _repository(tmp_path).find_current("nope") is None
 
 
+def test_execution_id_round_trips_through_save_and_reload(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    execution = _execution(identity)
+    repository.save(execution)
+    reloaded = repository.find_all(identity.generate_key())
+    assert len(reloaded) == 1
+    assert reloaded[0].execution_id == execution.execution_id
+
+
 def test_save_then_find_current(tmp_path):
     repository = _repository(tmp_path)
     identity = _managed_identity()

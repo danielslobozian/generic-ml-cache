@@ -80,7 +80,7 @@ def test_migration_records_applied_migration(tmp_path: Path) -> None:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 3
+    assert version == 4
 
 
 def test_migration_creates_indexes(tmp_path: Path) -> None:
@@ -96,6 +96,18 @@ def test_migration_creates_indexes(tmp_path: Path) -> None:
         conn.close()
     assert "idx_executions_key" in indexes
     assert "idx_artifacts_execution" in indexes
+    assert "idx_executions_execution_id" in indexes  # migration 0004
+
+
+def test_migration_0004_adds_execution_id_column(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    run_migrations(factory)
+    conn = factory()
+    try:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(executions)").fetchall()}
+    finally:
+        conn.close()
+    assert "execution_id" in columns
 
 
 def test_schema_version_returns_applied_migrations(tmp_path: Path) -> None:
