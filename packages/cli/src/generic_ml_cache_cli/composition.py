@@ -6,25 +6,14 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path
-from typing import cast
 
-from generic_ml_cache_adapters.datasource import sqlite_connection_factory
-from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_bootstrap.diagnostics import build_diagnostics
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ConfigError
 
 from . import config
-
-_DB_NAME = "executions.sqlite3"
-
-
-def db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
-    # The library's canonical factory: it creates the parent dir and, crucially,
-    # sets PRAGMA foreign_keys = ON per connection so the schema's FKs are enforced.
-    return cast("Callable[[], DbConnection]", sqlite_connection_factory(store_root / _DB_NAME))
 
 
 def make_diag(args: argparse.Namespace) -> DiagnosticsPort:

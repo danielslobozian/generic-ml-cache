@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 from generic_ml_cache_core.common.errors import StoreUnavailable
 
@@ -83,3 +85,31 @@ def test_check_same_thread_false_allows_cross_thread_use(tmp_path):
     t.join()
     conn.close()
     assert not errors
+
+
+def test_read_only_factory_reads_committed_data_but_rejects_writes(tmp_path):
+    db_path = tmp_path / "test.sqlite3"
+    rw = sqlite_connection_factory(db_path)
+    conn = rw()
+    try:
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.execute("INSERT INTO t VALUES (7)")
+        conn.commit()
+    finally:
+        conn.close()
+
+    conn = sqlite_connection_factory(db_path, read_only=True)()
+    try:
+        assert conn.execute("SELECT x FROM t").fetchone()[0] == 7
+        with pytest.raises(sqlite3.OperationalError):  # readonly database
+            conn.execute("INSERT INTO t VALUES (8)")
+    finally:
+        conn.close()
+
+
+def test_read_only_factory_never_creates_a_missing_db(tmp_path):
+    db_path = tmp_path / "absent.sqlite3"
+    factory = sqlite_connection_factory(db_path, read_only=True)
+    with pytest.raises(StoreUnavailable):
+        factory()
+    assert not db_path.exists()  # mode=ro must not create the file

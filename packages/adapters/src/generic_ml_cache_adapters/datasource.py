@@ -31,6 +31,7 @@ def sqlite_connection_factory(
     db_path: Path,
     *,
     check_same_thread: bool = True,
+    read_only: bool = False,
 ) -> Callable[[], Connection]:
     """Return a factory that opens a fresh SQLite connection to *db_path* on each call.
 
@@ -41,11 +42,23 @@ def sqlite_connection_factory(
         check_same_thread: Pass ``False`` when the factory is shared across threads
             (e.g. the daemon's async thread pool). Defaults to ``True`` for
             single-threaded callers such as the CLI.
+        read_only: Open the database ``mode=ro`` — never create the file, the parent
+            directory, or write the WAL header. For a status probe (``doctor``) that
+            must not initialize the store it inspects (W26). The file must already
+            exist; the caller checks that first.
     """
     resolved = Path(db_path)
 
     def _connect() -> Connection:
         try:
+            if read_only:
+                # URI mode=ro: SQLite refuses any write to the main database (no
+                # CREATE, no new file), so a probe cannot initialize the store.
+                connection = sqlite3.connect(
+                    f"file:{resolved}?mode=ro", uri=True, check_same_thread=check_same_thread
+                )
+                connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
+                return connection
             resolved.parent.mkdir(parents=True, exist_ok=True)
             connection = sqlite3.connect(str(resolved), check_same_thread=check_same_thread)
             # busy_timeout FIRST so the WAL-mode change (which needs a brief exclusive

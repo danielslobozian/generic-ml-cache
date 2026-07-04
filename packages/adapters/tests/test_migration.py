@@ -17,6 +17,7 @@ from generic_ml_cache_core.common.errors import MigrationFailed
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import (
     SqliteStoreMigration,
+    applied_schema_version,
     run_migrations,
     schema_version,
 )
@@ -262,3 +263,18 @@ def test_sqlite_store_migration_migrate_to_current_builds_the_schema(tmp_path: P
     # Idempotent: a second call is a no-op, never an error.
     migration.migrate_to_current()
     assert migration.applied_migrations()  # non-empty history after migrating
+
+
+def test_applied_schema_version_reports_all_migrations_after_run(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    run_migrations(factory)
+    applied = applied_schema_version(factory)
+    assert len(applied) == CURRENT_MODEL_VERSION
+    assert applied[-1]["migration_id"] == "0004.execution-id"
+
+
+def test_applied_schema_version_on_an_unmigrated_db_is_empty(tmp_path: Path) -> None:
+    # A DB with no schema_version table: the read-only reader reports unmigrated
+    # rather than creating the table (unlike schema_version, which bootstraps it).
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    assert applied_schema_version(factory) == []

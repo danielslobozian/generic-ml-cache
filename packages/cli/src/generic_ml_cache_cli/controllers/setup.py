@@ -14,7 +14,7 @@ from generic_ml_cache_core.common.errors import ConfigError, UnknownClient
 
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli._compose import get_encryption_state
-from generic_ml_cache_cli.composition import db_conn_factory, make_diag
+from generic_ml_cache_cli.composition import make_diag
 
 if TYPE_CHECKING:
     from generic_ml_cache_bootstrap.discovery.client_discover import ModelListing
@@ -68,8 +68,8 @@ def _doctor_payload(args: argparse.Namespace) -> _DoctorPayload:
     import platform
     from dataclasses import asdict
 
-    from generic_ml_cache_adapters.migration_runner import schema_version
     from generic_ml_cache_bootstrap.discovery.client_discover import probe_all
+    from generic_ml_cache_bootstrap.store_status import applied_migrations
 
     from generic_ml_cache_cli.discovery import adapter_sources
 
@@ -78,11 +78,10 @@ def _doctor_payload(args: argparse.Namespace) -> _DoctorPayload:
     store_root = Path(str(settings["store"][0]))
     _diag = make_diag(args)
 
-    # schema_version's own annotation is the unparametrized `list[dict]`; the cast
-    # pins the JSON-shaped rows the migration runner actually returns.
-    applied = cast(
-        "list[dict[str, object]]", schema_version(db_conn_factory(store_root), diag=_diag)
-    )
+    # A read-only probe: it reports the applied migrations without initializing the
+    # store (W26 — a mistyped path must not spawn an empty store). The cast pins the
+    # JSON-shaped rows onto the payload's `list[dict[str, object]]`.
+    applied = cast("list[dict[str, object]]", applied_migrations(store_root))
     statuses = probe_all(
         timeout=args.timeout,
         executables=file_cfg.executables,

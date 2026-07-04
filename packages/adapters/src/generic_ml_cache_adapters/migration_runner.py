@@ -202,3 +202,28 @@ def schema_version(
         return []
     finally:
         conn.close()
+
+
+def applied_schema_version(
+    conn_factory: Callable[[], DbConnection],
+) -> list[dict[str, str | None]]:
+    """Read the applied migrations WITHOUT initializing the store (W26).
+
+    The read-only counterpart of :func:`schema_version`: it never issues the
+    ``CREATE TABLE schema_version`` bootstrap, so it is safe on a ``mode=ro``
+    connection where any write would fail. A missing ``schema_version`` table (an
+    empty/uninitialized DB) or any read error reports ``[]`` (unmigrated). Used by
+    the ``doctor`` status probe, which must never mutate the store it inspects.
+    """
+    conn = conn_factory()
+    try:
+        row = conn.execute("SELECT version FROM schema_version").fetchone()
+        version = int(row[0]) if row is not None else 0
+        return [
+            {"migration_id": _MIGRATION_IDS[v - 1], "applied_at_utc": None}
+            for v in range(1, min(version, len(_MIGRATION_IDS)) + 1)
+        ]
+    except Exception:  # noqa: BLE001 — missing table / read error → unmigrated
+        return []
+    finally:
+        conn.close()
