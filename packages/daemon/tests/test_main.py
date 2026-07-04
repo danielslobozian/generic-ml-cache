@@ -76,6 +76,9 @@ def test_main_calls_uvicorn_run_with_defaults(tmp_path: Path, monkeypatch) -> No
 
     assert mock_run.called
     _, kwargs = mock_run.call_args
+    # X4: the gateway is single-principal (body-only cache key), so it MUST bind
+    # localhost by default — never a routable address that could serve one caller's
+    # provider-authorized response to another.
     assert kwargs["host"] == "127.0.0.1"
     assert kwargs["port"] == 8765
 

@@ -106,6 +106,16 @@ A cache-transparent proxy for the Anthropic Messages API. Requests that hit the
 cache are returned without a network call to Anthropic. The response shape matches
 the Anthropic Messages API exactly, with one extra field: `x_cache_hit: bool`.
 
+> **⚠️ Security — single-principal, localhost only.** The gateway is a single-user
+> tool. Its passthrough cache is keyed on the request **body only** — deliberately
+> **not** on the caller's auth token or session (the token refreshes, and keying on
+> it would defeat cross-session cache hits). That is safe for one operator on one
+> machine, but it means two different callers who send the same body share one cache
+> entry regardless of their credentials. **Never expose this daemon to a network or
+> to multiple users** — a second caller could be served the first caller's
+> provider-authorized response. It binds `127.0.0.1` by default for exactly this
+> reason; do not override `--host` to a routable address on an untrusted network.
+
 **Limitations:** single-turn conversations only (one `role: user` message,
 no prior assistant turns). Multi-turn support is planned.
 

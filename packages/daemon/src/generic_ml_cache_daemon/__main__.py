@@ -13,6 +13,11 @@ import uvicorn
 
 from generic_ml_cache_daemon.app import create_app
 
+# Bind LOCALHOST by default (X4): the gateway is single-principal — its passthrough
+# cache is keyed on the request body only, NOT the caller's auth token, so it must
+# never be exposed to a network / multiple users (one caller could then be served
+# another's provider-authorized response). Overriding --host to a routable address
+# opts out of that safety deliberately.
 _DEFAULT_HOST = "127.0.0.1"
 _DEFAULT_PORT = 8765
 

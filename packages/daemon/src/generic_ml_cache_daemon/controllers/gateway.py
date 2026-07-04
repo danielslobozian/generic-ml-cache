@@ -53,6 +53,14 @@ async def proxy_messages(session_id: str, request: Request) -> Response:
     """
     raw_body = await request.body()
     _reject_malformed(raw_body)
+    # The cache key is the request BODY only (ApiPassthroughCallIdentity) — the
+    # forwarded auth token and the session_id below are DELIBERATELY not keyed (X4).
+    # This is a single-user local tool (never multi-tenant), so there is no
+    # cross-principal replay to guard against, and the caller's OAuth token refreshes,
+    # so keying on it would fragment the cache and defeat cross-session hits. The
+    # residual risk is network exposure, handled by binding localhost (see __main__.py)
+    # + the security note in the daemon README — never by keying the token. Do NOT add
+    # auth/session to the key here.
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.API_PASSTHROUGH,
         client=_RELAY_CLIENT,

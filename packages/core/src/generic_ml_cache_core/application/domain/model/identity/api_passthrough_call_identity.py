@@ -20,6 +20,17 @@ class ApiPassthroughCallIdentity(CallIdentity):
     of those bytes — the raw body may carry secrets and is never keyed or stored,
     only its digest. The kind is folded into the key, so a relay call can never
     collide with a structured API call to the same provider.
+
+    **The auth/session is DELIBERATELY excluded from the key (X4, single-user).** The
+    forwarded subscription token and any ``session_id`` are NOT part of the identity,
+    on purpose: this is a single-user LOCAL tool (never multi-tenant — see the
+    threat model), so there is no cross-principal leak to guard against; and the
+    caller's OAuth token *refreshes over time*, so folding it into the key would
+    fragment the cache and force a needless upstream call on every refresh. Body-only
+    keying is therefore REQUIRED for cross-session cache hits, not merely acceptable —
+    do NOT "fix" this by adding the token/session to the key. The one residual risk is
+    accidental network exposure, handled by not opening the port (the daemon binds
+    localhost by default) + a security note, never by changing this key.
     """
 
     client: str
