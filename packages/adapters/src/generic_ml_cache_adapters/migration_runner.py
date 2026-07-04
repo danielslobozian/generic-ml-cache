@@ -2,7 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Migration runner for the unified gmlcache database.
 
-Tracks applied migrations in a ``schema_version`` table — one row, one integer.
+Tracks the applied schema version in a ``schema_version`` table that is
+structurally single-row: ``(id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER)``
+(Y1). The ``id = 1`` primary key makes a second concurrent first-init seed a no-op
+(``INSERT OR IGNORE``) instead of appending a duplicate row that could later brick the
+store, and the whole ``run_migrations`` sequence is wrapped in a blocking-exclusive
+store lock so a second process racing a fresh store waits its turn and no-ops rather
+than colliding on the DDL.
+
 Each migration **file** runs in its own transaction (Flyway-style): the runner wraps
 the file — and its version bump — in one ``BEGIN``/``COMMIT`` and applies it with the
 driver's native ``executescript``, which parses statement boundaries itself (a ``;``
@@ -20,12 +27,16 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.outbound.store_migration_port import StoreMigrationPort
-from generic_ml_cache_core.common.errors import MigrationFailed, StoreSchemaTooNew
+from generic_ml_cache_core.common.errors import MigrationFailed, StoreCorrupt, StoreSchemaTooNew
 
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
+    FilesystemStoreLock,
+)
 from generic_ml_cache_adapters.db import DbConnection
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -36,7 +47,14 @@ _CURRENT_VERSION = 1
 #: change is a full reset anyway); real per-version migrations resume at 1.0.0.
 _MIGRATION_IDS = ("0001.initial-schema",)
 
-_CREATE_VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+#: The version tracker is structurally single-row: the ``id = 1`` primary key makes a
+#: concurrent second seed an ``INSERT OR IGNORE`` no-op (Y1), so the store can never be
+#: left with a duplicate row that a later unordered read might resolve to the wrong
+#: version and re-apply the initial schema against an already-built store.
+_CREATE_VERSION_TABLE = (
+    "CREATE TABLE IF NOT EXISTS schema_version "
+    "(id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)"
+)
 
 
 class SqliteStoreMigration(StoreMigrationPort):
@@ -51,16 +69,24 @@ class SqliteStoreMigration(StoreMigrationPort):
     """
 
     def __init__(
-        self, conn_factory: Callable[[], DbConnection], diag: DiagnosticsPort | None = None
+        self,
+        conn_factory: Callable[[], DbConnection],
+        diag: DiagnosticsPort | None = None,
+        *,
+        store_root: Path | None = None,
     ) -> None:
         self._conn_factory = conn_factory
         self._diag = diag
+        # The store directory holding ``store.lock`` — when present, the whole migrate
+        # sequence runs under a blocking-exclusive lock so a concurrent first-init is
+        # serialized (Y1). ``None`` (bare-connection tests) skips the lock.
+        self._store_root = store_root
 
     def implemented_version(self) -> int:
         return _CURRENT_VERSION
 
     def migrate_to_current(self) -> None:
-        run_migrations(self._conn_factory, self._diag)
+        run_migrations(self._conn_factory, self._diag, store_root=self._store_root)
 
 
 def _migration_file(version: int) -> Path:
@@ -75,12 +101,21 @@ def _bootstrap_version(conn: DbConnection) -> int:
     """Ensure schema_version exists and return the current version.
 
     If the table is absent or empty, reads ``PRAGMA user_version`` as a one-time
-    fallback for stores migrated by the old runner, then seeds the table.
+    fallback for stores migrated by the old runner, then seeds the single row
+    idempotently. A table that somehow holds more than one row (a legacy store seeded
+    before the singleton constraint, under a concurrent first-init) fails loud rather
+    than letting an unordered read resolve to the wrong version.
     """
     conn.execute(_CREATE_VERSION_TABLE)
-    row = conn.execute("SELECT version FROM schema_version").fetchone()
-    if row is not None:
-        return int(row[0])
+    rows = conn.execute("SELECT version FROM schema_version").fetchall()
+    if len(rows) > 1:
+        raise StoreCorrupt(
+            f"schema_version holds {len(rows)} rows; expected exactly one — the store "
+            "is corrupt (a pre-singleton concurrent first-init may have double-seeded it); "
+            "reset the store to recover"
+        )
+    if rows:
+        return int(rows[0][0])
     # First run or upgrade from PRAGMA-based runner: seed from PRAGMA (SQLite only)
     # or default to 0. PRAGMA is sent as a plain SQL string — no sqlite3 import needed.
     try:
@@ -88,21 +123,51 @@ def _bootstrap_version(conn: DbConnection) -> int:
         prior_version = int(pragma_row[0]) if pragma_row is not None else 0
     except Exception:  # noqa: BLE001 — PRAGMA is SQLite-only; any DBAPI that rejects it seeds 0
         prior_version = 0
-    conn.execute("INSERT INTO schema_version (version) VALUES (?)", (prior_version,))
+    # INSERT OR IGNORE against the id=1 primary key: if a racing process already seeded
+    # the row (its seed committed in this same autocommit window), ours is a no-op and
+    # we serve its value — never a second row. The surrounding blocking-exclusive lock
+    # already serializes first-inits; this is the belt-and-braces that holds even
+    # without the lock (e.g. a bare-connection caller).
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, ?)", (prior_version,)
+    )
     conn.commit()
-    return prior_version
+    row = conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+    return int(row[0]) if row is not None else prior_version
 
 
 def run_migrations(
     conn_factory: Callable[[], DbConnection],
     diag: DiagnosticsPort | None = None,
+    *,
+    store_root: Path | None = None,
 ) -> None:
     """Apply any pending schema migrations to the database.
 
     Calling ``run_migrations`` on every startup is safe — it is a no-op when the
     schema is already at the current version.
+
+    When ``store_root`` is given, the whole sequence (seed + apply) runs under a
+    blocking-exclusive store lock (Y1), so a second process racing a fresh store waits
+    for the first to finish, then reads ``version == current`` and no-ops instead of
+    colliding on the DDL. ``None`` (bare-connection tests) runs without the lock — the
+    singleton ``schema_version`` row still prevents a duplicate-seed brick on its own.
     """
     _t = time.perf_counter()
+    guard = (
+        FilesystemStoreLock(store_root).acquire_exclusive_blocking()
+        if store_root is not None
+        else nullcontext()
+    )
+    with guard:
+        _run_migrations_locked(conn_factory, diag, _t)
+
+
+def _run_migrations_locked(
+    conn_factory: Callable[[], DbConnection],
+    diag: DiagnosticsPort | None,
+    _t: float,
+) -> None:
     conn = conn_factory()
     try:
         # Rebuild-style migrations (create-with-constraints -> copy -> drop -> rename)
@@ -188,7 +253,12 @@ def applied_schema_version(
     """
     conn = conn_factory()
     try:
-        row = conn.execute("SELECT version FROM schema_version").fetchone()
+        # ORDER BY … DESC defensiveness: the table is single-row today, but a legacy
+        # store seeded before the singleton constraint could hold more than one — read
+        # the highest version so the probe never reports an under-applied history.
+        row = conn.execute(
+            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
+        ).fetchone()
         version = int(row[0]) if row is not None else 0
         return [
             {"migration_id": _MIGRATION_IDS[v - 1]}

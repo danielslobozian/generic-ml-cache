@@ -106,7 +106,10 @@ def sqlite_persistence_backend(
     clock = SystemClock()
     repository = SqliteExecutionRepository(conn_factory, clock)
     journal = JournalMetrics(AccessRegistry(conn_factory, diag=diag))
-    migration = SqliteStoreMigration(conn_factory, diag)
+    # store_root = the DB's directory, holding ``store.lock`` — lets the migration run
+    # under the blocking-exclusive store lock so a concurrent first-init is serialized
+    # (Y1) rather than racing to double-seed schema_version or collide on the DDL.
+    migration = SqliteStoreMigration(conn_factory, diag, store_root=db_path.parent)
     return PersistenceBackend(
         save_ml_run=repository,
         read_ml_run=repository,

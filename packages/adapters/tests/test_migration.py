@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -12,7 +13,7 @@ from generic_ml_cache_core.application.port.outbound.store_migration_port import
     CURRENT_MODEL_VERSION,
     StoreMigrationPort,
 )
-from generic_ml_cache_core.common.errors import MigrationFailed, StoreSchemaTooNew
+from generic_ml_cache_core.common.errors import MigrationFailed, StoreCorrupt, StoreSchemaTooNew
 
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import (
@@ -280,3 +281,75 @@ def test_applied_schema_version_on_an_unmigrated_db_is_empty(tmp_path: Path) -> 
     # rather than creating the table (unlike schema_version, which bootstraps it).
     factory = _factory(tmp_path / "gmlcache.sqlite3")
     assert applied_schema_version(factory) == []
+
+
+def test_schema_version_is_structurally_single_row(tmp_path: Path) -> None:
+    # Y1: the tracker carries an id=1 PRIMARY KEY CHECK, so a second row can never be
+    # inserted — the constraint that turns a concurrent double-seed into a no-op.
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    run_migrations(factory)
+    conn = factory()
+    try:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(schema_version)").fetchall()}
+        assert {"id", "version"} <= columns
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute("INSERT INTO schema_version (id, version) VALUES (2, 1)")
+    finally:
+        conn.close()
+
+
+def test_a_duplicate_schema_version_row_fails_loud(tmp_path: Path) -> None:
+    # Y1 defensiveness: a legacy store seeded before the singleton constraint could
+    # hold >1 row; the runner refuses it loudly (StoreCorrupt) instead of letting an
+    # unordered read resolve to the wrong version and re-apply the initial schema.
+    db_path = tmp_path / "gmlcache.sqlite3"
+    conn = _factory(db_path)()
+    try:
+        # Recreate the OLD, unconstrained table shape and double-seed it.
+        conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)")
+        conn.execute("INSERT INTO schema_version (version) VALUES (0)")
+        conn.commit()
+    finally:
+        conn.close()
+    with pytest.raises(StoreCorrupt):
+        run_migrations(_factory(db_path))
+
+
+def test_concurrent_first_init_leaves_exactly_one_row_and_opens(tmp_path: Path) -> None:
+    # Y1 (the headline): two processes racing a fresh store must both succeed, leave
+    # EXACTLY one schema_version row, and leave the store openable. Without the
+    # blocking-exclusive lock + singleton row, one thread raised MigrationFailed and
+    # the store was left with [(1,), (0,)] and bricked on the next open.
+    db_path = tmp_path / "gmlcache.sqlite3"
+    barrier = threading.Barrier(2)
+    errors: list[BaseException] = []
+
+    def _worker() -> None:
+        factory = _factory(db_path)
+        try:
+            barrier.wait()  # maximize the overlap on the fresh-store first touch
+            run_migrations(factory, store_root=tmp_path)
+        except BaseException as exc:  # noqa: BLE001 — capture whatever escapes for the assert
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    conn = _factory(db_path)()
+    try:
+        rows = conn.execute("SELECT version FROM schema_version").fetchall()
+        # The store opens: the expected tables are present and at the current version.
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+    finally:
+        conn.close()
+    assert len(rows) == 1
+    assert rows[0][0] == _CURRENT_VERSION
+    assert "executions" in tables
