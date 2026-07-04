@@ -12,10 +12,11 @@ from generic_ml_cache_core.application.port.outbound.store_migration_port import
     CURRENT_MODEL_VERSION,
     StoreMigrationPort,
 )
-from generic_ml_cache_core.common.errors import MigrationFailed
+from generic_ml_cache_core.common.errors import MigrationFailed, StoreSchemaTooNew
 
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import (
+    _CURRENT_VERSION,
     SqliteStoreMigration,
     applied_schema_version,
     run_migrations,
@@ -82,6 +83,21 @@ def test_migration_records_applied_migration(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert version == 5
+
+
+def test_a_store_newer_than_this_build_fails_loud(tmp_path: Path) -> None:
+    # X11: a store recorded at a version newer than this build ships must fail loud
+    # (StoreSchemaTooNew), not be treated as "up to date" and written with a stale map.
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    run_migrations(factory)
+    conn = factory()
+    try:
+        conn.execute("UPDATE schema_version SET version = ?", (_CURRENT_VERSION + 1,))
+        conn.commit()
+    finally:
+        conn.close()
+    with pytest.raises(StoreSchemaTooNew):
+        run_migrations(factory)
 
 
 def test_migration_creates_indexes(tmp_path: Path) -> None:

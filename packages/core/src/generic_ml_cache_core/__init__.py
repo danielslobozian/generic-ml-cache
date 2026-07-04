@@ -189,6 +189,7 @@ from generic_ml_cache_core.common.errors import (  # noqa: E402  # fmt: skip
     StoreConsistencyError,
     StoreCorrupt,
     StoreLocked,
+    StoreSchemaTooNew,
     StoreUnavailable,
     UnknownClient,
     UnsupportedExecutionMode,
@@ -282,4 +283,5 @@ __all__ = [
     "StoreUnavailable",
     "StoreCorrupt",
     "StoreConsistencyError",
+    "StoreSchemaTooNew",
 ]

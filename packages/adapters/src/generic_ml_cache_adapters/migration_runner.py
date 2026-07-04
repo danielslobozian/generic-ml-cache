@@ -24,7 +24,7 @@ from pathlib import Path
 
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.outbound.store_migration_port import StoreMigrationPort
-from generic_ml_cache_core.common.errors import MigrationFailed
+from generic_ml_cache_core.common.errors import MigrationFailed, StoreSchemaTooNew
 
 from generic_ml_cache_adapters.db import DbConnection
 
@@ -120,7 +120,16 @@ def run_migrations(
         # connection applies. Normal connections keep foreign_keys ON (the factory).
         conn.execute("PRAGMA foreign_keys = OFF")
         version = _bootstrap_version(conn)
-        if version >= _CURRENT_VERSION:
+        if version > _CURRENT_VERSION:
+            # The store was written by a NEWER build than this one — fail loud rather
+            # than treat it as up to date and write against a stale mapping (X11, the
+            # mirror of the too-old-adapter PersistenceContractOutdated guard).
+            raise StoreSchemaTooNew(
+                f"store schema version {version} is newer than this build supports "
+                f"(this build ships migrations up to version {_CURRENT_VERSION}); "
+                "upgrade gmlcache to open this store"
+            )
+        if version == _CURRENT_VERSION:
             if diag:
                 diag.debug(
                     "schema up to date",

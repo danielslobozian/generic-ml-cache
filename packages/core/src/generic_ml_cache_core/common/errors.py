@@ -177,6 +177,21 @@ class PersistenceContractOutdated(CacheError):
     code: ClassVar[str] = "store.contract_outdated"
 
 
+class StoreSchemaTooNew(CacheError):
+    """Raised at startup when the store on disk is NEWER than this build understands
+    (X11) — its schema version exceeds the highest migration this build ships.
+
+    The mirror of :class:`PersistenceContractOutdated`: that guards a too-OLD adapter
+    against a store; this guards a too-NEW store against the running build. A downgraded
+    or older binary opening a store written by a newer one must fail loud rather than
+    treat it as "up to date" and write against a stale mapping (silent corruption).
+    Preventive and fail-fast (Flyway ``validate`` refusing to run when the DB is ahead
+    of the bundled migrations); the driver maps the code to a clean exit / 503.
+    """
+
+    code: ClassVar[str] = "store.schema_too_new"
+
+
 class ProviderApiError(CacheError):
     """Raised when a provider's HTTP API returns an error response (G-1/V28, §10).
 

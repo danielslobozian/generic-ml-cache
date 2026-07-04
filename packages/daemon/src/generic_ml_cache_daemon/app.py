@@ -42,6 +42,7 @@ _CACHE_ERROR_HTTP: dict[str, int] = {
     "crypto.state_error": 409,
     "store.locked": 409,
     "store.unavailable": 503,  # DB hard outage — fail loud, never pass through (S2b)
+    "store.schema_too_new": 503,  # store written by a newer build — cannot serve it (X11)
     "provider.api_error": 502,  # upstream provider returned an error (V28)
 }
 _LOG_FILE_NAME = "gmlcache.log"
