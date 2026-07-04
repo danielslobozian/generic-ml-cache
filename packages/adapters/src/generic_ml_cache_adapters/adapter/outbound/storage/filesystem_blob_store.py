@@ -74,10 +74,12 @@ class FilesystemBlobStore(BlobStorePort):
                 except PermissionError:
                     # Windows raises [WinError 5] when two writers replace the same
                     # target concurrently (POSIX rename is atomic last-wins and never
-                    # hits this). The store is content-addressed, so an existing target
-                    # already holds byte-identical content — the write goal is met.
-                    # Re-raise only if the target is genuinely absent.
-                    if not path.exists():
+                    # hits this). The store is content-addressed, so if the target is
+                    # already a regular file holding our exact bytes, another writer
+                    # landed identical content and the write goal is met. Anything else
+                    # — a missing target, a directory, or different bytes — is a real
+                    # failure and re-raises.
+                    if not (path.is_file() and path.read_bytes() == output):
                         raise
                     temp_path.unlink(missing_ok=True)
             except BaseException:
