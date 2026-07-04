@@ -3,10 +3,10 @@
 """Driver-facing read-only store-status probe (W28, folds W26).
 
 The CLI's ``gmlcache doctor`` reports the store's applied migrations. It used to do
-so by handing the read-write ``sqlite_connection_factory`` to ``schema_version`` —
-which created the store directory, the database file, and the ``schema_version``
-table as a side effect. A *status probe* must never initialize the store it
-inspects (W26): a mistyped store path would silently spawn an empty store.
+so by handing the read-write ``sqlite_connection_factory`` to a mutating status
+helper — which created the store directory, the database file, and the
+``schema_version`` table as a side effect. A *status probe* must never initialize the
+store it inspects (W26): a mistyped store path would silently spawn an empty store.
 
 This hook does it read-only: an absent database file reports "unmigrated" without
 touching the filesystem; a present one is opened ``mode=ro`` and read, never

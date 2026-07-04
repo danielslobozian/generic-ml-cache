@@ -20,7 +20,6 @@ from generic_ml_cache_adapters.migration_runner import (
     SqliteStoreMigration,
     applied_schema_version,
     run_migrations,
-    schema_version,
 )
 
 
@@ -127,21 +126,7 @@ def test_migration_0004_adds_execution_id_column(tmp_path: Path) -> None:
     assert "execution_id" in columns
 
 
-def test_schema_version_returns_applied_migrations(tmp_path: Path) -> None:
-    factory = _factory(tmp_path / "gmlcache.sqlite3")
-    run_migrations(factory)
-    result = schema_version(factory)
-    assert len(result) >= 1
-    assert result[0]["migration_id"] == "0001.unified-schema"
-    assert "applied_at_utc" in result[0]
-
-
-def test_schema_version_returns_empty_before_migrations(tmp_path: Path) -> None:
-    factory = _factory(tmp_path / "empty.sqlite3")
-    assert schema_version(factory) == []
-
-
-def test_schema_version_returns_empty_on_broken_connection() -> None:
+def test_applied_schema_version_returns_empty_on_broken_connection() -> None:
     import unittest.mock as mock
 
     bad_conn = mock.MagicMock()
@@ -150,7 +135,7 @@ def test_schema_version_returns_empty_on_broken_connection() -> None:
     def _bad():
         return bad_conn
 
-    assert schema_version(_bad) == []
+    assert applied_schema_version(_bad) == []
 
 
 def test_missing_migration_file_fails_loud_at_the_last_good_version(tmp_path: Path) -> None:
@@ -278,7 +263,7 @@ def test_sqlite_store_migration_migrate_to_current_builds_the_schema(tmp_path: P
     assert version == migration.implemented_version()
     # Idempotent: a second call is a no-op, never an error.
     migration.migrate_to_current()
-    assert migration.applied_migrations()  # non-empty history after migrating
+    assert version == migration.implemented_version()
 
 
 def test_applied_schema_version_reports_all_migrations_after_run(tmp_path: Path) -> None:

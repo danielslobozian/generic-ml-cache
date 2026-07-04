@@ -46,11 +46,12 @@ _CREATE_VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTE
 class SqliteStoreMigration(StoreMigrationPort):
     """The shipped SQLite implementation of the store-migration contract (C-2).
 
-    Wraps the ``run_migrations`` / ``schema_version`` machinery behind the port.
-    ``implemented_version`` is the highest migration this build ships
-    (``_CURRENT_VERSION``); since bootstrap always runs its migrations, the shipped
-    store is always current. The version handshake matters for a third-party
-    adapter that might lag core's ``CURRENT_MODEL_VERSION``.
+    Wraps the ``run_migrations`` machinery behind the port. ``implemented_version`` is
+    the highest migration this build ships (``_CURRENT_VERSION``); since bootstrap
+    always runs its migrations, the shipped store is always current. The version
+    handshake matters for a third-party adapter that might lag core's
+    ``CURRENT_MODEL_VERSION``. The migration history for the ``doctor`` command is read
+    (read-only) via :func:`applied_schema_version`, not through this port.
     """
 
     def __init__(
@@ -64,11 +65,6 @@ class SqliteStoreMigration(StoreMigrationPort):
 
     def migrate_to_current(self) -> None:
         run_migrations(self._conn_factory, self._diag)
-
-    def applied_migrations(self) -> list[dict[str, str | None]]:
-        """The SQLite-specific migration history for diagnostics (the ``doctor``
-        command) — not part of the port contract."""
-        return schema_version(self._conn_factory, self._diag)
 
 
 def _migration_file(version: int) -> Path:
@@ -179,48 +175,14 @@ def _apply_migration(conn: DbConnection, target: int, diag: DiagnosticsPort | No
         ) from exc
 
 
-def schema_version(
-    conn_factory: Callable[[], DbConnection], diag: DiagnosticsPort | None = None
-) -> list[dict[str, str | None]]:
-    """Return the current schema version as a list, or ``[]`` if unmigrated."""
-    _t = time.perf_counter()
-    if diag:
-        diag.debug("schema-version ENTER")
-    conn = conn_factory()
-    try:
-        conn.execute(_CREATE_VERSION_TABLE)
-        row = conn.execute("SELECT version FROM schema_version").fetchone()
-        version = int(row[0]) if row is not None else 0
-        result = [
-            {"migration_id": _MIGRATION_IDS[v - 1], "applied_at_utc": None}
-            for v in range(1, min(version, len(_MIGRATION_IDS)) + 1)
-        ]
-        if diag:
-            diag.debug(
-                "schema-version EXIT",
-                version=version,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            )
-        return result
-    except Exception as exc:  # noqa: BLE001 — status probe: any read failure reports "unmigrated"
-        if diag:
-            diag.error(
-                "schema-version FAILED",
-                exc=exc,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-            )
-        return []
-    finally:
-        conn.close()
-
-
 def applied_schema_version(
     conn_factory: Callable[[], DbConnection],
 ) -> list[dict[str, str | None]]:
-    """Read the applied migrations WITHOUT initializing the store (W26).
+    """Read the applied migrations WITHOUT initializing the store (W26) — the only
+    public read of the schema history.
 
-    The read-only counterpart of :func:`schema_version`: it never issues the
-    ``CREATE TABLE schema_version`` bootstrap, so it is safe on a ``mode=ro``
+    It never issues the ``CREATE TABLE schema_version`` bootstrap (that lives solely in
+    the migrate path, :func:`_bootstrap_version`), so it is safe on a ``mode=ro``
     connection where any write would fail. A missing ``schema_version`` table (an
     empty/uninitialized DB) or any read error reports ``[]`` (unmigrated). Used by
     the ``doctor`` status probe, which must never mutate the store it inspects.
