@@ -12,6 +12,7 @@ from pathlib import Path
 
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.common.errors import StoreUnavailable
 
 #: Sub-directory under the blob root for canary-write health probes. Probe files
 #: get always-new names (a fresh random token, named by its own hash) and are
@@ -44,26 +45,42 @@ class FilesystemBlobStore(BlobStorePort):
         return self._root / BlobKey(key)
 
     def get(self, key: str) -> bytes | None:
-        path = self._path_for(key)
+        path = self._path_for(key)  # BlobKey ValueError (X16 traversal guard) escapes as-is
         if not path.exists():
             return None
-        return path.read_bytes()
+        # An existing-but-unreadable blob (permissions, transient IO, a directory where
+        # a file is expected, a Windows lock) raises a raw OSError; translate it at the
+        # adapter boundary (Y5/§10) so a driver never sees a foreign type — absent still
+        # returns None (→ ArtifactBlobMissing in core), a real IO fault is StoreUnavailable.
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            raise StoreUnavailable(f"blob store read failed for {key!r}: {exc}") from exc
 
     def put(self, key: str, output: bytes) -> None:
         path = self._path_for(key)  # validate the key before any filesystem side effect
-        self._root.mkdir(parents=True, exist_ok=True)
-        temp_descriptor, temp_name = tempfile.mkstemp(dir=self._root, suffix=".tmp")
-        temp_path = Path(temp_name)
+        # Translate any backend IO failure (unwritable root, full disk, replace onto a
+        # bad target) to StoreUnavailable (Y5/§10); the inner guard still unlinks the
+        # scratch file and re-raises a non-OSError (e.g. KeyboardInterrupt) untranslated.
         try:
-            with os.fdopen(temp_descriptor, "wb") as temp_file:
-                temp_file.write(output)
-            os.replace(temp_path, path)
-        except BaseException:
-            temp_path.unlink(missing_ok=True)
-            raise
+            self._root.mkdir(parents=True, exist_ok=True)
+            temp_descriptor, temp_name = tempfile.mkstemp(dir=self._root, suffix=".tmp")
+            temp_path = Path(temp_name)
+            try:
+                with os.fdopen(temp_descriptor, "wb") as temp_file:
+                    temp_file.write(output)
+                os.replace(temp_path, path)
+            except BaseException:
+                temp_path.unlink(missing_ok=True)
+                raise
+        except OSError as exc:
+            raise StoreUnavailable(f"blob store write failed for {key!r}: {exc}") from exc
 
     def remove(self, key: str) -> None:
-        self._path_for(key).unlink(missing_ok=True)
+        try:
+            self._path_for(key).unlink(missing_ok=True)
+        except OSError as exc:
+            raise StoreUnavailable(f"blob store remove failed for {key!r}: {exc}") from exc
 
     def is_healthy(self) -> bool:
         # Active canary: write a unique probe into a health folder under the blob

@@ -10,6 +10,7 @@ import threading
 import pytest
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.common.errors import CacheError, StoreUnavailable
 
 from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (
     FilesystemBlobStore,
@@ -53,6 +54,40 @@ def test_a_raw_traversal_string_is_rejected_at_the_adapter_boundary(tmp_path):
 
 def test_get_unknown_key_returns_none(tmp_path):
     assert FilesystemBlobStore(tmp_path).get("missing") is None
+
+
+# ---------------------------------------------------------------------------
+# IO-failure boundary translation (Y5): an existing-but-unreadable blob, or a
+# failing write/remove, surfaces as a CacheError (StoreUnavailable), never a raw
+# OSError. Absent stays None; a bad KEY stays the X16 ValueError guard.
+# ---------------------------------------------------------------------------
+
+
+def test_get_on_an_unreadable_blob_surfaces_store_unavailable(tmp_path):
+    store = FilesystemBlobStore(tmp_path)
+    # A directory sitting where a blob file is expected: exists() is True, but the
+    # read raises IsADirectoryError (an OSError), which is translated at the boundary.
+    (tmp_path / "blobkey").mkdir()
+    with pytest.raises(StoreUnavailable) as excinfo:
+        store.get("blobkey")
+    assert isinstance(excinfo.value, CacheError)  # no raw OSError reaches a driver
+
+
+def test_put_failure_surfaces_store_unavailable(tmp_path):
+    store = FilesystemBlobStore(tmp_path)
+    # A non-empty directory at the destination path: os.replace onto it raises OSError.
+    (tmp_path / "blobkey").mkdir()
+    (tmp_path / "blobkey" / "sentinel").write_text("x")
+    with pytest.raises(StoreUnavailable):
+        store.put("blobkey", b"data")
+
+
+def test_remove_failure_surfaces_store_unavailable(tmp_path):
+    store = FilesystemBlobStore(tmp_path)
+    # unlink on a directory raises IsADirectoryError (missing_ok only masks absence).
+    (tmp_path / "blobkey").mkdir()
+    with pytest.raises(StoreUnavailable):
+        store.remove("blobkey")
 
 
 def test_put_then_get_round_trip(tmp_path):
