@@ -162,16 +162,12 @@ class PurgeService(
     def _soft_purge_keys(self, keys: list[str]) -> PurgeReport:
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-        before = self._repository.total_stored_bytes()
-        all_blob_keys: list[str] = []
+        blob_sizes = self._blob_sizes_for(keys)
         for key in keys:
-            all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
             self._repository.soft_purge_execution(key)
-        after = self._repository.total_stored_bytes()
+        blobs_removed, bytes_freed = self._remove_orphaned_blobs(blob_sizes)
         report = PurgeReport(
-            executions_removed=len(keys),
-            bytes_freed=max(0, before - after),
-            blobs_removed=self._remove_orphaned_blobs(all_blob_keys),
+            executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
         if self._diag:
             self._diag.info(
@@ -185,17 +181,13 @@ class PurgeService(
     def _hard_delete_keys(self, keys: list[str]) -> PurgeReport:
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-        before = self._repository.total_stored_bytes()
-        all_blob_keys: list[str] = []
+        blob_sizes = self._blob_sizes_for(keys)
         for key in keys:
-            all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
             self._repository.hard_delete_execution(key)
             self._journal.delete_events_for_key(key)
-        after = self._repository.total_stored_bytes()
+        blobs_removed, bytes_freed = self._remove_orphaned_blobs(blob_sizes)
         report = PurgeReport(
-            executions_removed=len(keys),
-            bytes_freed=max(0, before - after),
-            blobs_removed=self._remove_orphaned_blobs(all_blob_keys),
+            executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
         if self._diag:
             self._diag.info(
@@ -216,13 +208,31 @@ class PurgeService(
                     keys.append(key)
         return keys
 
-    def _remove_orphaned_blobs(self, blob_keys: list[str]) -> int:
-        removed = 0
-        for blob_key in set(blob_keys):
+    def _blob_sizes_for(self, keys: list[str]) -> dict[str, int]:
+        """Map each distinct blob key referenced by ``keys`` to its size, read
+        BEFORE the executions are deleted. A content-addressed blob shared by
+        several executions appears once (its size is invariant), so summing the
+        removed ones counts each freed blob a single time."""
+        blob_sizes: dict[str, int] = {}
+        for key in keys:
+            for execution in self._repository.find_all(key):
+                for artifact in execution.artifacts:
+                    blob_sizes[artifact.blob_key] = artifact.size_bytes
+        return blob_sizes
+
+    def _remove_orphaned_blobs(self, blob_sizes: dict[str, int]) -> tuple[int, int]:
+        """Remove each blob no execution still references, returning
+        (blobs_removed, bytes_freed) measured directly from what was deleted —
+        not a global before/after total (skewed by a concurrent write, and it
+        double-counts a shared blob)."""
+        blobs_removed = 0
+        bytes_freed = 0
+        for blob_key, size_bytes in blob_sizes.items():
             if self._repository.blob_reference_count(blob_key) == 0:
                 self._blob_store.remove(blob_key)
-                removed += 1
-        return removed
+                blobs_removed += 1
+                bytes_freed += size_bytes
+        return blobs_removed, bytes_freed
 
 
 def _lru_epoch(entry: ExecutionSizeEntry, last_access: dict[str, float]) -> float:

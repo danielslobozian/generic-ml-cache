@@ -326,6 +326,26 @@ def test_purge_all_empty_store_returns_zero_report():
     assert report.blobs_removed == 0
 
 
+def test_bytes_freed_counts_a_shared_blob_once():
+    # Two executions with distinct identities but identical content share one
+    # content-addressed blob. The old before/after total summed size_bytes per
+    # artifact, double-counting the shared blob; measuring the removed blobs
+    # directly frees its size exactly once.
+    svc, repo, store, _ = _service()
+    shared_content = b"shared-answer"
+    shared_blob_key = "blob_" + shared_content.hex()
+    repo.save(_execution(_identity("a"), content=shared_content))
+    repo.save(_execution(_identity("b"), content=shared_content))
+    store.put(shared_blob_key, shared_content)
+
+    report = svc.purge_all(PurgeAllCommand())
+
+    assert report.executions_removed == 2
+    assert report.blobs_removed == 1
+    assert report.bytes_freed == len(shared_content)
+    assert not store.has(shared_blob_key)
+
+
 # --- hard delete: hard_delete_one --------------------------------------------
 
 
