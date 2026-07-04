@@ -31,3 +31,22 @@ def test_the_injectable_spi_ports_are_exported() -> None:
     ):
         assert name in core.__all__
         assert hasattr(core, name)
+
+
+def test_structured_errors_are_exported() -> None:
+    # Consumers branch on these subclasses (each carries a `code`/`status_code` the
+    # drivers map to an exit code or HTTP status), so they must be importable from
+    # the public surface, not reached via a private module path (W22).
+    for name in (
+        "ProviderApiError",
+        "ProviderProtocolError",
+        "MigrationFailed",
+        "UnsupportedExecutionMode",
+        "CapabilityUnavailable",
+        "PersistenceContractOutdated",
+        "StoreUnavailable",
+        "StoreCorrupt",
+        "StoreConsistencyError",
+    ):
+        assert name in core.__all__
+        assert hasattr(core, name)
