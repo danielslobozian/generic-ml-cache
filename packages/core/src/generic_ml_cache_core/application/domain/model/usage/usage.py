@@ -72,6 +72,12 @@ def float_or_none(value: Any) -> float | None:
 class Usage:
     """Normalized token counts for one recorded call, with the raw block kept.
 
+    The parse-at-edge shape: it is built by normalizing a client's reported usage
+    block as its output is parsed (``parsed_output`` + the claude/codex/cursor
+    adapters). Its stored counterpart is :class:`TokenUsage` — the same counts as a
+    database-bound domain type. Two legitimate layers (parse-at-edge → stored
+    domain), not a duplication.
+
     Every count is ``Optional[int]``: a value the client reported, or ``None``
     when it did not report that count at all. ``cost_usd`` is the client's own
     estimate in US dollars when it offered one (advisory only -- see module docs),

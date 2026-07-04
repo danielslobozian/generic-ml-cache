@@ -86,8 +86,9 @@ class AesGcmCipher(CipherPort):
     def _derive_kek(token: str, salt: bytes) -> bytes:
         # Strip the optional provenance prefix so the derived key depends only on the
         # secret body: a ``gmlc_<hex>`` token and the legacy bare ``<hex>`` key alike
-        # (back-compat). A bare hex string can never carry the prefix (``g``/``m`` are
-        # not hex), so an existing token is never mis-stripped.
+        # (back-compat). A legacy bare token is all hex digits, so it can never *start
+        # with* the literal ``gmlc_`` (whose letters/underscore are not hex) — thus
+        # ``removeprefix`` only ever strips a real prefix, never mangling an old token.
         seed = token.removeprefix(_TOKEN_PREFIX)
         hkdf = HKDF(algorithm=SHA256(), length=_KEY_BYTES, salt=salt, info=_KEK_INFO)
         return hkdf.derive(seed.encode("utf-8"))

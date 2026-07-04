@@ -17,6 +17,10 @@ from generic_ml_cache_core.common.immutable import deep_freeze, thaw
 class TokenUsage:
     """Normalized token counts for one ML execution, with the raw block kept.
 
+    The stored counterpart of :class:`Usage`: same counts, but the database-bound
+    domain type (parse-at-edge :class:`Usage` → stored ``TokenUsage``); the two are
+    distinct layers, not a duplication.
+
     Accounting data: database-bound, separate from the output artifacts.
     Every count is Optional[int]: a value the client reported, or None when it
     did not report that field at all. None means unknown, never zero.
