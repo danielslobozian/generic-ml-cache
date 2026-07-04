@@ -69,7 +69,17 @@ class FilesystemBlobStore(BlobStorePort):
             try:
                 with os.fdopen(temp_descriptor, "wb") as temp_file:
                     temp_file.write(output)
-                os.replace(temp_path, path)
+                try:
+                    os.replace(temp_path, path)
+                except PermissionError:
+                    # Windows raises [WinError 5] when two writers replace the same
+                    # target concurrently (POSIX rename is atomic last-wins and never
+                    # hits this). The store is content-addressed, so an existing target
+                    # already holds byte-identical content — the write goal is met.
+                    # Re-raise only if the target is genuinely absent.
+                    if not path.exists():
+                        raise
+                    temp_path.unlink(missing_ok=True)
             except BaseException:
                 temp_path.unlink(missing_ok=True)
                 raise
