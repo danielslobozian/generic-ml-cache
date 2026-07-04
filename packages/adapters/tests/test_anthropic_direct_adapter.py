@@ -13,7 +13,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
-from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
+from generic_ml_cache_core.common.errors import (
+    ConfigError,
+    ProviderApiError,
+    ProviderProtocolError,
+)
 
 from generic_ml_cache_adapters.adapter.outbound.api.anthropic_direct_adapter import (
     AnthropicDirectAdapter,
@@ -253,6 +257,16 @@ def test_run_returns_client_run_result_with_text():
     result = adapter.run(_request())
     assert result.exit_code == 0
     assert "AI analyzes" in result.stdout
+
+
+def test_run_translates_malformed_response_to_protocol_error():
+    # A "text" block missing its "text" field would leak a raw KeyError from
+    # _extract_text; it must surface as a ProviderProtocolError (W19).
+    adapter = _adapter()
+    _patch_post(adapter, {"content": [{"type": "text"}], "usage": {}})
+    with pytest.raises(ProviderProtocolError) as raised:
+        adapter.run(_request())
+    assert raised.value.provider == "anthropic"
 
 
 def test_run_token_usage_flows_through():

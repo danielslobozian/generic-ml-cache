@@ -196,6 +196,22 @@ class ProviderApiError(CacheError):
         super().__init__(f"{provider} API error {status_code}: {body}")
 
 
+class ProviderProtocolError(ProviderApiError):
+    """Raised when a provider's transport SUCCEEDED (a response arrived) but the
+    PAYLOAD broke its contract: undecodable or malformed JSON, a non-object body,
+    or a field the adapter needs that is missing or renamed.
+
+    Distinct from its parent ``ProviderApiError`` (an HTTP *status* error): here the
+    status is fine but the body cannot be trusted, so it is never retried (a bad
+    payload will not fix itself). Inherits ``provider`` / ``status_code`` / ``body``;
+    the body is a BOUNDED snippet, not the full payload, so a diagnostic log is not
+    flooded. Java: a Jackson ``JsonMappingException`` translated at the client
+    boundary, as opposed to an ``HttpClientErrorException`` for a 4xx/5xx.
+    """
+
+    code: ClassVar[str] = "provider.protocol_error"
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

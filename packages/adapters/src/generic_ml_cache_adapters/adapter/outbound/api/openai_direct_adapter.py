@@ -24,7 +24,10 @@ from generic_ml_cache_core.application.port.outbound.api_client_port import ApiC
 from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import ConfigError
 
-from generic_ml_cache_adapters.adapter.outbound.api._http import request_json
+from generic_ml_cache_adapters.adapter.outbound.api._http import (
+    request_json,
+    translate_protocol_errors,
+)
 
 _BASE_URL = "https://api.openai.com/v1"
 
@@ -56,8 +59,9 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
     def run(self, request: MlRequest) -> ClientRunResult:
         body = self._build_body(request)
         response = self._post("/responses", body)
-        text = self._extract_text(response)
-        usage = self._extract_usage(response)
+        with translate_protocol_errors("openai", response):
+            text = self._extract_text(response)
+            usage = self._extract_usage(response)
         return ClientRunResult(exit_code=0, stdout=text, token_usage=usage)
 
     # ------------------------------------------------------------------

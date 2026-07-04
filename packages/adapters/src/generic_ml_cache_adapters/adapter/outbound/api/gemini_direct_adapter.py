@@ -25,7 +25,10 @@ from generic_ml_cache_core.application.port.outbound.model_listing_port import M
 from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_adapters.adapter.outbound.api._gemini_thinking import GeminiThinkingConfig
-from generic_ml_cache_adapters.adapter.outbound.api._http import request_json
+from generic_ml_cache_adapters.adapter.outbound.api._http import (
+    request_json,
+    translate_protocol_errors,
+)
 
 _BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -56,8 +59,9 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
         body = self._build_body(request)
         url = f"{_BASE_URL}/{request.model}:generateContent"
         response = self._post(url, body)
-        text = self._extract_text(response)
-        usage = self._extract_usage(response)
+        with translate_protocol_errors("gemini", response):
+            text = self._extract_text(response)
+            usage = self._extract_usage(response)
         return ClientRunResult(exit_code=0, stdout=text, token_usage=usage)
 
     # ------------------------------------------------------------------

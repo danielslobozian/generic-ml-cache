@@ -21,16 +21,67 @@ import random
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from email.message import Message
-from typing import Any
+from typing import Any, cast
 
-from generic_ml_cache_core.common.errors import ProviderApiError
+from generic_ml_cache_core.common.errors import ProviderApiError, ProviderProtocolError
 
 #: A network failure carries no HTTP status; ProviderApiError.status_code needs an
 #: int, so we use 0 to mean "no response reached us".
 _NO_STATUS = 0
+
+#: A payload that broke its contract on an otherwise-OK transport is reported with
+#: this status — "the response arrived, the body is the problem" (W19).
+_TRANSPORT_OK = 200
+
+#: Cap the body snippet carried on a ProviderProtocolError so a diagnostic log of a
+#: garbage response is not flooded with the whole payload.
+_MAX_BODY_SNIPPET = 500
+
+
+def _body_snippet(raw: bytes | str) -> str:
+    text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+    return text if len(text) <= _MAX_BODY_SNIPPET else text[:_MAX_BODY_SNIPPET] + "…"
+
+
+def _decode_json_object(raw: bytes, *, provider: str, status_code: int) -> dict[str, Any]:
+    """Decode a JSON object from ``raw`` or raise :class:`ProviderProtocolError`.
+
+    A 200 whose body is not UTF-8, is not JSON, or is JSON but not an object breaks
+    the contract the caller relies on — translate it here so it never leaks a raw
+    ``json.JSONDecodeError`` / ``UnicodeDecodeError`` past the boundary."""
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ProviderProtocolError(
+            provider=provider, status_code=status_code, body=_body_snippet(raw)
+        ) from exc
+    # A JSON scalar/array (non-object) is not a valid provider response either.
+    if not isinstance(decoded, dict):
+        raise ProviderProtocolError(
+            provider=provider, status_code=status_code, body=_body_snippet(raw)
+        )
+    # decoded is a dict here; cast narrows the key/value types the caller expects.
+    return cast("dict[str, Any]", decoded)
+
+
+@contextmanager
+def translate_protocol_errors(provider: str, response: dict[str, Any]) -> Generator[None]:
+    """Translate a malformed-response field access — a missing or renamed provider
+    field surfacing as ``KeyError`` / ``TypeError`` / ``IndexError`` / ``Attribute
+    Error`` — into :class:`ProviderProtocolError`, so an adapter's response parsing
+    never leaks a raw structural error past the boundary (W19)."""
+    try:
+        yield
+    except (KeyError, TypeError, IndexError, AttributeError) as exc:
+        raise ProviderProtocolError(
+            provider=provider,
+            status_code=_TRANSPORT_OK,
+            body=_body_snippet(json.dumps(response)),
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -84,14 +135,15 @@ def request_json(
 
     On a non-retryable HTTP status (any 4xx but 429) or after the last attempt, the
     foreign error is translated to :class:`ProviderApiError` (status ``0`` for a
-    network failure). ``sleep`` is injectable so tests need not wait."""
+    network failure). A response that arrives but whose body is not a JSON object is
+    translated to :class:`ProviderProtocolError` and never retried. ``sleep`` is
+    injectable so tests need not wait."""
     attempt = 0
     while True:
         attempt += 1
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 (trusted provider endpoint, https)
-                parsed: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
-                return parsed
+                return _decode_json_object(resp.read(), provider=provider, status_code=resp.status)
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             if _is_retryable_status(exc.code) and attempt < retry.max_attempts:
