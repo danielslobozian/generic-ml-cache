@@ -104,6 +104,10 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.call_identity import (  # noqa: E402  # fmt: skip
     CallIdentity,
 )
+from generic_ml_cache_core.application.domain.model.identity.identity_codec import (  # noqa: E402  # fmt: skip
+    deserialize_call_identity,
+    serialize_call_identity,
+)
 from generic_ml_cache_core.application.domain.model.run.client_run_result import (  # noqa: E402  # fmt: skip
     ClientRunResult,
     GeneratedFile,
@@ -245,6 +249,10 @@ __all__ = [
     "ClientCapability",
     "SessionSpec",
     "CallIdentity",
+    # Opaque CallIdentity round-trip for embedders (W21) — persist/restore a
+    # CallIdentity without importing its concrete subclasses.
+    "serialize_call_identity",
+    "deserialize_call_identity",
     # Checksum utilities
     "checksum_input_data",
     "text_checksum",

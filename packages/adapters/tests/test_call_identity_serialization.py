@@ -119,7 +119,11 @@ def test_api_passthrough_denormalized_columns():
 
 
 def test_unknown_kind_on_deserialize_raises():
+    # The kind now rides inside identity_json (the opaque codec's field dict), so an
+    # unknown kind THERE is what fails — the denormalized column is just a projection.
     with pytest.raises(ValueError):
         deserialize_identity(
-            SerializedIdentity(kind="nope", client="c", model="m", effort="", identity_json="{}")
+            SerializedIdentity(
+                kind="nope", client="c", model="m", effort="", identity_json='{"kind": "nope"}'
+            )
         )
