@@ -12,7 +12,7 @@ import pytest
 from generic_ml_cache_core.application.domain.model.run.api_passthrough_request import (
     ApiPassthroughRequest,
 )
-from generic_ml_cache_core.common.errors import ProviderApiError
+from generic_ml_cache_core.common.errors import ProviderApiError, ProviderProtocolError
 
 from generic_ml_cache_adapters.adapter.outbound.api.anthropic_subscription_relay_adapter import (
     AnthropicSubscriptionRelayAdapter,
@@ -71,6 +71,32 @@ class TestVerbatimResponse:
         assert answer.exit_code == 429  # the real upstream status (W15), not a hardcoded 200
         assert answer.stdout.encode("utf-8") == error_body
         assert answer.token_usage is None  # only a 200 is accounted
+
+    def test_non_200_non_utf8_body_forwards_lossily_without_crashing(self):
+        # X3: a non-2xx proxy/error body that is not valid UTF-8 must forward (lossily,
+        # with replacement chars) rather than crash the relay into a driver 500.
+        adapter = AnthropicSubscriptionRelayAdapter()
+        binary_body = b"\xff\xfe not valid utf-8 error page"
+        http_error = urllib.error.HTTPError(
+            url=_UPSTREAM_URL,
+            code=502,
+            msg="Bad Gateway",
+            hdrs=MagicMock(),
+            fp=BytesIO(binary_body),
+        )
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            answer = adapter.execute_api_passthrough(_request())
+        assert answer.exit_code == 502  # forwarded verbatim, not a crash
+        assert "�" in answer.stdout  # the invalid bytes became the replacement char
+        assert answer.token_usage is None
+
+    def test_200_with_a_non_utf8_body_is_a_provider_protocol_error(self):
+        # X3: a 200 is cached + usage-parsed, so a non-UTF-8 success is a broken upstream
+        # — a ProviderProtocolError (never cached, never a raw UnicodeDecodeError).
+        adapter = AnthropicSubscriptionRelayAdapter()
+        with patch("urllib.request.urlopen", return_value=_ok_response(b"\xff\xfe not utf8")):
+            with pytest.raises(ProviderProtocolError):
+                adapter.execute_api_passthrough(_request())
 
     def test_network_failure_is_translated_to_provider_api_error(self):
         adapter = AnthropicSubscriptionRelayAdapter()

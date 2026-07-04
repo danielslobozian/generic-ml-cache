@@ -28,10 +28,13 @@ from generic_ml_cache_core.application.domain.model.usage.usage import int_or_no
 from generic_ml_cache_core.application.port.outbound.api_passthrough_runner_port import (
     ApiPassthroughRunnerPort,
 )
-from generic_ml_cache_core.common.errors import ProviderApiError
+from generic_ml_cache_core.common.errors import ProviderApiError, ProviderProtocolError
 
 _MESSAGES_URL = "https://api.anthropic.com/v1/messages"  # NOSONAR — operator-configured upstream
 _HTTP_OK = 200
+#: Upper bound on the body snippet carried in a ProviderProtocolError, so a broken
+#: upstream body cannot flood a diagnostic log (matches the W19 bounding).
+_BODY_SNIPPET_LIMIT = 500
 #: A network failure carries no HTTP status; ProviderApiError.status_code needs an
 #: int, so 0 means "no response reached us" (mapped to 502 by the daemon).
 _NO_STATUS = 0
@@ -111,11 +114,35 @@ class AnthropicSubscriptionRelayAdapter(ApiPassthroughRunnerPort):
             ) from network_error
 
     def _to_answer(self, status_code: int, response_body: bytes) -> ClientAnswer:
+        if status_code == _HTTP_OK:
+            # A 200 is cached and its usage parsed, so it must be the clean UTF-8 JSON
+            # the Messages contract promises. A non-UTF-8 200 is a broken upstream/proxy
+            # — surface it as ProviderProtocolError (W19) so it is never cached and never
+            # a raw UnicodeDecodeError crashing the driver into a 500 (X3).
+            return ClientAnswer(
+                exit_code=0,
+                stdout=self._decode_ok_body(response_body),
+                token_usage=self._parse_usage(response_body),
+            )
+        # A non-2xx body is relayed verbatim and NOT cached; decode it leniently so a
+        # binary / non-UTF-8 proxy error page forwards (replacement chars) instead of
+        # crashing the relay. The bytes-verbatim passthrough is declined for now — the
+        # happy path is UTF-8 (documented assumption); this is only its error edge (X3).
         return ClientAnswer(
-            exit_code=0 if status_code == _HTTP_OK else status_code,
-            stdout=response_body.decode("utf-8"),
-            token_usage=self._parse_usage(response_body) if status_code == _HTTP_OK else None,
+            exit_code=status_code,
+            stdout=response_body.decode("utf-8", errors="replace"),
+            token_usage=None,
         )
+
+    def _decode_ok_body(self, response_body: bytes) -> str:
+        try:
+            return response_body.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ProviderProtocolError(
+                provider=self.name,
+                status_code=_HTTP_OK,
+                body=response_body[:_BODY_SNIPPET_LIMIT].decode("utf-8", errors="replace"),
+            ) from exc
 
     def _parse_usage(self, response_body: bytes) -> TokenUsage | None:
         """Map the Anthropic usage block to TokenUsage (W14). Usage accounting must
