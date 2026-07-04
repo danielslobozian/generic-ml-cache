@@ -27,7 +27,7 @@ from generic_ml_cache_adapters.migration_runner import applied_schema_version
 _DB_NAME = "executions.sqlite3"
 
 
-def applied_migrations(store_root: Path) -> list[dict[str, str | None]]:
+def applied_migrations(store_root: Path) -> list[dict[str, str]]:
     """Report the store's applied migrations without initializing it.
 
     Absent database file → ``[]`` (unmigrated), no filesystem touch; present → open

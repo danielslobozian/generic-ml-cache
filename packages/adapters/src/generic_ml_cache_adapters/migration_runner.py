@@ -177,7 +177,7 @@ def _apply_migration(conn: DbConnection, target: int, diag: DiagnosticsPort | No
 
 def applied_schema_version(
     conn_factory: Callable[[], DbConnection],
-) -> list[dict[str, str | None]]:
+) -> list[dict[str, str]]:
     """Read the applied migrations WITHOUT initializing the store (W26) — the only
     public read of the schema history.
 
@@ -186,13 +186,16 @@ def applied_schema_version(
     connection where any write would fail. A missing ``schema_version`` table (an
     empty/uninitialized DB) or any read error reports ``[]`` (unmigrated). Used by
     the ``doctor`` status probe, which must never mutate the store it inspects.
+
+    Each entry is ``{"migration_id": ...}``; ``schema_version`` records only the version
+    integer, so no applied-at timestamp is available (X14 dropped the always-null field).
     """
     conn = conn_factory()
     try:
         row = conn.execute("SELECT version FROM schema_version").fetchone()
         version = int(row[0]) if row is not None else 0
         return [
-            {"migration_id": _MIGRATION_IDS[v - 1], "applied_at_utc": None}
+            {"migration_id": _MIGRATION_IDS[v - 1]}
             for v in range(1, min(version, len(_MIGRATION_IDS)) + 1)
         ]
     except Exception:  # noqa: BLE001 — missing table / read error → unmigrated

@@ -159,9 +159,7 @@ def _print_doctor_text(payload: _DoctorPayload) -> None:
     applied = payload["schema"]
     if applied:
         latest = applied[-1]
-        print(
-            f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}  ({latest['applied_at_utc']})"
-        )
+        print(f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}")
     else:
         print("store schema : not initialised (run any gmlcache command to apply migrations)")
 
