@@ -28,7 +28,6 @@ from generic_ml_cache_core.application.usecase.cached_ml_execution_service impor
     CachedMlExecutionService,
 )
 from generic_ml_cache_core.common.errors import (
-    ArtifactBlobMissing,
     CacheMiss,
     StoreUnavailable,
 )
@@ -315,16 +314,18 @@ class TestUncacheable:
         runner.assert_not_called()
 
 
-class TestBlobMissing:
-    def test_raises_artifact_blob_missing_when_get_returns_none(self):
+class TestCorruptCassette:
+    def test_offline_missing_blob_degrades_to_cache_miss(self):
+        # A would-be hit whose blob is gone is a corrupt cassette. OFFLINE cannot
+        # re-run to self-heal, so it is a clean CacheMiss, not a crash (S4).
         repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution(blob_key="blob-gone")
         blob = create_autospec(BlobStorePort)
         blob.get.return_value = None
         svc = _make_svc(repo=repo, blob=blob)
 
-        with pytest.raises(ArtifactBlobMissing):
-            svc.execute(_Cmd())
+        with pytest.raises(CacheMiss):
+            svc.execute(_Cmd(cache_mode=CacheMode.OFFLINE))
 
 
 class TestFailedRun:

@@ -39,6 +39,7 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ReadMlRunPort,
     SaveMlRunPort,
 )
+from generic_ml_cache_core.common.errors import StoreCorrupt
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
     SqliteExecutionRepository,
@@ -824,8 +825,9 @@ def test_finalizing_a_recorded_failure_does_not_supersede_the_good_answer(tmp_pa
 
 def test_corrupt_blob_key_in_db_is_rejected_on_load(tmp_path):
     # C-5 parse-at-edge: a traversal-unsafe key that somehow reached the DB (row
-    # corruption/tampering) is rejected when the repository reconstructs the
-    # Artifact — it never reaches the blob store.
+    # corruption/tampering) is a corrupt cassette. The repository surfaces a
+    # catchable StoreCorrupt (the serve path self-heals it) — never a raw ValueError
+    # that would deny the whole key and bypass the driver ladders (W17/S4).
     repo = _repository(tmp_path)
     identity = _managed_identity()
     key = identity.generate_key()
@@ -839,5 +841,5 @@ def test_corrupt_blob_key_in_db_is_rejected_on_load(tmp_path):
     finally:
         conn.close()
 
-    with pytest.raises(ValueError, match="invalid blob key"):
+    with pytest.raises(StoreCorrupt, match="invalid blob key"):
         repo.find_current(key)

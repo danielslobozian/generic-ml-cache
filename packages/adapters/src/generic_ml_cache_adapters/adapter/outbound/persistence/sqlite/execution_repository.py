@@ -41,7 +41,7 @@ from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import 
     RepairMlRunsPort,
     UnpersistedRun,
 )
-from generic_ml_cache_core.common.errors import StoreConsistencyError
+from generic_ml_cache_core.common.errors import StoreConsistencyError, StoreCorrupt
 from generic_ml_cache_core.common.immutable import thaw
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
@@ -545,32 +545,39 @@ class SqliteExecutionRepository(
             "status_detail FROM artifacts WHERE execution_id = ? ORDER BY id",
             (execution_id,),
         ).fetchall()
-        return [
-            Artifact(
-                artifact_type=ArtifactType(artifact_type),
-                # Parse-at-edge (C-5): a key read from a possibly-corrupted DB row is
-                # validated here — a traversal-unsafe key is rejected before it can
-                # reach the (dumb) blob store.
-                blob_key=BlobKey(blob_key),
-                size_bytes=size_bytes,
-                name=name,
-                encoding=encoding,
-                content=None,
-                status=ArtifactStatus(status),
-                persisted_at=persisted_at,
-                status_detail=status_detail,
-            )
-            for (
-                artifact_type,
-                name,
-                encoding,
-                blob_key,
-                size_bytes,
-                status,
-                persisted_at,
-                status_detail,
-            ) in rows
-        ]
+        try:
+            return [
+                Artifact(
+                    artifact_type=ArtifactType(artifact_type),
+                    # Parse-at-edge (C-5): a key read from a possibly-corrupted DB row
+                    # is validated here — a traversal-unsafe key is rejected before it
+                    # can reach the (dumb) blob store.
+                    blob_key=BlobKey(blob_key),
+                    size_bytes=size_bytes,
+                    name=name,
+                    encoding=encoding,
+                    content=None,
+                    status=ArtifactStatus(status),
+                    persisted_at=persisted_at,
+                    status_detail=status_detail,
+                )
+                for (
+                    artifact_type,
+                    name,
+                    encoding,
+                    blob_key,
+                    size_bytes,
+                    status,
+                    persisted_at,
+                    status_detail,
+                ) in rows
+            ]
+        except ValueError as exc:
+            # A malformed stored row (a bad blob key or an unknown enum value) is a
+            # corrupt cassette. Surface a catchable CacheError the serve path can
+            # self-heal, never a raw ValueError that would deny the whole key and
+            # bypass the driver error ladders (W17/S4).
+            raise StoreCorrupt(f"corrupt artifact row for execution {execution_id}: {exc}") from exc
 
     @staticmethod
     def _load_token_usage(connection: DbConnection, execution_id: int) -> TokenUsage | None:

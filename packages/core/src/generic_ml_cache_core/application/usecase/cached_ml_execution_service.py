@@ -44,6 +44,7 @@ from generic_ml_cache_core.common.errors import (
     ArtifactBlobMissing,
     CacheMiss,
     RunInterrupted,
+    StoreCorrupt,
     StoreUnavailable,
 )
 
@@ -159,9 +160,8 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                 return result
 
             if command.cache_mode is CacheMode.CACHE:
-                current_execution = self._read.find_current(execution_key)
-                if current_execution is not None:
-                    result = self._serve_hit(command, execution_key, current_execution)
+                served = self._serve_current_if_healthy(command, execution_key)
+                if served is not None:
                     if self._diag:
                         self._diag.debug(
                             _EXECUTE_EXIT,
@@ -169,7 +169,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                             duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                             outcome="hit",
                         )
-                    return result
+                    return served
 
             result = self._run_fresh(command, call_identity, execution_key, allow_store=True)
             if self._diag:
@@ -240,28 +240,72 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
 
     # -- resolution paths -------------------------------------------------
 
+    def _serve_current_if_healthy(
+        self, command: TCommand, execution_key: str
+    ) -> MlExecution | None:
+        """Serve the current cached entry, or return None (treated as a miss) — self-
+        healing a corrupt cassette on the way (S4). A would-be hit we cannot load (a
+        malformed row) or hydrate (a missing / undecryptable blob) is quarantined so
+        the caller falls through to a fresh run that replaces it. Only OFFLINE mode
+        and pure reads surface the corruption instead of re-running."""
+        try:
+            current = self._read.find_current(execution_key)
+        except StoreCorrupt as exc:
+            # The row cannot even be loaded; treat as a miss — the fresh run's
+            # supersession retires the malformed row.
+            self._log_self_heal(execution_key, exc)
+            return None
+        if current is None:
+            return None
+        try:
+            return self._serve_hit(command, execution_key, current)
+        except (StoreCorrupt, ArtifactBlobMissing) as exc:
+            self._log_self_heal(execution_key, exc)
+            self._save.remove_execution(current.execution_id)
+            return None
+
+    def _log_self_heal(self, execution_key: str, exc: BaseException) -> None:
+        if self._diag:
+            self._diag.warn(
+                "corrupt cassette — self-healing by re-running as a miss",
+                key=execution_key,
+                exc=exc,
+            )
+
     def _serve_offline(self, command: TCommand, execution_key: str) -> MlExecution:
         _t = time.perf_counter()
         if self._diag:
             self._diag.debug("serve-offline ENTER", key=execution_key)
-        current_execution = self._read.find_current(execution_key)
-        if current_execution is None:
+        try:
+            current_execution = self._read.find_current(execution_key)
+            if current_execution is not None:
+                result = self._serve_hit(command, execution_key, current_execution)
+                if self._diag:
+                    self._diag.debug(
+                        "serve-offline EXIT",
+                        key=execution_key,
+                        duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    )
+                return result
+        except (StoreCorrupt, ArtifactBlobMissing) as exc:
+            # OFFLINE cannot re-run to self-heal, so a corrupt entry degrades to a
+            # clean miss rather than serving (or crashing on) a broken cassette (S4).
             if self._diag:
                 self._diag.warn(
-                    "offline miss — no stored execution",
-                    key=execution_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
+                    "offline miss — corrupt stored execution", key=execution_key, exc=exc
                 )
             self._record_event(journal_events.MISS, execution_key, command)
-            raise CacheMiss(f"offline miss: no stored execution for key {execution_key}")
-        result = self._serve_hit(command, execution_key, current_execution)
+            raise CacheMiss(
+                f"offline miss: corrupt stored execution for key {execution_key}"
+            ) from exc
         if self._diag:
-            self._diag.debug(
-                "serve-offline EXIT",
+            self._diag.warn(
+                "offline miss — no stored execution",
                 key=execution_key,
                 duration_ms=round((time.perf_counter() - _t) * 1000, 1),
             )
-        return result
+        self._record_event(journal_events.MISS, execution_key, command)
+        raise CacheMiss(f"offline miss: no stored execution for key {execution_key}")
 
     def _serve_hit(
         self, command: TCommand, execution_key: str, current_execution: MlExecution
@@ -357,9 +401,8 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         with self._acquire_key_lock(execution_key):
             # Another thread holding this lock may have just completed this key.
             if command.cache_mode is CacheMode.CACHE:
-                current = self._read.find_current(execution_key)
-                if current is not None:
-                    result = self._serve_hit(command, execution_key, current)
+                served = self._serve_current_if_healthy(command, execution_key)
+                if served is not None:
                     if self._diag:
                         self._diag.debug(
                             "run-fresh-locked EXIT",
@@ -367,7 +410,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                             duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                             stored=False,
                         )
-                    return result
+                    return served
 
             # S1.1: at DATASET depth, persisting input+output IS the point of the
             # call, so if blob storage cannot accept a write, fail fast BEFORE the

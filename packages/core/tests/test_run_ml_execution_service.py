@@ -804,3 +804,33 @@ def test_run_interrupted_removes_the_in_progress_row_entirely():
         harness.service.execute(_managed_command())
     # A requested stop is never recorded — the row is gone.
     assert harness.repo.all_execution_keys() == []
+
+
+# --- W17/S4: corrupt-cassette self-heal --------------------------------------
+
+
+def test_missing_output_blob_on_hit_self_heals_by_rerunning():
+    runner = FakeClientRunner(
+        ClientRunResult(exit_code=0, stdout="v1\n"),
+        ClientRunResult(exit_code=0, stdout="v2\n"),
+    )
+    harness = _Harness(client_runner=runner)
+    first = harness.service.execute(_managed_command())
+    assert _stdout(first) == b"v1\n"
+
+    # Corrupt the cassette: its output blob vanishes from the store.
+    harness.blob.store.clear()
+
+    second = harness.service.execute(_managed_command())
+    # A would-be hit we cannot hydrate becomes a miss → re-run, replacing it.
+    assert _stdout(second) == b"v2\n"
+    assert len(harness.runner.calls) == 2  # ran again to self-heal
+
+
+def test_missing_output_blob_offline_degrades_to_a_clean_miss():
+    harness = _Harness()
+    harness.service.execute(_managed_command())
+    harness.blob.store.clear()  # corrupt the cassette
+    # OFFLINE cannot re-run, so it is a clean CacheMiss, not a crash or partial serve.
+    with pytest.raises(CacheMiss):
+        harness.service.execute(_managed_command(cache_mode=CacheMode.OFFLINE))

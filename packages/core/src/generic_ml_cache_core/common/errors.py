@@ -231,6 +231,21 @@ class StoreUnavailable(CacheError):
     code: ClassVar[str] = "store.unavailable"
 
 
+class StoreCorrupt(CacheError):
+    """Raised when a stored cassette cannot be trusted: a malformed artifact row or
+    blob key, or a blob that is missing or will not decrypt WITH a valid token (S4).
+
+    A cache entry is atomic — whole and servable, or not an entry — so it is never
+    served partial. On the serve path the cached use case CATCHES this, quarantines
+    the entry, and re-runs the client to self-heal (a corrupt hit becomes a miss);
+    only a pure read (inspect/list, nothing to re-run) or OFFLINE mode surfaces it.
+    It is a ``CacheError`` so a driver never sees a raw ``ValueError`` from a value
+    object built on a bad row (absorbs the W7 read-edge residual).
+    """
+
+    code: ClassVar[str] = "store.corrupt"
+
+
 class StoreConsistencyError(CacheError):
     """Raised when a DB-first write targets an execution that is not there to
     update — a ``mark_artifacts_*`` / ``finalize`` for an ``execution_id`` with no
