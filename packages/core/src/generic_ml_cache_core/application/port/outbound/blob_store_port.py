@@ -17,7 +17,15 @@ class BlobStorePort(ABC):
     never interprets content. This is what makes it swappable (filesystem, S3,
     in-memory) without touching the core.
 
-    The key is always produced by CallIdentity.generate_key().
+    The key is a validated :class:`BlobKey` — a content fingerprint the core mints
+    and hands in (W7), NOT a raw string and NOT "always CallIdentity.generate_key()"
+    (a blob key addresses *content*, not an execution; content is shared across
+    executions and deduplicated). Because a ``BlobKey`` is validated at construction
+    to a bounded ``[A-Za-z0-9._-]`` charset with no path separators and no ``.``/``..``,
+    a store may resolve it directly against its root (``root / key``): the TYPE is the
+    containment guarantee, so the store neither re-validates the key nor holds any
+    traversal defense of its own (that logic belongs at the boundary, not in an
+    adapter — an S3 store cannot ``..`` anyway).
     """
 
     @abstractmethod

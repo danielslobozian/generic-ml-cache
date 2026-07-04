@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 import threading
 
+import pytest
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 
 from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (
@@ -16,6 +18,27 @@ from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store im
 
 def test_is_a_blob_store_port(tmp_path):
     assert isinstance(FilesystemBlobStore(tmp_path), BlobStorePort)
+
+
+def test_every_blobkey_resolves_strictly_within_the_store_root(tmp_path):
+    # The containment guarantee (W7/W23): the store holds NO traversal defense of its
+    # own — it resolves root / key and trusts the BlobKey type. So every validly
+    # constructed key, whatever its shape, must land strictly under the root.
+    blob_store = FilesystemBlobStore(tmp_path)
+    root = tmp_path.resolve()
+    for value in ("a", "a.b-c_d", "x" * 255, "deadbeef.req", "..req"):
+        blob_store.put(BlobKey(value), b"data")
+    for path in tmp_path.rglob("*"):
+        if path.is_file():
+            assert root in path.resolve().parents
+
+
+def test_a_traversal_key_never_reaches_the_store_it_is_unconstructible(tmp_path):
+    # The store needs no ".." check because the boundary is the type: an unsafe key
+    # cannot be constructed, so put/get/remove can never receive one (W7/W23).
+    for bad in ("../evil", "a/b", "/abs", "..", "."):
+        with pytest.raises(ValueError, match="invalid blob key"):
+            FilesystemBlobStore(tmp_path).put(BlobKey(bad), b"data")
 
 
 def test_get_unknown_key_returns_none(tmp_path):
