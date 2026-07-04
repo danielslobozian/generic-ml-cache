@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for MetricsPort contract."""
+"""Tests for the call-journal role ports' contract."""
 
 from __future__ import annotations
 
@@ -8,15 +8,31 @@ from collections import defaultdict
 
 import pytest
 
-from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
-from generic_ml_cache_core.application.port.outbound.metrics_port import (
-    MetricsPort,
+from generic_ml_cache_core.application.domain.model.session.session_event_row import (
     SessionEventRow,
+)
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
 )
 
 
-class InMemoryMetrics(MetricsPort):
-    """Minimal in-memory implementation used to verify the port contract."""
+class InMemoryMetrics(
+    RecordCallEventPort,
+    CallStatsPort,
+    SessionReportSourcePort,
+    SessionQueryPort,
+    PurgeJournalPort,
+    SessionTagsPort,
+    SessionSpecPort,
+):
+    """Minimal in-memory implementation used to verify the port contracts."""
 
     def __init__(self) -> None:
         self._events: list = []
@@ -122,7 +138,7 @@ class InMemoryMetrics(MetricsPort):
 
 def test_port_cannot_be_instantiated_directly():
     with pytest.raises(TypeError):
-        MetricsPort()  # type: ignore[abstract]
+        RecordCallEventPort()  # type: ignore[abstract]
 
 
 def test_record_event_appends_event():

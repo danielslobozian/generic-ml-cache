@@ -26,8 +26,12 @@ from generic_ml_cache_core.application.domain.model.identity.passthrough_call_id
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
 )
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
@@ -96,8 +100,13 @@ def _execution(
 # --- contract ----------------------------------------------------------------
 
 
-def test_is_an_execution_repository_port(tmp_path):
-    assert isinstance(_repository(tmp_path), ExecutionRepositoryPort)
+def test_implements_ml_run_ports(tmp_path):
+    repository = _repository(tmp_path)
+    assert isinstance(repository, SaveMlRunPort)
+    assert isinstance(repository, ReadMlRunPort)
+    assert isinstance(repository, AnnotateMlRunPort)
+    assert isinstance(repository, InspectMlRunsPort)
+    assert isinstance(repository, PurgeMlRunsPort)
 
 
 def test_find_current_is_none_for_unknown_key(tmp_path):

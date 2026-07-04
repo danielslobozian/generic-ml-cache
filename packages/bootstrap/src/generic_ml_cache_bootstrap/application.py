@@ -137,13 +137,17 @@ def build_application_api(
     metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
     runners = build_runners(catalog_for(whitelist), default_resolver())
-    # One application service per capability (grouped by shared machinery); each
-    # is exposed through the segregated per-operation inbound-port fields of
-    # ApplicationApi (B-1), so the same instance is bound to several fields.
-    purge = PurgeService(repository, blob_store, metrics, diag=_diag)
+    # One application service per capability (grouped by shared machinery); each is
+    # exposed through the segregated per-operation inbound-port fields of ApplicationApi
+    # (B-1). On the outbound side (V32) each service depends only on the role ports it
+    # needs, so the single repository / metrics instance — which implements every role
+    # ABC — is bound to several role-port parameters here at the composition root.
+    purge = PurgeService(repository, blob_store, journal=metrics, sessions=metrics, diag=_diag)
     session_tags = SessionTagsService(metrics)
-    session_admin = SessionAdminService(metrics)
-    session_report = SessionReportService(metrics, repository)
+    session_admin = SessionAdminService(specs=metrics, sessions=metrics)
+    session_report = SessionReportService(
+        report_source=metrics, sessions=metrics, repository=repository
+    )
     execution_query = ExecutionQueryService(repository)
     store_stats = StoreStatsService(metrics)
     artifact_content = ArtifactContentService(blob_store)
@@ -159,8 +163,10 @@ def build_application_api(
             file_fingerprint,
             runners,
             blob_store,
-            repository,
-            metrics,
+            save=repository,
+            read=repository,
+            annotate=repository,
+            record=metrics,
             purge_service=purge,
             max_size=max_size,
             workspace=FilesystemWorkspace(),

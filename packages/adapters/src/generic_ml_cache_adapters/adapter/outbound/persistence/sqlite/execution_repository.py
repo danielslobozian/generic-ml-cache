@@ -24,10 +24,14 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
     ExecutionSizeEntry,
     ExecutionSummary,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
 )
 from generic_ml_cache_core.common.immutable import thaw
 
@@ -48,7 +52,13 @@ _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
 _ExecutionRow = tuple[int, str, str, str, int, str | None, str | None, Any, int | None]
 
 
-class SqliteExecutionRepository(ExecutionRepositoryPort):
+class SqliteExecutionRepository(
+    SaveMlRunPort,
+    ReadMlRunPort,
+    AnnotateMlRunPort,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+):
     """A durable, append-only execution store backed by SQLite.
 
     Not a portability layer: the SQL is SQLite-dialect (``INTEGER PRIMARY KEY``,

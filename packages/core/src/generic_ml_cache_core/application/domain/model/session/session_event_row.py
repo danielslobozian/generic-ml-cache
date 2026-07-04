@@ -13,7 +13,7 @@ class SessionEventRow(NamedTuple):
     and model (the token axis), and the execution key (to look up token usage).
 
     A domain row, not a port concept: it is the shape the session-report projection
-    reads. The MetricsPort merely returns it — hence it lives in the domain model
+    reads. The call-journal port merely returns it — hence it lives in the domain model
     and the port imports it (a port referencing a domain model, never the reverse).
     """
 

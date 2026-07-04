@@ -18,10 +18,12 @@ from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheM
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )
@@ -32,9 +34,12 @@ from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
 # ---------------------------------------------------------------------------
 
 
+class _MlRunStore(SaveMlRunPort, ReadMlRunPort, AnnotateMlRunPort): ...
+
+
 class _RunSvc(CachedMlExecutionService):
     def __init__(self, blob, repo, metrics, runner=None, **kw):
-        super().__init__(blob, repo, metrics, **kw)
+        super().__init__(blob, save=repo, read=repo, annotate=repo, record=metrics, **kw)
         self._runner = runner or MagicMock()
 
     def _build_identity(self, cmd):
@@ -112,8 +117,8 @@ def _make_execution(blob_key: str = "blob-1") -> MlExecution:
 def _make_svc(blob=None, repo=None, metrics=None, runner=None):
     return _RunSvc(
         blob=blob or create_autospec(BlobStorePort),
-        repo=repo or create_autospec(ExecutionRepositoryPort),
-        metrics=metrics or create_autospec(MetricsPort),
+        repo=repo or create_autospec(_MlRunStore),
+        metrics=metrics or create_autospec(RecordCallEventPort),
         runner=runner,
     )
 
@@ -126,7 +131,7 @@ def _make_svc(blob=None, repo=None, metrics=None, runner=None):
 class TestCacheMode:
     def test_hit_returns_hydrated_execution_without_calling_client(self):
         runner = MagicMock()
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution()
         blob = create_autospec(BlobStorePort)
         blob.get.return_value = b"data"
@@ -138,11 +143,11 @@ class TestCacheMode:
         runner.assert_not_called()
 
     def test_hit_records_hit_event(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution()
         blob = create_autospec(BlobStorePort)
         blob.get.return_value = b"data"
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(RecordCallEventPort)
         svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 
         svc.execute(_Cmd())
@@ -151,7 +156,7 @@ class TestCacheMode:
 
     def test_miss_runs_client_and_saves_in_progress_then_final(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo, runner=runner)
 
@@ -162,9 +167,9 @@ class TestCacheMode:
 
     def test_miss_records_record_event(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(RecordCallEventPort)
         svc = _make_svc(repo=repo, metrics=metrics, runner=runner)
 
         svc.execute(_Cmd())
@@ -173,7 +178,7 @@ class TestCacheMode:
 
     def test_miss_stores_output_blobs(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         blob = create_autospec(BlobStorePort)
         svc = _make_svc(repo=repo, blob=blob, runner=runner)
@@ -186,7 +191,7 @@ class TestCacheMode:
 class TestRefreshMode:
     def test_runs_client_without_checking_cache(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         svc = _make_svc(repo=repo, runner=runner)
 
         svc.execute(_Cmd(cache_mode=CacheMode.REFRESH))
@@ -196,7 +201,7 @@ class TestRefreshMode:
 
     def test_saves_in_progress_then_final(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         svc = _make_svc(repo=repo, runner=runner)
 
         svc.execute(_Cmd(cache_mode=CacheMode.REFRESH))
@@ -207,7 +212,7 @@ class TestRefreshMode:
 class TestOfflineMode:
     def test_serves_cached_execution_without_calling_client(self):
         runner = MagicMock()
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution()
         blob = create_autospec(BlobStorePort)
         blob.get.return_value = b"data"
@@ -219,7 +224,7 @@ class TestOfflineMode:
         runner.assert_not_called()
 
     def test_raises_cache_miss_when_no_stored_execution(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -230,7 +235,7 @@ class TestOfflineMode:
 class TestMeterDepth:
     def test_always_runs_client(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo, runner=runner)
 
@@ -240,7 +245,7 @@ class TestMeterDepth:
 
     def test_never_saves_to_repository(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo, runner=runner)
 
@@ -250,9 +255,9 @@ class TestMeterDepth:
 
     def test_journals_would_hit_when_stored_entry_exists(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution()
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(RecordCallEventPort)
         svc = _make_svc(repo=repo, metrics=metrics, runner=runner)
 
         svc.execute(_Cmd(persistence_depth=PersistenceDepth.METER))
@@ -261,9 +266,9 @@ class TestMeterDepth:
 
     def test_journals_would_miss_when_no_stored_entry(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(RecordCallEventPort)
         svc = _make_svc(repo=repo, metrics=metrics, runner=runner)
 
         svc.execute(_Cmd(persistence_depth=PersistenceDepth.METER))
@@ -274,7 +279,7 @@ class TestMeterDepth:
 class TestUncacheable:
     def test_cache_mode_runs_client_without_saving(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         svc = _make_svc(repo=repo, runner=runner)
 
         svc.execute(_Cmd(_is_uncacheable=True))
@@ -284,7 +289,7 @@ class TestUncacheable:
 
     def test_cache_mode_records_run_event(self):
         runner = MagicMock(return_value=_make_result())
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(RecordCallEventPort)
         svc = _make_svc(metrics=metrics, runner=runner)
 
         svc.execute(_Cmd(_is_uncacheable=True))
@@ -303,7 +308,7 @@ class TestUncacheable:
 
 class TestBlobMissing:
     def test_raises_artifact_blob_missing_when_get_returns_none(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution(blob_key="blob-gone")
         blob = create_autospec(BlobStorePort)
         blob.get.return_value = None
@@ -316,7 +321,7 @@ class TestBlobMissing:
 class TestFailedRun:
     def test_failed_run_resolves_in_progress_but_does_not_store_blobs(self):
         runner = MagicMock(return_value=ClientRunResult(exit_code=1))
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         blob = create_autospec(BlobStorePort)
         svc = _make_svc(repo=repo, blob=blob, runner=runner)
@@ -328,9 +333,9 @@ class TestFailedRun:
 
     def test_failed_run_records_run_not_record_event(self):
         runner = MagicMock(return_value=ClientRunResult(exit_code=1))
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(RecordCallEventPort)
         svc = _make_svc(repo=repo, metrics=metrics, runner=runner)
 
         svc.execute(_Cmd())
@@ -341,12 +346,12 @@ class TestFailedRun:
 class TestAfterRecord:
     def test_after_record_called_once_on_successful_store(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _AfterRecordSvc(
             blob=create_autospec(BlobStorePort),
             repo=repo,
-            metrics=create_autospec(MetricsPort),
+            metrics=create_autospec(RecordCallEventPort),
             runner=runner,
         )
 
@@ -356,12 +361,12 @@ class TestAfterRecord:
 
     def test_after_record_not_called_when_run_fails(self):
         runner = MagicMock(return_value=ClientRunResult(exit_code=1))
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _AfterRecordSvc(
             blob=create_autospec(BlobStorePort),
             repo=repo,
-            metrics=create_autospec(MetricsPort),
+            metrics=create_autospec(RecordCallEventPort),
             runner=runner,
         )
 
@@ -373,12 +378,12 @@ class TestAfterRecord:
 class TestTags:
     def test_add_tags_called_after_successful_record(self):
         runner = MagicMock(return_value=_make_result())
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _TagSvc(
             blob=create_autospec(BlobStorePort),
             repo=repo,
-            metrics=create_autospec(MetricsPort),
+            metrics=create_autospec(RecordCallEventPort),
             runner=runner,
         )
 
@@ -388,12 +393,12 @@ class TestTags:
 
     def test_add_tags_not_called_when_run_fails(self):
         runner = MagicMock(return_value=ClientRunResult(exit_code=1))
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = None
         svc = _TagSvc(
             blob=create_autospec(BlobStorePort),
             repo=repo,
-            metrics=create_autospec(MetricsPort),
+            metrics=create_autospec(RecordCallEventPort),
             runner=runner,
         )
 
@@ -402,14 +407,14 @@ class TestTags:
         repo.add_tags.assert_not_called()
 
     def test_add_tags_called_on_cache_hit(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_current.return_value = _make_execution()
         blob = create_autospec(BlobStorePort)
         blob.get.return_value = b"data"
         svc = _TagSvc(
             blob=blob,
             repo=repo,
-            metrics=create_autospec(MetricsPort),
+            metrics=create_autospec(RecordCallEventPort),
         )
 
         svc.execute(_Cmd())

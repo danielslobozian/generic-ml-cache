@@ -37,7 +37,7 @@ class _FakeMetrics:
 
 def test_set_spec_stores_it():
     metrics = _FakeMetrics()
-    svc = SessionAdminService(metrics)  # type: ignore[arg-type]  # duck-typed metrics
+    svc = SessionAdminService(metrics, metrics)  # type: ignore[arg-type]  # duck-typed metrics
     spec = SessionSpec(client="claude", model="m", effort="")
     svc.set_spec(SetSessionSpecCommand("s1", spec))
     assert metrics.specs["s1"] is spec
@@ -45,7 +45,7 @@ def test_set_spec_stores_it():
 
 def test_clear_spec_removes_it():
     metrics = _FakeMetrics()
-    svc = SessionAdminService(metrics)  # type: ignore[arg-type]
+    svc = SessionAdminService(metrics, metrics)  # type: ignore[arg-type]
     svc.set_spec(SetSessionSpecCommand("s1", SessionSpec(client="c", model="m", effort="e")))
     svc.clear_spec(ClearSessionSpecCommand("s1"))
     assert "s1" not in metrics.specs
@@ -57,7 +57,7 @@ def test_get_spec_returns_the_stored_spec_or_none():
     )
 
     metrics = _FakeMetrics()
-    svc = SessionAdminService(metrics)  # type: ignore[arg-type]
+    svc = SessionAdminService(metrics, metrics)  # type: ignore[arg-type]
     spec = SessionSpec(client="c", model="m", effort="e")
     svc.set_spec(SetSessionSpecCommand("s1", spec))
     assert svc.get_spec(GetSessionSpecCommand("s1")) is spec
@@ -66,7 +66,7 @@ def test_get_spec_returns_the_stored_spec_or_none():
 
 def test_list_session_ids():
     metrics = _FakeMetrics()
-    svc = SessionAdminService(metrics)  # type: ignore[arg-type]
+    svc = SessionAdminService(metrics, metrics)  # type: ignore[arg-type]
     svc.set_spec(SetSessionSpecCommand("s2", SessionSpec(client="c", model="m", effort="e")))
     svc.set_spec(SetSessionSpecCommand("s1", SessionSpec(client="c", model="m", effort="e")))
     assert svc.list_session_ids() == ["s1", "s2"]
@@ -74,7 +74,7 @@ def test_list_session_ids():
 
 def test_clear_unknown_session_is_a_noop():
     metrics = _FakeMetrics()
-    SessionAdminService(metrics).clear_spec(ClearSessionSpecCommand("nope"))  # type: ignore[arg-type]
+    SessionAdminService(metrics, metrics).clear_spec(ClearSessionSpecCommand("nope"))  # type: ignore[arg-type]
     assert metrics.specs == {}
 
 
@@ -83,7 +83,7 @@ def test_sessions_for_tag():
         SessionsForTagCommand,
     )
 
-    svc = SessionAdminService(_FakeMetrics())  # type: ignore[arg-type]
+    svc = SessionAdminService(_FakeMetrics(), _FakeMetrics())  # type: ignore[arg-type]
     assert svc.sessions_for_tag(SessionsForTagCommand("t")) == ["s1", "s2"]
     assert svc.sessions_for_tag(SessionsForTagCommand("none")) == []
 
@@ -93,5 +93,5 @@ def test_execution_keys_for_session():
         ExecutionKeysForSessionCommand,
     )
 
-    svc = SessionAdminService(_FakeMetrics())  # type: ignore[arg-type]
+    svc = SessionAdminService(_FakeMetrics(), _FakeMetrics())  # type: ignore[arg-type]
     assert svc.execution_keys_for_session(ExecutionKeysForSessionCommand("s1")) == ["k1", "k2"]

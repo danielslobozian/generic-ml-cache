@@ -43,7 +43,10 @@ from generic_ml_cache_core.application.port.inbound.session_admin.set_session_sp
 from generic_ml_cache_core.application.port.inbound.session_admin.set_session_spec_use_case import (
     SetSessionSpecUseCase,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    SessionQueryPort,
+    SessionSpecPort,
+)
 
 
 class SessionAdminService(
@@ -56,23 +59,24 @@ class SessionAdminService(
 ):
     """Manage a session's execution spec and enumerate sessions."""
 
-    def __init__(self, metrics: MetricsPort) -> None:
-        self._metrics = metrics
+    def __init__(self, specs: SessionSpecPort, sessions: SessionQueryPort) -> None:
+        self._specs = specs
+        self._sessions = sessions
 
     def set_spec(self, command: SetSessionSpecCommand) -> None:
-        self._metrics.set_session_spec(command.session_id, command.spec)
+        self._specs.set_session_spec(command.session_id, command.spec)
 
     def clear_spec(self, command: ClearSessionSpecCommand) -> None:
-        self._metrics.clear_session_spec(command.session_id)
+        self._specs.clear_session_spec(command.session_id)
 
     def get_spec(self, command: GetSessionSpecCommand) -> SessionSpec | None:
-        return self._metrics.session_spec(command.session_id)
+        return self._specs.session_spec(command.session_id)
 
     def list_session_ids(self) -> list[str]:
-        return self._metrics.list_session_ids()
+        return self._specs.list_session_ids()
 
     def sessions_for_tag(self, command: SessionsForTagCommand) -> list[str]:
-        return self._metrics.session_ids_for_tag(command.tag)
+        return self._sessions.session_ids_for_tag(command.tag)
 
     def execution_keys_for_session(self, command: ExecutionKeysForSessionCommand) -> list[str]:
-        return self._metrics.execution_keys_for_session(command.session_id)
+        return self._sessions.execution_keys_for_session(command.session_id)

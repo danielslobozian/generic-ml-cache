@@ -47,12 +47,15 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_use_case 
     PurgeByTagUseCase,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
-    ExecutionSizeEntry,
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    PurgeJournalPort,
+    SessionQueryPort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    ExecutionSizeEntry,
+    PurgeMlRunsPort,
+)
 
 
 class PurgeService(
@@ -75,14 +78,16 @@ class PurgeService(
 
     def __init__(
         self,
-        repository: ExecutionRepositoryPort,
+        repository: PurgeMlRunsPort,
         blob_store: BlobStorePort,
-        metrics: MetricsPort,
+        journal: PurgeJournalPort,
+        sessions: SessionQueryPort,
         diag: DiagnosticsPort | None = None,
     ) -> None:
         self._repository = repository
         self._blob_store = blob_store
-        self._metrics = metrics
+        self._journal = journal
+        self._sessions = sessions
         self._diag: DiagnosticsPort | None = diag
 
     # -- scoped purge (soft by default; hard when the command says so) ---------
@@ -97,7 +102,7 @@ class PurgeService(
 
     def purge_by_session(self, command: PurgeBySessionCommand) -> PurgeReport:
         return self._purge(
-            self._metrics.execution_keys_for_session(command.session_id), command.hard
+            self._sessions.execution_keys_for_session(command.session_id), command.hard
         )
 
     def purge_by_session_tag(self, command: PurgeBySessionTagCommand) -> PurgeReport:
@@ -119,7 +124,7 @@ class PurgeService(
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         cutoff = time.time() - command.max_age_seconds
         entries = self._repository.current_executions_with_sizes()
-        last_access = self._metrics.last_access()
+        last_access = self._journal.last_access()
         stale_keys = [e.execution_key for e in entries if _lru_epoch(e, last_access) < cutoff]
         if stale_keys and self._diag:
             self._diag.info("stale eviction triggered", stale_count=len(stale_keys))
@@ -131,7 +136,7 @@ class PurgeService(
         if current <= command.max_bytes:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         entries = self._repository.current_executions_with_sizes()
-        last_access = self._metrics.last_access()
+        last_access = self._journal.last_access()
         sorted_entries = sorted(entries, key=lambda e: _lru_epoch(e, last_access))
         keys_to_evict: list[str] = []
         running = current
@@ -185,7 +190,7 @@ class PurgeService(
         for key in keys:
             all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
             self._repository.hard_delete_execution(key)
-            self._metrics.delete_events_for_key(key)
+            self._journal.delete_events_for_key(key)
         after = self._repository.total_stored_bytes()
         report = PurgeReport(
             executions_removed=len(keys),
@@ -204,8 +209,8 @@ class PurgeService(
     def _keys_for_session_tag(self, tag: str) -> list[str]:
         seen: set[str] = set()
         keys: list[str] = []
-        for session_id in self._metrics.session_ids_for_tag(tag):
-            for key in self._metrics.execution_keys_for_session(session_id):
+        for session_id in self._sessions.session_ids_for_tag(tag):
+            for key in self._sessions.execution_keys_for_session(session_id):
                 if key not in seen:
                     seen.add(key)
                     keys.append(key)

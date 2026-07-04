@@ -21,11 +21,13 @@ from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheM
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 from generic_ml_cache_core.common import journal_events
 from generic_ml_cache_core.common.checksum import file_content_fingerprint
 from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
@@ -73,13 +75,17 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
     def __init__(
         self,
         blob_store: BlobStorePort,
-        repository: ExecutionRepositoryPort,
-        metrics: MetricsPort,
+        save: SaveMlRunPort,
+        read: ReadMlRunPort,
+        annotate: AnnotateMlRunPort,
+        record: RecordCallEventPort,
         diag: DiagnosticsPort | None = None,
     ) -> None:
         self._blob_store = blob_store
-        self._repository = repository
-        self._metrics = metrics
+        self._save = save
+        self._read = read
+        self._annotate = annotate
+        self._record = record
         self._diag: DiagnosticsPort | None = diag
         self._key_locks: dict[str, threading.Lock] = {}
         self._key_locks_guard = threading.Lock()
@@ -131,7 +137,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                 return result
 
             if command.cache_mode is CacheMode.CACHE:
-                current_execution = self._repository.find_current(execution_key)
+                current_execution = self._read.find_current(execution_key)
                 if current_execution is not None:
                     result = self._serve_hit(command, execution_key, current_execution)
                     if self._diag:
@@ -208,7 +214,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         annotation: adding one never rewrites the execution record."""
         tags = self._execution_tags(command)
         if tags:
-            self._repository.add_tags(execution_key, tags)
+            self._annotate.add_tags(execution_key, tags)
 
     # -- resolution paths -------------------------------------------------
 
@@ -216,7 +222,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         _t = time.perf_counter()
         if self._diag:
             self._diag.debug("serve-offline ENTER", key=execution_key)
-        current_execution = self._repository.find_current(execution_key)
+        current_execution = self._read.find_current(execution_key)
         if current_execution is None:
             if self._diag:
                 self._diag.warn(
@@ -264,7 +270,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             return
         input_artifacts = self._build_input_artifacts(command, store=True)
         if input_artifacts:
-            self._repository.add_input_artifacts(execution_key, input_artifacts)
+            self._annotate.add_input_artifacts(execution_key, input_artifacts)
 
     def _run_uncacheable(
         self, command: TCommand, call_identity: CallIdentity, execution_key: str
@@ -323,7 +329,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         with self._acquire_key_lock(execution_key):
             # Another thread holding this lock may have just completed this key.
             if command.cache_mode is CacheMode.CACHE:
-                current = self._repository.find_current(execution_key)
+                current = self._read.find_current(execution_key)
                 if current is not None:
                     result = self._serve_hit(command, execution_key, current)
                     if self._diag:
@@ -337,7 +343,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
 
             # Write the IN_PROGRESS marker before the client is called so that
             # external observers (dashboard, probe, inspector) can see the run.
-            self._repository.save(
+            self._save.save(
                 MlExecution(
                     call_identity=call_identity,
                     execution_state=ExecutionState.IN_PROGRESS,
@@ -367,7 +373,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                 failure=client_run_result.failure(),
             )
             # Always resolve the IN_PROGRESS record with the final execution.
-            self._repository.save(execution)
+            self._save.save(execution)
             if should_store:
                 if self._diag:
                     self._diag.info("cached RECORD", key=execution_key)
@@ -398,7 +404,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         entry existed — so usage analytics can report would-be hit/miss ("you'd
         have saved N runs") without the cache ever serving or storing anything."""
         _t = time.perf_counter()
-        would_hit = self._repository.find_current(execution_key) is not None
+        would_hit = self._read.find_current(execution_key) is not None
         if self._diag:
             self._diag.debug("METER run", key=execution_key, would_hit=would_hit)
         client_run_result = self._run_client(command)
@@ -493,7 +499,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
 
     def _record_event(self, event: str, execution_key: str, command: TCommand) -> None:
         client, model, effort = self._journal_fields(command)
-        self._metrics.record_event(
+        self._record.record_event(
             event,
             execution_key=execution_key,
             client=client,

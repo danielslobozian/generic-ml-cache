@@ -12,12 +12,10 @@ from generic_ml_cache_core.application.domain.model.identity.gateway_call_identi
 )
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
 from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
-)
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import ReadMlRunPort
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 
 # ---------------------------------------------------------------------------
@@ -53,7 +51,7 @@ def _make_stored_execution() -> MlExecution:
 def _make_svc(fp=None, repo=None):
     return ProbeService(
         file_fingerprint=fp or create_autospec(FileFingerprintPort),
-        repository=repo or create_autospec(ExecutionRepositoryPort),
+        repository=repo or create_autospec(ReadMlRunPort),
     )
 
 
@@ -64,7 +62,7 @@ def _make_svc(fp=None, repo=None):
 
 class TestProbeUncacheable:
     def test_returns_non_cacheable_status(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         svc = _make_svc(repo=repo)
 
         report = svc.execute(_make_cmd(uncacheable=True))
@@ -72,7 +70,7 @@ class TestProbeUncacheable:
         assert report.status == ProbeStatus.NON_CACHEABLE
 
     def test_does_not_query_repository(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         svc = _make_svc(repo=repo)
 
         svc.execute(_make_cmd(uncacheable=True))
@@ -97,7 +95,7 @@ class TestProbeUncacheable:
 
 class TestProbeMiss:
     def test_returns_miss_status_when_find_current_returns_none(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -106,7 +104,7 @@ class TestProbeMiss:
         assert report.status == ProbeStatus.MISS
 
     def test_execution_is_none_on_miss(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -115,7 +113,7 @@ class TestProbeMiss:
         assert report.execution is None
 
     def test_execution_key_is_non_empty_on_miss(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -124,7 +122,7 @@ class TestProbeMiss:
         assert report.execution_key and len(report.execution_key) > 0
 
     def test_find_current_called_with_derived_key(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
         cmd = _make_cmd()
@@ -137,7 +135,7 @@ class TestProbeMiss:
 class TestProbeHit:
     def test_returns_hit_status_when_find_current_returns_execution(self):
         stored = _make_stored_execution()
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = stored
         svc = _make_svc(repo=repo)
 
@@ -147,7 +145,7 @@ class TestProbeHit:
 
     def test_execution_field_is_the_stored_execution(self):
         stored = _make_stored_execution()
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = stored
         svc = _make_svc(repo=repo)
 
@@ -156,7 +154,7 @@ class TestProbeHit:
         assert report.execution is stored
 
     def test_execution_key_is_non_empty_on_hit(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = _make_stored_execution()
         svc = _make_svc(repo=repo)
 
@@ -167,7 +165,7 @@ class TestProbeHit:
 
 class TestProbeKey:
     def test_same_command_produces_same_key(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -177,7 +175,7 @@ class TestProbeKey:
         assert r1.execution_key == r2.execution_key
 
     def test_different_model_produces_different_key(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -187,7 +185,7 @@ class TestProbeKey:
         assert r1.execution_key != r2.execution_key
 
     def test_different_prompt_produces_different_key(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 
@@ -197,7 +195,7 @@ class TestProbeKey:
         assert r1.execution_key != r2.execution_key
 
     def test_cacheable_and_uncacheable_same_fields_different_status_but_consistent_key(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(ReadMlRunPort)
         repo.find_current.return_value = None
         svc = _make_svc(repo=repo)
 

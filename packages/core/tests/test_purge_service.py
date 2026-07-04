@@ -25,25 +25,35 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command i
     PurgeByTagCommand,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
-    ExecutionSizeEntry,
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    PurgeJournalPort,
+    SessionQueryPort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    ExecutionSizeEntry,
+    PurgeMlRunsPort,
+)
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+
+
+class _MlRunStore(PurgeMlRunsPort): ...
+
+
+class _CallJournal(PurgeJournalPort, SessionQueryPort): ...
 
 
 def _make_svc(repo=None, blob=None, metrics=None):
     return PurgeService(
-        repository=repo or create_autospec(ExecutionRepositoryPort),
+        repository=repo or create_autospec(_MlRunStore),
         blob_store=blob or create_autospec(BlobStorePort),
-        metrics=metrics or create_autospec(MetricsPort),
+        journal=metrics or create_autospec(_CallJournal),
+        sessions=metrics or create_autospec(_CallJournal),
     )
 
 
 def _repo_with_key():
     """Repository mock that has one existing key and no blobs."""
-    repo = create_autospec(ExecutionRepositoryPort)
+    repo = create_autospec(_MlRunStore)
     repo.find_all.return_value = [object()]
     repo.blob_keys_for_execution.return_value = []
     repo.total_stored_bytes.return_value = 0
@@ -68,7 +78,7 @@ class TestPurgeOne:
         assert report.executions_removed == 1
 
     def test_key_not_found_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_all.return_value = []
         svc = _make_svc(repo=repo)
 
@@ -79,7 +89,7 @@ class TestPurgeOne:
         assert report.blobs_removed == 0
 
     def test_key_not_found_does_not_call_soft_purge(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_all.return_value = []
         svc = _make_svc(repo=repo)
 
@@ -90,7 +100,7 @@ class TestPurgeOne:
 
 class TestPurgeByTag:
     def test_tag_with_keys_soft_purges_each(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.executions_by_tag.return_value = ["key1", "key2"]
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
@@ -103,7 +113,7 @@ class TestPurgeByTag:
         repo.soft_purge_execution.assert_any_call("key2")
 
     def test_tag_with_no_keys_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.executions_by_tag.return_value = []
         svc = _make_svc(repo=repo)
 
@@ -115,9 +125,9 @@ class TestPurgeByTag:
 
 class TestPurgeBySession:
     def test_session_with_keys_soft_purges_each(self):
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.execution_keys_for_session.return_value = ["key1", "key2"]
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
@@ -128,7 +138,7 @@ class TestPurgeBySession:
         repo.soft_purge_execution.assert_any_call("key1")
 
     def test_session_with_no_keys_returns_empty_report(self):
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.execution_keys_for_session.return_value = []
         svc = _make_svc(metrics=metrics)
 
@@ -140,10 +150,10 @@ class TestPurgeBySession:
 
 class TestPurgeBySessionTag:
     def test_fans_out_through_sessions(self):
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.session_ids_for_tag.return_value = ["sess-A", "sess-B"]
         metrics.execution_keys_for_session.side_effect = [["key1"], ["key2"]]
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
@@ -155,10 +165,10 @@ class TestPurgeBySessionTag:
         repo.soft_purge_execution.assert_any_call("key2")
 
     def test_deduplicates_keys_across_sessions(self):
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.session_ids_for_tag.return_value = ["sess-A", "sess-B"]
         metrics.execution_keys_for_session.side_effect = [["key1"], ["key1"]]
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
@@ -169,7 +179,7 @@ class TestPurgeBySessionTag:
         assert repo.soft_purge_execution.call_count == 1
 
     def test_no_sessions_returns_empty_report(self):
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.session_ids_for_tag.return_value = []
         svc = _make_svc(metrics=metrics)
 
@@ -184,7 +194,7 @@ class TestPurgeAll:
             ExecutionSizeEntry("key1", 100, "2026-01-01T00:00:00"),
             ExecutionSizeEntry("key2", 200, "2026-01-01T00:00:00"),
         ]
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.current_executions_with_sizes.return_value = entries
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
@@ -197,7 +207,7 @@ class TestPurgeAll:
         repo.soft_purge_execution.assert_any_call("key2")
 
     def test_empty_store_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.current_executions_with_sizes.return_value = []
         svc = _make_svc(repo=repo)
 
@@ -210,7 +220,7 @@ class TestPurgeAll:
 class TestHardDeleteOne:
     def test_key_exists_calls_hard_delete_and_delete_events(self):
         repo = _repo_with_key()
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         svc = _make_svc(repo=repo, metrics=metrics)
 
         svc.purge_by_key(PurgeByKeyCommand("key1", hard=True))
@@ -227,7 +237,7 @@ class TestHardDeleteOne:
         assert report.executions_removed == 1
 
     def test_key_not_found_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_all.return_value = []
         svc = _make_svc(repo=repo)
 
@@ -236,9 +246,9 @@ class TestHardDeleteOne:
         assert report.executions_removed == 0
 
     def test_key_not_found_does_not_call_hard_delete_or_delete_events(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.find_all.return_value = []
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         svc = _make_svc(repo=repo, metrics=metrics)
 
         svc.purge_by_key(PurgeByKeyCommand("missing", hard=True))
@@ -249,11 +259,11 @@ class TestHardDeleteOne:
 
 class TestHardDeleteByTag:
     def test_hard_deletes_and_erases_events_for_each_tagged_key(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.executions_by_tag.return_value = ["key1", "key2"]
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         svc = _make_svc(repo=repo, metrics=metrics)
 
         report = svc.purge_by_tag(PurgeByTagCommand("my-tag", hard=True))
@@ -263,7 +273,7 @@ class TestHardDeleteByTag:
         metrics.delete_events_for_key.assert_any_call("key2")
 
     def test_empty_tag_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.executions_by_tag.return_value = []
         svc = _make_svc(repo=repo)
 
@@ -274,9 +284,9 @@ class TestHardDeleteByTag:
 
 class TestHardDeleteBySession:
     def test_hard_deletes_each_session_key_and_erases_events(self):
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.execution_keys_for_session.return_value = ["key1"]
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
         svc = _make_svc(repo=repo, metrics=metrics)
@@ -290,11 +300,11 @@ class TestHardDeleteBySession:
 
 class TestHardDeleteAll:
     def test_hard_deletes_all_keys_and_erases_events(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.all_execution_keys.return_value = ["key1", "key2"]
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         svc = _make_svc(repo=repo, metrics=metrics)
 
         report = svc.purge_all(PurgeAllCommand(hard=True))
@@ -306,7 +316,7 @@ class TestHardDeleteAll:
 
 class TestEvictStale:
     def test_zero_max_age_returns_empty_report_immediately(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         svc = _make_svc(repo=repo)
 
         report = svc.evict_stale(EvictStaleCommand(0))
@@ -315,7 +325,7 @@ class TestEvictStale:
         repo.current_executions_with_sizes.assert_not_called()
 
     def test_negative_max_age_returns_empty_report_immediately(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         svc = _make_svc(repo=repo)
 
         report = svc.evict_stale(EvictStaleCommand(-5))
@@ -324,13 +334,13 @@ class TestEvictStale:
         repo.current_executions_with_sizes.assert_not_called()
 
     def test_entry_past_cutoff_is_evicted(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.current_executions_with_sizes.return_value = [
             ExecutionSizeEntry("stale-key", 100, "2000-01-01T00:00:00"),
         ]
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.last_access.return_value = {"stale-key": 0.0}
         svc = _make_svc(repo=repo, metrics=metrics)
 
@@ -340,11 +350,11 @@ class TestEvictStale:
         repo.soft_purge_execution.assert_called_once_with("stale-key")
 
     def test_entry_within_age_is_not_evicted(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.current_executions_with_sizes.return_value = [
             ExecutionSizeEntry("fresh-key", 100, "2026-01-01T00:00:00"),
         ]
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.last_access.return_value = {"fresh-key": time.time()}
         svc = _make_svc(repo=repo, metrics=metrics)
 
@@ -354,13 +364,13 @@ class TestEvictStale:
         repo.soft_purge_execution.assert_not_called()
 
     def test_lru_falls_back_to_created_at_when_key_absent_from_last_access(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.current_executions_with_sizes.return_value = [
             ExecutionSizeEntry("old-key", 100, "2000-01-01T00:00:00"),
         ]
         repo.blob_keys_for_execution.return_value = []
         repo.total_stored_bytes.return_value = 0
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.last_access.return_value = {}
         svc = _make_svc(repo=repo, metrics=metrics)
 
@@ -371,7 +381,7 @@ class TestEvictStale:
 
 class TestEvictToQuota:
     def test_under_quota_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.total_stored_bytes.return_value = 100
         svc = _make_svc(repo=repo)
 
@@ -381,7 +391,7 @@ class TestEvictToQuota:
         repo.current_executions_with_sizes.assert_not_called()
 
     def test_at_quota_returns_empty_report(self):
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.total_stored_bytes.return_value = 500
         svc = _make_svc(repo=repo)
 
@@ -394,11 +404,11 @@ class TestEvictToQuota:
             ExecutionSizeEntry("oldest", 600, "2025-01-01T00:00:00"),
             ExecutionSizeEntry("newest", 600, "2026-01-01T00:00:00"),
         ]
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.total_stored_bytes.side_effect = [1200, 0, 0]
         repo.current_executions_with_sizes.return_value = entries
         repo.blob_keys_for_execution.return_value = []
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.last_access.return_value = {"oldest": 1000.0, "newest": time.time()}
         svc = _make_svc(repo=repo, metrics=metrics)
 
@@ -410,12 +420,12 @@ class TestEvictToQuota:
     def test_blobs_with_zero_references_are_removed_from_blob_store(self):
         entries = [ExecutionSizeEntry("key1", 100, "2020-01-01T00:00:00")]
         blob = create_autospec(BlobStorePort)
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.total_stored_bytes.side_effect = [1000, 0, 0]
         repo.current_executions_with_sizes.return_value = entries
         repo.blob_keys_for_execution.return_value = ["blob-orphan"]
         repo.blob_reference_count.return_value = 0
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.last_access.return_value = {"key1": 0.0}
         svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 
@@ -426,12 +436,12 @@ class TestEvictToQuota:
     def test_blobs_still_referenced_are_not_removed_from_blob_store(self):
         entries = [ExecutionSizeEntry("key1", 100, "2020-01-01T00:00:00")]
         blob = create_autospec(BlobStorePort)
-        repo = create_autospec(ExecutionRepositoryPort)
+        repo = create_autospec(_MlRunStore)
         repo.total_stored_bytes.side_effect = [1000, 0, 0]
         repo.current_executions_with_sizes.return_value = entries
         repo.blob_keys_for_execution.return_value = ["blob-shared"]
         repo.blob_reference_count.return_value = 2
-        metrics = create_autospec(MetricsPort)
+        metrics = create_autospec(_CallJournal)
         metrics.last_access.return_value = {"key1": 0.0}
         svc = _make_svc(repo=repo, blob=blob, metrics=metrics)
 

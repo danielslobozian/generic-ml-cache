@@ -13,10 +13,14 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
     ExecutionSizeEntry,
     ExecutionSummary,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
 )
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
@@ -24,7 +28,13 @@ from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serial
 )
 
 
-class InMemoryExecutionRepository(ExecutionRepositoryPort):
+class InMemoryExecutionRepository(
+    SaveMlRunPort,
+    ReadMlRunPort,
+    AnnotateMlRunPort,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+):
     """An in-memory, append-only implementation of the execution repository.
 
     Holds only structure: every saved execution is dehydrated (artifact bytes

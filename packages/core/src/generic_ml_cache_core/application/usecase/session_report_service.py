@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import SessionEventRow
 from generic_ml_cache_core.application.domain.model.session.session_report import (
     SessionReport,
     TagSessionReport,
@@ -30,31 +31,35 @@ from generic_ml_cache_core.application.port.inbound.session_report.report_for_ta
 from generic_ml_cache_core.application.port.inbound.session_report.report_for_tag_use_case import (
     ReportForTagUseCase,
 )
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    SessionQueryPort,
+    SessionReportSourcePort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import (
-    MetricsPort,
-    SessionEventRow,
-)
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import ReadMlRunPort
 
 
 class SessionReportService(ReportForSessionUseCase, ReportForTagUseCase):
     """Report on one session, or on every session carrying a tag."""
 
-    def __init__(self, metrics: MetricsPort, repository: ExecutionRepositoryPort) -> None:
-        self._metrics = metrics
+    def __init__(
+        self,
+        report_source: SessionReportSourcePort,
+        sessions: SessionQueryPort,
+        repository: ReadMlRunPort,
+    ) -> None:
+        self._report_source = report_source
+        self._sessions = sessions
         self._repository = repository
 
     def report_for_session(self, command: ReportForSessionCommand) -> SessionReport:
-        events = self._metrics.session_events(command.session_id)
+        events = self._report_source.session_events(command.session_id)
         return build_session_report(command.session_id, events, self._usage_by_key(events))
 
     def report_for_tag(self, command: ReportForTagCommand) -> TagSessionReport:
-        session_ids = self._metrics.session_ids_for_tag(command.tag)
+        session_ids = self._sessions.session_ids_for_tag(command.tag)
         events: list[SessionEventRow] = []
         for session_id in session_ids:
-            events.extend(self._metrics.session_events(session_id))
+            events.extend(self._report_source.session_events(session_id))
         report = build_session_report(command.tag, events, self._usage_by_key(events))
         return TagSessionReport(tag=command.tag, report=report, session_count=len(session_ids))
 

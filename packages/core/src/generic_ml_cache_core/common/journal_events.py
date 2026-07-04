@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Journal event names recorded through the MetricsPort.
+"""Journal event names recorded through the call journal (RecordCallEventPort).
 
 The shared vocabulary every use case logs against. Caching and metrics are
 independent concerns: every resolution emits exactly one event, including the

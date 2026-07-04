@@ -10,13 +10,13 @@ from generic_ml_cache_core.application.port.inbound.store_stats.event_counts_use
 from generic_ml_cache_core.application.port.inbound.store_stats.hit_counts_by_key_use_case import (
     HitCountsByKeyUseCase,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import CallStatsPort
 
 
 class StoreStatsService(EventCountsUseCase, HitCountsByKeyUseCase):
     """Event and hit aggregates via the metrics out-port."""
 
-    def __init__(self, metrics: MetricsPort) -> None:
+    def __init__(self, metrics: CallStatsPort) -> None:
         self._metrics = metrics
 
     def event_counts(self) -> dict[str, int]:

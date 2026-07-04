@@ -6,7 +6,15 @@ from __future__ import annotations
 
 import sqlite3
 
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
+)
 
 from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
 from generic_ml_cache_adapters.adapter.outbound.metrics.journal_metrics import JournalMetrics
@@ -34,8 +42,15 @@ def _session_ids(tmp_path):
         conn.close()
 
 
-def test_is_a_metrics_port(tmp_path):
-    assert isinstance(_metrics(tmp_path), MetricsPort)
+def test_implements_call_journal_ports(tmp_path):
+    metrics = _metrics(tmp_path)
+    assert isinstance(metrics, RecordCallEventPort)
+    assert isinstance(metrics, CallStatsPort)
+    assert isinstance(metrics, SessionReportSourcePort)
+    assert isinstance(metrics, SessionQueryPort)
+    assert isinstance(metrics, PurgeJournalPort)
+    assert isinstance(metrics, SessionTagsPort)
+    assert isinstance(metrics, SessionSpecPort)
 
 
 def test_recorded_events_are_counted(tmp_path):

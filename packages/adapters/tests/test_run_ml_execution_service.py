@@ -30,11 +30,19 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_exec
 )
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
+)
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import CacheMiss
@@ -149,7 +157,15 @@ class FakeBlobStore(BlobStorePort):
         self.store.pop(key, None)
 
 
-class FakeMetrics(MetricsPort):
+class FakeMetrics(
+    RecordCallEventPort,
+    CallStatsPort,
+    SessionReportSourcePort,
+    SessionQueryPort,
+    PurgeJournalPort,
+    SessionTagsPort,
+    SessionSpecPort,
+):
     def __init__(self) -> None:
         self.events: list[dict] = []
 
@@ -302,8 +318,10 @@ class _Harness:
             FakeFileFingerprint(),
             _runners_for(self.runner, self.passthrough, self.api),
             self.blob,
-            self.repo,
-            self.metrics,
+            save=self.repo,
+            read=self.repo,
+            annotate=self.repo,
+            record=self.metrics,
             workspace=FakeWorkspace(),
         )
 
@@ -575,8 +593,10 @@ def _harness_with_quota(max_size: int | None) -> tuple:
         FakeFileFingerprint(),
         _runners_for(harness.runner, harness.passthrough, harness.api),
         harness.blob,
-        harness.repo,
-        harness.metrics,
+        save=harness.repo,
+        read=harness.repo,
+        annotate=harness.repo,
+        record=harness.metrics,
         purge_service=spy,
         max_size=max_size,
         workspace=FakeWorkspace(),
@@ -616,8 +636,10 @@ def test_eviction_not_triggered_on_failed_run():
         FakeFileFingerprint(),
         _runners_for(failing_harness.runner, failing_harness.passthrough, failing_harness.api),
         failing_harness.blob,
-        failing_harness.repo,
-        failing_harness.metrics,
+        save=failing_harness.repo,
+        read=failing_harness.repo,
+        annotate=failing_harness.repo,
+        record=failing_harness.metrics,
         purge_service=spy,
         max_size=1_000_000,
         workspace=FakeWorkspace(),

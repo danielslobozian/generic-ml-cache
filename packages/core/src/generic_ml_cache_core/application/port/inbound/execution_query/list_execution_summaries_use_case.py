@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ExecutionSummary,
 )
 

@@ -1,20 +1,34 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""JournalMetrics: the MetricsPort over the SQLite access registry."""
+"""JournalMetrics: the call-journal ports over the SQLite access registry."""
 
 from __future__ import annotations
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import SessionEventRow
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
-from generic_ml_cache_core.application.port.outbound.metrics_port import (
-    MetricsPort,
-    SessionEventRow,
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
 )
 
 from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
 
 
-class JournalMetrics(MetricsPort):
-    """Implements the journal over the existing best-effort access registry.
+class JournalMetrics(
+    RecordCallEventPort,
+    CallStatsPort,
+    SessionReportSourcePort,
+    SessionQueryPort,
+    PurgeJournalPort,
+    SessionTagsPort,
+    SessionSpecPort,
+):
+    """Implements the call-journal role ports over the best-effort access registry.
 
     Non-load-bearing by construction: the registry swallows its own errors, so
     ``record_event`` never raises and the projections return empty on failure —

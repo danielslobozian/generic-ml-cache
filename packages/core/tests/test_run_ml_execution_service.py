@@ -24,26 +24,34 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_exec
     RunMlExecutionCommand,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
-)
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
+)
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
+
+
+class _MlRunStore(SaveMlRunPort, ReadMlRunPort, AnnotateMlRunPort): ...
 
 
 def _make_svc(
     file_fingerprint=None, runners=None, purge_service=None, max_size=None, workspace=None
 ):
+    store = create_autospec(_MlRunStore)
     return RunMlExecutionService(
         file_fingerprint=file_fingerprint or create_autospec(FileFingerprintPort),
         runners=runners or {},
         blob_store=create_autospec(BlobStorePort),
-        repository=create_autospec(ExecutionRepositoryPort),
-        metrics=create_autospec(MetricsPort),
+        save=store,
+        read=store,
+        annotate=store,
+        record=create_autospec(RecordCallEventPort),
         purge_service=purge_service,
         max_size=max_size,
         workspace=workspace,

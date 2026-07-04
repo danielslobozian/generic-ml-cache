@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for SessionReportService (the session-report inbound capability)."""
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import (
+    SessionEventRow,
+)
 from generic_ml_cache_core.application.port.inbound.session_report.report_for_session_command import (
     ReportForSessionCommand,
 )
 from generic_ml_cache_core.application.port.inbound.session_report.report_for_tag_command import (
     ReportForTagCommand,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import SessionEventRow
 from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 
 
@@ -40,8 +42,9 @@ class _FakeRepo:
 
 
 def test_report_for_session_counts_events():
+    metrics = _FakeMetrics({"s1": [_event(), _event(event="hit")]}, {})
     svc = SessionReportService(  # type: ignore[arg-type]  # duck-typed ports
-        _FakeMetrics({"s1": [_event(), _event(event="hit")]}, {}), _FakeRepo()
+        report_source=metrics, sessions=metrics, repository=_FakeRepo()
     )
     report = svc.report_for_session(ReportForSessionCommand("s1"))
     assert report.session_id == "s1"
@@ -51,7 +54,8 @@ def test_report_for_session_counts_events():
 
 
 def test_report_for_session_unknown_session_is_empty():
-    svc = SessionReportService(_FakeMetrics({}, {}), _FakeRepo())  # type: ignore[arg-type]
+    metrics = _FakeMetrics({}, {})
+    svc = SessionReportService(report_source=metrics, sessions=metrics, repository=_FakeRepo())  # type: ignore[arg-type]
     report = svc.report_for_session(ReportForSessionCommand("nope"))
     assert report.invocations == 0
 
@@ -61,7 +65,7 @@ def test_report_for_tag_merges_sessions():
         {"s1": [_event()], "s2": [_event(), _event()]},
         {"t": ["s1", "s2"]},
     )
-    svc = SessionReportService(metrics, _FakeRepo())  # type: ignore[arg-type]
+    svc = SessionReportService(report_source=metrics, sessions=metrics, repository=_FakeRepo())  # type: ignore[arg-type]
     result = svc.report_for_tag(ReportForTagCommand("t"))
     assert result.tag == "t"
     assert result.session_count == 2
@@ -69,7 +73,8 @@ def test_report_for_tag_merges_sessions():
 
 
 def test_report_for_tag_no_sessions():
-    svc = SessionReportService(_FakeMetrics({}, {}), _FakeRepo())  # type: ignore[arg-type]
+    metrics = _FakeMetrics({}, {})
+    svc = SessionReportService(report_source=metrics, sessions=metrics, repository=_FakeRepo())  # type: ignore[arg-type]
     result = svc.report_for_tag(ReportForTagCommand("missing"))
     assert result.session_count == 0
     assert result.report.invocations == 0

@@ -27,12 +27,10 @@ from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gatewa
     RunMlGatewayUseCase,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
-)
 from generic_ml_cache_core.application.port.outbound.gateway_forward_port import GatewayForwardPort
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import SaveMlRunPort
 from generic_ml_cache_core.common import journal_events
 
 _SUCCESS_STATUS = 200
@@ -51,8 +49,8 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         self,
         blob_store: BlobStorePort,
         gateway_forward_port: GatewayForwardPort,
-        repository: ExecutionRepositoryPort,
-        metrics: MetricsPort,
+        repository: SaveMlRunPort,
+        metrics: RecordCallEventPort,
         diag: DiagnosticsPort | None = None,
     ) -> None:
         self._blob_store = blob_store

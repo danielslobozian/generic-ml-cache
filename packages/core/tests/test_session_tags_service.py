@@ -15,7 +15,7 @@ from generic_ml_cache_core.application.usecase.session_tags_service import Sessi
 
 
 class _FakeMetrics:
-    """A duck-typed stand-in for the slice of MetricsPort the service uses."""
+    """A duck-typed stand-in for the slice of SessionTagsPort the service uses."""
 
     def __init__(self) -> None:
         self._tags: dict[str, set[str]] = {}

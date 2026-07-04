@@ -34,9 +34,9 @@ from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_exe
 from generic_ml_cache_core.application.port.inbound.execution_query.total_stored_bytes_use_case import (
     TotalStoredBytesUseCase,
 )
-from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ExecutionSummary,
+    InspectMlRunsPort,
 )
 
 
@@ -49,7 +49,7 @@ class ExecutionQueryService(
 ):
     """Read the stored executions via the execution repository out-port."""
 
-    def __init__(self, repository: ExecutionRepositoryPort) -> None:
+    def __init__(self, repository: InspectMlRunsPort) -> None:
         self._repository = repository
 
     def list_summaries(self) -> list[ExecutionSummary]:

@@ -14,6 +14,9 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
+from generic_ml_cache_core.application.domain.model.session.session_event_row import (
+    SessionEventRow,
+)
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
@@ -36,11 +39,16 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command i
     PurgeByTagCommand,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
-from generic_ml_cache_core.application.port.outbound.metrics_port import (
-    MetricsPort,
-    SessionEventRow,
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
 )
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
@@ -72,7 +80,15 @@ class InMemoryBlobStore(BlobStorePort):
         return key in self._store
 
 
-class FakeMetrics(MetricsPort):
+class FakeMetrics(
+    RecordCallEventPort,
+    CallStatsPort,
+    SessionReportSourcePort,
+    SessionQueryPort,
+    PurgeJournalPort,
+    SessionTagsPort,
+    SessionSpecPort,
+):
     """Controllable fake for PurgeService tests."""
 
     def __init__(
@@ -169,7 +185,7 @@ def _service(repository=None, blob_store=None, metrics=None):
     repo = repository or InMemoryExecutionRepository(FixedClock())
     store = blob_store or InMemoryBlobStore()
     met = metrics or FakeMetrics()
-    return PurgeService(repo, store, met), repo, store, met
+    return PurgeService(repo, store, met, met), repo, store, met
 
 
 # --- soft purge: purge_one ---------------------------------------------------
@@ -265,7 +281,7 @@ def test_purge_by_session_purges_matching_executions():
     repo = InMemoryExecutionRepository(FixedClock())
     store = InMemoryBlobStore()
     metrics = FakeMetrics(session_keys={"sess-1": [id_a.generate_key()]})
-    svc = PurgeService(repo, store, metrics)
+    svc = PurgeService(repo, store, metrics, metrics)
 
     repo.save(_execution(id_a, content=b"aaa"))
     repo.save(_execution(id_b, content=b"bb"))
@@ -474,7 +490,7 @@ def test_evict_to_quota_evicts_least_recently_accessed():
             id_new.generate_key(): 999.0,
         }
     )
-    svc = PurgeService(repo, store, metrics)
+    svc = PurgeService(repo, store, metrics, metrics)
 
     # quota is just under the total — need to evict one execution
     total = len(old_content) + len(new_content)
@@ -499,7 +515,8 @@ def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():
     # No access data — creation-time fallback; both entries created_at="" so
     # both get epoch 0.0 and any one of them may be evicted. Validate the
     # service runs without error and evicts exactly enough.
-    svc = PurgeService(repo, store, FakeMetrics())
+    metrics = FakeMetrics()
+    svc = PurgeService(repo, store, metrics, metrics)
     total = len(b"content_a") + len(b"content_b")
     report = svc.evict_to_quota(EvictToQuotaCommand(max_bytes=total - 1))
 
@@ -516,7 +533,7 @@ def _svc_with_session_tag(tag: str, session_ids: list[str], key_per_session: dic
     metrics = FakeMetrics(
         session_keys={sid: [key] for sid, key in key_per_session.items()},
     )._with_session_tags({tag: session_ids})
-    return PurgeService(repo, store, metrics), repo
+    return PurgeService(repo, store, metrics, metrics), repo
 
 
 def _repo_with_entries(keys: list[str]):
@@ -562,7 +579,7 @@ def test_purge_by_session_tag_deduplicates_shared_keys():
     metrics = FakeMetrics(
         session_keys={"s1": ["shared-key"], "s2": ["shared-key"]},
     )._with_session_tags({"tag": ["s1", "s2"]})
-    svc = PurgeService(repo, blob_store, metrics)
+    svc = PurgeService(repo, blob_store, metrics, metrics)
     report = svc.purge_by_session_tag(PurgeBySessionTagCommand("tag"))
     assert report.executions_removed == 1
 
@@ -590,7 +607,7 @@ def test_evict_stale_removes_entries_older_than_cutoff():
     blob_store.put("blob_" + b"recent".hex(), b"recent")
 
     metrics = FakeMetrics(last_access={old_key: old_epoch, recent_key: recent_epoch})
-    svc = PurgeService(repo, blob_store, metrics)
+    svc = PurgeService(repo, blob_store, metrics, metrics)
 
     report = svc.evict_stale(EvictStaleCommand(max_age_seconds=3600))
     assert report.executions_removed == 1
@@ -610,7 +627,7 @@ def test_evict_stale_noop_when_nothing_is_stale():
     repo.save(_execution(id2, b"v2"))
 
     metrics = FakeMetrics(last_access={key1: now - 60, key2: now - 120})
-    svc = PurgeService(repo, blob_store, metrics)
+    svc = PurgeService(repo, blob_store, metrics, metrics)
 
     report = svc.evict_stale(EvictStaleCommand(max_age_seconds=3600))
     assert report.executions_removed == 0
@@ -621,7 +638,7 @@ def test_evict_stale_fallback_to_created_at_when_no_access_event():
     # no last_access entry for this key -> falls back to created_at (fixed clock = _MOMENT)
     # _MOMENT is 2026-06-21 09:30 UTC, which is far in the past
     metrics = FakeMetrics(last_access={})
-    svc = PurgeService(repo, blob_store, metrics)
+    svc = PurgeService(repo, blob_store, metrics, metrics)
 
     report = svc.evict_stale(
         EvictStaleCommand(max_age_seconds=60)
@@ -631,7 +648,8 @@ def test_evict_stale_fallback_to_created_at_when_no_access_event():
 
 def test_evict_stale_zero_or_negative_max_age_is_noop():
     repo, blob_store = _repo_with_entries(["key1"])
-    svc = PurgeService(repo, blob_store, FakeMetrics())
+    metrics = FakeMetrics()
+    svc = PurgeService(repo, blob_store, metrics, metrics)
     assert svc.evict_stale(EvictStaleCommand(max_age_seconds=0)).executions_removed == 0
     assert svc.evict_stale(EvictStaleCommand(max_age_seconds=-1)).executions_removed == 0
 
@@ -670,7 +688,7 @@ def test_hard_delete_by_session_removes_matching_executions():
     repo.save(_execution(identity, content=b"answer"))
     store.put("blob_" + b"answer".hex(), b"answer")
     metrics = FakeMetrics(session_keys={"sess-1": [key]})
-    svc = PurgeService(repo, store, metrics)
+    svc = PurgeService(repo, store, metrics, metrics)
 
     report = svc.purge_by_session(PurgeBySessionCommand("sess-1", hard=True))
 

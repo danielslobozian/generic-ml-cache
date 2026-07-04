@@ -28,13 +28,13 @@ from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_c
 from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_use_case import (
     UntagSessionUseCase,
 )
-from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import SessionTagsPort
 
 
 class SessionTagsService(TagSessionUseCase, UntagSessionUseCase, ListSessionTagsUseCase):
     """Tag, untag, and list a session's tags via the metrics out-port."""
 
-    def __init__(self, metrics: MetricsPort) -> None:
+    def __init__(self, metrics: SessionTagsPort) -> None:
         self._metrics = metrics
 
     def tag(self, command: TagSessionCommand) -> None:
