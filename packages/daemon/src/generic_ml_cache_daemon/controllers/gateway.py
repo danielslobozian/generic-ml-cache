@@ -100,7 +100,9 @@ def _to_http_response(execution: MlExecution) -> tuple[int, bytes]:
     if execution.execution_state is ExecutionState.SUCCESS:
         return _HTTP_OK, response_body
     upstream_status = execution.failure.exit_code if execution.failure else None
-    return upstream_status or _BAD_GATEWAY, response_body
+    # A real upstream status of 0 is falsy but valid — use an explicit None check so a
+    # 0 is not silently rewritten to 502 (only a genuinely absent status falls back).
+    return (upstream_status if upstream_status is not None else _BAD_GATEWAY), response_body
 
 
 def _stdout_bytes(execution: MlExecution) -> bytes:

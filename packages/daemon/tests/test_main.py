@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_daemon.__main__ import main
 
@@ -37,14 +38,33 @@ def test_module_invocation_help_exits_promptly() -> None:
     assert "usage:" in result.stdout
 
 
-def test_custom_host_and_port_flags(tmp_path: Path, monkeypatch) -> None:
+def test_custom_loopback_host_and_port_flags(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path))
     mock_run = MagicMock()
     with patch("uvicorn.run", mock_run):
+        main(["--host", "127.0.0.1", "--port", "9999"])
+    _, kwargs = mock_run.call_args
+    assert kwargs["host"] == "127.0.0.1"
+    assert kwargs["port"] == 9999
+
+
+def test_non_loopback_host_is_refused_without_the_override(tmp_path: Path, monkeypatch) -> None:
+    # Y11: binding a routable address exposes the body-only gateway cache; refuse it
+    # with a ConfigError (before any server starts) unless the risk is named.
+    monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path))
+    mock_run = MagicMock()
+    with patch("uvicorn.run", mock_run), pytest.raises(ConfigError):
         main(["--host", "0.0.0.0", "--port", "9999"])
+    assert not mock_run.called  # never reached uvicorn
+
+
+def test_non_loopback_host_is_allowed_with_the_override(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GMLCACHE_STORE", str(tmp_path))
+    mock_run = MagicMock()
+    with patch("uvicorn.run", mock_run):
+        main(["--host", "0.0.0.0", "--unsafe-allow-network-gateway"])
     _, kwargs = mock_run.call_args
     assert kwargs["host"] == "0.0.0.0"
-    assert kwargs["port"] == 9999
 
 
 def test_main_parses_size_age_and_adapters_from_env(tmp_path: Path, monkeypatch) -> None:

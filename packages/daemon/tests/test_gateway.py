@@ -182,3 +182,52 @@ def test_missing_model_is_rejected_locally_without_relaying(tmp_path: Path) -> N
         response = client.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]})
     assert response.status_code == 422
     urlopen.assert_not_called()  # rejected before any upstream call
+
+
+# ---------------------------------------------------------------------------
+# _to_http_response: a real upstream status of 0 must not be masked as 502 (Y11 nit)
+# ---------------------------------------------------------------------------
+
+
+def test_upstream_status_zero_is_preserved_not_rewritten_to_502() -> None:
+    from types import SimpleNamespace
+
+    from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
+        ExecutionFailure,
+        FailureReason,
+    )
+    from generic_ml_cache_core.application.domain.model.execution.execution_state import (
+        ExecutionState,
+    )
+
+    from generic_ml_cache_daemon.controllers.gateway import _to_http_response
+
+    execution = SimpleNamespace(
+        execution_state=ExecutionState.FAILED,
+        failure=ExecutionFailure(reason=FailureReason.NONZERO_EXIT, message="x", exit_code=0),
+        artifacts=[],
+    )
+    status, _ = _to_http_response(execution)  # type: ignore[arg-type]
+    assert status == 0  # a real 0 is falsy but valid — not silently rewritten to 502
+
+
+def test_absent_upstream_status_falls_back_to_502() -> None:
+    from types import SimpleNamespace
+
+    from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
+        ExecutionFailure,
+        FailureReason,
+    )
+    from generic_ml_cache_core.application.domain.model.execution.execution_state import (
+        ExecutionState,
+    )
+
+    from generic_ml_cache_daemon.controllers.gateway import _to_http_response
+
+    execution = SimpleNamespace(
+        execution_state=ExecutionState.FAILED,
+        failure=ExecutionFailure(reason=FailureReason.CLIENT_ERROR, message="x", exit_code=None),
+        artifacts=[],
+    )
+    status, _ = _to_http_response(execution)  # type: ignore[arg-type]
+    assert status == 502  # a genuinely absent status still falls back

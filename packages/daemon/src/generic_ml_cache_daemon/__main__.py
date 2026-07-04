@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 import re
 from pathlib import Path
 
 import uvicorn
+from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_daemon.app import create_app
 
@@ -51,6 +53,39 @@ def _parse_adapters(raw: str) -> frozenset[str] | None:
     return frozenset(name.strip() for name in text.split(",") if name.strip())
 
 
+def _is_loopback_host(host: str) -> bool:
+    """Whether ``host`` binds only the local machine. ``localhost`` and any address in a
+    loopback range (127.0.0.0/8, ::1) are loopback; ``0.0.0.0`` / ``::`` (all interfaces)
+    and any routable address are NOT. An un-classifiable hostname is treated as
+    non-loopback — safe by default."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _require_safe_bind(host: str, unsafe_allow_network_gateway: bool) -> None:
+    """Refuse a non-loopback bind unless the operator explicitly opts in (Y11).
+
+    The gateway's passthrough cache is keyed on the request body ONLY, not the caller's
+    auth token (X4) — safe on localhost, but on a routable address a second caller could
+    be served the first caller's provider-authorized response. So a non-loopback ``--host``
+    is a ``ConfigError`` unless ``--unsafe-allow-network-gateway`` loudly names the risk;
+    this turns 'safe by default, dangerous by a silent flag' into 'dangerous only when
+    you say so'."""
+    if unsafe_allow_network_gateway or _is_loopback_host(host):
+        return
+    raise ConfigError(
+        f"refusing to bind the daemon to the non-loopback host {host!r}: the gateway's "
+        "passthrough cache is keyed on the request body only (not the caller's auth "
+        "token), so exposing it to a network could serve one caller another's "
+        "provider-authorized response. Pass --unsafe-allow-network-gateway to override "
+        "if you accept that risk."
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     # Parse args first so ``--help`` prints usage and exits *before* any server
     # starts. All cache behaviour is configured by GMLCACHE_* environment variables;
@@ -69,7 +104,19 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--port", type=int, default=_DEFAULT_PORT, help="bind port (default: %(default)s)"
     )
+    parser.add_argument(
+        "--unsafe-allow-network-gateway",
+        action="store_true",
+        help=(
+            "allow binding a non-loopback --host despite the body-only cache key "
+            "(a network caller could be served another caller's response) — off by default"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    # Refuse a routable bind unless the risk is explicitly named (Y11), before any
+    # server or store is touched.
+    _require_safe_bind(args.host, args.unsafe_allow_network_gateway)
 
     store_root = Path(os.environ.get("GMLCACHE_STORE", str(Path.home() / ".gmlcache")))
     session_id = os.environ.get("GMLCACHE_SESSION") or None

@@ -115,8 +115,9 @@ stay exact for SDK compatibility).
 > machine, but it means two different callers who send the same body share one cache
 > entry regardless of their credentials. **Never expose this daemon to a network or
 > to multiple users** — a second caller could be served the first caller's
-> provider-authorized response. It binds `127.0.0.1` by default for exactly this
-> reason; do not override `--host` to a routable address on an untrusted network.
+> provider-authorized response. It binds `127.0.0.1` by default, and a non-loopback
+> `--host` is **refused** (a `ConfigError`) unless you pass
+> `--unsafe-allow-network-gateway` to loudly accept the risk.
 
 **Limitations:** single-turn conversations only (one `role: user` message,
 no prior assistant turns). Multi-turn support is planned.

@@ -58,7 +58,7 @@ Its core cache is **exact and content-addressed**. Around it: inspection, per-se
 
 gmlcache is a **single-user** tool for discovering, testing, and integrating AI: it records a real call once and replays it forever by checksum, across whichever subscriptions and APIs **you already hold**. It runs **locally, on your machine, as you**.
 
-It is **not** a gateway, **not** a multi-user router, and **not** a way to make one subscription serve several people. If you want a gateway, the market already has them (LiteLLM, Portkey, Helicone, …) — gmlcache deliberately isn't one.
+It is **not** a **multi-user** gateway or router, and **not** a way to make one subscription serve several people. It *does* ship a local, single-principal caching proxy (the daemon's `/gateway/claude` route) for your own calls on your own machine — but that binds localhost and is single-user by design, not a shared gateway. If you want a multi-user gateway, the market already has them (LiteLLM, Portkey, Helicone, …) — gmlcache deliberately isn't one.
 
 > [!IMPORTANT]
 > **Being upfront.** Because gmlcache drives the vendors' *own* CLIs, you *could* wire it to front one subscription for many people — the tool doesn't technically stop you, the same way `git` doesn't stop a bad commit. But that is a violation of **your** provider's terms that **you** commit, identical to sharing your password, and it is explicitly **not** what gmlcache is for. We're not hiding behind "it's impossible" — it isn't impossible; it's simply not the intent, and respecting your provider's licence is your responsibility.
