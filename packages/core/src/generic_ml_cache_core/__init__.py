@@ -108,12 +108,30 @@ from generic_ml_cache_core.application.domain.model.identity.identity_codec impo
     deserialize_call_identity,
     serialize_call_identity,
 )
+from generic_ml_cache_core.application.domain.model.model_info import (  # noqa: E402  # fmt: skip
+    ModelInfo,
+)
+from generic_ml_cache_core.application.domain.model.run.api_passthrough_request import (  # noqa: E402  # fmt: skip
+    ApiPassthroughRequest,
+)
+from generic_ml_cache_core.application.domain.model.run.client_answer import (  # noqa: E402  # fmt: skip
+    ClientAnswer,
+)
 from generic_ml_cache_core.application.domain.model.run.client_run_result import (  # noqa: E402  # fmt: skip
     ClientRunResult,
     GeneratedFile,
 )
+from generic_ml_cache_core.application.domain.model.run.managed_local_request import (  # noqa: E402  # fmt: skip
+    ManagedLocalRequest,
+)
 from generic_ml_cache_core.application.domain.model.run.ml_request import (  # noqa: E402  # fmt: skip
     MlRequest,
+)
+from generic_ml_cache_core.application.domain.model.run.passthrough_request import (  # noqa: E402  # fmt: skip
+    PassthroughRequest,
+)
+from generic_ml_cache_core.application.domain.model.run.workspace import (  # noqa: E402  # fmt: skip
+    Workspace,
 )
 from generic_ml_cache_core.application.domain.model.session.session_event_row import (  # noqa: E402  # fmt: skip
     SessionEventRow,
@@ -133,6 +151,12 @@ from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import
 from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (  # noqa: E402  # fmt: skip
     AdapterResolverPort,
 )
+from generic_ml_cache_core.application.port.outbound.api_client_port import (  # noqa: E402  # fmt: skip
+    ApiClientPort,
+)
+from generic_ml_cache_core.application.port.outbound.api_passthrough_runner_port import (  # noqa: E402  # fmt: skip
+    ApiPassthroughRunnerPort,
+)
 from generic_ml_cache_core.application.port.outbound.blob_store_port import (  # noqa: E402  # fmt: skip
     BlobStorePort,
 )
@@ -151,6 +175,18 @@ from generic_ml_cache_core.application.port.outbound.diagnostics_port import (  
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (  # noqa: E402  # fmt: skip
     FileFingerprintPort,
 )
+from generic_ml_cache_core.application.port.outbound.local_client_port import (  # noqa: E402  # fmt: skip
+    LocalClientPort,
+)
+from generic_ml_cache_core.application.port.outbound.local_client_probe_port import (  # noqa: E402  # fmt: skip
+    LocalClientProbePort,
+)
+from generic_ml_cache_core.application.port.outbound.local_model_listing_port import (  # noqa: E402  # fmt: skip
+    LocalModelListingPort,
+)
+from generic_ml_cache_core.application.port.outbound.managed_local_runner_port import (  # noqa: E402  # fmt: skip
+    ManagedLocalRunnerPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import (  # noqa: E402  # fmt: skip
     AnnotateMlRunPort,
     ExecutionSizeEntry,
@@ -162,6 +198,12 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (  # no
 )
 from generic_ml_cache_core.application.port.outbound.ml_runner_port import (
     MlRunnerPort,  # noqa: E402  # fmt: skip
+)
+from generic_ml_cache_core.application.port.outbound.model_listing_port import (  # noqa: E402  # fmt: skip
+    ModelListingPort,
+)
+from generic_ml_cache_core.application.port.outbound.passthrough_local_runner_port import (  # noqa: E402  # fmt: skip
+    PassthroughLocalRunnerPort,
 )
 from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (  # noqa: E402  # fmt: skip
     RegisteredAdapterPort,
@@ -247,6 +289,17 @@ __all__ = [
     "RegisteredAdapterPort",
     "FileFingerprintPort",
     "DiagnosticsPort",
+    # The driven-client role ports a custom client adapter IMPLEMENTS (Y14): the README
+    # sells "implement the ports to run your own client", so these must be on the stable
+    # public surface, not reached via internal application/port paths.
+    "ApiClientPort",
+    "ApiPassthroughRunnerPort",
+    "ManagedLocalRunnerPort",
+    "PassthroughLocalRunnerPort",
+    "LocalClientPort",
+    "ModelListingPort",
+    "LocalModelListingPort",
+    "LocalClientProbePort",
     # Domain vocabulary the public ports reference — the DTOs/enums an embedder
     # must construct/read to implement a port (W21). CallIdentity is exported OPAQUE
     # (its four subclasses stay internal); round-trip it with the serialize pair.
@@ -264,6 +317,14 @@ __all__ = [
     "MlRequest",
     "ClientRunResult",
     "GeneratedFile",
+    # Driven-client request/response DTOs the role ports reference (Y14): what a custom
+    # client adapter receives and returns.
+    "ManagedLocalRequest",
+    "PassthroughRequest",
+    "ApiPassthroughRequest",
+    "ClientAnswer",
+    "Workspace",
+    "ModelInfo",
     "AdapterDescriptor",
     "AdapterBoundary",
     "ClientCapability",

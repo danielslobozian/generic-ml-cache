@@ -110,6 +110,25 @@ def test_the_consumed_composition_spi_ports_are_importable() -> None:
         assert name in core.__all__ and hasattr(core, name)
 
 
+def test_the_driven_client_role_ports_are_exported() -> None:
+    # Y14: the README sells "implement the ports to run your own client", so the
+    # driven-client role ports a custom adapter implements must be on the stable public
+    # surface (X17 exported the composition SPI but deliberately excluded these). The
+    # W21 walk below then guarantees their whole referenced vocabulary is exported too.
+    for name in (
+        "ApiClientPort",
+        "ApiPassthroughRunnerPort",
+        "ManagedLocalRunnerPort",
+        "PassthroughLocalRunnerPort",
+        "LocalClientPort",
+        "ModelListingPort",
+        "LocalModelListingPort",
+        "LocalClientProbePort",
+    ):
+        assert name in core.__all__
+        assert hasattr(core, name)
+
+
 def test_public_ports_vocabulary_is_fully_exported() -> None:
     # An embedder implementing a public outbound port must be able to construct/read
     # every core type its signatures reference — transitively (W21). If a referenced
