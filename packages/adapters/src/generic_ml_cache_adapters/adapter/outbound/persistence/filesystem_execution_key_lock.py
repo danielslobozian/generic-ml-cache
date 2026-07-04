@@ -13,6 +13,14 @@ Unlike the store lock (fail-fast, ``LOCK_NB``), this one BLOCKS with a bounded t
 it retries the non-blocking acquire until a deadline (portable to Windows, which has no
 timed blocking flock), and on timeout PROCEEDS without the cross-process lock rather
 than failing the user's call because a peer hung.
+
+The wait is SIZED to the client call it protects (Y2): a contender waits out a peer's
+whole client run (the client timeout + a margin) so an ordinary *slow* call coalesces
+into one client run, and only a genuinely hung/dead peer — already past its own timeout
+— ever falls through to a duplicate run. Composition passes that size to the constructor
+via :func:`lock_wait_for_client_timeout`; the bare ``_DEFAULT_TIMEOUT_SECONDS`` is only a
+fallback for a caller that does not size it. The never-block-the-user guarantee is kept:
+an unbounded (``None``) client timeout still falls back to a bounded ceiling.
 """
 
 from __future__ import annotations
@@ -37,11 +45,32 @@ _LOCKS_DIRNAME = "locks"
 #: another's even on a colliding stripe — eviction acquires victim keys' locks from
 #: inside a record that already holds the recorded key's lock (X10).
 _STRIPE_COUNT = 64
-#: Ceiling on the cross-process wait, mirroring SQLite's busy_timeout (5s); on timeout
-#: the caller proceeds (possible duplicate WORK, never duplicate corruption).
+#: Fallback ceiling on the cross-process wait for a caller that does not size the wait
+#: to a client call; on timeout the caller proceeds (possible duplicate WORK, never
+#: duplicate corruption). Composition normally overrides this via the constructor.
 _DEFAULT_TIMEOUT_SECONDS = 5.0
 #: Poll interval while waiting for the OS lock — a non-blocking retry loop (portable).
 _RETRY_INTERVAL_SECONDS = 0.05
+#: Added to the client timeout when sizing the wait (Y2), so a peer that runs right up
+#: to its timeout is still waited out rather than raced.
+_LOCK_WAIT_MARGIN_SECONDS = 30.0
+#: Bounded wait when the client timeout is unbounded (``None``): long enough to coalesce
+#: a realistic call, short enough that a truly hung peer still eventually falls through,
+#: honouring "never block the user forever" (X7).
+_UNBOUNDED_CLIENT_WAIT_CEILING_SECONDS = 300.0
+
+
+def lock_wait_for_client_timeout(client_timeout: float | None) -> float:
+    """Size the per-key cross-process wait to the client call it protects (Y2).
+
+    A contender should wait out a peer's whole client run — ``client_timeout`` plus a
+    margin — so an ordinary slow call yields ONE client run (the winner's result is
+    served to the waiter), and only a genuinely hung/dead peer past its own timeout ever
+    falls through to a duplicate run. An unbounded (``None``) client timeout falls back
+    to a bounded ceiling, keeping the never-block-the-user guarantee."""
+    if client_timeout is None:
+        return _UNBOUNDED_CLIENT_WAIT_CEILING_SECONDS
+    return client_timeout + _LOCK_WAIT_MARGIN_SECONDS
 
 
 def _try_lock(fd: int) -> bool:

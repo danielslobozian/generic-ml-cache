@@ -38,6 +38,7 @@ from generic_ml_cache_adapters.adapter.outbound.fingerprint.filesystem_file_fing
 )
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_execution_key_lock import (
     FilesystemExecutionKeyLock,
+    lock_wait_for_client_timeout,
 )
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
@@ -149,6 +150,7 @@ def build_application_api(
     encryption_token: str | None = None,
     max_size: int | None = None,
     whitelist: frozenset[str] | None = None,
+    client_timeout: float | None = None,
     diag: DiagnosticsPort | None = None,
 ) -> ApplicationApi:
     """Wire the application: the use-case graph over its outbound adapters.
@@ -181,8 +183,12 @@ def build_application_api(
     # One shared per-key lock instance (X7): the record path and eviction/purge both
     # coordinate on it, so an eviction of a key waits for a concurrent write of that
     # same key (and vice versa) — its in-process stripe only serializes if it is the
-    # same object.
-    execution_key_lock = FilesystemExecutionKeyLock(store_root, _diag)
+    # same object. Size its cross-process wait to the client call it protects (Y2), so a
+    # contender waits out an ordinary slow call (coalescing into one client run) instead
+    # of tripping the old fixed 5s and running the expensive call a second time.
+    execution_key_lock = FilesystemExecutionKeyLock(
+        store_root, _diag, timeout_seconds=lock_wait_for_client_timeout(client_timeout)
+    )
     provision_store(persistence.migration)
     catalog, resolver = catalog_and_resolver_for(whitelist)
     runners = build_runners(catalog, resolver)

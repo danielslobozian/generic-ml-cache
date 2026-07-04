@@ -12,7 +12,10 @@ from unittest.mock import MagicMock
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_execution_key_lock import (
+    _LOCK_WAIT_MARGIN_SECONDS,
+    _UNBOUNDED_CLIENT_WAIT_CEILING_SECONDS,
     FilesystemExecutionKeyLock,
+    lock_wait_for_client_timeout,
 )
 
 
@@ -79,3 +82,16 @@ def test_bounded_timeout_proceeds_when_another_holder_has_the_os_lock(tmp_path: 
 
     assert 0.2 <= elapsed < 2.0  # waited the bounded timeout, then proceeded
     diag.warn.assert_called()  # the fallback was logged
+
+
+def test_wait_is_sized_to_the_client_timeout_plus_a_margin():
+    # Y2: a bounded client timeout sizes the wait to timeout + margin, so a contender
+    # waits out a peer's whole client call rather than tripping the old fixed 5s.
+    assert lock_wait_for_client_timeout(60.0) == 60.0 + _LOCK_WAIT_MARGIN_SECONDS
+    assert lock_wait_for_client_timeout(0.5) == 0.5 + _LOCK_WAIT_MARGIN_SECONDS
+
+
+def test_wait_falls_back_to_a_bounded_ceiling_for_an_unbounded_timeout():
+    # An unbounded (None) client timeout must not mean an unbounded wait — it falls
+    # back to a bounded ceiling so a hung peer never blocks the user forever (X7).
+    assert lock_wait_for_client_timeout(None) == _UNBOUNDED_CLIENT_WAIT_CEILING_SECONDS

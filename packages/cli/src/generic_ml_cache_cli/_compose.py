@@ -101,6 +101,7 @@ def build_use_cases(
         encryption_token=encryption_token,
         max_size=max_size,
         whitelist=whitelist,
+        client_timeout=timeout,
         diag=diag,
     )
 
