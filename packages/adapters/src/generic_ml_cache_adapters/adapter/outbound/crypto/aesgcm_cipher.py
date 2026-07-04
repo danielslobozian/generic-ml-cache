@@ -7,6 +7,15 @@ for authenticated encryption and HKDF-SHA256 for key derivation. The token is
 gmlcache-generated and high-entropy, so HKDF (built for high-entropy keying
 material) is the right KDF; we never accept a low-entropy human passphrase, so no
 password-hardening KDF (Argon2id) is needed.
+
+**Content encryption derives a fresh per-write subkey (X23).** A "cache forever"
+store can accumulate millions of blobs, and a bare random 96-bit GCM nonce under one
+long-lived key has a NIST SP 800-38D collision bound around 2^32 encryptions. So each
+content ``encrypt`` HKDFs a *unique* AES key from the data key + a random 256-bit
+salt (stored ahead of the nonce): every blob is sealed under its own key, so no single
+key ever nears the random-nonce bound — with **no 2^32 ceiling and no persistent
+counter to trust** (a counter that resets/rolls back would be a catastrophic
+nonce-reuse hazard). The rare key-*wrap* path (one per token) keeps the plain seal.
 """
 
 from __future__ import annotations
@@ -26,6 +35,9 @@ from generic_ml_cache_core.common.errors import WrongEncryptionToken
 _KEY_BYTES = 32  # AES-256
 _NONCE_BYTES = 12  # GCM standard nonce
 _SALT_BYTES = 16
+#: Per-write content-subkey salt (X23): 256 bits, so the birthday bound on a repeated
+#: salt (~2^128 writes) is astronomically beyond any real store — no 2^32 ceiling.
+_CONTENT_SUBKEY_SALT_BYTES = 32
 _TOKEN_BYTES = 32  # 256-bit token
 # Owned, scanner-friendly provenance prefix (GitHub-style ``<prefix>_<secret>``): it
 # lets our own log scrubber and external secret scanners recognise a leaked token by
@@ -43,6 +55,9 @@ _KEK_INFO = b"generic-ml-cache/kek/v1"
 # and a content blob can never be swapped for one another.
 _WRAP_AAD = b"generic-ml-cache/wrapped-data-key/v1"
 _CONTENT_AAD = b"generic-ml-cache/content/v1"
+# Domain-separated HKDF label for the per-write content subkey (X23), distinct from
+# the KEK label so a content subkey and a wrapping key can never coincide.
+_CONTENT_SUBKEY_INFO = b"generic-ml-cache/content-subkey/v1"
 
 
 class AesGcmCipher(CipherPort):
@@ -71,10 +86,20 @@ class AesGcmCipher(CipherPort):
         return EncryptionManifest(kdf_salt=salt, wrapped_data_key=wrapped)
 
     def encrypt(self, data_key: bytes, plaintext: bytes) -> bytes:
-        return self._aead_seal(data_key, plaintext, _CONTENT_AAD)
+        # Per-write subkey (X23): a fresh random salt derives a unique AES key for this
+        # blob, so its GCM nonce is the only one ever used under that key — the random-
+        # nonce 2^32 bound never applies. Blob = salt || nonce || ciphertext+tag.
+        salt = secrets.token_bytes(_CONTENT_SUBKEY_SALT_BYTES)
+        subkey = self._content_subkey(data_key, salt)
+        return salt + self._aead_seal(subkey, plaintext, _CONTENT_AAD)
 
     def decrypt(self, data_key: bytes, ciphertext: bytes) -> bytes:
-        return self._aead_open(data_key, ciphertext, _CONTENT_AAD)
+        salt, sealed = (
+            ciphertext[:_CONTENT_SUBKEY_SALT_BYTES],
+            ciphertext[_CONTENT_SUBKEY_SALT_BYTES:],
+        )
+        subkey = self._content_subkey(data_key, salt)
+        return self._aead_open(subkey, sealed, _CONTENT_AAD)
 
     # -- internals --------------------------------------------------------
 
@@ -94,6 +119,13 @@ class AesGcmCipher(CipherPort):
         return hkdf.derive(seed.encode("utf-8"))
 
     @staticmethod
+    def _content_subkey(data_key: bytes, salt: bytes) -> bytes:
+        # HKDF a per-write AES key from the (high-entropy) data key + this write's
+        # random salt (X23). No token, no counter — just fresh keying material per blob.
+        hkdf = HKDF(algorithm=SHA256(), length=_KEY_BYTES, salt=salt, info=_CONTENT_SUBKEY_INFO)
+        return hkdf.derive(data_key)
+
+    @staticmethod
     def _aead_seal(key: bytes, plaintext: bytes, aad: bytes) -> bytes:
         nonce = secrets.token_bytes(_NONCE_BYTES)
         return nonce + AESGCM(key).encrypt(nonce, plaintext, aad)
@@ -103,5 +135,8 @@ class AesGcmCipher(CipherPort):
         nonce, ciphertext = blob[:_NONCE_BYTES], blob[_NONCE_BYTES:]
         try:
             return AESGCM(key).decrypt(nonce, ciphertext, aad)
-        except InvalidTag as exc:
+        except (InvalidTag, ValueError) as exc:
+            # InvalidTag = wrong key / tampered bytes; ValueError = a malformed or
+            # truncated blob (e.g. too short to hold a full nonce). Both mean the
+            # stored blob cannot be trusted — never a raw crash across the boundary.
             raise WrongEncryptionToken("decryption failed: wrong token or tampered data") from exc

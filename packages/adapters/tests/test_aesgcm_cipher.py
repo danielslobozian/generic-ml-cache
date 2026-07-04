@@ -109,6 +109,19 @@ def test_each_encryption_is_nondeterministic_but_decrypts():
     assert cipher.decrypt(data_key, a) == cipher.decrypt(data_key, b) == b"same input"
 
 
+def test_content_encryption_uses_a_fresh_per_write_subkey_salt():
+    # X23: each content encryption prepends a fresh 32-byte salt from which a UNIQUE
+    # AES key is derived, so no single key is reused across blobs and the random-nonce
+    # 2^32 bound never applies. The leading salt bytes differ across two encryptions of
+    # the same plaintext, and both still decrypt.
+    cipher = _cipher()
+    _, data_key = cipher.create_envelope(cipher.generate_token())
+    a = cipher.encrypt(data_key, b"same")
+    b = cipher.encrypt(data_key, b"same")
+    assert a[:32] != b[:32]  # distinct per-write subkey salts (no reused key)
+    assert cipher.decrypt(data_key, a) == cipher.decrypt(data_key, b) == b"same"
+
+
 # --- wrong token / tampering -------------------------------------------------
 
 
