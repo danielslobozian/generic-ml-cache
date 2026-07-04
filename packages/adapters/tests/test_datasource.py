@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 
 import pytest
 from generic_ml_cache_core.common.errors import StoreUnavailable
@@ -115,6 +116,11 @@ def test_read_only_factory_never_creates_a_missing_db(tmp_path):
     assert not db_path.exists()  # mode=ro must not create the file
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="'?' is an illegal filename character on Windows; the URI-encoding "
+    "scenario (X22) can only arise on POSIX",
+)
 def test_read_only_factory_opens_a_path_containing_a_question_mark(tmp_path):
     # X22: a '?' (or '#') is valid on disk but special in SQLite URI syntax; the
     # read-only URI must percent-encode the path so it opens the right file instead
