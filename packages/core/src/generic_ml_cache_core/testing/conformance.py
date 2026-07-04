@@ -33,6 +33,7 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import ExecutionSizeEntry
 from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import UnpersistedRun
 from generic_ml_cache_core.common.errors import StoreConsistencyError
 
@@ -55,6 +56,14 @@ class MlRunStore(Protocol):
     def remove_execution(self, execution_id: ExecutionId) -> None: ...
     def runs_awaiting_persistence(self) -> list[UnpersistedRun]: ...
     def soft_purge_execution(self, execution_key: str) -> None: ...
+    # Accounting / retention surface (X24): quota, size summaries, blob-key collection,
+    # tagging, and hard delete — where a third-party backend most easily diverges.
+    def add_tags(self, execution_key: str, tags: list[str]) -> None: ...
+    def total_stored_bytes(self) -> int: ...
+    def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]: ...
+    def hard_delete_execution(self, execution_key: str) -> None: ...
+    def current_executions_with_sizes(self) -> list[ExecutionSizeEntry]: ...
+    def executions_by_tag(self, tag: str) -> list[str]: ...
 
 
 def _identity(prompt: str = "p") -> ManagedCallIdentity:
@@ -260,3 +269,51 @@ class MlRunStoreConformance:
         store.save(_servable(identity))
         store.soft_purge_execution(key)
         assert store.find_current(key) is None
+
+    # -- accounting / retention (X24) -----------------------------------------
+
+    def test_total_stored_bytes_sums_the_current_stored_artifacts(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        store.save(_servable(_identity("a"), b"aaaa"))  # 4 bytes
+        store.save(_servable(_identity("b"), b"bbbbbb"))  # 6 bytes
+        assert store.total_stored_bytes() == 10
+
+    def test_total_stored_bytes_excludes_a_non_servable_run(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        store.save(_servable(_identity("a"), b"aaaa"))
+        store.save(_pending(_identity("b"), b"bbbbbb"))  # not output_persisted → uncounted
+        assert store.total_stored_bytes() == 4
+
+    def test_blob_keys_for_execution_lists_the_owned_keys(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        store.save(_servable(identity, b"answer"))
+        keys = store.blob_keys_for_execution(identity.generate_key())
+        assert keys == [BlobKey("blob" + b"answer".hex())]
+
+    def test_current_executions_with_sizes_reports_the_servable_sizes(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        store.save(_servable(identity, b"answer"))
+        entries = store.current_executions_with_sizes()
+        assert [(e.execution_key, e.total_size_bytes) for e in entries] == [
+            (identity.generate_key(), len(b"answer"))
+        ]
+
+    def test_hard_delete_execution_removes_all_history(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity, b"old"))
+        store.save(_servable(identity, b"new"))  # append-only history: two rows
+        store.hard_delete_execution(key)
+        assert store.find_all(key) == []
+
+    def test_executions_by_tag_returns_the_tagged_current_key(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity))
+        store.add_tags(key, ["keep"])
+        assert store.executions_by_tag("keep") == [key]
+        assert store.executions_by_tag("absent") == []
