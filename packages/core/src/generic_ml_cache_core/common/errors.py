@@ -161,6 +161,21 @@ class MigrationFailed(CacheError):
     code: ClassVar[str] = "store.migration_failed"
 
 
+class PersistenceContractOutdated(CacheError):
+    """Raised at startup when an injected persistence adapter implements an older
+    model contract than this build requires (C-2).
+
+    The whole-store version handshake: bootstrap compares the adapter's
+    ``implemented_version()`` against core's ``CURRENT_MODEL_VERSION`` and refuses
+    to serve when the adapter is behind, rather than letting a stale mapping
+    silently write ``NULL`` for a field it does not know about. Preventive and
+    fail-fast (Flyway / Hibernate-``validate`` at boot) — the message tells the
+    embedder which version to upgrade their adapter to.
+    """
+
+    code: ClassVar[str] = "store.contract_outdated"
+
+
 class RunInterrupted(Exception):
     """Raised when a real client run is stopped by a signal from the caller (the
     workflow engine) before it finished.

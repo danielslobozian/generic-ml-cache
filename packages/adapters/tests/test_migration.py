@@ -8,10 +8,18 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from generic_ml_cache_core.application.port.outbound.store_migration_port import (
+    CURRENT_MODEL_VERSION,
+    StoreMigrationPort,
+)
 from generic_ml_cache_core.common.errors import MigrationFailed
 
 from generic_ml_cache_adapters.db import DbConnection
-from generic_ml_cache_adapters.migration_runner import run_migrations, schema_version
+from generic_ml_cache_adapters.migration_runner import (
+    SqliteStoreMigration,
+    run_migrations,
+    schema_version,
+)
 
 
 def _factory(db_path: Path) -> Callable[[], DbConnection]:
@@ -140,3 +148,32 @@ def test_migration_rollback_on_failure(tmp_path: Path) -> None:
     finally:
         conn.close()
     assert version == 0
+
+
+def test_sqlite_store_migration_is_a_store_migration_port(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    assert isinstance(SqliteStoreMigration(factory), StoreMigrationPort)
+
+
+def test_sqlite_store_migration_implemented_version_matches_current_contract(
+    tmp_path: Path,
+) -> None:
+    # The shipped adapter is always current: it implements at least what this
+    # build requires, so the boot handshake passes.
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    assert SqliteStoreMigration(factory).implemented_version() >= CURRENT_MODEL_VERSION
+
+
+def test_sqlite_store_migration_migrate_to_current_builds_the_schema(tmp_path: Path) -> None:
+    factory = _factory(tmp_path / "gmlcache.sqlite3")
+    migration = SqliteStoreMigration(factory)
+    migration.migrate_to_current()
+    conn = factory()
+    try:
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+    finally:
+        conn.close()
+    assert version == migration.implemented_version()
+    # Idempotent: a second call is a no-op, never an error.
+    migration.migrate_to_current()
+    assert migration.applied_migrations()  # non-empty history after migrating

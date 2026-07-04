@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.store_migration_port import StoreMigrationPort
 from generic_ml_cache_core.common.errors import MigrationFailed
 
 from generic_ml_cache_adapters.db import DbConnection
@@ -29,6 +30,34 @@ _CURRENT_VERSION = 2
 _MIGRATION_IDS = ("0001.unified-schema", "0002.integrity-constraints")
 
 _CREATE_VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
+
+
+class SqliteStoreMigration(StoreMigrationPort):
+    """The shipped SQLite implementation of the store-migration contract (C-2).
+
+    Wraps the ``run_migrations`` / ``schema_version`` machinery behind the port.
+    ``implemented_version`` is the highest migration this build ships
+    (``_CURRENT_VERSION``); since bootstrap always runs its migrations, the shipped
+    store is always current. The version handshake matters for a third-party
+    adapter that might lag core's ``CURRENT_MODEL_VERSION``.
+    """
+
+    def __init__(
+        self, conn_factory: Callable[[], DbConnection], diag: DiagnosticsPort | None = None
+    ) -> None:
+        self._conn_factory = conn_factory
+        self._diag = diag
+
+    def implemented_version(self) -> int:
+        return _CURRENT_VERSION
+
+    def migrate_to_current(self) -> None:
+        run_migrations(self._conn_factory, self._diag)
+
+    def applied_migrations(self) -> list[dict[str, str | None]]:
+        """The SQLite-specific migration history for diagnostics (the ``doctor``
+        command) — not part of the port contract."""
+        return schema_version(self._conn_factory, self._diag)
 
 
 def _iter_statements(sql: str):

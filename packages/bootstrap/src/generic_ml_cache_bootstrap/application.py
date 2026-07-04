@@ -52,7 +52,7 @@ from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace i
     FilesystemWorkspace,
 )
 from generic_ml_cache_adapters.db import DbConnection
-from generic_ml_cache_adapters.migration_runner import run_migrations
+from generic_ml_cache_adapters.migration_runner import SqliteStoreMigration
 from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
 from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
     AdapterResolverPort,
@@ -61,6 +61,10 @@ from generic_ml_cache_core.application.port.outbound.blob_store_port import Blob
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
     RegisteredAdapterPort,
+)
+from generic_ml_cache_core.application.port.outbound.store_migration_port import (
+    CURRENT_MODEL_VERSION,
+    StoreMigrationPort,
 )
 from generic_ml_cache_core.application.usecase.artifact_content_service import (
     ArtifactContentService,
@@ -77,6 +81,7 @@ from generic_ml_cache_core.application.usecase.session_report_service import Ses
 from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
 from generic_ml_cache_core.application.usecase.store_stats_service import StoreStatsService
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
+from generic_ml_cache_core.common.errors import PersistenceContractOutdated
 
 from generic_ml_cache_bootstrap.discovery.composition import catalog_for, default_resolver
 
@@ -112,6 +117,23 @@ def resolve_blob_store(store_root: Path, encryption_token: str | None) -> BlobSt
     return EncryptingBlobStore(blob_store, cipher, data_key)
 
 
+def provision_store(migration: StoreMigrationPort) -> None:
+    """Run the persistence-contract handshake (C-2), then migrate.
+
+    Fail-fast at boot if the injected adapter implements an older model contract
+    than this build requires, rather than letting a stale mapping silently drop a
+    field. The shipped SQLite adapter is always current; the check guards a
+    third-party adapter that might lag ``CURRENT_MODEL_VERSION``.
+    """
+    implemented = migration.implemented_version()
+    if implemented < CURRENT_MODEL_VERSION:
+        raise PersistenceContractOutdated(
+            f"persistence adapter implements model version {implemented}, but this build "
+            f"requires version {CURRENT_MODEL_VERSION}; upgrade the adapter's mapping/migrations"
+        )
+    migration.migrate_to_current()
+
+
 def build_application_api(
     conn_factory: Callable[[], DbConnection],
     store_root: Path,
@@ -132,7 +154,7 @@ def build_application_api(
     recover_store(store_root)
     clock = SystemClock()
     blob_store = resolve_blob_store(store_root, encryption_token)
-    run_migrations(conn_factory, _diag)
+    provision_store(SqliteStoreMigration(conn_factory, _diag))
     repository = SqliteExecutionRepository(conn_factory, clock)
     metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
     file_fingerprint = FilesystemFileFingerprint()
