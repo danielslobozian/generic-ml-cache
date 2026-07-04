@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import sys
 
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
-from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
+from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+    ComposedLocalClient,
+)
+from generic_ml_cache_adapters.adapter.outbound.client.cursor import CursorAdapter
 from generic_ml_cache_bootstrap.discovery.client_discover import list_models
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,

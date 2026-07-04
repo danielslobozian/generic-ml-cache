@@ -10,7 +10,7 @@ from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifa
 from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_use_case import (
     ReadArtifactBlobUseCase,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 
 
 class ArtifactContentService(ReadArtifactBlobUseCase):

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 
 
 class InMemoryBlobStore(BlobStorePort):

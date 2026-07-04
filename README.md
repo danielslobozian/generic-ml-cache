@@ -16,13 +16,13 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-185FA5?style=for-the-badge&labelColor=403E3A)](LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/status-alpha-BA7517?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
 
-[![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/client/claude.py)
-[![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/client/codex.py)
-[![CLI adapter: cursor-agent](https://img.shields.io/badge/cli-cursor--agent-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/client/cursor.py)
+[![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/claude.py)
+[![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/codex.py)
+[![CLI adapter: cursor-agent](https://img.shields.io/badge/cli-cursor--agent-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/cursor.py)
 
-[![API adapter: anthropic](https://img.shields.io/badge/api-anthropic-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/api/anthropic_direct_adapter.py)
-[![API adapter: openai](https://img.shields.io/badge/api-openai-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/api/openai_direct_adapter.py)
-[![API adapter: gemini](https://img.shields.io/badge/api-gemini-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/out/api/gemini_direct_adapter.py)
+[![API adapter: anthropic](https://img.shields.io/badge/api-anthropic-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/anthropic_direct_adapter.py)
+[![API adapter: openai](https://img.shields.io/badge/api-openai-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/openai_direct_adapter.py)
+[![API adapter: gemini](https://img.shields.io/badge/api-gemini-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/gemini_direct_adapter.py)
 
 <br>
 

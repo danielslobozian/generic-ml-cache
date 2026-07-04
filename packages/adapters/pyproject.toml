@@ -34,12 +34,12 @@ encryption = ["cryptography>=42"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "cryptography>=42", "import-linter>=2", "pyright>=1.1"]
 
 [project.entry-points."gmlcache.adapters"]
-claude = "generic_ml_cache_adapters.adapter.out.client.claude:ClaudeCliAdapter"
-codex = "generic_ml_cache_adapters.adapter.out.client.codex:CodexCliAdapter"
-cursor-agent = "generic_ml_cache_adapters.adapter.out.client.cursor:CursorCliAdapter"
-anthropic = "generic_ml_cache_adapters.adapter.out.api.anthropic_direct_adapter:AnthropicDirectAdapter"
-openai = "generic_ml_cache_adapters.adapter.out.api.openai_direct_adapter:OpenAIDirectAdapter"
-gemini = "generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter:GeminiDirectAdapter"
+claude = "generic_ml_cache_adapters.adapter.outbound.client.claude:ClaudeCliAdapter"
+codex = "generic_ml_cache_adapters.adapter.outbound.client.codex:CodexCliAdapter"
+cursor-agent = "generic_ml_cache_adapters.adapter.outbound.client.cursor:CursorCliAdapter"
+anthropic = "generic_ml_cache_adapters.adapter.outbound.api.anthropic_direct_adapter:AnthropicDirectAdapter"
+openai = "generic_ml_cache_adapters.adapter.outbound.api.openai_direct_adapter:OpenAIDirectAdapter"
+gemini = "generic_ml_cache_adapters.adapter.outbound.api.gemini_direct_adapter:GeminiDirectAdapter"
 
 [project.urls]
 Homepage = "https://github.com/danielslobozian/generic-ml-cache"
@@ -81,6 +81,6 @@ max-complexity = 10
 # resolution. Its DbConnection is a driver-agnostic PEP 249 protocol (SQLite/Postgres/…),
 # so there is no single DB error type to narrow to — the broad best-effort catch is the
 # design (AGENTS §10's "deliberate, commented best-effort boundary"), not a defect.
-"src/generic_ml_cache_adapters/adapter/out/metrics/access_registry.py" = ["BLE001"]
+"src/generic_ml_cache_adapters/adapter/outbound/metrics/access_registry.py" = ["BLE001"]
 # Tests catch broadly on purpose to assert best-effort / failure behaviour.
 "tests/**" = ["BLE001"]

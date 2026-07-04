@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 
-from generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
+from generic_ml_cache_adapters.adapter.outbound.api.gemini_direct_adapter import GeminiDirectAdapter
 
 # ---------------------------------------------------------------------------
 # Fixtures

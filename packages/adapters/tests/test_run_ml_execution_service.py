@@ -28,16 +28,18 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
 from generic_ml_cache_core.common.errors import CacheMiss
 
-from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 

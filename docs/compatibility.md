@@ -56,7 +56,7 @@ following surfaces are locked under the promise described in the sections below:
 | **Configuration** | All keys documented in [`docs/reference/configuration.md`](reference/configuration.md), their types, and their precedence order (default → file → env → flag). |
 
 Anything not in the table above is internal and may change between `1.x` minor
-releases. Internal paths (`adapter/out/…`, `adapter/inbound/…`, `migrations/`) are
+releases. Internal paths (`adapter/outbound/…`, `adapter/inbound/…`, `migrations/`) are
 not covered by this promise even if they are importable.
 
 ---

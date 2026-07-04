@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from generic_ml_cache_core.common.errors import StoreLocked
 
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
 )
 

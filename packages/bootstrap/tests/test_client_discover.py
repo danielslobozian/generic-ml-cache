@@ -7,7 +7,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 
 from generic_ml_cache_bootstrap.discovery.client_discover import (
     _probe_version,

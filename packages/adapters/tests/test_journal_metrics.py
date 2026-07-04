@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import sqlite3
 
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
-from generic_ml_cache_adapters.adapter.out.metrics.journal_metrics import JournalMetrics
+from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
+from generic_ml_cache_adapters.adapter.outbound.metrics.journal_metrics import JournalMetrics
 from generic_ml_cache_adapters.migration_runner import run_migrations
 
 

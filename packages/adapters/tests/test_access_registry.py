@@ -8,7 +8,7 @@ import sqlite3
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
+from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
 from generic_ml_cache_adapters.migration_runner import run_migrations
 
 

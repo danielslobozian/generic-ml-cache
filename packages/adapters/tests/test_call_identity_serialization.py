@@ -15,7 +15,7 @@ from generic_ml_cache_core.application.domain.model.identity.passthrough_call_id
     PassthroughCallIdentity,
 )
 
-from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
     SerializedIdentity,
     deserialize_identity,
     serialize_identity,

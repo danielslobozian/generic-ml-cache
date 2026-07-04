@@ -11,7 +11,7 @@ from generic_ml_cache_core.application.domain.model.encryption.encryption_state 
     EncryptionState,
 )
 
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (
+from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
 )
 

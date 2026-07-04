@@ -9,7 +9,7 @@ for the workflow engine relaying progress to its own user.
 This is infrastructure (it opens files), so it lives in the adapters package, not
 the pure core. It sits at the package top level — like ``discovery`` — because it
 is shared by an out adapter (the CLI runtime) and a driver (the CLI's async-jobs
-runner); it is not itself a driven ``adapter/out`` implementation behind a port.
+runner); it is not itself a driven ``adapter/outbound`` implementation behind a port.
 
 Design:
 

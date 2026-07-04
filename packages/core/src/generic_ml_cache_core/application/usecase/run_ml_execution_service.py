@@ -35,18 +35,22 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution_command imp
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.client_config_port import ClientConfigPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
-from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
-from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
+from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
+    RegisteredAdapterPort,
+)
+from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )

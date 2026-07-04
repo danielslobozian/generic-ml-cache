@@ -29,7 +29,7 @@ from generic_ml_cache_core.application.domain.model.session.session_report impor
     SessionReport,
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
-from generic_ml_cache_core.application.port.out.metrics_port import SessionEventRow
+from generic_ml_cache_core.application.port.outbound.metrics_port import SessionEventRow
 
 #: Events where a real client call ran (vs. a HIT replay or an offline MISS).
 EXECUTED_EVENTS = frozenset({"record", "run", "would_hit", "would_miss"})

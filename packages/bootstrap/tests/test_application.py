@@ -6,9 +6,13 @@ import sqlite3
 from typing import cast
 
 from generic_ml_cache_adapters.db import DbConnection
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
-from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
+    RegisteredAdapterPort,
+)
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_bootstrap.application import build_application_api

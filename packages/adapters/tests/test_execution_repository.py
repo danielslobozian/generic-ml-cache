@@ -25,12 +25,12 @@ from generic_ml_cache_core.application.domain.model.identity.passthrough_call_id
     PassthroughCallIdentity,
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )
 
-from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.execution_repository import (
     ExecutionRepository,
 )
 from generic_ml_cache_adapters.migration_runner import run_migrations

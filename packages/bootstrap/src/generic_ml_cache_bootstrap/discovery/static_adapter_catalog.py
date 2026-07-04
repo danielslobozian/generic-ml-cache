@@ -15,7 +15,7 @@ from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor i
     AdapterDescriptor,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
 
 
 class StaticAdapterCatalog(AdapterCatalogPort):

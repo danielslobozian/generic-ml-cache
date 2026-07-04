@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
+from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
 

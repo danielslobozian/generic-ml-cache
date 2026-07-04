@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 
-from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
+from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (
+    FilesystemBlobStore,
+)
 
 
 def test_is_a_blob_store_port(tmp_path):

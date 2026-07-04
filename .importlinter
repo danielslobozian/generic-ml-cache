@@ -21,10 +21,10 @@ forbidden_modules =
     generic_ml_cache_bootstrap
 
 # Rule 2 — driver packages (CLI, daemon) must not import driven adapter
-# implementations (generic_ml_cache_adapters.adapter.out.*) DIRECTLY. Reaching
+# implementations (generic_ml_cache_adapters.adapter.outbound.*) DIRECTLY. Reaching
 # adapters *through* the bootstrap composition root is the intended path, so this
 # checks direct imports only (allow_indirect_imports) — otherwise the legitimate
-# cli/daemon -> bootstrap -> adapter.out chain would be flagged.
+# cli/daemon -> bootstrap -> adapter.outbound chain would be flagged.
 #
 # The few remaining ignore_imports are genuinely driver-specific direct edges the
 # split did not (and should not) relocate into the composition root:
@@ -41,22 +41,22 @@ source_modules =
     generic_ml_cache_cli
     generic_ml_cache_daemon
 forbidden_modules =
-    generic_ml_cache_adapters.adapter.out
+    generic_ml_cache_adapters.adapter.outbound
 ignore_imports =
     # The bulk application wiring moved to generic_ml_cache_bootstrap (the
-    # composition root), so the long list of _compose/app -> adapter.out edges is
+    # composition root), so the long list of _compose/app -> adapter.outbound edges is
     # gone. What remains are the few adapters the drivers still touch directly:
     # CLI encryption helpers (store encrypt/decrypt + the stub adapter for demos)
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock
+    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter
     # CLI + daemon pick their own diagnostics adapter (logging is driver policy)
-    generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
-    generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
+    generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter
+    generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter
+    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter
+    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter
     # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
     generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app
 
@@ -64,7 +64,7 @@ ignore_imports =
 # Domain objects (entities, value objects, domain events) must not import use cases,
 # application services, OR ports. They are the innermost ring: they model the world,
 # not the workflows, and not the boundaries that drive them. (A domain model leaking
-# in from a port — e.g. ModelInfo via port/out/base — is the exact slip this catches.)
+# in from a port — e.g. ModelInfo via port/outbound/base — is the exact slip this catches.)
 [importlinter:contract:hex-domain-purity]
 name = Domain model must not import use cases or ports
 type = forbidden
@@ -113,7 +113,7 @@ source_modules =
     generic_ml_cache_daemon.controllers
 forbidden_modules =
     generic_ml_cache_core.application.usecase
-    generic_ml_cache_core.application.port.out
+    generic_ml_cache_core.application.port.outbound
     generic_ml_cache_core.application.domain.service
 
 # Rule 5 — driven adapter sub-packages must not depend on each other.
@@ -123,17 +123,17 @@ forbidden_modules =
 name = Driven adapter sub-packages must not import each other
 type = independence
 modules =
-    generic_ml_cache_adapters.adapter.out.api
-    generic_ml_cache_adapters.adapter.out.client
-    generic_ml_cache_adapters.adapter.out.clock
-    generic_ml_cache_adapters.adapter.out.crypto
-    generic_ml_cache_adapters.adapter.out.fingerprint
-    generic_ml_cache_adapters.adapter.out.gateway
-    generic_ml_cache_adapters.adapter.out.metrics
-    generic_ml_cache_adapters.adapter.out.persistence
-    generic_ml_cache_adapters.adapter.out.storage
-    generic_ml_cache_adapters.adapter.out.diagnostics
-    generic_ml_cache_adapters.adapter.out.workspace
+    generic_ml_cache_adapters.adapter.outbound.api
+    generic_ml_cache_adapters.adapter.outbound.client
+    generic_ml_cache_adapters.adapter.outbound.clock
+    generic_ml_cache_adapters.adapter.outbound.crypto
+    generic_ml_cache_adapters.adapter.outbound.fingerprint
+    generic_ml_cache_adapters.adapter.outbound.gateway
+    generic_ml_cache_adapters.adapter.outbound.metrics
+    generic_ml_cache_adapters.adapter.outbound.persistence
+    generic_ml_cache_adapters.adapter.outbound.storage
+    generic_ml_cache_adapters.adapter.outbound.diagnostics
+    generic_ml_cache_adapters.adapter.outbound.workspace
 
 # Rule 6 — package-level isolation: lower packages never import driver packages.
 # Adapters (infrastructure) and a driver must not reach "up" into another driver.
@@ -150,7 +150,7 @@ forbidden_modules =
 # Rule 6b — bootstrap is the composition root: it wires core + adapters and is
 # imported only by the drivers. It must never reach "up" into a driver (that
 # would be the composition root depending on a thing it composes). It is allowed
-# to import core, adapters, and adapter.out — wiring is its job — so it is not
+# to import core, adapters, and adapter.outbound — wiring is its job — so it is not
 # itself isolation-policed, only confined here.
 [importlinter:contract:bootstrap-no-drivers]
 name = Bootstrap must not import driver packages

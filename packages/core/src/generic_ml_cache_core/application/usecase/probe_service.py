@@ -8,10 +8,12 @@ from generic_ml_cache_core.application.domain.model.probe.probe_report import Pr
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
 from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
 from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 
 

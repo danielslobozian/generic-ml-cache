@@ -28,7 +28,7 @@ from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_c
 from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_use_case import (
     UntagSessionUseCase,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 
 
 class SessionTagsService(TagSessionUseCase, UntagSessionUseCase, ListSessionTagsUseCase):

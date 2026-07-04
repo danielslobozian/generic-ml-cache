@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
-from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
 from generic_ml_cache_core.common.errors import UnknownClient
 
 from generic_ml_cache_bootstrap.discovery.composite_adapter_catalog import CompositeAdapterCatalog

@@ -43,7 +43,7 @@ from generic_ml_cache_core.application.port.inbound.session_admin.set_session_sp
 from generic_ml_cache_core.application.port.inbound.session_admin.set_session_spec_use_case import (
     SetSessionSpecUseCase,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 
 
 class SessionAdminService(

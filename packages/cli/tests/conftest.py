@@ -14,9 +14,13 @@ import sys
 from pathlib import Path
 
 import pytest
-from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
+from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
+    StubApiClientAdapter,
+)
+from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+    ComposedLocalClient,
+)
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
 )

@@ -29,7 +29,7 @@ This is a hexagonal application shipped as a **monorepo of two package rings**: 
 (`packages/cli` today, a daemon later). The **library is the whole application
 *except* the user interface and the data source**: it contains the hexagon's
 `application/` rings (domain, use cases, ports — the business rules, depending on
-nothing outward), **and the default outbound adapters** (`adapter/out/...`: client
+nothing outward), **and the default outbound adapters** (`adapter/outbound/...`: client
 runner, blob store, SQLite repository, metrics), **and** the composition factory that
 wires them. The aggregate is an **ML execution** — a demand to run a client and what
 came back. A **client** is thin: it provides the data source and configuration and
@@ -132,9 +132,9 @@ packages/core/   THE LIBRARY (generic_ml_cache_core) — everything but the UI &
   application/usecase/         use cases — orchestration; each names an action and
                                takes a command as input.
   application/port/inbound/    inbound port contracts (the use-case interfaces).
-  application/port/out/        outbound port contracts (store, metrics, client
+  application/port/outbound/        outbound port contracts (store, metrics, client
                                runner) — owned by the core ring.
-  adapter/out/...              the DEFAULT outbound adapters (client runner, blob
+  adapter/outbound/...              the DEFAULT outbound adapters (client runner, blob
                                store, SQLite repository, metrics) — implementations
                                that SHIP with the library. Dumb, swappable.
   adapter/inbound/             the composition factory (build_use_cases): wires the
@@ -507,7 +507,7 @@ return blob_path.read_bytes()
   5. `python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-fail-under=80 --cov-report=xml:packages/daemon/coverage.xml`
   6. `lint-imports` — enforces the four hexagonal import contracts in `.importlinter`:
      application ring must not import adapters; driver packages must not reach past the
-     composition root into `adapter.out`; domain model must not import use cases;
+     composition root into `adapter.outbound`; domain model must not import use cases;
      driven adapter sub-packages must not import each other. A BROKEN contract is an
      architecture defect, not a style issue.
   7. `pyright` — static type checking (standard mode) against `pyrightconfig.json`.

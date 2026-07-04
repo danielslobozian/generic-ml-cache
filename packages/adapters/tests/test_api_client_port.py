@@ -7,9 +7,11 @@ from __future__ import annotations
 import pytest
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
 
-from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
+from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
+    StubApiClientAdapter,
+)
 
 
 def _request(prompt: str = "summarise this") -> MlRequest:

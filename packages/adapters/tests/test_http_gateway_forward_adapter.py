@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import GatewayRequest
 
-from generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.gateway.http_gateway_forward_adapter import (
     HttpGatewayForwardAdapter,
 )
 

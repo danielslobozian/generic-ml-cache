@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import MigrationFailed
 
 from generic_ml_cache_adapters.db import DbConnection

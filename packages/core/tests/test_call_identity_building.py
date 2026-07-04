@@ -8,7 +8,9 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.common.checksum import text_checksum
 

@@ -20,9 +20,13 @@ from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor i
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 
-from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.adapter.out.client.composed_local_client import ComposedLocalClient
+from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
+    StubApiClientAdapter,
+)
+from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+    ComposedLocalClient,
+)
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 

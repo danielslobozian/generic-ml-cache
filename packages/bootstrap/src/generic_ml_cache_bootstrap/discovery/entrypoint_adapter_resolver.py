@@ -15,9 +15,11 @@ from typing import cast
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
 )
-from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
+from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
 from generic_ml_cache_bootstrap.discovery._entrypoints import (

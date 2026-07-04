@@ -11,7 +11,7 @@ passed explicitly.
 from __future__ import annotations
 
 from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
-from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
+from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
 from generic_ml_cache_bootstrap.discovery.composition import get_adapter

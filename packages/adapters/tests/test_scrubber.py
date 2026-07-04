@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter import (
     _scrub_processor,
     _scrub_string,
     _scrub_value,

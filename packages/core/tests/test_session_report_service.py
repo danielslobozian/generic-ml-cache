@@ -8,7 +8,7 @@ from generic_ml_cache_core.application.port.inbound.session_report.report_for_se
 from generic_ml_cache_core.application.port.inbound.session_report.report_for_tag_command import (
     ReportForTagCommand,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import SessionEventRow
+from generic_ml_cache_core.application.port.outbound.metrics_port import SessionEventRow
 from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 
 

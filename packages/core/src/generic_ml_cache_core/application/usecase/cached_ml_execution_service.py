@@ -20,12 +20,12 @@ from generic_ml_cache_core.application.domain.model.identity.call_identity impor
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase import journal_events
 from generic_ml_cache_core.common.checksum import file_content_fingerprint
 from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss

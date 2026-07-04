@@ -34,7 +34,7 @@ from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_exe
 from generic_ml_cache_core.application.port.inbound.execution_query.total_stored_bytes_use_case import (
     TotalStoredBytesUseCase,
 )
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
     ExecutionSummary,
 )

@@ -8,7 +8,7 @@ from generic_ml_cache_core.application.domain.model.encryption.encryption_manife
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
-from generic_ml_cache_core.application.port.out.encryption_manifest_store_port import (
+from generic_ml_cache_core.application.port.outbound.encryption_manifest_store_port import (
     EncryptionManifestStorePort,
 )
 

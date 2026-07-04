@@ -41,8 +41,8 @@ def _stdout(execution) -> bytes | None:
 def _repo(tmp_path):
     # White-box: build the repository out-port directly (it is no longer on the
     # narrowed ApplicationApi) to assert the stored audit trail.
-    from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
-    from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
+    from generic_ml_cache_adapters.adapter.outbound.clock.system_clock import SystemClock
+    from generic_ml_cache_adapters.adapter.outbound.persistence.execution_repository import (
         ExecutionRepository,
     )
 

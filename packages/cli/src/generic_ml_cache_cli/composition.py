@@ -10,15 +10,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
-from generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter import (
     StructlogDiagnosticsAdapter,
 )
 from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 from generic_ml_cache_adapters.db import DbConnection
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_cli._compose import build_store_encryptor, load_cipher

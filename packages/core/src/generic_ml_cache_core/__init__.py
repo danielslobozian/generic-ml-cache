@@ -56,7 +56,7 @@ except PackageNotFoundError:  # running from an uninstalled source tree
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402  # fmt: skip
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.ml_runner_port import (
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import (
     MlRunnerPort,  # noqa: E402  # fmt: skip
 )
 from generic_ml_cache_core.application.wiring.application_api import (  # noqa: E402  # fmt: skip

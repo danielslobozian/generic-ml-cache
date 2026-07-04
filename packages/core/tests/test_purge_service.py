@@ -24,12 +24,12 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_c
 from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
     PurgeByTagCommand,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
     ExecutionSizeEntry,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
 

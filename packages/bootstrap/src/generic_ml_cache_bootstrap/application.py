@@ -19,41 +19,49 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
-from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (
+from generic_ml_cache_adapters.adapter.outbound.clock.system_clock import SystemClock
+from generic_ml_cache_adapters.adapter.outbound.crypto.encrypting_blob_store import (
     EncryptingBlobStore,
     TokenRequiredBlobStore,
 )
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (
+from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
 )
-from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import StoreEncryptor
-from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor import StoreEncryptor
+from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
-from generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint import (
+from generic_ml_cache_adapters.adapter.outbound.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
 )
-from generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.gateway.http_gateway_forward_adapter import (
     HttpGatewayForwardAdapter,
 )
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
-from generic_ml_cache_adapters.adapter.out.metrics.journal_metrics import JournalMetrics
-from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
+from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
+from generic_ml_cache_adapters.adapter.outbound.metrics.journal_metrics import JournalMetrics
+from generic_ml_cache_adapters.adapter.outbound.persistence.execution_repository import (
     ExecutionRepository,
 )
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
 )
-from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
+from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (
+    FilesystemBlobStore,
+)
+from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
+    FilesystemWorkspace,
+)
 from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
-from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
+    RegisteredAdapterPort,
+)
 from generic_ml_cache_core.application.usecase.artifact_content_service import (
     ArtifactContentService,
 )
@@ -97,7 +105,7 @@ def resolve_blob_store(store_root: Path, encryption_token: str | None) -> BlobSt
         return blob_store
     if encryption_token is None:
         return TokenRequiredBlobStore(blob_store)
-    from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
+    from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import AesGcmCipher
 
     cipher = AesGcmCipher()
     data_key = cipher.open_envelope(encryption_token, manifest)

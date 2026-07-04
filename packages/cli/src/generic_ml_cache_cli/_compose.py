@@ -13,11 +13,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (
+from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
 )
-from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import StoreEncryptor
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
+from generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor import StoreEncryptor
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
 )
 from generic_ml_cache_adapters.db import DbConnection
@@ -27,10 +27,14 @@ from generic_ml_cache_core.application.domain.model.encryption.encryption_state 
     EncryptionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
-from generic_ml_cache_core.application.port.out.adapter_resolver_port import AdapterResolverPort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.registered_adapter_port import RegisteredAdapterPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
+    RegisteredAdapterPort,
+)
 from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
     SelectAdapterForExecutionService,
 )
@@ -74,7 +78,7 @@ def _build_runners(
     # No client selected: stub mode — every API client name is served by the
     # in-process stub adapter (records/replays a canned response, no live call), so
     # demos and cache tests can exercise the pipeline without real credentials.
-    from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import (
+    from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
         StubApiClientAdapter,
     )
 
@@ -125,7 +129,7 @@ def get_encryption_state(store_root: Path) -> EncryptionState:
 def load_cipher():
     """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
     try:
-        from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher
+        from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import AesGcmCipher
     except ImportError as exc:  # pragma: no cover
         raise SystemExit(
             "error: encryption needs an optional dependency — install with "

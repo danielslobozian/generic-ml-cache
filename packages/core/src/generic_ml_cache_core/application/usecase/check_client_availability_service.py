@@ -12,7 +12,7 @@ from __future__ import annotations
 from generic_ml_cache_core.application.domain.model.catalog.client_availability import (
     ClientAvailability,
 )
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
 
 
 class CheckClientAvailabilityService:

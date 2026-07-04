@@ -13,7 +13,9 @@ pytest.importorskip("cryptography")  # the optional [encryption] extra
 
 from generic_ml_cache_core.common.errors import WrongEncryptionToken  # noqa: E402
 
-from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
+from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import (
+    AesGcmCipher,  # noqa: E402
+)
 
 
 def _cipher() -> AesGcmCipher:

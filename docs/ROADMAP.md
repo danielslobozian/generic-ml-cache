@@ -340,7 +340,7 @@ those gates expose are fixed before the gates go green.
     from `generic_ml_cache_core.adapter` — the hexagonal invariant; dependencies point
     inward, never outward.
   - *Driver packages*: `generic_ml_cache_cli` and `generic_ml_cache_daemon` may not
-    import from `generic_ml_cache_core.adapter.out` — drivers work through ports and
+    import from `generic_ml_cache_core.adapter.outbound` — drivers work through ports and
     the composition root, never past it into driven-adapter implementations.
   - *Domain purity*: `generic_ml_cache_core.application.domain` may not import from
     `generic_ml_cache_core.application.usecase` — domain objects model the world,
@@ -359,7 +359,7 @@ those gates expose are fixed before the gates go green.
     non-port CLI-to-adapter calls.
   - `ExecutionSummary` dataclass moved from the adapter file to the domain/port layer
     where it belongs.
-  - CLI's direct `adapter.out` imports (crypto, lock, discover modules) encapsulated
+  - CLI's direct `adapter.outbound` imports (crypto, lock, discover modules) encapsulated
     behind port or composition-root calls.
 - **Pre-commit hooks** (`.pre-commit-config.yaml`): both `lint-imports` and `pyright`
   run as a local commit-time gate backed by the project's own `.venv` — violations
@@ -527,7 +527,7 @@ import any internal path and receive a silent breakage on upgrade.
   `ClientAdapter`, `MlRunnerPort`, `register`, `get_adapter`, all error types from
   `common/errors.py`, and the checksum utilities.
 - `generic-ml-cache-cli`'s re-export surface aligned and documented.
-- Internal module paths (`adapter/out/…`, `adapter/inbound/…`, persistence internals)
+- Internal module paths (`adapter/outbound/…`, `adapter/inbound/…`, persistence internals)
   documented as internal in the architecture docs.
 
 ### 0.24.0 — Compatibility policy *(released 2026-06-28)*

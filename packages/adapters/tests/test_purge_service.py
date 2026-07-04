@@ -35,12 +35,15 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_c
 from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
     PurgeByTagCommand,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import (
+    MetricsPort,
+    SessionEventRow,
+)
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 
-from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 

@@ -9,7 +9,10 @@ from collections import defaultdict
 import pytest
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
+from generic_ml_cache_core.application.port.outbound.metrics_port import (
+    MetricsPort,
+    SessionEventRow,
+)
 
 
 class InMemoryMetrics(MetricsPort):

@@ -14,8 +14,8 @@ from generic_ml_cache_core.application.domain.model.catalog.client_capability im
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
-from generic_ml_cache_core.application.port.out.model_listing_port import ModelListingPort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.model_listing_port import ModelListingPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
 from generic_ml_cache_bootstrap.discovery.api_discover import list_api_models

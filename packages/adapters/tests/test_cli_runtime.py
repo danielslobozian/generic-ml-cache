@@ -24,7 +24,9 @@ from generic_ml_cache_core.application.domain.model.run.passthrough_request impo
     PassthroughRequest,
 )
 
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
+from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
+    FilesystemWorkspace,
+)
 
 
 def _fake_adapter():

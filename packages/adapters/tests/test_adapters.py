@@ -10,7 +10,7 @@ import pytest
 from generic_ml_cache_bootstrap.discovery.composition import get_adapter, registered_names
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
-from generic_ml_cache_adapters.adapter.out.client.prime_directive import (
+from generic_ml_cache_adapters.adapter.outbound.client.prime_directive import (
     PRIME_DIRECTIVE,
     build_system_prompt,
 )
@@ -170,7 +170,7 @@ def _grant(client, tmp_path, grants):
     # them into the redirected config home; the env points the client at it.
     from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
 
-    from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import (
+    from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
         FilesystemWorkspace,
     )
 
@@ -190,7 +190,7 @@ def _materialize(client, config_home, grants=()):
     WorkspacePort, the way the managed use case does."""
     from generic_ml_cache_core.application.domain.model.run.workspace import Workspace
 
-    from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import (
+    from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
         FilesystemWorkspace,
     )
 
@@ -264,7 +264,7 @@ def test_no_grant_opens_no_capability_in_the_file(tmp_path):
 def test_a_client_without_config_knowledge_is_not_a_config_port():
     # The fake adapter carries no grant config -> it is not a ClientConfigPort, so
     # the use case skips config materialization for it entirely.
-    from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
+    from generic_ml_cache_core.application.port.outbound.client_config_port import ClientConfigPort
 
     assert not isinstance(get_adapter("fake"), ClientConfigPort)
     assert isinstance(get_adapter("claude"), ClientConfigPort)

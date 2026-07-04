@@ -29,10 +29,13 @@ from generic_ml_cache_core.application.port.inbound.session_report.report_for_ta
 from generic_ml_cache_core.application.port.inbound.session_report.report_for_tag_use_case import (
     ReportForTagUseCase,
 )
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort, SessionEventRow
+from generic_ml_cache_core.application.port.outbound.metrics_port import (
+    MetricsPort,
+    SessionEventRow,
+)
 from generic_ml_cache_core.application.usecase.session_report import build_session_report
 
 

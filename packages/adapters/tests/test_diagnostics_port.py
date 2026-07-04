@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 
-from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_adapter import (
     NullDiagnosticsAdapter,
 )
 

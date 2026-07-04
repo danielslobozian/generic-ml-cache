@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from generic_ml_cache_adapters.adapter.out.client.claude import ClaudeAdapter
-from generic_ml_cache_adapters.adapter.out.client.codex import CodexAdapter
-from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
+from generic_ml_cache_adapters.adapter.outbound.client.claude import ClaudeAdapter
+from generic_ml_cache_adapters.adapter.outbound.client.codex import CodexAdapter
+from generic_ml_cache_adapters.adapter.outbound.client.cursor import CursorAdapter
 
 from generic_ml_cache_cli.cli import main
 

@@ -26,13 +26,13 @@ from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command impor
 from generic_ml_cache_core.application.port.inbound.run_ml_gateway_use_case import (
     RunMlGatewayUseCase,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )
-from generic_ml_cache_core.application.port.out.gateway_forward_port import GatewayForwardPort
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.outbound.gateway_forward_port import GatewayForwardPort
+from generic_ml_cache_core.application.port.outbound.metrics_port import MetricsPort
 from generic_ml_cache_core.application.usecase import journal_events
 
 _SUCCESS_STATUS = 200

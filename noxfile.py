@@ -49,9 +49,7 @@ _IMPORT_NAME: dict[str, str] = {pkg: f"generic_ml_cache_{pkg}" for pkg in PACKAG
 # The security-critical secret scrubber runs on every command's log path, so a
 # coverage gap there risks leaking tokens. It carries a per-module floor above the
 # package-wide 80% average, which would otherwise hide a regression in this one file (CG8).
-_SCRUBBER_MODULE = (
-    "generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter"
-)
+_SCRUBBER_MODULE = "generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter"
 _SCRUBBER_FLOOR = 90
 
 

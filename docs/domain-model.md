@@ -584,7 +584,7 @@ computes a key, never stores. The use case turns that result into stored
 **`ApiClientPort`** — call an ML provider API directly. Separate port from
 `ClientRunnerPort` because the contract is fundamentally different (no
 subprocess, no filesystem, no grants). An initial `StubApiClientAdapter` in
-`adapter/out/api/` supports testing before a real adapter exists.
+`adapter/outbound/api/` supports testing before a real adapter exists.
 
 ```python
 class ApiClientPort(ABC):
@@ -663,7 +663,7 @@ type it accepts. Defined in `application/port/inbound/`.
 > Python keyword, so it cannot be used as a package or module name —
 > `from ...port.in import X` is a `SyntaxError`. The inbound side is therefore
 > always written in full as `inbound` rather than the shorter `in`; its outbound
-> counterpart lives in `application/port/out/`. The asymmetry (`inbound` vs the
+> counterpart lives in `application/port/outbound/`. The asymmetry (`inbound` vs the
 > short `out`) is a language constraint, not an oversight — `out` is a legal
 > identifier, `in` is not.
 
@@ -753,13 +753,13 @@ the same boundary the package split will formalise tomorrow.
 | — | `ClientRunResult` / `GeneratedFile` | `application/domain/model/client_run_result.py` |
 | — | `ClientRunRequest` | `application/domain/model/client_run_request.py` |
 | — | `file_content_fingerprint()` | `common/checksum.py` |
-| — | `BlobStorePort` | `application/port/out/blob_store_port.py` |
-| — | `MetricsPort` | `application/port/out/metrics_port.py` |
-| — | `ClientRunnerPort` | `application/port/out/client_runner_port.py` |
-| — | `FileFingerprintPort` | `application/port/out/file_fingerprint_port.py` |
-| — | `ExecutionRepositoryPort` | `application/port/out/execution_repository_port.py` |
-| — | `ClockPort` / `SystemClock` | `application/port/out/clock_port.py` |
-| — | `ApiClientPort` | `application/port/out/api_client_port.py` |
+| — | `BlobStorePort` | `application/port/outbound/blob_store_port.py` |
+| — | `MetricsPort` | `application/port/outbound/metrics_port.py` |
+| — | `ClientRunnerPort` | `application/port/outbound/client_runner_port.py` |
+| — | `FileFingerprintPort` | `application/port/outbound/file_fingerprint_port.py` |
+| — | `ExecutionRepositoryPort` | `application/port/outbound/execution_repository_port.py` |
+| — | `ClockPort` / `SystemClock` | `application/port/outbound/clock_port.py` |
+| — | `ApiClientPort` | `application/port/outbound/api_client_port.py` |
 | `ExecutionOutput` | *(retired mid-refactor — superseded by `Artifact`)* | — |
 
 `ClientStatus` is **kept** (discovery / `doctor` output — unrelated to the

@@ -15,7 +15,9 @@ from typing import Protocol
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
 from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_checksum
 
 

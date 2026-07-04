@@ -17,12 +17,14 @@ from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeU
 from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
 
-from generic_ml_cache_adapters.adapter.out.persistence.in_memory_execution_repository import (
+from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 

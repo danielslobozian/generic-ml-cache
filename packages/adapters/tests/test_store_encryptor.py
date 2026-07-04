@@ -16,21 +16,23 @@ from generic_ml_cache_core.common.errors import (  # noqa: E402
     WrongEncryptionToken,
 )
 
-from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
-from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (  # noqa: E402
+from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import (
+    AesGcmCipher,  # noqa: E402
+)
+from generic_ml_cache_adapters.adapter.outbound.crypto.encrypting_blob_store import (  # noqa: E402
     EncryptingBlobStore,
     TokenRequiredBlobStore,
 )
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
+from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
     FilesystemEncryptionManifestStore,
 )
-from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import (
+from generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor import (
     StoreEncryptor,  # noqa: E402
 )
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (  # noqa: E402
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (  # noqa: E402
     FilesystemStoreLock,
 )
-from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import (  # noqa: E402
+from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (  # noqa: E402
     FilesystemBlobStore,
 )
 
