@@ -40,10 +40,7 @@ pip install generic-ml-cache-core
 for the shipped infrastructure, then wire them in your composition root:
 
 ```python
-from generic_ml_cache_core import ApplicationApi
-from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
-    RunMlExecutionCommand,
-)
+from generic_ml_cache_core import ApplicationApi, ExecutionKind, RunMlExecutionCommand
 
 # wired: ApplicationApi — constructed by your composition root (see adapters package)
 command = RunMlExecutionCommand(

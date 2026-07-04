@@ -76,12 +76,31 @@ def test_the_injectable_spi_ports_are_exported() -> None:
         assert hasattr(core, name)
 
 
+# The composition-SPI port the build_runners callback CONSUMES: a driver receives an
+# instance of it and immediately widens the result to RegisteredAdapterPort for the
+# runner dict, so it never names the method return types (LocalClientPort → the whole
+# local-client role-port hierarchy). It is exported (X17) so the callback's signature
+# can be written from the package root, but it is checked for import (below), not for
+# full implementer-closure — the default resolver is framework-provided; a rare custom
+# one imports the driven-client ports directly.
+_CONSUMED_SPI_PORTS = frozenset({"AdapterResolverPort"})
+
+
+def test_the_consumed_composition_spi_ports_are_importable() -> None:
+    for name in _CONSUMED_SPI_PORTS:
+        assert name in core.__all__ and hasattr(core, name)
+
+
 def test_public_ports_vocabulary_is_fully_exported() -> None:
     # An embedder implementing a public outbound port must be able to construct/read
     # every core type its signatures reference — transitively (W21). If a referenced
     # type is not in __all__, the SPI is not implementable from the stable surface;
     # this walk fails the moment a port grows a signature referencing a fresh type.
-    ports = [getattr(core, name) for name in core.__all__ if name.endswith("Port")]
+    ports = [
+        getattr(core, name)
+        for name in core.__all__
+        if name.endswith("Port") and name not in _CONSUMED_SPI_PORTS
+    ]
     missing = sorted(
         {
             t.__name__

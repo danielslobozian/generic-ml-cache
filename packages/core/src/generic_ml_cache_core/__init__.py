@@ -130,6 +130,9 @@ from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_exec
 from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import (  # noqa: E402  # fmt: skip
     AdapterCatalogPort,
 )
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (  # noqa: E402  # fmt: skip
+    AdapterResolverPort,
+)
 from generic_ml_cache_core.application.port.outbound.blob_store_port import (  # noqa: E402  # fmt: skip
     BlobStorePort,
 )
@@ -142,6 +145,12 @@ from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
     SessionSpecPort,
     SessionTagsPort,
 )
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import (  # noqa: E402  # fmt: skip
+    DiagnosticsPort,
+)
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (  # noqa: E402  # fmt: skip
+    FileFingerprintPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import (  # noqa: E402  # fmt: skip
     AnnotateMlRunPort,
     ExecutionSizeEntry,
@@ -153,6 +162,9 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (  # no
 )
 from generic_ml_cache_core.application.port.outbound.ml_runner_port import (
     MlRunnerPort,  # noqa: E402  # fmt: skip
+)
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (  # noqa: E402  # fmt: skip
+    RegisteredAdapterPort,
 )
 from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import (  # noqa: E402  # fmt: skip
     RepairMlRunsPort,
@@ -228,6 +240,12 @@ __all__ = [
     "BlobStorePort",
     "MlRunnerPort",
     "AdapterCatalogPort",
+    # The composition SPI the documented build_application_api path references (X17):
+    # the build_runners callback is typed over these, and injection accepts them.
+    "AdapterResolverPort",
+    "RegisteredAdapterPort",
+    "FileFingerprintPort",
+    "DiagnosticsPort",
     # Domain vocabulary the public ports reference — the DTOs/enums an embedder
     # must construct/read to implement a port (W21). CallIdentity is exported OPAQUE
     # (its four subclasses stay internal); round-trip it with the serialize pair.

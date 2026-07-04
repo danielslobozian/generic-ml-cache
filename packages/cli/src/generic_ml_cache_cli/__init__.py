@@ -21,6 +21,9 @@ except PackageNotFoundError:  # running from an uninstalled source tree
 
 from generic_ml_cache_core.common.errors import UnknownClient  # noqa: E402
 
+from generic_ml_cache_cli._compose import (
+    build_use_cases,  # noqa: E402  # public embedding entry point
+)
 from generic_ml_cache_cli.discovery import register  # noqa: E402  # adapter registration seam
 
-__all__ = ["__version__", "register", "UnknownClient"]
+__all__ = ["__version__", "register", "UnknownClient", "build_use_cases"]
