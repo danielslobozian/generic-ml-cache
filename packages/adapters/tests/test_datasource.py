@@ -113,3 +113,23 @@ def test_read_only_factory_never_creates_a_missing_db(tmp_path):
     with pytest.raises(StoreUnavailable):
         factory()
     assert not db_path.exists()  # mode=ro must not create the file
+
+
+def test_read_only_factory_opens_a_path_containing_a_question_mark(tmp_path):
+    # X22: a '?' (or '#') is valid on disk but special in SQLite URI syntax; the
+    # read-only URI must percent-encode the path so it opens the right file instead
+    # of mis-parsing 'abc.sqlite3' as a query and reporting the store as unmigrated.
+    db_path = tmp_path / "store?abc.sqlite3"
+    conn = sqlite_connection_factory(db_path)()
+    try:
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.execute("INSERT INTO t VALUES (42)")
+        conn.commit()
+    finally:
+        conn.close()
+
+    conn = sqlite_connection_factory(db_path, read_only=True)()
+    try:
+        assert conn.execute("SELECT x FROM t").fetchone()[0] == 42  # the real file, not a new one
+    finally:
+        conn.close()

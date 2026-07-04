@@ -15,6 +15,7 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from sqlite3 import Connection
+from urllib.parse import quote
 
 from generic_ml_cache_core.common.errors import StoreUnavailable
 
@@ -54,9 +55,11 @@ def sqlite_connection_factory(
             if read_only:
                 # URI mode=ro: SQLite refuses any write to the main database (no
                 # CREATE, no new file), so a probe cannot initialize the store.
-                connection = sqlite3.connect(
-                    f"file:{resolved}?mode=ro", uri=True, check_same_thread=check_same_thread
-                )
+                # Percent-encode the path (keeping ``/``) so a ``?`` or ``#`` in a valid
+                # on-disk path is not mis-parsed as URI query/fragment syntax (X22) —
+                # e.g. a store named ``store?abc.sqlite3`` opened the wrong file.
+                uri = f"file:{quote(str(resolved))}?mode=ro"
+                connection = sqlite3.connect(uri, uri=True, check_same_thread=check_same_thread)
                 connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
                 return connection
             resolved.parent.mkdir(parents=True, exist_ok=True)
