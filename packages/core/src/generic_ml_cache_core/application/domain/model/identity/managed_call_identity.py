@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
@@ -71,7 +71,7 @@ class ManagedCallIdentity(CallIdentity):
     effort: str
     context_fingerprint: str
     prompt_fingerprint: str
-    input_file_fingerprints: Mapping[str, str] = MappingProxyType({})
+    input_file_fingerprints: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
     client_args_fingerprint: str | None = None
     system_fingerprint: str | None = None
     grants: frozenset[str] = frozenset()

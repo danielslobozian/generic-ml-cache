@@ -23,7 +23,7 @@ class ApiPassthroughRequest:
     """
 
     raw_body: bytes = b""
-    forward_headers: Mapping[str, str] = field(default=_NO_HEADERS)
+    forward_headers: Mapping[str, str] = field(default_factory=lambda: _NO_HEADERS)
     timeout: float | None = None
 
     def __post_init__(self) -> None:

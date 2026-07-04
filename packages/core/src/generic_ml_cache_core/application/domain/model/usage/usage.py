@@ -36,7 +36,7 @@ Design rulings this encodes (do not relitigate):
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
@@ -104,7 +104,7 @@ class Usage:
     cost_usd: float | None = None
     #: The client's verbatim usage structure (lossless), so unanticipated
     #: client-specific fields stay reachable. Shape is per-client.
-    raw: Mapping[str, Any] = MappingProxyType({})
+    raw: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "raw", deep_freeze(self.raw))
