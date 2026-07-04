@@ -29,7 +29,6 @@ from generic_ml_cache_core.common.errors import (
 from generic_ml_cache_cli import async_jobs
 from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
-    db_conn_factory,
     make_diag,
     resolve_token,
     store_root,
@@ -91,7 +90,6 @@ def cmd_worker(args: argparse.Namespace) -> int:
                 # spawner), never from disk; a public store ignores it.
                 token = os.environ.get("GMLCACHE_TOKEN") or None
                 wired = build_use_cases(
-                    db_conn_factory(store_root_path),
                     store_root_path,
                     spec_executable_override(spec),
                     spec_timeout(spec),
@@ -201,7 +199,6 @@ def cmd_execution_result(args: argparse.Namespace) -> int:
     token = resolve_token(args)
     try:
         wired = build_use_cases(
-            db_conn_factory(store_root_path),
             store_root_path,
             encryption_token=token,
             diag=make_diag(args),
@@ -370,7 +367,6 @@ def cmd_execution_materialize(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
     try:
         wired = build_use_cases(
-            db_conn_factory(store_root_path),
             store_root_path,
             encryption_token=token,
             diag=make_diag(args),

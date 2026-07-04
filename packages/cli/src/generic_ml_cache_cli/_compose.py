@@ -24,7 +24,6 @@ from generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor import St
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
 )
-from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_bootstrap.application import build_application_api
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
@@ -93,7 +92,6 @@ def _build_runners(
 
 
 def build_use_cases(
-    conn_factory: Callable[[], DbConnection],
     store_root: Path,
     executable_override: ExecutableOverride | None = None,
     timeout: float | None = None,
@@ -115,7 +113,6 @@ def build_use_cases(
         )
 
     return build_application_api(
-        conn_factory,
         store_root,
         _runners,
         encryption_token=encryption_token,

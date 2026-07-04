@@ -61,7 +61,6 @@ from generic_ml_cache_core.common.errors import (
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
-    db_conn_factory,
     make_diag,
     read_text_arg,
     resolve_allow_paths,
@@ -152,9 +151,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         client_args=tuple(getattr(args, "client_arg", None) or []),
         grants=tuple(getattr(args, "grant", None) or []),
     )
-    report = build_use_cases(
-        db_conn_factory(store_root), store_root, diag=make_diag(args)
-    ).probe.execute(command)
+    report = build_use_cases(store_root, diag=make_diag(args)).probe.execute(command)
     execution = report.execution
     usage = execution.token_usage if execution is not None else None
     file_count = (
@@ -218,7 +215,7 @@ def cmd_inspect(args: argparse.Namespace) -> int:
 
     store_root = Path(str(settings["store"][0]))
     matches = build_use_cases(
-        db_conn_factory(store_root), store_root, diag=make_diag(args)
+        store_root, diag=make_diag(args)
     ).find_executions_by_key_prefix.find_by_key_prefix(
         FindExecutionsByKeyPrefixCommand(args.execution)
     )
@@ -259,7 +256,7 @@ def cmd_repair(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
+    wired = build_use_cases(store_root, diag=make_diag(args))
     report = wired.repair_store.repair()
     total = report.runs_recovered + report.runs_unrecoverable
     if total == 0:
@@ -283,7 +280,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
     max_size_bytes = config.resolved_max_size(settings)
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
+    wired = build_use_cases(store_root, diag=make_diag(args))
     summaries = wired.list_execution_summaries.list_summaries()
     store_bytes = wired.total_stored_bytes.total_stored_bytes()
     access = wired.event_counts.event_counts()
@@ -405,7 +402,7 @@ def cmd_purge(args: argparse.Namespace) -> int:
             return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
+    wired = build_use_cases(store_root, diag=make_diag(args))
     report = _dispatch_purge(wired, key, tag, session, session_tag, hard)
 
     if args.json:
@@ -490,7 +487,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
+    wired = build_use_cases(store_root, diag=make_diag(args))
     hit_counts = wired.hit_counts_by_key.hit_counts_by_key()
     entries: list[_ListedExecution] = [
         {
@@ -536,7 +533,7 @@ def cmd_tags(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(db_conn_factory(store_root), store_root, diag=make_diag(args))
+    wired = build_use_cases(store_root, diag=make_diag(args))
     counts: dict[str, int] = {}
     for summary in wired.list_execution_summaries.list_summaries():
         for tag in wired.tags_for_execution.tags_for(
@@ -653,7 +650,6 @@ def cmd_export(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     try:
         wired = build_use_cases(
-            db_conn_factory(store_root),
             store_root,
             encryption_token=resolve_token(args),
             diag=make_diag(args),

@@ -36,7 +36,6 @@ from generic_ml_cache_core.common.errors import (
 from generic_ml_cache_cli import async_jobs, config
 from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
 from generic_ml_cache_cli.composition import (
-    db_conn_factory,
     make_diag,
     read_text_arg,
     resolve_allow_paths,
@@ -334,7 +333,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 4
     execution, error = run_cached_execution(
         lambda: build_use_cases(
-            db_conn_factory(store_root),
             store_root,
             spec_executable_override(spec),
             spec_timeout(spec),
@@ -396,7 +394,6 @@ def cmd_alias(args: argparse.Namespace) -> int:
     store_root = Path(str(settings["store"][0]))
     execution, error = run_cached_execution(
         lambda: build_use_cases(
-            db_conn_factory(store_root),
             store_root,
             lambda _client: executable,
             config.resolved_timeout(settings),

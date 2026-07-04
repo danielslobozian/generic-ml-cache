@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import cast
@@ -18,9 +17,8 @@ from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_ada
 from generic_ml_cache_adapters.adapter.outbound.diagnostics.structlog_diagnostics_adapter import (
     StructlogDiagnosticsAdapter,
 )
-from generic_ml_cache_adapters.datasource import sqlite_connection_factory
-from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_bootstrap.application import build_application_api
+from generic_ml_cache_bootstrap.persistence_backend import sqlite_persistence_backend
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
 from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
@@ -59,16 +57,6 @@ async def _cache_error_handler(request: Request, exc: Exception) -> JSONResponse
     code = exc.code if isinstance(exc, CacheError) else "internal_error"
     status = _CACHE_ERROR_HTTP.get(code, 500)
     return JSONResponse(status_code=status, content={"code": code, "detail": str(exc)})
-
-
-def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
-    # The library's canonical factory: it creates the parent dir and, crucially,
-    # sets PRAGMA foreign_keys = ON per connection so the schema's FKs are enforced.
-    # check_same_thread=False: the daemon shares the factory across its thread pool.
-    return cast(
-        "Callable[[], DbConnection]",
-        sqlite_connection_factory(store_root / _DB_NAME, check_same_thread=False),
-    )
 
 
 _CAPTURE_ENV_FLAG = "GMLCACHE_GATEWAY_CAPTURE"
@@ -118,7 +106,10 @@ def create_app(
         _diag = StructlogDiagnosticsAdapter(log_file, level=log_level)
     else:
         _diag = NullDiagnosticsAdapter()
-    _conn_factory = _db_conn_factory(store_root)
+    # The daemon shares its persistence connection across an async thread pool, so it
+    # injects a SQLite backend built with check_same_thread=False (the CLI uses the
+    # default single-threaded backend). Everything else defaults.
+    _persistence = sqlite_persistence_backend(store_root / _DB_NAME, _diag, check_same_thread=False)
     _encryption_token = os.environ.get("GMLCACHE_TOKEN") or None
 
     # The daemon wires every whitelisted client (the CLI wires one selected
@@ -142,9 +133,9 @@ def create_app(
         return runners
 
     wired_use_cases = build_application_api(
-        _conn_factory,
         store_root,
         _runners,
+        persistence=_persistence,
         encryption_token=_encryption_token,
         max_size=max_size,
         whitelist=whitelist,
