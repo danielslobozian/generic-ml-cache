@@ -41,6 +41,13 @@ from generic_ml_cache_core.common.errors import ArtifactBlobMissing, CacheMiss
 _TEXT_ENCODING = "utf-8"
 _EXECUTE_EXIT = "execute EXIT"
 
+#: Number of stripes in the per-key lock array. A fixed pool bounds memory forever
+#: (W29): a key hashes to one stripe, so two distinct keys occasionally share a lock
+#: and one waits briefly — harmless, and cheaper than a lock-per-key dict that grows
+#: without bound for a long-lived daemon. The in-process lock only stops same-process
+#: duplicate work; cross-process correctness is the database's job (W1).
+_KEY_LOCK_STRIPE_COUNT = 64
+
 
 class CacheableExecutionCommand(Protocol):
     """What the shared flow needs of any execution command: a cache mode and a
@@ -93,8 +100,8 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         self._annotate = annotate
         self._record = record
         self._diag: DiagnosticsPort | None = diag
-        self._key_locks: dict[str, threading.Lock] = {}
-        self._key_locks_guard = threading.Lock()
+        # A fixed pool of striped locks (W29): bounded memory, no per-key growth.
+        self._key_lock_stripes = tuple(threading.Lock() for _ in range(_KEY_LOCK_STRIPE_COUNT))
 
     def execute(self, command: TCommand) -> MlExecution:  # noqa: C901
         _t = time.perf_counter()
@@ -291,14 +298,15 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             raise CacheMiss("offline: this call is not cacheable, so it cannot be served offline")
         return self._run_fresh(command, call_identity, execution_key, allow_store=False)
 
+    def _lock_for_key(self, execution_key: str) -> threading.Lock:
+        """The striped lock guarding this key. ``hash`` is per-process (fine — the
+        lock is intra-process only), and Python's ``%`` keeps the index in range."""
+        return self._key_lock_stripes[hash(execution_key) % _KEY_LOCK_STRIPE_COUNT]
+
     @contextmanager
     def _acquire_key_lock(self, execution_key: str) -> Generator[None, None, None]:
-        """Yield with a per-key lock held, creating it on first use."""
-        with self._key_locks_guard:
-            if execution_key not in self._key_locks:
-                self._key_locks[execution_key] = threading.Lock()
-            lock = self._key_locks[execution_key]
-        with lock:
+        """Yield with the key's striped lock held."""
+        with self._lock_for_key(execution_key):
             yield
 
     def _run_fresh(

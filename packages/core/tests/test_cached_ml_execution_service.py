@@ -427,3 +427,20 @@ class TestTags:
         svc.execute(_Cmd())
 
         repo.add_tags.assert_called_once_with("test-key", ["tag1"])
+
+
+class TestStripedKeyLocks:
+    def test_key_locks_are_striped_and_bounded(self):
+        from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
+            _KEY_LOCK_STRIPE_COUNT,
+        )
+
+        svc = _make_svc()
+        distinct_locks = {id(svc._lock_for_key(f"key-{i}")) for i in range(1000)}
+        # A thousand distinct keys map onto a fixed pool — memory never grows per
+        # key (W29), yet the keys spread across more than one stripe.
+        assert 1 < len(distinct_locks) <= _KEY_LOCK_STRIPE_COUNT
+
+    def test_same_key_maps_to_the_same_lock(self):
+        svc = _make_svc()
+        assert svc._lock_for_key("stable-key") is svc._lock_for_key("stable-key")
