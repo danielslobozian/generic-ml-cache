@@ -9,6 +9,7 @@ from dataclasses import replace
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
     Artifact,
+    ArtifactStatus,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -71,6 +72,47 @@ class InMemoryExecutionRepository(
                     prior.superseded_at = superseded_at
         history.append(stored)
 
+    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
+        execution = self._latest(execution_key)
+        if execution is None:
+            return
+        persisted_at = self._clock.now().isoformat()
+        execution.artifacts[:] = [
+            replace(a, status=ArtifactStatus.STORED, persisted_at=persisted_at, status_detail=None)
+            if a.blob_key == blob_key
+            else a
+            for a in execution.artifacts
+        ]
+
+    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
+        execution = self._latest(execution_key)
+        if execution is None:
+            return
+        execution.artifacts[:] = [
+            replace(a, status=ArtifactStatus.FAILED, status_detail=detail)
+            if a.blob_key == blob_key
+            else a
+            for a in execution.artifacts
+        ]
+
+    def finalize_output_persisted(self, execution_key: str) -> None:
+        execution = self._latest(execution_key)
+        if execution is None:
+            return
+        # A servable SUCCESS supersedes the prior current; a recorded FAILURE
+        # (record_on_error) is persisted without displacing the good answer. The new
+        # row is still output_persisted=0 here, so _is_servable excludes it.
+        if execution.execution_state is ExecutionState.SUCCESS:
+            superseded_at = self._clock.now()
+            for prior in self._by_key.get(execution_key, []):
+                if self._is_servable(prior):
+                    prior.superseded_at = superseded_at
+        execution.output_persisted = True
+
+    def _latest(self, execution_key: str) -> MlExecution | None:
+        history = self._by_key.get(execution_key, [])
+        return history[-1] if history else None
+
     def add_tags(self, execution_key: str, tags: list[str]) -> None:
         # Tags the key's current execution; a no-op when there is none.
         if not tags or self.find_current(execution_key) is None:
@@ -108,12 +150,14 @@ class InMemoryExecutionRepository(
         )
 
     def blob_reference_count(self, blob_key: str) -> int:
+        # Only STORED artifacts truly reference a blob (a PENDING/FAILED row's blob
+        # may not exist), so only they keep it alive for GC.
         return sum(
             1
             for executions in self._by_key.values()
             for execution in executions
             for a in execution.artifacts
-            if a.blob_key == blob_key
+            if a.blob_key == blob_key and a.status is ArtifactStatus.STORED
         )
 
     def soft_purge_execution(self, execution_key: str) -> None:

@@ -8,6 +8,7 @@ import time
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
+    ArtifactStatus,
     ArtifactType,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -140,7 +141,6 @@ class RunMlGatewayService(RunMlGatewayUseCase):
                         key=cache_key,
                         duration_ms=round((time.perf_counter() - _t) * 1000, 1),
                     )
-                self._blob_store.put(cache_key, forwarded.body_bytes)
                 self._record_miss(cache_key, command, forwarded)
         else:
             if self._diag:
@@ -180,26 +180,43 @@ class RunMlGatewayService(RunMlGatewayUseCase):
     ) -> None:
         input_bytes = command.gateway_request.serialize_request()
         input_key = f"{cache_key}.req"
-        self._blob_store.put(input_key, input_bytes)
         input_artifact = Artifact.from_content(
             artifact_type=ArtifactType.INPUT_MESSAGES,
             blob_key=input_key,
             content=input_bytes,
+            status=ArtifactStatus.PENDING,
         )
         output_artifact = Artifact.from_content(
             artifact_type=ArtifactType.STDOUT,
             blob_key=cache_key,
             content=forwarded.body_bytes,
+            status=ArtifactStatus.PENDING,
         )
+        # DB-first: save the rows PENDING (not yet servable) before writing any blob,
+        # so a failed blob write can never orphan bytes; finalize only when both land.
         execution = MlExecution(
             call_identity=GatewayCallIdentity(cache_key=cache_key),
             execution_state=ExecutionState.SUCCESS,
             execution_kind=ExecutionKind.API,
-            output_persisted=True,
+            output_persisted=False,
             artifacts=[input_artifact, output_artifact],
             token_usage=command.gateway_request.parse_token_usage(forwarded.body_bytes),
         )
         self._repository.save(execution)
+        all_stored = True
+        for blob_key, content in ((input_key, input_bytes), (cache_key, forwarded.body_bytes)):
+            try:
+                self._blob_store.put(blob_key, content)
+                self._repository.mark_artifacts_stored(cache_key, blob_key)
+            except Exception as exc:  # noqa: BLE001 — surface any blob-write failure as FAILED (§10)
+                self._repository.mark_artifacts_failed(cache_key, blob_key, str(exc))
+                all_stored = False
+                if self._diag:
+                    self._diag.error(
+                        "gateway blob write failed", key=cache_key, blob=blob_key, exc=exc
+                    )
+        if all_stored:
+            self._repository.finalize_output_persisted(cache_key)
         self._metrics.record_event(
             journal_events.RECORD,
             execution_key=cache_key,

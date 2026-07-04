@@ -8,7 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    ArtifactStatus,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
@@ -359,6 +362,52 @@ def test_managed_miss_runs_and_records():
     assert len(harness.runner.calls) == 1
     assert harness.api.calls == []
     assert harness.metrics.event_names() == ["record"]
+
+
+def test_recorded_run_marks_artifacts_stored():
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
+    execution = harness.service.execute(_managed_command())
+    assert execution.output_persisted is True
+    assert execution.artifacts  # stdout + stderr
+    assert all(a.status is ArtifactStatus.STORED for a in execution.artifacts)
+
+
+def test_blob_write_failure_is_intercepted_and_surfaced():
+    # DB-first + C-4: a failing blob write must NOT throw out of execute(); it marks
+    # the artifacts FAILED with a detail, leaves the run non-servable (not cached),
+    # and does not orphan a blob.
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
+
+    class _FailingBlobStore(FakeBlobStore):
+        def put(self, key: str, output: bytes) -> None:
+            raise OSError("disk full")
+
+    harness.blob = _FailingBlobStore()
+    harness.service = RunMlExecutionService(
+        FakeFileFingerprint(),
+        _runners_for(harness.runner, harness.passthrough, harness.api),
+        harness.blob,
+        save=harness.repo,
+        read=harness.repo,
+        annotate=harness.repo,
+        record=harness.metrics,
+        workspace=FakeWorkspace(),
+    )
+
+    execution = harness.service.execute(_managed_command())  # must not raise
+
+    key = execution.call_identity.generate_key()
+    assert execution.output_persisted is False
+    assert execution.artifacts
+    assert all(a.status is ArtifactStatus.FAILED for a in execution.artifacts)
+    assert all(a.status_detail for a in execution.artifacts)
+    # Not servable: a failed-to-store run is not cached.
+    assert harness.repo.find_current(key) is None
+    # No blob was orphaned (the put failed, so nothing landed).
+    assert harness.blob.store == {}
+    # A subsequent call re-runs the client (the store never became servable).
+    harness.service.execute(_managed_command())
+    assert len(harness.runner.calls) == 2
 
 
 def test_managed_second_call_is_a_cache_hit():

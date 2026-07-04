@@ -12,6 +12,7 @@ from typing import Any
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
     Artifact,
+    ArtifactStatus,
     ArtifactType,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
@@ -160,6 +161,61 @@ class SqliteExecutionRepository(
         finally:
             connection.close()
 
+    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
+        connection = self._connect()
+        try:
+            connection.execute(
+                "UPDATE artifacts SET status = ?, persisted_at = ?, status_detail = NULL "
+                "WHERE blob_key = ? AND execution_id = "
+                "(SELECT id FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1)",
+                (
+                    ArtifactStatus.STORED.value,
+                    self._clock.now().isoformat(),
+                    blob_key,
+                    execution_key,
+                ),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
+        connection = self._connect()
+        try:
+            connection.execute(
+                "UPDATE artifacts SET status = ?, status_detail = ? "
+                "WHERE blob_key = ? AND execution_id = "
+                "(SELECT id FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1)",
+                (ArtifactStatus.FAILED.value, detail, blob_key, execution_key),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def finalize_output_persisted(self, execution_key: str) -> None:
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                "SELECT id, state FROM executions WHERE execution_key = ? ORDER BY id DESC LIMIT 1",
+                (execution_key,),
+            ).fetchone()
+            if row is None:
+                return
+            latest_id, state = row
+            # A servable SUCCESS supersedes the prior current — but a recorded
+            # FAILURE (record_on_error) is persisted without displacing the good
+            # answer. Supersede FIRST (the new row is still output_persisted=0, so
+            # the supersede query cannot match it), then promote the new row.
+            if state == ExecutionState.SUCCESS.value:
+                self._supersede_prior_current(connection, execution_key, self._clock.now())
+            connection.execute(
+                "UPDATE executions SET output_persisted = 1 WHERE id = ?",
+                (latest_id,),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
     @staticmethod
     def _upsert_identity(
         connection: DbConnection, execution_key: str, identity: CallIdentity
@@ -224,7 +280,8 @@ class SqliteExecutionRepository(
         for artifact in artifacts:
             connection.execute(
                 "INSERT INTO artifacts (execution_id, artifact_type, name, encoding, blob_key, "
-                "size_bytes) VALUES (?, ?, ?, ?, ?, ?)",
+                "size_bytes, status, persisted_at, status_detail) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     execution_id,
                     artifact.artifact_type.value,
@@ -232,6 +289,9 @@ class SqliteExecutionRepository(
                     artifact.encoding,
                     artifact.blob_key,
                     artifact.size_bytes,
+                    artifact.status.value,
+                    artifact.persisted_at,
+                    artifact.status_detail,
                 ),
             )
 
@@ -373,8 +433,8 @@ class SqliteExecutionRepository(
     @staticmethod
     def _load_artifacts(connection: DbConnection, execution_id: int) -> list[Artifact]:
         rows = connection.execute(
-            "SELECT artifact_type, name, encoding, blob_key, size_bytes FROM artifacts "
-            "WHERE execution_id = ? ORDER BY id",
+            "SELECT artifact_type, name, encoding, blob_key, size_bytes, status, persisted_at, "
+            "status_detail FROM artifacts WHERE execution_id = ? ORDER BY id",
             (execution_id,),
         ).fetchall()
         return [
@@ -385,8 +445,20 @@ class SqliteExecutionRepository(
                 name=name,
                 encoding=encoding,
                 content=None,
+                status=ArtifactStatus(status),
+                persisted_at=persisted_at,
+                status_detail=status_detail,
             )
-            for (artifact_type, name, encoding, blob_key, size_bytes) in rows
+            for (
+                artifact_type,
+                name,
+                encoding,
+                blob_key,
+                size_bytes,
+                status,
+                persisted_at,
+                status_detail,
+            ) in rows
         ]
 
     @staticmethod
@@ -435,9 +507,11 @@ class SqliteExecutionRepository(
     def blob_reference_count(self, blob_key: str) -> int:
         connection = self._connect()
         try:
+            # Only STORED artifacts truly reference a blob; a PENDING/FAILED row's
+            # blob may not exist, so it must not keep a blob alive for GC purposes.
             row = connection.execute(
-                "SELECT COUNT(*) FROM artifacts WHERE blob_key = ?",
-                (blob_key,),
+                "SELECT COUNT(*) FROM artifacts WHERE blob_key = ? AND status = ?",
+                (blob_key, ArtifactStatus.STORED.value),
             ).fetchone()
             return int(row[0])
         finally:

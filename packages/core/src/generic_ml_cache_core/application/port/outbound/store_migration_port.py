@@ -26,7 +26,7 @@ from abc import ABC, abstractmethod
 #: implement. Bumped whenever a migration changes the persisted domain model
 #: (e.g. the C-4 per-artifact status extends it). An adapter reporting a lower
 #: ``implemented_version()`` is refused at boot.
-CURRENT_MODEL_VERSION = 2
+CURRENT_MODEL_VERSION = 3
 
 
 class StoreMigrationPort(ABC):

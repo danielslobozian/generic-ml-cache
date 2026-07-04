@@ -7,7 +7,11 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timezone
 
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    Artifact,
+    ArtifactStatus,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
@@ -663,3 +667,90 @@ def test_all_execution_keys_empty_after_hard_delete_all(tmp_path):
     for key in list(repository.all_execution_keys()):
         repository.hard_delete_execution(key)
     assert repository.all_execution_keys() == []
+
+
+# --- C-4 DB-first artifact lifecycle -----------------------------------------
+
+
+def _pending_execution(identity, *, state=ExecutionState.SUCCESS, content=b"answer"):
+    """An execution as the DB-first write path saves it: not-yet-persisted, with a
+    PENDING artifact whose blob has not been stored."""
+    artifact = Artifact(
+        artifact_type=ArtifactType.STDOUT,
+        blob_key="blob_" + content.hex(),
+        size_bytes=len(content),
+        content=content,
+        status=ArtifactStatus.PENDING,
+    )
+    return MlExecution(
+        call_identity=identity,
+        execution_state=state,
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        output_persisted=False,
+        artifacts=[artifact],
+    )
+
+
+def test_db_first_pending_run_is_not_servable_until_finalized(tmp_path):
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+    execution = _pending_execution(identity)
+    blob_key = execution.artifacts[0].blob_key
+
+    repo.save(execution)  # PENDING, output_persisted=0 -> not servable, no supersede
+    assert repo.find_current(key) is None
+    assert repo.find_all(key)[0].artifacts[0].status is ArtifactStatus.PENDING
+
+    repo.mark_artifacts_stored(key, blob_key)
+    stored = repo.find_all(key)[0].artifacts[0]
+    assert stored.status is ArtifactStatus.STORED
+    assert stored.persisted_at is not None
+    assert repo.find_current(key) is None  # still not finalized
+
+    repo.finalize_output_persisted(key)
+    current = repo.find_current(key)
+    assert current is not None
+    assert current.output_persisted is True
+
+
+def test_db_first_failed_blob_marks_artifact_failed(tmp_path):
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+    execution = _pending_execution(identity)
+    blob_key = execution.artifacts[0].blob_key
+
+    repo.save(execution)
+    repo.mark_artifacts_failed(key, blob_key, "disk full")
+    failed = repo.find_all(key)[0].artifacts[0]
+    assert failed.status is ArtifactStatus.FAILED
+    assert failed.status_detail == "disk full"
+    # A FAILED artifact does not keep the blob alive for GC.
+    assert repo.blob_reference_count(blob_key) == 0
+    # Never finalized -> not servable.
+    assert repo.find_current(key) is None
+
+
+def test_finalizing_a_recorded_failure_does_not_supersede_the_good_answer(tmp_path):
+    # record_on_error stores a FAILED run; finalizing it must persist the record
+    # WITHOUT displacing the current SUCCESS (find_current filters SUCCESS anyway).
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+
+    good = _pending_execution(identity, content=b"good")
+    repo.save(good)
+    repo.mark_artifacts_stored(key, good.artifacts[0].blob_key)
+    repo.finalize_output_persisted(key)
+    assert repo.find_current(key) is not None
+
+    failed = _pending_execution(identity, state=ExecutionState.FAILED, content=b"boom")
+    repo.save(failed)
+    repo.mark_artifacts_stored(key, failed.artifacts[0].blob_key)
+    repo.finalize_output_persisted(key)
+
+    current = repo.find_current(key)
+    assert current is not None
+    assert current.execution_state is ExecutionState.SUCCESS
+    assert current.artifacts[0].blob_key == "blob_" + b"good".hex()

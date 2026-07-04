@@ -11,6 +11,22 @@ _UTF8 = "utf-8"
 _BINARY = "binary"
 
 
+class ArtifactStatus(enum.Enum):
+    """The persistence lifecycle of an artifact's blob (C-4).
+
+    DB-first ordering: the row is written ``PENDING`` before the blob is put, then
+    flipped to ``STORED`` once the blob lands, or ``FAILED`` (with a
+    ``status_detail``) if the write fails. Readers trust only ``STORED``; the
+    execution becomes servable (``output_persisted``) only when all its artifacts
+    are ``STORED``. So an untracked orphan (a blob with no row) is impossible, and a
+    failed write is a visible, recoverable state rather than a stuck run.
+    """
+
+    PENDING = "pending"
+    STORED = "stored"
+    FAILED = "failed"
+
+
 class ArtifactType(enum.Enum):
     """The kind of document an Artifact holds.
 
@@ -53,6 +69,9 @@ class Artifact:
     name: str | None = None
     encoding: str = _UTF8
     content: bytes | None = None
+    status: ArtifactStatus = ArtifactStatus.STORED
+    persisted_at: str | None = None
+    status_detail: str | None = None
 
     @classmethod
     def from_content(
@@ -61,11 +80,13 @@ class Artifact:
         blob_key: str,
         content: bytes,
         name: str | None = None,
+        status: ArtifactStatus = ArtifactStatus.STORED,
     ) -> Artifact:
         """Build a hydrated artifact from its bytes, deriving size and encoding.
 
-        The caller has already computed ``blob_key`` and stored the bytes; this
-        only assembles the value object from the content it owns.
+        The caller has already computed ``blob_key`` and holds the bytes; this only
+        assembles the value object. ``status`` defaults to ``STORED`` (the read/hydrate
+        case); the write path builds ``PENDING`` artifacts before storing the blob.
         """
         return cls(
             artifact_type=artifact_type,
@@ -74,7 +95,13 @@ class Artifact:
             name=name,
             encoding=cls._encoding_for(content),
             content=content,
+            status=status,
         )
+
+    @property
+    def is_stored(self) -> bool:
+        """True when the blob is confirmed persisted (safe to hydrate/serve)."""
+        return self.status is ArtifactStatus.STORED
 
     @staticmethod
     def _encoding_for(content: bytes) -> str:

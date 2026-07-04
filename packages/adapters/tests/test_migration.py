@@ -80,7 +80,7 @@ def test_migration_records_applied_migration(tmp_path: Path) -> None:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 2
+    assert version == 3
 
 
 def test_migration_creates_indexes(tmp_path: Path) -> None:

@@ -46,13 +46,42 @@ class ExecutionSizeEntry:
 
 
 class SaveMlRunPort(ABC):
-    """Append a new ML run to the store (the write side of record-or-replay)."""
+    """Append a new ML run and drive its artifacts' persistence lifecycle (C-4).
+
+    DB-first ordering: ``save`` writes the run with its artifacts ``PENDING`` and
+    ``output_persisted`` still false (so it is not yet servable and does NOT
+    supersede the prior current run). The use case then stores each blob and calls
+    ``mark_artifacts_stored`` / ``mark_artifacts_failed``, and finally
+    ``finalize_output_persisted`` once every artifact is stored — which is the point
+    the run becomes servable and supersedes its predecessor.
+    """
 
     @abstractmethod
     def save(self, execution: MlExecution) -> None:
-        """Append a new execution. If it is a servable success, atomically
-        supersede the prior current execution for the same key — the supersession
-        happens here, where atomicity belongs, never in the caller."""
+        """Append a new execution. A servable success (``output_persisted`` true)
+        atomically supersedes the prior current execution for the same key — the
+        supersession happens here, where atomicity belongs, never in the caller. A
+        run saved not-yet-persisted (the C-4 DB-first path) supersedes nothing; that
+        is deferred to ``finalize_output_persisted``."""
+
+    @abstractmethod
+    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None:
+        """Flip every artifact of the key's latest execution that references
+        ``blob_key`` to ``STORED`` and stamp ``persisted_at`` — the blob is now
+        confirmed in the store. Two artifacts sharing a blob (e.g. empty
+        stdout+stderr) are marked together; one blob backs both."""
+
+    @abstractmethod
+    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None:
+        """Flip every artifact of the key's latest execution that references
+        ``blob_key`` to ``FAILED`` with ``detail`` — the blob write did not land, so
+        the run cannot become servable and the failure is visible in read views."""
+
+    @abstractmethod
+    def finalize_output_persisted(self, execution_key: str) -> None:
+        """Mark the key's latest execution output-persisted (servable) and supersede
+        the prior current execution — called once all its artifacts are ``STORED``.
+        The deferred half of ``save``'s supersession under DB-first ordering."""
 
 
 class ReadMlRunPort(ABC):
