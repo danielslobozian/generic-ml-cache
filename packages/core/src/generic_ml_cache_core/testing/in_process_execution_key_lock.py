@@ -14,6 +14,9 @@ from generic_ml_cache_core.application.port.outbound.execution_key_lock_port imp
 
 #: A fixed pool of striped locks (W29): bounded memory, no per-key growth. Two keys
 #: that hash to the same stripe share a lock — a rare, harmless over-serialization.
+#: The locks are RE-ENTRANT (RLock): a thread holding one key's lock may acquire
+#: another's even when they collide on a stripe (eviction runs inside a record, X10),
+#: which a plain Lock would deadlock on.
 _STRIPE_COUNT = 64
 
 
@@ -28,7 +31,7 @@ class InProcessExecutionKeyLock(ExecutionKeyLockPort):
     """
 
     def __init__(self) -> None:
-        self._stripes = tuple(threading.Lock() for _ in range(_STRIPE_COUNT))
+        self._stripes = tuple(threading.RLock() for _ in range(_STRIPE_COUNT))
 
     @contextmanager
     def acquire(self, execution_key: str) -> Generator[None]:

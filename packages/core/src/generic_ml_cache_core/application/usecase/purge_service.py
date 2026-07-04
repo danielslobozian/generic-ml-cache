@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
 
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
@@ -53,6 +54,9 @@ from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
     SessionQueryPort,
 )
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ExecutionSizeEntry,
     PurgeMlRunsPort,
@@ -83,12 +87,18 @@ class PurgeService(
         blob_store: BlobStorePort,
         journal: PurgeJournalPort,
         sessions: SessionQueryPort,
+        execution_key_lock: ExecutionKeyLockPort | None = None,
         diag: DiagnosticsPort | None = None,
     ) -> None:
         self._repository = repository
         self._blob_store = blob_store
         self._journal = journal
         self._sessions = sessions
+        # The per-key record-once lock (X7). A purge/eviction of a key holds it while
+        # deleting that key's rows + blobs, so it can never race a concurrent write of
+        # the same key (X10). Shared with the record path (one instance) so they
+        # coordinate. Optional — a no-op when absent (a non-filesystem embedder).
+        self._execution_key_lock: ExecutionKeyLockPort | None = execution_key_lock
         self._diag: DiagnosticsPort | None = diag
 
     # -- scoped purge (soft by default; hard when the command says so) ---------
@@ -175,13 +185,29 @@ class PurgeService(
     def _purge(self, keys: list[str], hard: bool) -> PurgeReport:
         return self._hard_delete_keys(keys) if hard else self._soft_purge_keys(keys)
 
+    def _key_lock(self, execution_key: str) -> AbstractContextManager[None]:
+        """Hold the per-key record-once lock around this key's purge, so it never
+        races a concurrent write of the same key (X10). A no-op when no lock is
+        injected — a non-filesystem store manages its own consistency."""
+        if self._execution_key_lock is None:
+            return nullcontext()
+        return self._execution_key_lock.acquire(execution_key)
+
     def _soft_purge_keys(self, keys: list[str]) -> PurgeReport:
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-        blob_sizes = self._blob_sizes_for(keys)
+        blobs_removed = 0
+        bytes_freed = 0
+        # One key at a time under its own lock: collect its blob sizes, drop its
+        # artifact rows, then remove its (execution-owned, X25) blobs — so eviction
+        # can never race a concurrent write of that key.
         for key in keys:
-            self._repository.soft_purge_execution(key)
-        blobs_removed, bytes_freed = self._remove_blobs(blob_sizes)
+            with self._key_lock(key):
+                blob_sizes = self._blob_sizes_for([key])
+                self._repository.soft_purge_execution(key)
+                removed, freed = self._remove_blobs(blob_sizes)
+            blobs_removed += removed
+            bytes_freed += freed
         report = PurgeReport(
             executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
@@ -197,11 +223,16 @@ class PurgeService(
     def _hard_delete_keys(self, keys: list[str]) -> PurgeReport:
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-        blob_sizes = self._blob_sizes_for(keys)
+        blobs_removed = 0
+        bytes_freed = 0
         for key in keys:
-            self._repository.hard_delete_execution(key)
-            self._journal.delete_events_for_key(key)
-        blobs_removed, bytes_freed = self._remove_blobs(blob_sizes)
+            with self._key_lock(key):
+                blob_sizes = self._blob_sizes_for([key])
+                self._repository.hard_delete_execution(key)
+                self._journal.delete_events_for_key(key)
+                removed, freed = self._remove_blobs(blob_sizes)
+            blobs_removed += removed
+            bytes_freed += freed
         report = PurgeReport(
             executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )

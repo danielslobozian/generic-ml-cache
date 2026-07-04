@@ -43,3 +43,13 @@ def test_the_lock_is_reusable_after_release():
         pass
     with lock.acquire("k"):  # a released lock can be re-acquired
         pass
+
+
+def test_a_thread_can_nest_acquisitions_without_deadlock():
+    # X10: the stripes are re-entrant (RLock) — a thread already holding a key's lock
+    # (recording it) can acquire another key's lock (evicting a victim) even when they
+    # collide on a stripe. Same-key nesting is the deterministic proof of re-entrancy.
+    lock = InProcessExecutionKeyLock()
+    with lock.acquire("k"):
+        with lock.acquire("k"):  # a plain Lock would deadlock here
+            pass

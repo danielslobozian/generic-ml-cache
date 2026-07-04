@@ -78,12 +78,16 @@ class EvictionScheduler:
             self._task = None
 
     async def _loop(self) -> None:
+        loop = asyncio.get_running_loop()
         while True:
             await asyncio.sleep(self._interval)
-            self._run_sweep()
+            # Offload the synchronous sweep (full-table scans, per-key locking, blob
+            # unlinks) to a worker thread so it never stalls the daemon event loop —
+            # the same offload the gateway uses for a blocking execute (X10).
+            await loop.run_in_executor(None, self._run_sweep)
 
     def _run_sweep(self) -> None:
-        """Execute one eviction sweep and update stats."""
+        """Execute one eviction sweep and update stats. Runs off the event loop."""
         report = PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         if self._stats.max_size is not None:
             quota_report = self._evict_to_quota.evict_to_quota(

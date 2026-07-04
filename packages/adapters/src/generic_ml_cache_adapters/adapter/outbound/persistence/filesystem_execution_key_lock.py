@@ -32,7 +32,10 @@ from generic_ml_cache_core.application.port.outbound.execution_key_lock_port imp
 )
 
 _LOCKS_DIRNAME = "locks"
-#: A fixed pool of in-process stripes (W29): bounded memory, no per-key growth.
+#: A fixed pool of in-process stripes (W29): bounded memory, no per-key growth. The
+#: stripes are RE-ENTRANT (RLock) so a thread holding one key's lock may acquire
+#: another's even on a colliding stripe — eviction acquires victim keys' locks from
+#: inside a record that already holds the recorded key's lock (X10).
 _STRIPE_COUNT = 64
 #: Ceiling on the cross-process wait, mirroring SQLite's busy_timeout (5s); on timeout
 #: the caller proceeds (possible duplicate WORK, never duplicate corruption).
@@ -80,7 +83,7 @@ class FilesystemExecutionKeyLock(ExecutionKeyLockPort):
         self._locks_dir = Path(store_root) / _LOCKS_DIRNAME
         self._diag = diag
         self._timeout_seconds = timeout_seconds
-        self._stripes = tuple(threading.Lock() for _ in range(_STRIPE_COUNT))
+        self._stripes = tuple(threading.RLock() for _ in range(_STRIPE_COUNT))
 
     @contextmanager
     def acquire(self, execution_key: str) -> Generator[None]:

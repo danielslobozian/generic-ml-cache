@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import time as _time_module
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
@@ -50,6 +51,9 @@ from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
 )
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
@@ -472,7 +476,7 @@ def _over_quota_service(metrics, diag):
     repo.save(_execution(_identity("b"), content=b"bbbb"))
     store.put("blob_" + b"aaaa".hex(), b"aaaa")
     store.put("blob_" + b"bbbb".hex(), b"bbbb")
-    return PurgeService(repo, store, metrics, metrics, diag)
+    return PurgeService(repo, store, metrics, metrics, diag=diag)
 
 
 def test_evict_to_quota_warns_and_still_enforces_when_access_data_unreadable():
@@ -513,6 +517,36 @@ def test_evict_to_quota_falls_back_to_creation_time_for_untracked_keys():
 
     assert report.executions_removed >= 1
     assert report.bytes_freed > 0
+
+
+class _SpyKeyLock(ExecutionKeyLockPort):
+    """Records the keys eviction/purge holds the per-key lock for (X10)."""
+
+    def __init__(self) -> None:
+        self.acquired: list[str] = []
+
+    @contextmanager
+    def acquire(self, execution_key: str):
+        self.acquired.append(execution_key)
+        yield
+
+
+def test_eviction_holds_the_per_key_lock_for_each_evicted_key():
+    # X10: each evicted key is deleted under its own record-once lock, so eviction can
+    # never race a concurrent write of that key.
+    id_a = _identity("a")
+    id_b = _identity("b")
+    repo = InMemoryExecutionRepository(FixedClock())
+    store = InMemoryBlobStore()
+    for identity, content in ((id_a, b"aaaa"), (id_b, b"bbbb")):
+        repo.save(_execution(identity, content=content))
+        store.put("blob_" + content.hex(), content)
+    lock = _SpyKeyLock()
+    svc = PurgeService(repo, store, FakeMetrics(), FakeMetrics(), execution_key_lock=lock)
+
+    svc.evict_to_quota(EvictToQuotaCommand(max_bytes=0))  # evict everything
+
+    assert set(lock.acquired) == {id_a.generate_key(), id_b.generate_key()}
 
 
 # --- purge_by_session_tag / hard_delete_by_session_tag -----------------------

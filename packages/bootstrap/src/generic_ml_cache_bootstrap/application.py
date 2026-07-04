@@ -171,6 +171,11 @@ def build_application_api(
     file_fingerprint = (
         file_fingerprint if file_fingerprint is not None else FilesystemFileFingerprint()
     )
+    # One shared per-key lock instance (X7): the record path and eviction/purge both
+    # coordinate on it, so an eviction of a key waits for a concurrent write of that
+    # same key (and vice versa) — its in-process stripe only serializes if it is the
+    # same object.
+    execution_key_lock = FilesystemExecutionKeyLock(store_root, _diag)
     provision_store(persistence.migration)
     runners = build_runners(catalog_for(whitelist), default_resolver())
     # The caching HTTP gateway (the daemon's /gateway/claude route) dispatches an
@@ -187,6 +192,7 @@ def build_application_api(
         blob_store,
         journal=persistence.purge_journal,
         sessions=persistence.session_query,
+        execution_key_lock=execution_key_lock,
         diag=_diag,
     )
     session_tags = SessionTagsService(persistence.session_tags)
@@ -216,7 +222,7 @@ def build_application_api(
             read=persistence.read_ml_run,
             annotate=persistence.annotate_ml_run,
             record=persistence.record_call_event,
-            execution_key_lock=FilesystemExecutionKeyLock(store_root, _diag),
+            execution_key_lock=execution_key_lock,
             store_lock=FilesystemStoreLock(store_root),
             purge_service=purge,
             max_size=max_size,
