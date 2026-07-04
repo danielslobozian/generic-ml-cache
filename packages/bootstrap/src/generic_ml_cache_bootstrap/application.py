@@ -218,7 +218,7 @@ def build_application_api(
     artifact_content = ArtifactContentService(blob_store)
     repair_store = RepairStoreService(
         repair_source=persistence.repair_ml_runs,
-        save=persistence.save_ml_run,
+        artifact_persistence=persistence.save_ml_run,
         blob_store=blob_store,
     )
     return ApplicationApi(

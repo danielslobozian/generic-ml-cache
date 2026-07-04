@@ -17,8 +17,12 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
+from generic_ml_cache_core.application.port.outbound.artifact_persistence_repair_port import (
+    ArtifactPersistenceRepairPort,
+)
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import SaveMlRunPort
 from generic_ml_cache_core.application.usecase.repair_store_service import RepairStoreService
 from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
@@ -83,7 +87,7 @@ def _save_pending(repo, identity, blob_key: str) -> str:
 
 
 def _service(repo, blob):
-    return RepairStoreService(repair_source=repo, save=repo, blob_store=blob)
+    return RepairStoreService(repair_source=repo, artifact_persistence=repo, blob_store=blob)
 
 
 def test_repair_recovers_a_run_whose_blob_is_present():
@@ -120,3 +124,39 @@ def test_repair_is_a_no_op_when_nothing_is_pending():
     repo = InMemoryExecutionRepository(clock=FixedClock())
     report = _service(repo, InMemoryBlobStore()).repair()
     assert report == report.__class__(0, 0, 0, 0)
+
+
+class _NarrowArtifactPersistence(ArtifactPersistenceRepairPort):
+    """Implements ONLY the three artifact-persistence methods — no save/record path."""
+
+    def __init__(self) -> None:
+        self.stored: list = []
+        self.finalized: list = []
+
+    def mark_artifacts_stored(self, execution_id, blob_key) -> None:
+        self.stored.append((execution_id, blob_key))
+
+    def mark_artifacts_failed(self, execution_id, blob_key, detail) -> None:
+        pass
+
+    def finalize_output_persisted(self, execution_id) -> None:
+        self.finalized.append(execution_id)
+
+
+def test_repair_depends_only_on_the_narrow_artifact_persistence_port():
+    # X21 (ISP): the repair path drives persistence through the narrow
+    # ArtifactPersistenceRepairPort — a repair-only backend need not implement the
+    # fuller SaveMlRunPort (save / record_outcome / persist_artifact / remove).
+    repo = InMemoryExecutionRepository(clock=FixedClock())
+    blob = InMemoryBlobStore()
+    _save_pending(repo, _identity(), "blob-a")
+    blob.put("blob-a", b"hi")
+    narrow = _NarrowArtifactPersistence()
+
+    report = RepairStoreService(
+        repair_source=repo, artifact_persistence=narrow, blob_store=blob
+    ).repair()
+
+    assert report.runs_recovered == 1
+    assert narrow.stored and narrow.finalized  # reconciled + finalized via the narrow port
+    assert not isinstance(narrow, SaveMlRunPort)  # NOT the full write port

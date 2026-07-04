@@ -26,6 +26,9 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import Ar
 from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.port.outbound.artifact_persistence_repair_port import (
+    ArtifactPersistenceRepairPort,
+)
 
 
 @dataclass(frozen=True)
@@ -47,7 +50,7 @@ class ExecutionSizeEntry:
     created_at: str  # ISO-format string; empty string when not tracked (in-memory)
 
 
-class SaveMlRunPort(ABC):
+class SaveMlRunPort(ArtifactPersistenceRepairPort):
     """Append a new ML run and drive its persistence lifecycle in place (W1, C-4).
 
     ONE row per client call, updated in place: ``save`` inserts the IN_PROGRESS
@@ -58,6 +61,11 @@ class SaveMlRunPort(ABC):
     every artifact is STORED. Every post-``save`` step targets ``execution_id`` — the
     exact row just written — never "the latest row by key", which a concurrent
     second writer could have inserted (the W1 corruption bug).
+
+    Extends :class:`ArtifactPersistenceRepairPort` (X21): the three artifact-resolution
+    methods (``mark_artifacts_stored``/``mark_artifacts_failed``/
+    ``finalize_output_persisted``) are that narrower role, which ``RepairStoreService``
+    depends on alone; the record/write path uses them through this fuller port.
     """
 
     @abstractmethod
@@ -85,38 +93,12 @@ class SaveMlRunPort(ABC):
         its blob is stored). Raises ``StoreConsistencyError`` for an unknown id."""
 
     @abstractmethod
-    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: BlobKey) -> None:
-        """Flip every artifact of the execution identified by ``execution_id`` that
-        references ``blob_key`` to ``STORED`` and stamp ``persisted_at`` — the blob
-        is confirmed in the store. Two artifacts sharing a blob (e.g. empty
-        stdout+stderr) are marked together; one blob backs both. Raises
-        ``StoreConsistencyError`` if no such artifact row exists to update."""
-
-    @abstractmethod
-    def mark_artifacts_failed(
-        self, execution_id: ExecutionId, blob_key: BlobKey, detail: str
-    ) -> None:
-        """Flip every artifact of the execution identified by ``execution_id`` that
-        references ``blob_key`` to ``FAILED`` with ``detail`` — the blob write did
-        not land, so the run cannot become servable and the failure is visible in
-        read views. Raises ``StoreConsistencyError`` if there is no row to update."""
-
-    @abstractmethod
     def remove_execution(self, execution_id: ExecutionId) -> None:
         """Delete the single execution identified by ``execution_id`` and its
         artifact / usage / tag rows — used to clean up an IN_PROGRESS row when the
         run must NOT be recorded (a requested stop, ``RunInterrupted``). Targets only
         that one row (never the whole key), so a prior servable run for the same key
         is untouched. Idempotent — a no-op if the id is already gone (S3c-ii)."""
-
-    @abstractmethod
-    def finalize_output_persisted(self, execution_id: ExecutionId) -> None:
-        """Mark the execution identified by ``execution_id`` output-persisted
-        (servable) and supersede the prior current execution — called once all its
-        artifacts are ``STORED``. The deferred half of ``save``'s supersession under
-        DB-first ordering. Raises ``StoreConsistencyError`` if the id is unknown or
-        any of its artifacts is not yet STORED (finalize must never make a run with a
-        missing blob servable)."""
 
 
 class ReadMlRunPort(ABC):
