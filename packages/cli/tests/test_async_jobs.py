@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 
 import pytest
 
@@ -15,7 +16,8 @@ from generic_ml_cache_cli.async_jobs import (
     hold_job_lock,
     job_lock_held,
 )
-from generic_ml_cache_cli.cli import _cmd_worker, main
+from generic_ml_cache_cli.cli import main
+from generic_ml_cache_cli.controllers.execution import cmd_worker
 
 _RUN_BASE = ["run", "--client", "fake", "--model", "m1", "--effort", "high"]
 
@@ -49,7 +51,7 @@ def _spec():
 def test_worker_runs_the_job_and_records_success(tmp_path):
     store = JobStore(tmp_path)
     store.write_spec("j1", _spec())
-    rc = _cmd_worker(argparse.Namespace(store_root=str(tmp_path), job_id="j1"))
+    rc = cmd_worker(argparse.Namespace(store_root=str(tmp_path), job_id="j1"))
     assert rc == 0
     status = store.read_status("j1")
     assert status["state"] == "succeeded"
@@ -64,7 +66,7 @@ def test_worker_records_failure_on_a_bad_client(tmp_path):
     spec["client"] = "does-not-exist"
     store = JobStore(tmp_path)
     store.write_spec("j2", spec)
-    rc = _cmd_worker(argparse.Namespace(store_root=str(tmp_path), job_id="j2"))
+    rc = cmd_worker(argparse.Namespace(store_root=str(tmp_path), job_id="j2"))
     assert rc == 1
     status = store.read_status("j2")
     assert status["state"] == "failed" and status["error"]
@@ -149,7 +151,7 @@ def _submit_via_run(monkeypatch, prompt="STDOUT hi"):
 
 def _submit_and_run(monkeypatch, prompt="STDOUT hi"):
     jid, root = _submit_via_run(monkeypatch, prompt)
-    _cmd_worker(argparse.Namespace(store_root=str(root), job_id=jid))
+    cmd_worker(argparse.Namespace(store_root=str(root), job_id=jid))
     return jid, root
 
 
@@ -260,8 +262,8 @@ def test_materialize_refuses_an_unfinished_job(tmp_path, monkeypatch):
 def _encrypt_and_get_token(capsys):
     assert main(["encrypt"]) == 0  # encrypt the (empty) isolated store
     out = capsys.readouterr().out
-    tokens = [w for w in out.split() if len(w) == 64 and all(c in "0123456789abcdef" for c in w)]
-    assert tokens, "encrypt should print a hex token"
+    tokens = [w for w in out.split() if re.fullmatch(r"gmlc_[0-9a-f]{64}", w)]
+    assert tokens, "encrypt should print a gmlc_-prefixed token"
     return tokens[0]
 
 
@@ -294,7 +296,7 @@ def test_detached_run_round_trips_on_an_encrypted_store(capsys, monkeypatch):
     # run the worker with the token in its environment, as the spawner would have set it
     monkeypatch.setenv("GMLCACHE_TOKEN", token)
     assert (
-        _cmd_worker(argparse.Namespace(store_root=str(captured["root"]), job_id=captured["jid"]))
+        cmd_worker(argparse.Namespace(store_root=str(captured["root"]), job_id=captured["jid"]))
         == 0
     )
     monkeypatch.delenv("GMLCACHE_TOKEN", raising=False)

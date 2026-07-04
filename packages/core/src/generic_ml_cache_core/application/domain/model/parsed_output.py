@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage
 
@@ -20,4 +19,4 @@ class ParsedOutput:
     """
 
     text: str
-    usage: Optional[Usage] = None
+    usage: Usage | None = None

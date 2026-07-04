@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+
+from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
+    StubApiClientAdapter,
+)
 
 
 def _request(prompt: str = "summarise this") -> MlRequest:
@@ -29,7 +31,7 @@ def test_stub_returns_a_client_run_result_with_no_files():
     result = StubApiClientAdapter().run(_request())
     assert isinstance(result, ClientRunResult)
     assert result.exit_code == 0
-    assert result.files == []
+    assert result.files == ()
 
 
 def test_stub_reply_reflects_model_and_prompt():

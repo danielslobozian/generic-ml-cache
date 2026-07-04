@@ -7,16 +7,18 @@
 
 from __future__ import annotations
 
-import subprocess
+from generic_ml_cache_core.common.errors import RunTimedOut
 
-from generic_ml_cache_cli import cli
 import generic_ml_cache_cli.controllers.run as run_ctrl
+from generic_ml_cache_cli import cli
 
 
 def test_cli_maps_timeout_to_124(monkeypatch):
     class _TimingOutService:
         def execute(self, command):
-            raise subprocess.TimeoutExpired(cmd="client", timeout=0.5)
+            # The client-run adapter translates subprocess.TimeoutExpired to RunTimedOut
+            # (Y4), so core re-raises the project type; the CLI maps it to exit 124.
+            raise RunTimedOut(client="fake", timeout_seconds=0.5)
 
     class _Wired:
         run_ml = _TimingOutService()

@@ -3,10 +3,9 @@
     "packages/core/src",
     "packages/cli/src",
     "packages/daemon/src",
-    "packages/adapters/src"
+    "packages/adapters/src",
+    "packages/bootstrap/src"
   ],
   "pythonVersion": "3.10",
-  "typeCheckingMode": "basic",
-  "venvPath": ".",
-  "venv": ".venv"
+  "typeCheckingMode": "strict"
 }

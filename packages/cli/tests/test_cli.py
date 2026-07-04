@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-
 import pytest
+from conftest import write_directive
 
 from generic_ml_cache_cli.cli import main
-from conftest import write_directive
 
 
 def run_cli(args):
@@ -175,7 +174,7 @@ def test_run_rejects_retired_location_flags(tmp_path):
 
 
 def test_render_banner_lines_align():
-    from generic_ml_cache_cli.cli import render_banner
+    from generic_ml_cache_cli.presenters.shared import render_banner
 
     lines = render_banner(color=False).splitlines()
     widths = {len(line) for line in lines}
@@ -185,7 +184,7 @@ def test_render_banner_lines_align():
 
 
 def test_render_banner_color_is_opt_in():
-    from generic_ml_cache_cli.cli import render_banner
+    from generic_ml_cache_cli.presenters.shared import render_banner
 
     assert "\x1b[" not in render_banner(color=False)
     assert "\x1b[" in render_banner(color=True)
@@ -195,12 +194,12 @@ def test_paint_colours_only_when_enabled(monkeypatch):
     """gmlcache's UI is coloured only on a real TTY; piped/NO_COLOR output is plain."""
     from generic_ml_cache_cli.presenters import shared
 
-    monkeypatch.setattr(shared, "_use_color", lambda: True)
-    painted = shared._paint("hit", shared._GREEN)
+    monkeypatch.setattr(shared, "use_color", lambda: True)
+    painted = shared.paint("hit", shared.GREEN)
     assert painted.startswith("\x1b[") and painted.endswith("\x1b[0m") and "hit" in painted
 
-    monkeypatch.setattr(shared, "_use_color", lambda: False)
-    assert shared._paint("hit", shared._GREEN) == "hit"  # no escape codes when off
+    monkeypatch.setattr(shared, "use_color", lambda: False)
+    assert shared.paint("hit", shared.GREEN) == "hit"  # no escape codes when off
 
 
 def test_bare_invocation_prints_help_not_an_error(capsys):
@@ -357,6 +356,16 @@ def test_stats_reports_executions_and_access(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "executions : 2" in out
     assert "record" in out  # access events
+
+
+def test_repair_on_a_fully_persisted_store_reports_nothing(tmp_path, monkeypatch, capsys):
+    # Normal runs persist fully (DB-first finalize), so repair has nothing to reconcile.
+    _record_two_models(monkeypatch, tmp_path)
+    capsys.readouterr()
+    rc = main(["repair"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "nothing to reconcile" in out
 
 
 def test_stats_shows_store_size(tmp_path, monkeypatch, capsys):
@@ -1359,7 +1368,7 @@ def test_daemon_start_calls_uvicorn(tmp_path, monkeypatch, capsys):
     mock_uvicorn = MagicMock()
 
     with (
-        patch("generic_ml_cache_cli.cli._store_root", return_value=tmp_path),
+        patch("generic_ml_cache_cli.controllers.daemon.store_root", return_value=tmp_path),
         patch.dict(
             "sys.modules",
             {

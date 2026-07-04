@@ -12,10 +12,20 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
+    EvictStaleCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_use_case import (
+    EvictStaleUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_use_case import (
+    EvictToQuotaUseCase,
+)
 
 _DEFAULT_INTERVAL = 3600.0  # seconds between eviction sweeps
 
@@ -24,11 +34,11 @@ _DEFAULT_INTERVAL = 3600.0  # seconds between eviction sweeps
 class EvictionStats:
     """Last-run snapshot exposed via GET /info."""
 
-    last_run_at: Optional[float] = None  # Unix epoch, None = never run
+    last_run_at: float | None = None  # Unix epoch, None = never run
     last_executions_removed: int = 0
     last_bytes_freed: int = 0
-    max_size: Optional[int] = None  # bytes, None = disabled
-    max_age: Optional[float] = None  # seconds, None = disabled
+    max_size: int | None = None  # bytes, None = disabled
+    max_age: float | None = None  # seconds, None = disabled
     interval: float = _DEFAULT_INTERVAL
 
 
@@ -42,15 +52,19 @@ class EvictionScheduler:
 
     def __init__(
         self,
-        purge: PurgeService,
+        evict_to_quota: EvictToQuotaUseCase,
+        evict_stale: EvictStaleUseCase,
         stats: EvictionStats,
         *,
         interval: float = _DEFAULT_INTERVAL,
     ) -> None:
-        self._purge = purge
+        # Typed against exactly the two inbound ports the sweep invokes, not the
+        # concrete PurgeService — the scheduler depends only on what it uses (B-1).
+        self._evict_to_quota = evict_to_quota
+        self._evict_stale = evict_stale
         self._stats = stats
         self._interval = interval
-        self._task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Schedule the recurring eviction task on the running event loop."""
@@ -64,19 +78,25 @@ class EvictionScheduler:
             self._task = None
 
     async def _loop(self) -> None:
+        loop = asyncio.get_running_loop()
         while True:
             await asyncio.sleep(self._interval)
-            self._run_sweep()
+            # Offload the synchronous sweep (full-table scans, per-key locking, blob
+            # unlinks) to a worker thread so it never stalls the daemon event loop —
+            # the same offload the gateway uses for a blocking execute (X10).
+            await loop.run_in_executor(None, self._run_sweep)
 
     def _run_sweep(self) -> None:
-        """Execute one eviction sweep and update stats."""
+        """Execute one eviction sweep and update stats. Runs off the event loop."""
         report = PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
         if self._stats.max_size is not None:
-            r = self._purge.evict_to_quota(self._stats.max_size)
-            report = _merge(report, r)
+            quota_report = self._evict_to_quota.evict_to_quota(
+                EvictToQuotaCommand(self._stats.max_size)
+            )
+            report = _merge(report, quota_report)
         if self._stats.max_age is not None:
-            r = self._purge.evict_stale(self._stats.max_age)
-            report = _merge(report, r)
+            stale_report = self._evict_stale.evict_stale(EvictStaleCommand(self._stats.max_age))
+            report = _merge(report, stale_report)
         self._stats.last_run_at = time.time()
         self._stats.last_executions_removed = report.executions_removed
         self._stats.last_bytes_freed = report.bytes_freed

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -12,6 +11,6 @@ class ClientStatus:
 
     name: str
     present: bool
-    executable: Optional[str] = None  # resolved path, when present
-    version: Optional[str] = None  # first line of `--version`, best-effort
-    detail: Optional[str] = None  # why it's absent, or why version is unknown
+    executable: str | None = None  # resolved path, when present
+    version: str | None = None  # first line of `--version`, best-effort
+    detail: str | None = None  # why it's absent, or why version is unknown

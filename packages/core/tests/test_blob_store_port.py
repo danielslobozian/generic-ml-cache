@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 
 
 class InMemoryBlobStore(BlobStorePort):
@@ -20,6 +20,9 @@ class InMemoryBlobStore(BlobStorePort):
 
     def put(self, key: str, output: bytes) -> None:
         self._store[key] = output
+
+    def is_healthy(self) -> bool:
+        return True
 
     def remove(self, key: str) -> None:
         self._store.pop(key, None)
@@ -49,6 +52,10 @@ def test_different_keys_are_independent():
     blob_store.put("key2", b"value2")
     assert blob_store.get("key1") == b"value1"
     assert blob_store.get("key2") == b"value2"
+
+
+def test_is_healthy_reports_writability():
+    assert InMemoryBlobStore().is_healthy() is True
 
 
 def test_remove_deletes_stored_bytes():
@@ -83,6 +90,9 @@ def test_port_requires_get_implementation():
         def put(self, key: str, output: bytes) -> None:
             pass
 
+        def is_healthy(self) -> bool:
+            return True
+
         def remove(self, key: str) -> None:
             pass
 
@@ -95,11 +105,29 @@ def test_port_requires_put_implementation():
         def get(self, key: str):
             return None
 
+        def is_healthy(self) -> bool:
+            return True
+
         def remove(self, key: str) -> None:
             pass
 
     with pytest.raises(TypeError):
         MissingPut()  # type: ignore[abstract]
+
+
+def test_port_requires_is_healthy_implementation():
+    class MissingIsHealthy(BlobStorePort):
+        def get(self, key: str):
+            return None
+
+        def put(self, key: str, output: bytes) -> None:
+            pass
+
+        def remove(self, key: str) -> None:
+            pass
+
+    with pytest.raises(TypeError):
+        MissingIsHealthy()  # type: ignore[abstract]
 
 
 def test_port_requires_remove_implementation():
@@ -109,6 +137,9 @@ def test_port_requires_remove_implementation():
 
         def put(self, key: str, output: bytes) -> None:
             pass
+
+        def is_healthy(self) -> bool:
+            return True
 
     with pytest.raises(TypeError):
         MissingRemove()  # type: ignore[abstract]

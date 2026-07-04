@@ -4,12 +4,10 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
-
-from generic_ml_cache_adapters.discovery.composition import registered_names
+from generic_ml_cache_bootstrap.discovery.composition import registered_names
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
 from generic_ml_cache_daemon import __version__
 from generic_ml_cache_daemon.metrics import is_prometheus_available
@@ -32,11 +30,11 @@ def get_health() -> HealthResponse:
 @router.get("/ready", response_model=ReadyResponse)
 def get_ready(request: Request) -> Response:
     """Readiness: confirm the store is accessible and the daemon can serve requests."""
-    wired = request.app.state.wired
+    wired: ApplicationApi = request.app.state.wired
     try:
-        wired.metrics.event_counts()
+        wired.event_counts.event_counts()
         return JSONResponse(content=ReadyResponse(status="ready").model_dump())
-    except Exception:
+    except Exception:  # noqa: BLE001 — readiness probe: any store failure reports "not ready"
         return JSONResponse(
             status_code=503,
             content=ReadyResponse(status="not ready", detail="store not accessible").model_dump(),
@@ -49,7 +47,7 @@ def get_info(request: Request) -> InfoResponse:
     store_root: str = str(request.app.state.store_root)
     session_id: str | None = request.app.state.session_id
     whitelist = request.app.state.whitelist
-    all_adapter_names: List[str] = registered_names(whitelist=whitelist)
+    all_adapter_names: list[str] = registered_names(whitelist=whitelist)
     stats = request.app.state.eviction_stats
     return InfoResponse(
         version=__version__,

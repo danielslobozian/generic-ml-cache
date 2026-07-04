@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the standalone CLI client adapters + their shared CliRuntime.
 
-There is no base class: each adapter composes a CliRuntime (via wire_cli_client)
-and supplies only its translation hooks. The adapter's job is to make the call;
-the managed-execution use case owns the workspace and captures artifacts. These
+Each adapter subclasses ComposedLocalClient and composes a CliRuntime (via
+wire_cli_client), supplying only its translation hooks. The base delegates the
+LocalClientPort surface to the runtime, so no call logic is duplicated. The
+adapter's job is to make the call; the managed-execution use case owns the
+workspace and captures artifacts. These
 tests exercise the call against the fake client registered in conftest, driving
 the workspace lifecycle the way the core use case does.
 """
@@ -13,14 +15,19 @@ from __future__ import annotations
 
 import base64
 
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
-from generic_ml_cache_adapters.discovery.composition import get_adapter
+import pytest
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter
 from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
     ManagedLocalRequest,
 )
 from generic_ml_cache_core.application.domain.model.run.passthrough_request import (
     PassthroughRequest,
+)
+from generic_ml_cache_core.common.errors import CacheError, RunTimedOut
+
+from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
+    FilesystemWorkspace,
 )
 
 
@@ -103,7 +110,40 @@ def test_execute_passthrough_captures_stderr_and_exit():
 
 
 # ---------------------------------------------------------------------------
-# Composition surface — wire_cli_client exposes the call API on a plain class
+# Timeout boundary translation (Y4): a client run past --timeout surfaces
+# RunTimedOut (a CacheError), never the raw subprocess.TimeoutExpired.
+# ---------------------------------------------------------------------------
+
+
+def test_execute_managed_translates_a_timeout_to_run_timed_out():
+    fs = FilesystemWorkspace()
+    workspace = fs.create()
+    try:
+        request = ManagedLocalRequest(
+            model="m", effort="", context="", prompt="SLEEP 5", timeout=0.3
+        )
+        _fake_adapter().stage_inputs(request, workspace)
+        with pytest.raises(RunTimedOut) as excinfo:
+            _fake_adapter().execute_managed(request, workspace)
+        # Never leaks the stdlib type, and IS a CacheError with the timeout recorded.
+        assert isinstance(excinfo.value, CacheError)
+        assert excinfo.value.timeout_seconds == 0.3
+        assert excinfo.value.client == "fake"
+    finally:
+        fs.dispose(workspace)
+
+
+def test_execute_passthrough_translates_a_timeout_to_run_timed_out():
+    with pytest.raises(RunTimedOut) as excinfo:
+        _fake_adapter().execute_passthrough(
+            PassthroughRequest(native_args=["-c", "import time; time.sleep(5)"], timeout=0.3)
+        )
+    assert isinstance(excinfo.value, CacheError)
+    assert excinfo.value.timeout_seconds == 0.3
+
+
+# ---------------------------------------------------------------------------
+# Composition surface — ComposedLocalClient delegates the call API to _call
 # ---------------------------------------------------------------------------
 
 

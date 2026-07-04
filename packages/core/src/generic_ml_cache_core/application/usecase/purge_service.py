@@ -5,342 +5,211 @@
 from __future__ import annotations
 
 import time
+from contextlib import AbstractContextManager, nullcontext
 from datetime import datetime
-from typing import Dict, List, Optional
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
-    ExecutionRepositoryPort,
-    ExecutionSizeEntry,
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
+    EvictStaleCommand,
 )
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
+from generic_ml_cache_core.application.port.inbound.purge.evict_stale_use_case import (
+    EvictStaleUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_use_case import (
+    EvictToQuotaUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_use_case import PurgeAllUseCase
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
+    PurgeByKeyCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_use_case import (
+    PurgeByKeyUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_command import (
+    PurgeBySessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_command import (
+    PurgeBySessionTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_use_case import (
+    PurgeBySessionTagUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_use_case import (
+    PurgeBySessionUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
+    PurgeByTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_use_case import (
+    PurgeByTagUseCase,
+)
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    PurgeJournalPort,
+    SessionQueryPort,
+)
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    ExecutionSizeEntry,
+    PurgeMlRunsPort,
+)
 
 
-class PurgeService:
-    """Coordinates soft and hard purge operations across the execution store and blob store.
+class PurgeService(
+    PurgeByKeyUseCase,
+    PurgeByTagUseCase,
+    PurgeBySessionUseCase,
+    PurgeBySessionTagUseCase,
+    PurgeAllUseCase,
+    EvictStaleUseCase,
+    EvictToQuotaUseCase,
+):
+    """Coordinates soft and hard purge operations across the execution + blob stores.
 
-    Soft purge: removes blob files and artifact rows, preserving the execution
-    records, token_usage, tags, and access events — statistics and history survive,
-    only the stored bytes are released.
-
-    Hard delete: removes every DB row and blob for a key — nothing survives.
-
-    LRU eviction: soft-purges the least-recently-accessed executions until the
-    store is at or below the configured size quota. LRU order is derived from the
-    access journal; creation timestamp is the fallback for entries never accessed.
+    Each scope is one inbound use case; ``hard`` is a command field, not a separate
+    use case. Soft purge releases the stored bytes (blobs + artifact rows) but keeps
+    the execution records, usage, tags, and access history; hard delete removes
+    everything for the key, including its access events. LRU eviction soft-purges
+    the least-recently-accessed executions until the store is under quota.
     """
 
     def __init__(
         self,
-        repository: ExecutionRepositoryPort,
+        repository: PurgeMlRunsPort,
         blob_store: BlobStorePort,
-        metrics: MetricsPort,
-        diag: Optional[DiagnosticsPort] = None,
+        journal: PurgeJournalPort,
+        sessions: SessionQueryPort,
+        execution_key_lock: ExecutionKeyLockPort | None = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
         self._repository = repository
         self._blob_store = blob_store
-        self._metrics = metrics
-        self._diag: Optional[DiagnosticsPort] = diag
+        self._journal = journal
+        self._sessions = sessions
+        # The per-key record-once lock (X7). A purge/eviction of a key holds it while
+        # deleting that key's rows + blobs, so it can never race a concurrent write of
+        # the same key (X10). Shared with the record path (one instance) so they
+        # coordinate. Optional — a no-op when absent (a non-filesystem embedder).
+        self._execution_key_lock: ExecutionKeyLockPort | None = execution_key_lock
+        self._diag: DiagnosticsPort | None = diag
 
-    # -- soft purge -----------------------------------------------------------
+    # -- scoped purge (soft by default; hard when the command says so) ---------
 
-    def purge_one(self, execution_key: str) -> PurgeReport:
-        """Soft-purge a single execution by its key. Returns an empty report if
-        the key does not exist in the store."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("purge-one ENTER", key=execution_key)
-        if not self._repository.find_all(execution_key):
-            report = PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-            if self._diag:
-                self._diag.debug(
-                    "purge-one EXIT",
-                    key=execution_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                    executions=0,
-                    bytes_freed=0,
-                )
-            return report
-        report = self._soft_purge_keys([execution_key])
-        if self._diag:
-            self._diag.debug(
-                "purge-one EXIT",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def purge_by_tag(self, tag: str) -> PurgeReport:
-        """Soft-purge all current executions carrying ``tag``."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("purge-by-tag ENTER", tag=tag)
-        report = self._soft_purge_keys(self._repository.executions_by_tag(tag))
-        if self._diag:
-            self._diag.debug(
-                "purge-by-tag EXIT",
-                tag=tag,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def purge_by_session(self, session_id: str) -> PurgeReport:
-        """Soft-purge all executions recorded under ``session_id``."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("purge-by-session ENTER", session_id=session_id)
-        report = self._soft_purge_keys(self._metrics.execution_keys_for_session(session_id))
-        if self._diag:
-            self._diag.debug(
-                "purge-by-session EXIT",
-                session_id=session_id,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def purge_by_session_tag(self, tag: str) -> PurgeReport:
-        """Soft-purge all executions from every session carrying ``tag``."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("purge-by-session-tag ENTER", tag=tag)
-        report = self._soft_purge_keys(self._keys_for_session_tag(tag))
-        if self._diag:
-            self._diag.debug(
-                "purge-by-session-tag EXIT",
-                tag=tag,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def purge_all(self) -> PurgeReport:
-        """Soft-purge every current execution in the store."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("purge-all ENTER")
-        keys = [e.execution_key for e in self._repository.current_executions_with_sizes()]
-        report = self._soft_purge_keys(keys)
-        if self._diag:
-            self._diag.debug(
-                "purge-all EXIT",
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    # -- hard delete ----------------------------------------------------------
-
-    def hard_delete_one(self, execution_key: str) -> PurgeReport:
-        """Hard-delete a single execution and erase its access history. Returns
-        an empty report if the key does not exist in the store."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("hard-delete-one ENTER", key=execution_key)
-        if not self._repository.find_all(execution_key):
-            report = PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-            if self._diag:
-                self._diag.debug(
-                    "hard-delete-one EXIT",
-                    key=execution_key,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                    executions=0,
-                    bytes_freed=0,
-                )
-            return report
-        report = self._hard_delete_keys([execution_key])
-        if self._diag:
-            self._diag.debug(
-                "hard-delete-one EXIT",
-                key=execution_key,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def hard_delete_by_tag(self, tag: str) -> PurgeReport:
-        """Hard-delete all current executions carrying ``tag``."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("hard-delete-by-tag ENTER", tag=tag)
-        report = self._hard_delete_keys(self._repository.executions_by_tag(tag))
-        if self._diag:
-            self._diag.debug(
-                "hard-delete-by-tag EXIT",
-                tag=tag,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def hard_delete_by_session(self, session_id: str) -> PurgeReport:
-        """Hard-delete all executions recorded under ``session_id``."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("hard-delete-by-session ENTER", session_id=session_id)
-        report = self._hard_delete_keys(self._metrics.execution_keys_for_session(session_id))
-        if self._diag:
-            self._diag.debug(
-                "hard-delete-by-session EXIT",
-                session_id=session_id,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def hard_delete_by_session_tag(self, tag: str) -> PurgeReport:
-        """Hard-delete all executions from every session carrying ``tag``."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("hard-delete-by-session-tag ENTER", tag=tag)
-        report = self._hard_delete_keys(self._keys_for_session_tag(tag))
-        if self._diag:
-            self._diag.debug(
-                "hard-delete-by-session-tag EXIT",
-                tag=tag,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    def hard_delete_all(self) -> PurgeReport:
-        """Hard-delete every execution in the store, including failed-only keys."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("hard-delete-all ENTER")
-        report = self._hard_delete_keys(self._repository.all_execution_keys())
-        if self._diag:
-            self._diag.debug(
-                "hard-delete-all EXIT",
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
-
-    # -- quota enforcement ----------------------------------------------------
-
-    def evict_stale(self, max_age_seconds: float) -> PurgeReport:
-        """Soft-purge current executions not accessed within ``max_age_seconds``.
-
-        An execution's "last access" is the most recent event in the access
-        journal for that key.  Executions that have never been accessed fall back
-        to their ``created_at`` timestamp.  Returns an empty report when nothing
-        is stale.
-        """
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("evict-stale ENTER", max_age_seconds=max_age_seconds)
-        if max_age_seconds <= 0:
-            if self._diag:
-                self._diag.debug(
-                    "evict-stale EXIT",
-                    max_age_seconds=max_age_seconds,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                )
+    def purge_by_key(self, command: PurgeByKeyCommand) -> PurgeReport:
+        if not self._repository.find_all(command.execution_key):
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
+        return self._purge([command.execution_key], command.hard)
 
-        cutoff = time.time() - max_age_seconds
+    def purge_by_tag(self, command: PurgeByTagCommand) -> PurgeReport:
+        return self._purge(self._repository.executions_by_tag(command.tag), command.hard)
+
+    def purge_by_session(self, command: PurgeBySessionCommand) -> PurgeReport:
+        return self._purge(
+            self._sessions.execution_keys_for_session(command.session_id), command.hard
+        )
+
+    def purge_by_session_tag(self, command: PurgeBySessionTagCommand) -> PurgeReport:
+        return self._purge(self._keys_for_session_tag(command.tag), command.hard)
+
+    def purge_all(self, command: PurgeAllCommand) -> PurgeReport:
+        if command.hard:
+            # Hard delete-all reaches every key, including failed-only ones.
+            keys = self._repository.all_execution_keys()
+        else:
+            keys = [e.execution_key for e in self._repository.current_executions_with_sizes()]
+        return self._purge(keys, command.hard)
+
+    # -- quota / age eviction (always soft) -----------------------------------
+
+    def evict_stale(self, command: EvictStaleCommand) -> PurgeReport:
+        """Soft-purge current executions not accessed within ``max_age_seconds``."""
+        if command.max_age_seconds <= 0:
+            return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
+        cutoff = time.time() - command.max_age_seconds
         entries = self._repository.current_executions_with_sizes()
-        last_access = self._metrics.last_access()
+        last_access = self._access_ordering()
         stale_keys = [e.execution_key for e in entries if _lru_epoch(e, last_access) < cutoff]
         if stale_keys and self._diag:
-            self._diag.info(
-                "stale eviction triggered",
-                stale_count=len(stale_keys),
-                max_age_seconds=max_age_seconds,
-            )
-        report = self._soft_purge_keys(stale_keys)
-        if self._diag:
-            self._diag.debug(
-                "evict-stale EXIT",
-                max_age_seconds=max_age_seconds,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
+            self._diag.info("stale eviction triggered", stale_count=len(stale_keys))
+        return self._soft_purge_keys(stale_keys)
 
-    def evict_to_quota(self, max_bytes: int) -> PurgeReport:
-        """Soft-purge the least-recently-accessed executions until the store is at
-        or below ``max_bytes``. Returns an empty report when already under quota."""
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("evict-to-quota ENTER", max_bytes=max_bytes)
+    def evict_to_quota(self, command: EvictToQuotaCommand) -> PurgeReport:
+        """Soft-purge the least-recently-accessed executions until under ``max_bytes``."""
         current = self._repository.total_stored_bytes()
-        if current <= max_bytes:
-            if self._diag:
-                self._diag.debug(
-                    "evict-to-quota EXIT",
-                    max_bytes=max_bytes,
-                    duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                    executions=0,
-                    bytes_freed=0,
-                )
+        if current <= command.max_bytes:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-
         entries = self._repository.current_executions_with_sizes()
-        last_access = self._metrics.last_access()
+        last_access = self._access_ordering()
         sorted_entries = sorted(entries, key=lambda e: _lru_epoch(e, last_access))
-
-        keys_to_evict: List[str] = []
+        keys_to_evict: list[str] = []
         running = current
         for entry in sorted_entries:
-            if running <= max_bytes:
+            if running <= command.max_bytes:
                 break
             keys_to_evict.append(entry.execution_key)
             running -= entry.total_size_bytes
-
         if self._diag:
             self._diag.info(
                 "quota eviction triggered",
                 current_bytes=current,
-                max_bytes=max_bytes,
+                max_bytes=command.max_bytes,
                 keys_to_evict=len(keys_to_evict),
             )
-        report = self._soft_purge_keys(keys_to_evict)
-        if self._diag:
-            self._diag.debug(
-                "evict-to-quota EXIT",
-                max_bytes=max_bytes,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
-                executions=report.executions_removed,
-                bytes_freed=report.bytes_freed,
-            )
-        return report
+        return self._soft_purge_keys(keys_to_evict)
 
     # -- private --------------------------------------------------------------
 
-    def _soft_purge_keys(self, keys: List[str]) -> PurgeReport:
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("soft-purge ENTER", count=len(keys))
+    def _access_ordering(self) -> dict[str, float]:
+        """The LRU input for eviction ordering. A ``None`` from the journal means
+        the access data could not be read: keep enforcing quota but order by
+        creation time (an empty map makes every key fall back to it) and warn
+        loudly that eviction is running degraded, rather than silently evicting on
+        the wrong ordering. An empty dict is a genuinely-empty registry — normal."""
+        last_access = self._journal.last_access()
+        if last_access is None:
+            if self._diag:
+                self._diag.warn(
+                    "eviction degraded — access data unavailable, ordering by creation time"
+                )
+            return {}
+        return last_access
+
+    def _purge(self, keys: list[str], hard: bool) -> PurgeReport:
+        return self._hard_delete_keys(keys) if hard else self._soft_purge_keys(keys)
+
+    def _key_lock(self, execution_key: str) -> AbstractContextManager[None]:
+        """Hold the per-key record-once lock around this key's purge, so it never
+        races a concurrent write of the same key (X10). A no-op when no lock is
+        injected — a non-filesystem store manages its own consistency."""
+        if self._execution_key_lock is None:
+            return nullcontext()
+        return self._execution_key_lock.acquire(execution_key)
+
+    def _soft_purge_keys(self, keys: list[str]) -> PurgeReport:
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-        before = self._repository.total_stored_bytes()
-        all_blob_keys: List[str] = []
+        blobs_removed = 0
+        bytes_freed = 0
+        # One key at a time under its own lock: collect its blob sizes, drop its
+        # artifact rows, then remove its (execution-owned, X25) blobs — so eviction
+        # can never race a concurrent write of that key.
         for key in keys:
-            all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
-            self._repository.soft_purge_execution(key)
-        after = self._repository.total_stored_bytes()
-        blobs_removed = self._remove_orphaned_blobs(all_blob_keys)
+            with self._key_lock(key):
+                blob_sizes = self._blob_sizes_for([key])
+                self._repository.soft_purge_execution(key)
+                removed, freed = self._remove_blobs(blob_sizes)
+            blobs_removed += removed
+            bytes_freed += freed
         report = PurgeReport(
-            executions_removed=len(keys),
-            bytes_freed=max(0, before - after),
-            blobs_removed=blobs_removed,
+            executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
         if self._diag:
             self._diag.info(
@@ -348,28 +217,24 @@ class PurgeService:
                 executions=report.executions_removed,
                 bytes_freed=report.bytes_freed,
                 blobs_removed=report.blobs_removed,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
             )
         return report
 
-    def _hard_delete_keys(self, keys: List[str]) -> PurgeReport:
-        _t = time.perf_counter()
-        if self._diag:
-            self._diag.debug("hard-delete ENTER", count=len(keys))
+    def _hard_delete_keys(self, keys: list[str]) -> PurgeReport:
         if not keys:
             return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
-        before = self._repository.total_stored_bytes()
-        all_blob_keys: List[str] = []
+        blobs_removed = 0
+        bytes_freed = 0
         for key in keys:
-            all_blob_keys.extend(self._repository.blob_keys_for_execution(key))
-            self._repository.hard_delete_execution(key)
-            self._metrics.delete_events_for_key(key)
-        after = self._repository.total_stored_bytes()
-        blobs_removed = self._remove_orphaned_blobs(all_blob_keys)
+            with self._key_lock(key):
+                blob_sizes = self._blob_sizes_for([key])
+                self._repository.hard_delete_execution(key)
+                self._journal.delete_events_for_key(key)
+                removed, freed = self._remove_blobs(blob_sizes)
+            blobs_removed += removed
+            bytes_freed += freed
         report = PurgeReport(
-            executions_removed=len(keys),
-            bytes_freed=max(0, before - after),
-            blobs_removed=blobs_removed,
+            executions_removed=len(keys), bytes_freed=bytes_freed, blobs_removed=blobs_removed
         )
         if self._diag:
             self._diag.info(
@@ -377,30 +242,45 @@ class PurgeService:
                 executions=report.executions_removed,
                 bytes_freed=report.bytes_freed,
                 blobs_removed=report.blobs_removed,
-                duration_ms=round((time.perf_counter() - _t) * 1000, 1),
             )
         return report
 
-    def _keys_for_session_tag(self, tag: str) -> List[str]:
-        seen: set = set()
-        keys: List[str] = []
-        for session_id in self._metrics.session_ids_for_tag(tag):
-            for key in self._metrics.execution_keys_for_session(session_id):
+    def _keys_for_session_tag(self, tag: str) -> list[str]:
+        seen: set[str] = set()
+        keys: list[str] = []
+        for session_id in self._sessions.session_ids_for_tag(tag):
+            for key in self._sessions.execution_keys_for_session(session_id):
                 if key not in seen:
                     seen.add(key)
                     keys.append(key)
         return keys
 
-    def _remove_orphaned_blobs(self, blob_keys: List[str]) -> int:
-        removed = 0
-        for blob_key in set(blob_keys):
-            if self._repository.blob_reference_count(blob_key) == 0:
-                self._blob_store.remove(blob_key)
-                removed += 1
-        return removed
+    def _blob_sizes_for(self, keys: list[str]) -> dict[BlobKey, int]:
+        """Map each distinct blob key owned by ``keys`` to its size, read BEFORE the
+        executions are deleted. Each blob is owned by exactly one execution (its key
+        is execution-scoped), so a key here belongs solely to these executions and is
+        freed for good once their rows are gone — summing the removed ones counts each
+        freed blob once."""
+        blob_sizes: dict[BlobKey, int] = {}
+        for key in keys:
+            for execution in self._repository.find_all(key):
+                for artifact in execution.artifacts:
+                    blob_sizes[artifact.blob_key] = artifact.size_bytes
+        return blob_sizes
+
+    def _remove_blobs(self, blob_sizes: dict[BlobKey, int]) -> tuple[int, int]:
+        """Remove each collected blob — every one is owned solely by a purged
+        execution (X25), so it is deleted directly — returning (blobs_removed,
+        bytes_freed) measured directly from what was deleted, not a global
+        before/after total (which a concurrent write would skew)."""
+        bytes_freed = 0
+        for blob_key, size_bytes in blob_sizes.items():
+            self._blob_store.remove(blob_key)
+            bytes_freed += size_bytes
+        return len(blob_sizes), bytes_freed
 
 
-def _lru_epoch(entry: ExecutionSizeEntry, last_access: Dict[str, float]) -> float:
+def _lru_epoch(entry: ExecutionSizeEntry, last_access: dict[str, float]) -> float:
     if entry.execution_key in last_access:
         return last_access[entry.execution_key]
     try:

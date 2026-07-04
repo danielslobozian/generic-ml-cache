@@ -4,19 +4,24 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import List, Optional
 
-from generic_ml_cache_cli.discovery import register
+from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+    ComposedLocalClient,
+)
+from generic_ml_cache_adapters.adapter.outbound.client.cursor import CursorAdapter
+from generic_ml_cache_bootstrap.discovery.client_discover import list_models
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
-from generic_ml_cache_adapters.discovery.descriptors import local_cli_descriptor
+
 from generic_ml_cache_cli.cli import main
-from generic_ml_cache_adapters.adapter.out.client.discover import list_models
+from generic_ml_cache_cli.discovery import register
 
 # A trimmed sample of real `cursor-agent --list-models` output: a header line,
 # ordinary entries, a "(current)"/"(default)" marker, and the trailing tip.
@@ -61,7 +66,7 @@ def test_list_models_unsupported_for_fake():
     assert "no model-listing" in (ml.reason or "")
 
 
-class _ListingAdapter:
+class _ListingAdapter(ComposedLocalClient):
     """A present client that can enumerate two models, via the interpreter."""
 
     name = "fakelist"
@@ -73,15 +78,15 @@ class _ListingAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("fakelist", {ClientCapability.LIST_MODELS}, "Fake List")
+        return AdapterDescriptor.local_cli("fakelist", {ClientCapability.LIST_MODELS}, "Fake List")
 
-    def build_argv(self, *a, **k) -> List[str]:  # pragma: no cover - unused here
+    def build_argv(self, *a, **k) -> list[str]:  # pragma: no cover - unused here
         raise NotImplementedError
 
-    def models_argv(self, executable: str) -> Optional[List[str]]:
+    def models_argv(self, executable: str) -> list[str] | None:
         return [executable, "-c", "print('m-one - Model One\\nm-two - Model Two (default)')"]
 
-    def parse_model_list(self, stdout: str) -> List[ModelInfo]:
+    def parse_model_list(self, stdout: str) -> list[ModelInfo]:
         out = []
         for line in stdout.splitlines():
             ident, _, label = line.partition(" - ")
@@ -130,7 +135,7 @@ def test_models_cli_routes_unknown_client_to_api_registry(capsys, monkeypatch):
         ],
     )
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.api.api_discover.list_api_models",
+        "generic_ml_cache_bootstrap.discovery.api_discover.list_api_models",
         lambda provider, **kw: fake_listing,
     )
     rc = main(["models", "gemini"])
@@ -151,7 +156,7 @@ def test_models_cli_api_provider_json_output(capsys, monkeypatch):
         models=[ModelInfo(id="gemini-2.5-flash", name="Gemini 2.5 Flash")],
     )
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.api.api_discover.list_api_models",
+        "generic_ml_cache_bootstrap.discovery.api_discover.list_api_models",
         lambda provider, **kw: fake_listing,
     )
     rc = main(["models", "gemini", "--json"])
@@ -166,7 +171,7 @@ def test_models_cli_unknown_api_provider_still_returns_zero(capsys, monkeypatch)
     from generic_ml_cache_core.application.domain.model.model_listing import ModelListing
 
     monkeypatch.setattr(
-        "generic_ml_cache_adapters.adapter.out.api.api_discover.list_api_models",
+        "generic_ml_cache_bootstrap.discovery.api_discover.list_api_models",
         lambda provider, **kw: ModelListing(
             name=provider, present=False, supported=False, reason="unknown API provider"
         ),

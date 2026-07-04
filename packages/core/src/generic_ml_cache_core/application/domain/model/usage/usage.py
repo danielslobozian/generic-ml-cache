@@ -35,11 +35,15 @@ Design rulings this encodes (do not relitigate):
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from types import MappingProxyType
+from typing import Any
+
+from generic_ml_cache_core.common.immutable import deep_freeze, thaw
 
 
-def int_or_none(value: Any) -> Optional[int]:
+def int_or_none(value: Any) -> int | None:
     """Coerce a client-reported count to ``int``, or ``None`` if absent/unusable.
 
     Used by adapters reading a client's JSON: a missing or non-numeric field
@@ -54,7 +58,7 @@ def int_or_none(value: Any) -> Optional[int]:
         return None
 
 
-def float_or_none(value: Any) -> Optional[float]:
+def float_or_none(value: Any) -> float | None:
     """Coerce a client-reported amount to ``float``, or ``None`` if absent/unusable."""
     if value is None or isinstance(value, bool):
         return None
@@ -68,6 +72,12 @@ def float_or_none(value: Any) -> Optional[float]:
 class Usage:
     """Normalized token counts for one recorded call, with the raw block kept.
 
+    The parse-at-edge shape: it is built by normalizing a client's reported usage
+    block as its output is parsed (``parsed_output`` + the claude/codex/cursor
+    adapters). Its stored counterpart is :class:`TokenUsage` — the same counts as a
+    database-bound domain type. Two legitimate layers (parse-at-edge → stored
+    domain), not a duplication.
+
     Every count is ``Optional[int]``: a value the client reported, or ``None``
     when it did not report that count at all. ``cost_usd`` is the client's own
     estimate in US dollars when it offered one (advisory only -- see module docs),
@@ -77,26 +87,29 @@ class Usage:
     """
 
     #: Prompt/input tokens the call consumed.
-    input_tokens: Optional[int] = None
+    input_tokens: int | None = None
     #: Generated/output tokens. For clients that fold reasoning into output
     #: (Claude), reasoning is included here and ``reasoning_tokens`` is unknown.
-    output_tokens: Optional[int] = None
+    output_tokens: int | None = None
     #: Input tokens served from the client's prompt cache (a reduced-rate read).
-    cache_read_tokens: Optional[int] = None
+    cache_read_tokens: int | None = None
     #: Input tokens spent writing new prompt-cache entries. Unknown for clients
     #: that do not report a cache-write count (e.g. Codex).
-    cache_write_tokens: Optional[int] = None
+    cache_write_tokens: int | None = None
     #: Reasoning tokens reported *separately* from output (e.g. Codex). Unknown
     #: when the client folds reasoning into output (Claude) or omits it (Cursor).
-    reasoning_tokens: Optional[int] = None
+    reasoning_tokens: int | None = None
     #: The client's own dollar estimate for the call, when it reports one (only
     #: Claude does, today). Advisory, not authoritative billing; never derived.
-    cost_usd: Optional[float] = None
+    cost_usd: float | None = None
     #: The client's verbatim usage structure (lossless), so unanticipated
     #: client-specific fields stay reachable. Shape is per-client.
-    raw: Dict[str, Any] = field(default_factory=dict)
+    raw: Mapping[str, Any] = field(default_factory=lambda: MappingProxyType({}))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "raw", deep_freeze(self.raw))
+
+    def to_dict(self) -> dict[str, Any]:
         return {
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
@@ -104,5 +117,5 @@ class Usage:
             "cache_write_tokens": self.cache_write_tokens,
             "reasoning_tokens": self.reasoning_tokens,
             "cost_usd": self.cost_usd,
-            "raw": self.raw,
+            "raw": thaw(self.raw),
         }

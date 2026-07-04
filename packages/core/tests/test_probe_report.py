@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.probe.probe_report import ProbeReport
@@ -26,5 +28,5 @@ def test_non_cacheable_report_carries_the_key():
 
 def test_is_frozen():
     report = ProbeReport(status=ProbeStatus.MISS, execution_key="abc")
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         report.status = ProbeStatus.HIT  # type: ignore[misc]

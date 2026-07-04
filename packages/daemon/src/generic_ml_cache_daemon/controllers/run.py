@@ -6,21 +6,22 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, FrozenSet, Optional
+from collections.abc import AsyncIterator
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
-
-from generic_ml_cache_adapters.discovery.composition import execution_kind_for
+from generic_ml_cache_bootstrap.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_state import (
     ExecutionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
+from sse_starlette.sse import EventSourceResponse
 
 from generic_ml_cache_daemon.presenters.run import RunBody, RunResponse
 
@@ -30,7 +31,24 @@ _STDOUT = ArtifactType.STDOUT
 _STDERR = ArtifactType.STDERR
 
 
-def _build_command(body: RunBody, whitelist: Optional[FrozenSet[str]]) -> RunMlExecutionCommand:
+class RunCommandInputs(Protocol):
+    """Structural shape of a request body that builds a run command. Both the
+    ``/run`` body (:class:`RunBody`) and the ``/jobs`` body (``JobSubmitBody``)
+    satisfy it, so ``build_command`` serves both routes without importing either
+    presenter into the other."""
+
+    client: str
+    model: str
+    effort: str
+    prompt: str
+    context: str
+    tags: list[str]
+    session_id: str | None
+
+
+def build_command(
+    body: RunCommandInputs, whitelist: frozenset[str] | None
+) -> RunMlExecutionCommand:
     # Resolve the kind over the *whitelisted* catalog: an unknown or non-whitelisted
     # client raises UnknownClient here, which the CacheError handler maps to 400 —
     # the whitelist is enforced at /run, not only at /health.
@@ -42,17 +60,17 @@ def _build_command(body: RunBody, whitelist: Optional[FrozenSet[str]]) -> RunMlE
         effort=body.effort,
         prompt=body.prompt,
         context=body.context,
-        tags=body.tags,
+        tags=tuple(body.tags),
         session_id=body.session_id,
     )
 
 
-def _extract_artifact(execution: MlExecution, artifact_type: ArtifactType) -> Optional[str]:
+def extract_artifact(execution: MlExecution, artifact_type: ArtifactType) -> str | None:
     for artifact in execution.artifacts:
         if artifact.artifact_type is artifact_type and artifact.content is not None:
             try:
                 return artifact.content.decode("utf-8", errors="replace")
-            except Exception:  # pragma: no cover
+            except Exception:  # noqa: BLE001  # pragma: no cover — defensive decode guard
                 return None
     return None
 
@@ -69,23 +87,23 @@ def _to_response(execution: MlExecution, cache_hit: bool) -> RunResponse:
         execution_key=key,
         state=execution.execution_state.value,
         cache_hit=cache_hit,
-        stdout=_extract_artifact(execution, _STDOUT),
-        stderr=_extract_artifact(execution, _STDERR),
+        stdout=extract_artifact(execution, _STDOUT),
+        stderr=extract_artifact(execution, _STDERR),
     )
 
 
-def _to_dict(response: RunResponse) -> Dict[str, Any]:
+def _to_dict(response: RunResponse) -> dict[str, Any]:
     return response.model_dump()
 
 
-async def _run_in_thread(wired: Any, command: RunMlExecutionCommand) -> MlExecution:
+async def _run_in_thread(wired: ApplicationApi, command: RunMlExecutionCommand) -> MlExecution:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, wired.run_ml.execute, command)
 
 
 async def _sse_generator(
-    wired: Any, command: RunMlExecutionCommand
-) -> AsyncIterator[Dict[str, str]]:
+    wired: ApplicationApi, command: RunMlExecutionCommand
+) -> AsyncIterator[dict[str, str]]:
     yield {"data": json.dumps({"type": "accepted"})}
     execution = await _run_in_thread(wired, command)
     hit = _was_cache_hit(execution)
@@ -102,8 +120,8 @@ async def run(body: RunBody, request: Request) -> Any:
       ``complete`` event when the execution finishes.
     - Any other ``Accept`` → JSON: blocks until the execution completes.
     """
-    command = _build_command(body, request.app.state.whitelist)
-    wired = request.app.state.wired
+    command = build_command(body, request.app.state.whitelist)
+    wired: ApplicationApi = request.app.state.wired
 
     if "text/event-stream" in request.headers.get("accept", ""):
         return EventSourceResponse(_sse_generator(wired, command))

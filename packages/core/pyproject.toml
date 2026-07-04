@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "generic-ml-cache-core"
 dynamic = ["version"]
-description = "Hexagonal core library for generic-ml-cache: domain model, use cases, port contracts, and the adapter registry. Zero runtime dependencies; inject all adapters."
+description = "Hexagonal core library for generic-ml-cache: domain model, use cases, and port contracts. The default adapters ship in generic-ml-cache-adapters; inject a data source to use them."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -33,6 +33,11 @@ Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
 Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+# The shipped test-support kit (generic_ml_cache_core.testing) needs pytest for its
+# conformance TCK. It sits behind this extra so the core RUNTIME stays dependency-free
+# (`dependencies = []`): a consumer running the TCK against their own PersistenceBackend
+# installs `generic-ml-cache-core[test]`.
+test = ["pytest>=7"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [tool.hatch.version]
@@ -45,6 +50,11 @@ packages = ["src/generic_ml_cache_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Treat warnings as errors: a regression lock that catches the next upstream
+# deprecation (or our own) at first appearance (CA9). Add a narrow
+# "ignore::Cat:module" entry with a justification only for an unfixable
+# third-party warning — never blanket.
+filterwarnings = ["error"]
 addopts = "-ra --cov-branch --cov=generic_ml_cache_core --cov-fail-under=85"
 timeout = 60
 
@@ -53,7 +63,13 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-extend-select = ["C901"]
+extend-select = ["C901", "I", "B", "N", "S310", "UP", "BLE001"]
+
+[tool.ruff.lint.per-file-ignores]
+# The domain exceptions are deliberately named for the condition they signal
+# (CacheMiss, UnknownClient, ArtifactBlobMissing, …), not with an -Error suffix.
+# That naming is intentional, so the N818 "error-suffix" rule is a false positive here.
+"src/generic_ml_cache_core/common/errors.py" = ["N818"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

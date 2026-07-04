@@ -6,10 +6,27 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import Optional
+
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 
 _UTF8 = "utf-8"
 _BINARY = "binary"
+
+
+class ArtifactStatus(enum.Enum):
+    """The persistence lifecycle of an artifact's blob (C-4).
+
+    DB-first ordering: the row is written ``PENDING`` before the blob is put, then
+    flipped to ``STORED`` once the blob lands, or ``FAILED`` (with a
+    ``status_detail``) if the write fails. Readers trust only ``STORED``; the
+    execution becomes servable (``output_persisted``) only when all its artifacts
+    are ``STORED``. So an untracked orphan (a blob with no row) is impossible, and a
+    failed write is a visible, recoverable state rather than a stuck run.
+    """
+
+    PENDING = "pending"
+    STORED = "stored"
+    FAILED = "failed"
 
 
 class ArtifactType(enum.Enum):
@@ -41,32 +58,37 @@ class ArtifactType(enum.Enum):
 class Artifact:
     """One generated document of an execution's output.
 
-    An artifact is a STORED thing: it always has a ``blob_key`` (the content
-    checksum addressing its bytes in the blob store). ``content`` is materialised
+    An artifact is a STORED thing: it always has a ``blob_key`` (the execution-scoped
+    key addressing its bytes in the blob store). ``content`` is materialised
     only when the artifact is hydrated; dehydrated, only the reference remains.
     The use case — never the client runner — computes the key and stores the
     bytes; this object just records the result.
     """
 
     artifact_type: ArtifactType
-    blob_key: str
+    blob_key: BlobKey
     size_bytes: int
-    name: Optional[str] = None
+    name: str | None = None
     encoding: str = _UTF8
-    content: Optional[bytes] = None
+    content: bytes | None = None
+    status: ArtifactStatus = ArtifactStatus.STORED
+    persisted_at: str | None = None
+    status_detail: str | None = None
 
     @classmethod
     def from_content(
         cls,
         artifact_type: ArtifactType,
-        blob_key: str,
+        blob_key: BlobKey,
         content: bytes,
-        name: Optional[str] = None,
-    ) -> "Artifact":
+        name: str | None = None,
+        status: ArtifactStatus = ArtifactStatus.STORED,
+    ) -> Artifact:
         """Build a hydrated artifact from its bytes, deriving size and encoding.
 
-        The caller has already computed ``blob_key`` and stored the bytes; this
-        only assembles the value object from the content it owns.
+        The caller has already computed ``blob_key`` and holds the bytes; this only
+        assembles the value object. ``status`` defaults to ``STORED`` (the read/hydrate
+        case); the write path builds ``PENDING`` artifacts before storing the blob.
         """
         return cls(
             artifact_type=artifact_type,
@@ -75,7 +97,13 @@ class Artifact:
             name=name,
             encoding=cls._encoding_for(content),
             content=content,
+            status=status,
         )
+
+    @property
+    def is_stored(self) -> bool:
+        """True when the blob is confirmed persisted (safe to hydrate/serve)."""
+        return self.status is ArtifactStatus.STORED
 
     @staticmethod
     def _encoding_for(content: bytes) -> str:

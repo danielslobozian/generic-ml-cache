@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from generic_ml_cache_core.application.domain.model.probe.probe_report import ProbeReport
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
-from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
-from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
+from generic_ml_cache_core.application.port.inbound.probe.probe_use_case import ProbeUseCase
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    ReadMlRunPort,
+)
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 
 
@@ -23,9 +25,7 @@ class ProbeService(ProbeUseCase):
     disagree. It launches no client, writes no blob, and records no journal event.
     """
 
-    def __init__(
-        self, file_fingerprint: FileFingerprintPort, repository: ExecutionRepositoryPort
-    ) -> None:
+    def __init__(self, file_fingerprint: FileFingerprintPort, repository: ReadMlRunPort) -> None:
         self._file_fingerprint = file_fingerprint
         self._repository = repository
 

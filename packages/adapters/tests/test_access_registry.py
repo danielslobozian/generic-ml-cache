@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import sqlite3
 
-from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+
+from generic_ml_cache_adapters.adapter.outbound.metrics.access_registry import AccessRegistry
+from generic_ml_cache_adapters.migration_runner import run_migrations
 
 
 def _make_factory(db_path):
@@ -124,8 +125,10 @@ def test_session_ids_for_tag_returns_empty_list_when_registry_unavailable():
     assert _broken().session_ids_for_tag("tag-sprint3") == []
 
 
-def test_last_access_returns_empty_dict_when_registry_unavailable():
-    assert _broken().last_access() == {}
+def test_last_access_returns_none_when_registry_unavailable():
+    # None (read failed) is distinct from {} (genuinely empty) so eviction can
+    # tell a degraded read from an empty registry and warn accordingly (W20).
+    assert _broken().last_access() is None
 
 
 # --- session spec -----------------------------------------------------------

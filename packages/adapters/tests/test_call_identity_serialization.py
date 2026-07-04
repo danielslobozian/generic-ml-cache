@@ -5,20 +5,23 @@
 from __future__ import annotations
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.persistence.call_identity_serialization import (
-    SerializedIdentity,
-    deserialize_identity,
-    serialize_identity,
-)
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
     ApiCallIdentity,
+)
+from generic_ml_cache_core.application.domain.model.identity.api_passthrough_call_identity import (
+    ApiPassthroughCallIdentity,
 )
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
+)
+
+from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
+    SerializedIdentity,
+    deserialize_identity,
+    serialize_identity,
 )
 
 
@@ -99,8 +102,28 @@ def test_api_provider_lands_in_the_client_column():
     assert serialized.model == "gpt-x"
 
 
+def test_api_passthrough_round_trip():
+    identity = ApiPassthroughCallIdentity(client="anthropic-subscription", body_fingerprint="bf")
+    restored = _round_trip(identity)
+    assert restored == identity
+    assert restored.generate_key() == identity.generate_key()
+
+
+def test_api_passthrough_denormalized_columns():
+    serialized = serialize_identity(
+        ApiPassthroughCallIdentity(client="anthropic-subscription", body_fingerprint="bf")
+    )
+    assert serialized.kind == "api_passthrough"
+    assert serialized.client == "anthropic-subscription"
+    assert serialized.model == ""
+
+
 def test_unknown_kind_on_deserialize_raises():
+    # The kind now rides inside identity_json (the opaque codec's field dict), so an
+    # unknown kind THERE is what fails — the denormalized column is just a projection.
     with pytest.raises(ValueError):
         deserialize_identity(
-            SerializedIdentity(kind="nope", client="c", model="m", effort="", identity_json="{}")
+            SerializedIdentity(
+                kind="nope", client="c", model="m", effort="", identity_json='{"kind": "nope"}'
+            )
         )

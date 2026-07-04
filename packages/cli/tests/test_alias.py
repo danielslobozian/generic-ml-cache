@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from generic_ml_cache_core.common.errors import CacheError
 
-from generic_ml_cache_cli.cli import _run_cached_execution, main
+from generic_ml_cache_cli.cli import main
+from generic_ml_cache_cli.controllers.run import run_cached_execution
 
 # `fake`'s executable is sys.executable (python), so these tails run python directly.
 # Write raw bytes via the stdout/stderr buffer so the output is identical on every OS
@@ -112,7 +113,7 @@ def test_run_cached_execution_maps_a_cache_error_to_exit_4(capsys):
     def boom():
         raise CacheError("something went wrong")
 
-    execution, code = _run_cached_execution(boom)
+    execution, code = run_cached_execution(boom)
     assert execution is None
     assert code == 4
     assert "something went wrong" in capsys.readouterr().err

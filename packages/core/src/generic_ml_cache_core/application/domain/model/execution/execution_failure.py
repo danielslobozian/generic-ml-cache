@@ -6,14 +6,16 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass
-from typing import Optional
 
 
 class FailureReason(enum.Enum):
     """Why a run failed. Starts minimal; grows as features land (TIMEOUT,
-    NETWORK, CLIENT_ERROR, …)."""
+    NETWORK, …)."""
 
     NONZERO_EXIT = "nonzero_exit"
+    #: The client raised before returning a result (not installed, network death,
+    #: timeout, provider error) — the run never produced an exit code (S3c-ii).
+    CLIENT_ERROR = "client_error"
 
 
 @dataclass(frozen=True)
@@ -29,4 +31,4 @@ class ExecutionFailure:
 
     reason: FailureReason
     message: str
-    exit_code: Optional[int] = None
+    exit_code: int | None = None

@@ -35,11 +35,10 @@ repos:
         types: [python]
 
       # Gate 3 — hexagonal import contracts
-      # Checks all four contracts declared in .importlinter:
-      #   1. Application ring must not import adapters
-      #   2. Driver packages must not import driven adapter implementations
-      #   3. Domain model must not import use cases
-      #   4. Driven adapter sub-packages must not import each other
+      # Gate 6 — the hexagonal import contracts declared in .importlinter
+      # (application ring, driver→adapter isolation, domain purity, ports-no-usecases,
+      # controllers-inbound-only, adapter isolation, bootstrap-as-composition-root, …).
+      # A BROKEN contract is an architecture defect, not a style issue.
       - id: lint-imports
         name: import-linter (architecture contracts)
         entry: .venv/bin/lint-imports
@@ -47,13 +46,36 @@ repos:
         pass_filenames: false
         types: [python]
 
-      # Gate 4 — static type checking (pyright basic mode)
+      # Gate 7 — static type checking (pyright standard mode)
       # Zero errors required. See pyrightconfig.json for scope and settings.
       # `type: ignore` is acceptable only for provably safe casts that cannot
       # be expressed in the type system; a comment must explain why.
+      # --pythonpath names the interpreter explicitly: pyrightconfig.json no
+      # longer carries a venvPath/venv pin (it broke in CI / agent sandboxes
+      # that install globally — see CA2/CA10), so each caller names its env.
       - id: pyright
         name: pyright (static type checking)
-        entry: .venv/bin/pyright
+        entry: .venv/bin/pyright --pythonpath .venv/bin/python
         language: system
         pass_filenames: false
         types: [python]
+
+      # Gate 5 — process guards (IaC-1). Encode AGENTS.md process prose as
+      # runnable hooks so the rules can't be "simply not read".
+
+      # No direct commits to main; branch names follow the convention.
+      - id: guard-branch
+        name: branch guard (no commits to main; naming convention)
+        entry: tools/hooks/guard-branch.sh
+        language: script
+        pass_filenames: false
+        always_run: true
+
+      # No AI/assistant attribution in the commit message. Runs at the
+      # commit-msg stage — install once with:
+      #   .venv/bin/pre-commit install --hook-type commit-msg
+      - id: no-ai-attribution
+        name: no AI attribution in commit message
+        entry: tools/hooks/check-commit-msg.sh
+        language: script
+        stages: [commit-msg]

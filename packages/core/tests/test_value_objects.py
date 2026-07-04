@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.client_status import ClientStatus

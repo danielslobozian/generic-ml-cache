@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import (
+    SessionEventRow,
+)
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
-from generic_ml_cache_core.application.port.out.metrics_port import SessionEventRow
-from generic_ml_cache_core.application.usecase.session_report import build_session_report
+from generic_ml_cache_core.application.domain.service.session_report import build_session_report
 
 
 def _row(ts, event, client, model, key):
@@ -82,7 +84,7 @@ def test_extended_token_fields_aggregated():
 
 def test_extended_token_fields_zero_on_empty_session():
     r = build_session_report("nope", [], {})
-    assert r.by_model == []
+    assert r.by_model == ()
 
 
 def test_by_day_is_activity_counts_oldest_first():
@@ -97,4 +99,4 @@ def test_by_day_is_activity_counts_oldest_first():
 def test_empty_session():
     r = build_session_report("nope", [], {})
     assert (r.invocations, r.executions, r.hits, r.unknown_usage) == (0, 0, 0, 0)
-    assert (r.span_start, r.span_end, r.by_model, r.by_day) == (None, None, [], [])
+    assert (r.span_start, r.span_end, r.by_model, r.by_day) == (None, None, (), ())

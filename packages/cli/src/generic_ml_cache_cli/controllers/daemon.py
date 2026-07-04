@@ -7,20 +7,19 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Optional
 
 from generic_ml_cache_cli import config
-from generic_ml_cache_cli.composition import _store_root
+from generic_ml_cache_cli.composition import store_root
 
 
-def _cmd_daemon(_args: argparse.Namespace) -> int:
+def cmd_daemon(_args: argparse.Namespace) -> int:
     print("usage: gmlcache daemon {start,stop,status}", file=sys.stderr)
     return 1
 
 
-def _cmd_daemon_start(args: argparse.Namespace) -> int:
+def cmd_daemon_start(args: argparse.Namespace) -> int:
     try:
-        from generic_ml_cache_daemon.app import create_app  # noqa: PLC0415
+        from generic_ml_cache_daemon.app import create_app
     except ImportError:
         print(
             "error: generic-ml-cache-daemon is not installed. "
@@ -29,27 +28,27 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
         )
         return 1
     try:
-        import uvicorn  # noqa: PLC0415
+        import uvicorn
     except ImportError:
         print("error: uvicorn is not installed (install generic-ml-cache-daemon)", file=sys.stderr)
         return 1
 
-    store_root = _store_root()
-    if store_root is None:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
 
-    session_id: Optional[str] = getattr(args, "session", None) or None
+    session_id: str | None = getattr(args, "session", None) or None
     enable_metrics: bool = getattr(args, "metrics", False)
     host: str = args.host
     port: int = args.port
 
     _daemon_cfg = config.load()
     settings = config.resolve_settings(_daemon_cfg)
-    max_size: Optional[int] = settings["max_size"][0]  # type: ignore[assignment]
-    max_age: Optional[float] = settings["max_age"][0]  # type: ignore[assignment]
+    max_size = config.resolved_max_size(settings)
+    max_age = config.resolved_max_age(settings)
 
     application = create_app(
-        store_root,
+        store_root_path,
         session_id=session_id,
         enable_metrics=enable_metrics,
         max_size=max_size,
@@ -60,10 +59,10 @@ def _cmd_daemon_start(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_daemon_status(args: argparse.Namespace) -> int:
-    import json as _json  # noqa: PLC0415
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+def cmd_daemon_status(args: argparse.Namespace) -> int:
+    import json as _json
+    import urllib.error
+    import urllib.request
 
     host: str = args.host
     port: int = args.port
@@ -79,7 +78,7 @@ def _cmd_daemon_status(args: argparse.Namespace) -> int:
             return 1
 
     if getattr(args, "json", False):
-        import json as _json2  # noqa: PLC0415
+        import json as _json2
 
         print(_json2.dumps({"status": status, "host": host, "port": port}))
     else:
@@ -87,10 +86,10 @@ def _cmd_daemon_status(args: argparse.Namespace) -> int:
     return 0 if status == "ok" else 1
 
 
-def _cmd_daemon_stop(args: argparse.Namespace) -> int:
-    import signal  # noqa: PLC0415
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+def cmd_daemon_stop(args: argparse.Namespace) -> int:
+    import signal
+    import urllib.error
+    import urllib.request
 
     host: str = args.host
     port: int = args.port
@@ -101,8 +100,8 @@ def _cmd_daemon_stop(args: argparse.Namespace) -> int:
         print("daemon: not running", file=sys.stderr)
         return 1
 
-    store_root = _store_root()
-    pid_path = (store_root / ".daemon.pid") if store_root else None
+    store_root_path = store_root()
+    pid_path = (store_root_path / ".daemon.pid") if store_root_path else None
     if pid_path is None or not pid_path.exists():
         print("daemon: running but no PID file found — send SIGTERM manually", file=sys.stderr)
         return 1
@@ -118,17 +117,16 @@ def _cmd_daemon_stop(args: argparse.Namespace) -> int:
         return 1
 
 
-def _cmd_status_line(args: argparse.Namespace) -> int:  # NOSONAR — always 0 by design
+def cmd_status_line(args: argparse.Namespace) -> int:  # NOSONAR — always 0 by design
     """Emit live session stats as JSON for status-bar integrations.
 
     Designed to be called repeatedly by a status-bar formatter script.  Exits 0
     and prints nothing when no session is active or the daemon is not running —
     the caller decides how to handle absence.
     """
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+    import urllib.request
 
-    session_id: Optional[str] = getattr(args, "session", None) or os.environ.get("GMLCACHE_SESSION")
+    session_id: str | None = getattr(args, "session", None) or os.environ.get("GMLCACHE_SESSION")
     if not session_id:
         return 0
 

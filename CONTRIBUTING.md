@@ -40,7 +40,7 @@ See [`AGENTS.md`](AGENTS.md) for the full structure and dependency rules.
 
 ## Development setup
 
-You need Python 3.10 or newer. Install all four packages editable — core first, since
+You need Python 3.10 or newer. Install all five packages editable — core first, since
 the others depend on it:
 
 ```bash
@@ -49,6 +49,7 @@ cd generic-ml-cache
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e "packages/core[dev]"        # the kernel
 pip install -e "packages/adapters[dev]"    # the infrastructure adapters
+pip install -e "packages/bootstrap[dev]"   # the composition root
 pip install -e "packages/cli[dev]"         # the terminal client (provides gmlcache)
 pip install -e "packages/daemon[dev]"      # the local HTTP daemon
 ```

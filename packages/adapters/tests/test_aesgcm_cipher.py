@@ -4,12 +4,18 @@
 
 from __future__ import annotations
 
+import re
+import secrets
+
 import pytest
 
 pytest.importorskip("cryptography")  # the optional [encryption] extra
 
-from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
 from generic_ml_cache_core.common.errors import WrongEncryptionToken  # noqa: E402
+
+from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import (
+    AesGcmCipher,  # noqa: E402
+)
 
 
 def _cipher() -> AesGcmCipher:
@@ -24,6 +30,34 @@ def test_generated_tokens_are_unique_and_substantial():
     tokens = {cipher.generate_token() for _ in range(100)}
     assert len(tokens) == 100  # no collisions
     assert all(len(t) >= 32 for t in tokens)  # high-entropy, url-safe
+
+
+def test_generated_token_carries_the_gmlc_prefix():
+    # CG9-bis: an owned, scanner-friendly ``gmlc_<64hex>`` shape.
+    assert re.fullmatch(r"gmlc_[0-9a-f]{64}", _cipher().generate_token())
+
+
+def test_prefix_is_stripped_for_key_derivation_back_compat():
+    # A store encrypted with the legacy bare-hex token must open with the ``gmlc_``-
+    # prefixed form of the same secret, and vice versa — the prefix is presentation
+    # only and never changes the derived key.
+    cipher = _cipher()
+    bare = secrets.token_hex(32)
+    prefixed = f"gmlc_{bare}"
+
+    manifest_bare, data_key = cipher.create_envelope(bare)
+    assert cipher.open_envelope(prefixed, manifest_bare) == data_key  # bare store, prefixed key
+
+    manifest_prefixed, data_key2 = cipher.create_envelope(prefixed)
+    assert cipher.open_envelope(bare, manifest_prefixed) == data_key2  # prefixed store, bare key
+
+
+def test_a_different_secret_body_still_fails():
+    # Stripping the prefix must not weaken rejection: a wrong body is still wrong.
+    cipher = _cipher()
+    manifest, _ = cipher.create_envelope("gmlc_" + secrets.token_hex(32))
+    with pytest.raises(WrongEncryptionToken):
+        cipher.open_envelope("gmlc_" + secrets.token_hex(32), manifest)
 
 
 # --- envelope round-trip -----------------------------------------------------
@@ -73,6 +107,19 @@ def test_each_encryption_is_nondeterministic_but_decrypts():
     b = cipher.encrypt(data_key, b"same input")
     assert a != b  # fresh nonce each time
     assert cipher.decrypt(data_key, a) == cipher.decrypt(data_key, b) == b"same input"
+
+
+def test_content_encryption_uses_a_fresh_per_write_subkey_salt():
+    # X23: each content encryption prepends a fresh 32-byte salt from which a UNIQUE
+    # AES key is derived, so no single key is reused across blobs and the random-nonce
+    # 2^32 bound never applies. The leading salt bytes differ across two encryptions of
+    # the same plaintext, and both still decrypt.
+    cipher = _cipher()
+    _, data_key = cipher.create_envelope(cipher.generate_token())
+    a = cipher.encrypt(data_key, b"same")
+    b = cipher.encrypt(data_key, b"same")
+    assert a[:32] != b[:32]  # distinct per-write subkey salts (no reused key)
+    assert cipher.decrypt(data_key, a) == cipher.decrypt(data_key, b) == b"same"
 
 
 # --- wrong token / tampering -------------------------------------------------

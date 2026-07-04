@@ -6,15 +6,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 
+from generic_ml_cache_daemon.controllers.run import build_command, extract_artifact
 from generic_ml_cache_daemon.jobs import Job, JobState
 from generic_ml_cache_daemon.presenters.job import JobResponse, JobSubmitBody
-from generic_ml_cache_daemon.controllers.run import _build_command, _extract_artifact
 
 router = APIRouter(prefix="/jobs")
 
@@ -24,13 +24,13 @@ _SSE_POLL_INTERVAL = 0.1
 
 
 def _job_to_response(job: Job) -> JobResponse:
-    execution_key: Optional[str] = None
-    stdout: Optional[str] = None
-    stderr: Optional[str] = None
+    execution_key: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
     if job.execution is not None:
         execution_key = job.execution.call_identity.generate_key()
-        stdout = _extract_artifact(job.execution, _STDOUT)
-        stderr = _extract_artifact(job.execution, _STDERR)
+        stdout = extract_artifact(job.execution, _STDOUT)
+        stderr = extract_artifact(job.execution, _STDERR)
     return JobResponse(
         job_id=job.job_id,
         state=job.state.value,
@@ -45,7 +45,7 @@ def _job_to_response(job: Job) -> JobResponse:
 def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
     """Submit an execution to run in the background. Returns immediately with
     a job_id in 'pending' state."""
-    command = _build_command(body, request.app.state.whitelist)  # type: ignore[arg-type]
+    command = build_command(body, request.app.state.whitelist)
     wired = request.app.state.wired
     registry = request.app.state.job_registry
     job = registry.submit(wired.run_ml.execute, command)
@@ -53,7 +53,7 @@ def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
 
 
 @router.get("")
-def list_jobs(request: Request) -> Dict[str, Any]:
+def list_jobs(request: Request) -> dict[str, Any]:
     """Return all known job IDs."""
     registry = request.app.state.job_registry
     return {"job_ids": registry.list_ids()}
@@ -80,7 +80,7 @@ async def stream_job(job_id: str, request: Request) -> Any:
     if job is None:
         raise HTTPException(status_code=404, detail=f"job {job_id!r} not found")
 
-    async def generator() -> AsyncIterator[Dict[str, str]]:
+    async def generator() -> AsyncIterator[dict[str, str]]:
         while job.state not in (JobState.DONE, JobState.ERROR):  # pragma: no cover
             yield {"data": json.dumps({"type": "status", "state": job.state.value})}
             await asyncio.sleep(_SSE_POLL_INTERVAL)

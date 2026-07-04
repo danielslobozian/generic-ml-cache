@@ -10,10 +10,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from generic_ml_cache_adapters.adapter.outbound.client.claude import ClaudeAdapter
+from generic_ml_cache_adapters.adapter.outbound.client.codex import CodexAdapter
+from generic_ml_cache_adapters.adapter.outbound.client.cursor import CursorAdapter
 
-from generic_ml_cache_adapters.adapter.out.client.claude import ClaudeAdapter
-from generic_ml_cache_adapters.adapter.out.client.codex import CodexAdapter
-from generic_ml_cache_adapters.adapter.out.client.cursor import CursorAdapter
 from generic_ml_cache_cli.cli import main
 
 # Larger than the Linux single-argument limit (128 KiB) and the Windows
@@ -46,11 +46,11 @@ def test_command_line_size_guard_is_legible_and_platform_aware():
     # The guard fires only when the assembled command line would exceed THIS OS's
     # real limit, so the test sizes its oversize argument against that limit -- it
     # behaves correctly on Linux (per-arg), Windows and macOS (total).
-    from generic_ml_cache_core.common.errors import CommandLineTooLong
-    from generic_ml_cache_adapters.adapter.out.client.cli_process_runner import (
+    from generic_ml_cache_adapters.adapter.outbound.client.cli_process_runner import (
         _check_command_line_size,
         _command_line_limit,
     )
+    from generic_ml_cache_core.common.errors import CommandLineTooLong
 
     # A normal command line passes untouched.
     _check_command_line_size(["exe", "--model", "m", "--print", "a short prompt"])

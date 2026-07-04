@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 
 import pytest
+from generic_ml_cache_core.common.errors import ConfigError
 
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli.cli import main
-from generic_ml_cache_core.common.errors import ConfigError
 
 
 def _write(path, text):
@@ -283,23 +283,27 @@ def test_adapters_wildcard_in_file_cfg_is_none(tmp_path):
 # --- adapters whitelist wired end-to-end (0.16.0) --------------------------
 
 
-def test_doctor_respects_adapter_whitelist(tmp_path, monkeypatch, capsys):
+def test_doctor_lists_registered_adapters_regardless_of_whitelist(tmp_path, monkeypatch, capsys):
+    # G1: the `adapters` whitelist gates third-party entry-point plugins only;
+    # registered/bundled adapters always appear, so whitelisting 'fake' does not
+    # hide its sibling 'fake_stdin'.
     p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake\n")
     monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
     rc = main(["doctor"])
     assert rc == 0
     out = capsys.readouterr().out
     assert "fake" in out
-    assert "fake_stdin" not in out
+    assert "fake_stdin" in out
 
 
-def test_doctor_excludes_all_when_unknown_whitelist(tmp_path, monkeypatch, capsys):
+def test_doctor_unknown_whitelist_name_does_not_hide_builtins(tmp_path, monkeypatch, capsys):
     p = _write(tmp_path / "c.ini", "[defaults]\nadapters = nonexistent-adapter\n")
     monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
     rc = main(["doctor"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "no client adapters" in out
+    assert "no client adapters" not in out
+    assert "fake" in out
 
 
 # --- status command: adapter whitelist display (0.16.0) --------------------
@@ -341,20 +345,20 @@ def test_status_text_shows_named_adapters_when_configured(tmp_path, monkeypatch,
 # --- run / alias: excluded adapter → clear error (0.16.0) ------------------
 
 
-def test_run_excluded_adapter_returns_error_4(tmp_path, monkeypatch, capsys):
+def test_run_registered_adapter_not_blocked_by_whitelist(tmp_path, monkeypatch, capsys):
+    # G1: 'fake' is a registered adapter, so a config whitelist that omits it no
+    # longer excludes it — the run proceeds instead of failing with error 4.
     p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake_stdin\n")
     monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
     rc = main(["run", "--client", "fake", "--model", "m", "--prompt", "STDOUT hi"])
-    assert rc == 4
-    assert "fake" in capsys.readouterr().err
+    assert rc == 0
 
 
-def test_alias_excluded_adapter_returns_error_4(tmp_path, monkeypatch, capsys):
+def test_alias_registered_adapter_not_blocked_by_whitelist(tmp_path, monkeypatch, capsys):
     p = _write(tmp_path / "c.ini", "[defaults]\nadapters = fake_stdin\n")
     monkeypatch.setenv("GMLCACHE_CONFIG", str(p))
     rc = main(["alias", "fake", "--", "-c", "print('hi')"])
-    assert rc == 4
-    assert "fake" in capsys.readouterr().err
+    assert rc == 0
 
 
 # --- init ------------------------------------------------------------------

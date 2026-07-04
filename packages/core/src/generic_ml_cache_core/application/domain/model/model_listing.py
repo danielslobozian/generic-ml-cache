@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 
@@ -25,5 +24,5 @@ class ModelListing:
     name: str
     present: bool
     supported: bool
-    models: Optional[List[ModelInfo]] = None
-    reason: Optional[str] = None
+    models: list[ModelInfo] | None = None
+    reason: str | None = None

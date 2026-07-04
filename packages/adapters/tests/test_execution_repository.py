@@ -1,38 +1,51 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for ExecutionRepository."""
+"""Tests for SqliteExecutionRepository."""
 
 from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
+from typing import Any
 
-from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
-    ExecutionRepository,
+import pytest
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    Artifact,
+    ArtifactStatus,
+    ArtifactType,
 )
-from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
-    ApiCallIdentity,
-)
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
     FailureReason,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
+    ApiCallIdentity,
+)
 from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
     ManagedCallIdentity,
 )
-from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
 )
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
-from generic_ml_cache_core.application.port.out.clock_port import ClockPort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
 )
+from generic_ml_cache_core.common.errors import StoreCorrupt, StoreLocked, StoreUnavailable
+
+from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
+    SqliteExecutionRepository,
+)
+from generic_ml_cache_adapters.db import DbCursor
+from generic_ml_cache_adapters.migration_runner import run_migrations
 
 _MOMENT = datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
 
@@ -42,6 +55,170 @@ class FixedClock(ClockPort):
         return _MOMENT
 
 
+class _NullCursor:
+    lastrowid: int | None = 0
+    # A matched row: mark_artifacts_stored's rowcount guard treats 0 as a stale write.
+    rowcount: int = 1
+
+    def fetchone(self) -> Any:
+        return None
+
+    def fetchall(self) -> list[Any]:
+        return []
+
+
+class _RecordingConnection:
+    """A DbConnection spy that records the transaction calls it receives, so a
+    test can assert the write helper commits on success / rolls back on error."""
+
+    def __init__(
+        self, *, fail_on_execute: bool = False, error: BaseException | None = None
+    ) -> None:
+        self.calls: list[str] = []
+        self._fail_on_execute = fail_on_execute
+        self._error = error or sqlite3.OperationalError("simulated write failure")
+
+    def execute(self, sql: str, parameters: Any = ()) -> DbCursor:
+        self.calls.append("execute")
+        if self._fail_on_execute:
+            raise self._error
+        return _NullCursor()
+
+    def commit(self) -> None:
+        self.calls.append("commit")
+
+    def rollback(self) -> None:
+        self.calls.append("rollback")
+
+    def close(self) -> None:
+        self.calls.append("close")
+
+
+def test_write_commits_then_closes_on_success(tmp_path):
+    connection = _RecordingConnection()
+    repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
+    repository.mark_artifacts_stored("some-key", "some-blob")
+    assert connection.calls == ["execute", "commit", "close"]
+
+
+def test_write_rolls_back_then_translates_then_closes_on_error(tmp_path):
+    connection = _RecordingConnection(fail_on_execute=True)
+    repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
+    # X1: the raw sqlite3.OperationalError never crosses the port — it is translated
+    # to the project's vocabulary (a non-"locked" operational error is a hard outage →
+    # StoreUnavailable), with the original preserved as __cause__.
+    with pytest.raises(StoreUnavailable) as caught:
+        repository.mark_artifacts_stored("some-key", "some-blob")
+    assert isinstance(caught.value.__cause__, sqlite3.OperationalError)
+    # Rollback is explicit — never a silent reliance on close-time auto-rollback —
+    # and commit is never reached on the error path.
+    assert connection.calls == ["execute", "rollback", "close"]
+
+
+def test_read_against_a_malformed_database_translates_to_store_corrupt(tmp_path):
+    # X1: a READ (not just a write) is wrapped — a malformed database image surfaces
+    # as StoreCorrupt, never a raw sqlite3.DatabaseError, so the serve path self-heals
+    # the whole DB file (S4) instead of crashing the driver.
+    db_path = tmp_path / "corrupt.sqlite3"
+    db_path.write_bytes(b"this is not a sqlite database, just junk bytes" * 8)
+    repository = SqliteExecutionRepository(_make_factory(db_path), clock=FixedClock())
+    with pytest.raises(StoreCorrupt) as caught:
+        repository.find_current("any-key")
+    assert isinstance(caught.value.__cause__, sqlite3.DatabaseError)
+
+
+def test_locked_read_translates_to_store_locked(tmp_path):
+    # X1: a "database is locked" OperationalError past the busy-timeout is transient
+    # contention (S2a) → StoreLocked, distinct from a hard StoreUnavailable outage.
+    connection = _RecordingConnection(
+        fail_on_execute=True, error=sqlite3.OperationalError("database is locked")
+    )
+    repository = SqliteExecutionRepository(lambda: connection, clock=FixedClock())
+    with pytest.raises(StoreLocked):
+        repository.find_current("any-key")
+    assert connection.calls == ["execute", "close"]
+
+
+# --- X2: a malformed row (outside the artifact fields) → StoreCorrupt ---------
+
+
+def _corrupt(db_path, sql: str) -> None:
+    """Tamper one column of a stored row via a raw connection — simulating on-disk
+    corruption the reconstruction must survive as a self-healable StoreCorrupt."""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        connection.execute(sql)
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _servable_repo(tmp_path):
+    db_path = tmp_path / "executions.sqlite3"
+    factory = _make_factory(db_path)
+    run_migrations(factory)
+    return SqliteExecutionRepository(factory, clock=FixedClock()), db_path
+
+
+def test_corrupt_kind_is_store_corrupt_on_the_serve_path(tmp_path):
+    # X2: a bad enum outside the artifact fields must not raise a raw ValueError that
+    # denies the whole key — it is a corrupt cassette the serve path can self-heal.
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET kind = 'not-a-kind'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_failure_reason_is_store_corrupt(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET failure_reason = 'not-a-reason'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_identity_json_is_store_corrupt(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE call_identities SET identity_json = '{ not valid json'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_token_usage_json_is_store_corrupt(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    usage = TokenUsage(input_tokens=1, output_tokens=1, raw={"x": 1})
+    repository.save(_execution(identity, token_usage=usage))
+    _corrupt(db_path, "UPDATE token_usage SET raw_json = '{ not valid json'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_state_is_store_corrupt_on_read_all(tmp_path):
+    # ``state`` is in find_current's WHERE filter, so a bad value hides the row from
+    # the serve path; find_all (the unfiltered history) still reconstructs it.
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET state = 'not-a-state'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_all(identity.generate_key())
+
+
+def test_corrupt_superseded_timestamp_is_store_corrupt_on_read_all(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET superseded_at = 'not-a-timestamp'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_all(identity.generate_key())
+
+
 def _make_factory(db_path):
     def _connect():
         return sqlite3.connect(str(db_path))
@@ -49,10 +226,10 @@ def _make_factory(db_path):
     return _connect
 
 
-def _repository(tmp_path) -> ExecutionRepository:
+def _repository(tmp_path) -> SqliteExecutionRepository:
     factory = _make_factory(tmp_path / "executions.sqlite3")
     run_migrations(factory)
-    return ExecutionRepository(factory, clock=FixedClock())
+    return SqliteExecutionRepository(factory, clock=FixedClock())
 
 
 def _managed_identity(prompt_fingerprint: str = "p") -> ManagedCallIdentity:
@@ -95,12 +272,27 @@ def _execution(
 # --- contract ----------------------------------------------------------------
 
 
-def test_is_an_execution_repository_port(tmp_path):
-    assert isinstance(_repository(tmp_path), ExecutionRepositoryPort)
+def test_implements_ml_run_ports(tmp_path):
+    repository = _repository(tmp_path)
+    assert isinstance(repository, SaveMlRunPort)
+    assert isinstance(repository, ReadMlRunPort)
+    assert isinstance(repository, AnnotateMlRunPort)
+    assert isinstance(repository, InspectMlRunsPort)
+    assert isinstance(repository, PurgeMlRunsPort)
 
 
 def test_find_current_is_none_for_unknown_key(tmp_path):
     assert _repository(tmp_path).find_current("nope") is None
+
+
+def test_execution_id_round_trips_through_save_and_reload(tmp_path):
+    repository = _repository(tmp_path)
+    identity = _managed_identity()
+    execution = _execution(identity)
+    repository.save(execution)
+    reloaded = repository.find_all(identity.generate_key())
+    assert len(reloaded) == 1
+    assert reloaded[0].execution_id == execution.execution_id
 
 
 def test_save_then_find_current(tmp_path):
@@ -359,48 +551,6 @@ def test_blob_keys_for_execution_includes_superseded_executions(tmp_path):
     assert "blob_" + b"new".hex() in keys
 
 
-# --- blob_reference_count ----------------------------------------------------
-
-
-def test_blob_reference_count_is_one_for_a_single_execution(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, content=b"answer"))
-    blob_key = "blob_" + b"answer".hex()
-    assert repository.blob_reference_count(blob_key) == 1
-
-
-def test_blob_reference_count_is_zero_for_unknown_blob(tmp_path):
-    assert _repository(tmp_path).blob_reference_count("nope") == 0
-
-
-def test_blob_reference_count_counts_all_referencing_rows(tmp_path):
-    repository = _repository(tmp_path)
-    id_a = _managed_identity(prompt_fingerprint="a")
-    id_b = _managed_identity(prompt_fingerprint="b")
-    shared_blob = "blob_shared"
-
-    # Two executions with identical content (same blob_key — content-addressed)
-    def _shared_execution(identity):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=6,
-            content=b"shared",
-        )
-        return MlExecution(
-            call_identity=identity,
-            execution_state=ExecutionState.SUCCESS,
-            execution_kind=ExecutionKind.LOCAL_MANAGED,
-            output_persisted=True,
-            artifacts=[artifact],
-        )
-
-    repository.save(_shared_execution(id_a))
-    repository.save(_shared_execution(id_b))
-    assert repository.blob_reference_count(shared_blob) == 2
-
-
 # --- soft_purge_execution ----------------------------------------------------
 
 
@@ -436,44 +586,6 @@ def test_soft_purge_preserves_token_usage(tmp_path):
     assert history[0].token_usage == usage
 
 
-def test_soft_purge_reduces_blob_reference_count_to_zero(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, content=b"answer"))
-    blob_key = "blob_" + b"answer".hex()
-    assert repository.blob_reference_count(blob_key) == 1
-    repository.soft_purge_execution(identity.generate_key())
-    assert repository.blob_reference_count(blob_key) == 0
-
-
-def test_soft_purge_does_not_drop_shared_blob_reference(tmp_path):
-    repository = _repository(tmp_path)
-    id_a = _managed_identity(prompt_fingerprint="a")
-    id_b = _managed_identity(prompt_fingerprint="b")
-    shared_blob = "blob_shared"
-
-    def _shared(identity):
-        artifact = Artifact(
-            artifact_type=ArtifactType.STDOUT,
-            blob_key=shared_blob,
-            size_bytes=6,
-            content=b"shared",
-        )
-        return MlExecution(
-            call_identity=identity,
-            execution_state=ExecutionState.SUCCESS,
-            execution_kind=ExecutionKind.LOCAL_MANAGED,
-            output_persisted=True,
-            artifacts=[artifact],
-        )
-
-    repository.save(_shared(id_a))
-    repository.save(_shared(id_b))
-    repository.soft_purge_execution(id_a.generate_key())
-    # id_b still holds a reference — blob should not be deleted yet
-    assert repository.blob_reference_count(shared_blob) == 1
-
-
 def test_soft_purge_unknown_key_is_a_no_op(tmp_path):
     _repository(tmp_path).soft_purge_execution("nope")  # must not raise
 
@@ -490,15 +602,6 @@ def test_hard_delete_execution_removes_all_history(tmp_path):
     repository.hard_delete_execution(key)
     assert repository.find_current(key) is None
     assert repository.find_all(key) == []
-
-
-def test_hard_delete_execution_removes_blob_references(tmp_path):
-    repository = _repository(tmp_path)
-    identity = _managed_identity()
-    repository.save(_execution(identity, content=b"answer"))
-    blob_key = "blob_" + b"answer".hex()
-    repository.hard_delete_execution(identity.generate_key())
-    assert repository.blob_reference_count(blob_key) == 0
 
 
 def test_hard_delete_execution_allows_re_save_of_same_key(tmp_path):
@@ -653,3 +756,110 @@ def test_all_execution_keys_empty_after_hard_delete_all(tmp_path):
     for key in list(repository.all_execution_keys()):
         repository.hard_delete_execution(key)
     assert repository.all_execution_keys() == []
+
+
+# --- C-4 DB-first artifact lifecycle -----------------------------------------
+
+
+def _pending_execution(identity, *, state=ExecutionState.SUCCESS, content=b"answer"):
+    """An execution as the DB-first write path saves it: not-yet-persisted, with a
+    PENDING artifact whose blob has not been stored."""
+    artifact = Artifact(
+        artifact_type=ArtifactType.STDOUT,
+        blob_key="blob_" + content.hex(),
+        size_bytes=len(content),
+        content=content,
+        status=ArtifactStatus.PENDING,
+    )
+    return MlExecution(
+        call_identity=identity,
+        execution_state=state,
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        output_persisted=False,
+        artifacts=[artifact],
+    )
+
+
+def test_db_first_pending_run_is_not_servable_until_finalized(tmp_path):
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+    execution = _pending_execution(identity)
+    blob_key = execution.artifacts[0].blob_key
+
+    repo.save(execution)  # PENDING, output_persisted=0 -> not servable, no supersede
+    assert repo.find_current(key) is None
+    assert repo.find_all(key)[0].artifacts[0].status is ArtifactStatus.PENDING
+
+    repo.mark_artifacts_stored(execution.execution_id, blob_key)
+    stored = repo.find_all(key)[0].artifacts[0]
+    assert stored.status is ArtifactStatus.STORED
+    assert stored.persisted_at is not None
+    assert repo.find_current(key) is None  # still not finalized
+
+    repo.finalize_output_persisted(execution.execution_id)
+    current = repo.find_current(key)
+    assert current is not None
+    assert current.output_persisted is True
+
+
+def test_db_first_failed_blob_marks_artifact_failed(tmp_path):
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+    execution = _pending_execution(identity)
+    blob_key = execution.artifacts[0].blob_key
+
+    repo.save(execution)
+    repo.mark_artifacts_failed(execution.execution_id, blob_key, "disk full")
+    failed = repo.find_all(key)[0].artifacts[0]
+    assert failed.status is ArtifactStatus.FAILED
+    assert failed.status_detail == "disk full"
+    # Never finalized -> not servable.
+    assert repo.find_current(key) is None
+
+
+def test_finalizing_a_recorded_failure_does_not_supersede_the_good_answer(tmp_path):
+    # record_on_error stores a FAILED run; finalizing it must persist the record
+    # WITHOUT displacing the current SUCCESS (find_current filters SUCCESS anyway).
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+
+    good = _pending_execution(identity, content=b"good")
+    repo.save(good)
+    repo.mark_artifacts_stored(good.execution_id, good.artifacts[0].blob_key)
+    repo.finalize_output_persisted(good.execution_id)
+    assert repo.find_current(key) is not None
+
+    failed = _pending_execution(identity, state=ExecutionState.FAILED, content=b"boom")
+    repo.save(failed)
+    repo.mark_artifacts_stored(failed.execution_id, failed.artifacts[0].blob_key)
+    repo.finalize_output_persisted(failed.execution_id)
+
+    current = repo.find_current(key)
+    assert current is not None
+    assert current.execution_state is ExecutionState.SUCCESS
+    assert current.artifacts[0].blob_key == "blob_" + b"good".hex()
+
+
+def test_corrupt_blob_key_in_db_is_rejected_on_load(tmp_path):
+    # C-5 parse-at-edge: a traversal-unsafe key that somehow reached the DB (row
+    # corruption/tampering) is a corrupt cassette. The repository surfaces a
+    # catchable StoreCorrupt (the serve path self-heals it) — never a raw ValueError
+    # that would deny the whole key and bypass the driver ladders (W17/S4).
+    repo = _repository(tmp_path)
+    identity = _managed_identity()
+    key = identity.generate_key()
+    repo.save(_execution(identity))
+
+    factory = _make_factory(tmp_path / "executions.sqlite3")
+    conn = factory()
+    try:
+        conn.execute("UPDATE artifacts SET blob_key = ?", ("../etc/passwd",))
+        conn.commit()
+    finally:
+        conn.close()
+
+    with pytest.raises(StoreCorrupt, match="invalid blob key"):
+        repo.find_current(key)

@@ -4,86 +4,48 @@ root_packages =
     generic_ml_cache_cli
     generic_ml_cache_daemon
     generic_ml_cache_adapters
+    generic_ml_cache_bootstrap
 include_external_packages = True
 
-# Rule 1 — the application ring is independent of the adapter layer.
-# Domain, use cases, and ports may not import from any adapter (inbound or outbound).
-# This is the hexagonal invariant: dependencies point inward, never outward.
+# Rule 1 — the application ring is independent of the adapter/composition layers.
+# Domain, use cases, and ports may not import from any adapter (inbound or outbound)
+# nor from bootstrap (the composition root). This is the hexagonal invariant:
+# dependencies point inward, never outward.
 [importlinter:contract:hex-application-ring]
 name = Application ring must not import adapters
 type = forbidden
 source_modules =
     generic_ml_cache_core.application
 forbidden_modules =
-    generic_ml_cache_core.adapter
     generic_ml_cache_adapters
+    generic_ml_cache_bootstrap
 
-# Rule 2 — driver packages (CLI, daemon) may only reach into adapters via their
-# private composition modules.  They must not import driven adapter implementations
-# (generic_ml_cache_adapters.adapter.out.*) from business-logic modules.
+# Rule 2 — driver packages (CLI, daemon) must not import driven adapter
+# implementations (generic_ml_cache_adapters.adapter.outbound.*) DIRECTLY. Reaching
+# adapters *through* the bootstrap composition root is the intended path, so this
+# checks direct imports only (allow_indirect_imports) — otherwise the legitimate
+# cli/daemon -> bootstrap -> adapter.outbound chain would be flagged.
 #
-# ignore_imports lists the legitimate wiring edges in the private composition roots
-# (_compose.py in CLI, inline wiring in daemon/app.py) and shared helpers:
-#   * cli._compose is the CLI composition root — it is supposed to wire adapters.
-#   * daemon.app is the daemon composition root — same.
-#   * cli.composition provides get_encryption_state / load_cipher / build_store_encryptor.
-#   * cli.controllers.daemon → daemon.app is an optional lazy import.
+# W28 made this invariant genuinely TRUE: every driver->adapter edge now goes
+# through a bootstrap composition-root hook (diagnostics factory, encryption-ops
+# facade, read-only store-status probe, stub-runners, progress stream) and the
+# drivers no longer declare a runtime dependency on the adapters package at all.
+# So there are NO ignore_imports left to whitelist — the contract stands clean.
 [importlinter:contract:hex-drivers-no-driven-adapters]
 name = Driver packages must not import driven adapter implementations directly
 type = forbidden
+allow_indirect_imports = True
 source_modules =
     generic_ml_cache_cli
     generic_ml_cache_daemon
 forbidden_modules =
-    generic_ml_cache_core.adapter.out
-    generic_ml_cache_adapters.adapter.out
-ignore_imports =
-    # CLI private composition root — legitimate adapter assembly
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.clock.system_clock
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.metrics.access_registry
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.metrics.journal_metrics
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.execution_repository
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
-    # CLI shared composition helpers (encryption, diagnostics)
-    generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
-    generic_ml_cache_cli.composition -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
-    # Daemon composition root (inline in app.py)
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.clock.system_clock
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.metrics.access_registry
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.metrics.journal_metrics
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.persistence.execution_repository
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.store_encryptor
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter
-    generic_ml_cache_daemon.app -> generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter
-    # `gmlcache doctor` and `gmlcache models` probe live adapters — read-only observational imports
-    generic_ml_cache_cli.controllers.setup -> generic_ml_cache_adapters.adapter.out.client.discover
-    generic_ml_cache_cli.controllers.setup -> generic_ml_cache_adapters.adapter.out.api.api_discover
-    # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
-    generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app
+    generic_ml_cache_adapters.adapter.outbound
 
 # Rule 3 — domain model purity.
 # Domain objects (entities, value objects, domain events) must not import use cases,
 # application services, OR ports. They are the innermost ring: they model the world,
 # not the workflows, and not the boundaries that drive them. (A domain model leaking
-# in from a port — e.g. ModelInfo via port/out/base — is the exact slip this catches.)
+# in from a port — e.g. ModelInfo via port/outbound/base — is the exact slip this catches.)
 [importlinter:contract:hex-domain-purity]
 name = Domain model must not import use cases or ports
 type = forbidden
@@ -105,15 +67,80 @@ source_modules =
 forbidden_modules =
     generic_ml_cache_core.application.usecase
 
-# Rule 4 — core must not import any specific database driver.
-# Core is driver-agnostic: it accepts a DBAPI2 connection injected by the caller.
+# Rule 3c — core production code must not import the shipped test-support kit.
+# generic_ml_cache_core.testing (the reference fakes + conformance TCK, E-1) is
+# test-support: production modules must never depend on it, so the core runtime
+# stays dependency-free (its pytest dep lives behind the [test] extra).
+[importlinter:contract:core-prod-not-testing]
+name = Core production code must not import the test-support kit
+type = forbidden
+source_modules =
+    generic_ml_cache_core.application
+    generic_ml_cache_core.common
+forbidden_modules =
+    generic_ml_cache_core.testing
+
+# Rule 4 — core must not import any concrete driver.
+# Core is driver-agnostic: it accepts a DBAPI2 connection, an HTTP client, a
+# subprocess runner, etc. injected by the caller through a port. The invariant is
+# "core imports only stdlib + generic_ml_cache_core.*", but import-linter has no
+# allowlist contract type, so (per the Y15 fallback) we widen the forbidden set to the
+# whole concrete-driver family — a DB driver, the HTTP/socket stack, subprocess, the
+# crypto lib, the web-server frameworks, the logging backend — instead of just sqlite3.
+# This catches the NEXT stray driver import (e.g. urllib/cryptography/fastapi), not only
+# the one we already named. The core-purity pytest guard (test_core_has_no_adapter_
+# discovery) is its AST-level twin.
 [importlinter:contract:no-db-driver-in-core]
-name = Core must not import a database driver
+name = Core must not import a concrete driver
 type = forbidden
 source_modules =
     generic_ml_cache_core
 forbidden_modules =
     sqlite3
+    urllib
+    http
+    socket
+    subprocess
+    cryptography
+    fastapi
+    starlette
+    uvicorn
+    structlog
+
+# Rule 10 — driver runtime modules reach the application only through inbound ports.
+# A driving adapter (a CLI command controller, a daemon route, and any driver
+# *runtime* module such as the daemon's eviction scheduler or job registry) may
+# invoke the domain ONLY via the inbound ports it is handed in the ApplicationApi
+# bundle. It must not import a use-case implementation, an outbound port, or a
+# domain service directly. (Commands/queries under application.port.inbound and
+# domain *models* are fine — those ARE the contract surface.) The scope is the
+# driver packages MINUS their composition roots (cli._compose, cli.composition,
+# daemon.app) — those alone are free to wire the concrete graph. Broadened from
+# *.controllers to the runtime modules (V9): Rule 10 previously policed only
+# controllers, so infrastructure like daemon.scheduler could import a concrete
+# PurgeService and escape. This is the project's ArchUnit for the inbound-port
+# refactor: green = the refactor is complete.
+[importlinter:contract:hex-controllers-inbound-only]
+name = Driver runtime modules reach the application only through inbound ports
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    generic_ml_cache_cli.controllers
+    generic_ml_cache_cli.infrastructure
+    generic_ml_cache_cli.presenters
+    generic_ml_cache_cli.async_jobs
+    generic_ml_cache_cli.config
+    generic_ml_cache_cli.discovery
+    generic_ml_cache_daemon.controllers
+    generic_ml_cache_daemon.infrastructure
+    generic_ml_cache_daemon.presenters
+    generic_ml_cache_daemon.scheduler
+    generic_ml_cache_daemon.jobs
+    generic_ml_cache_daemon.metrics
+forbidden_modules =
+    generic_ml_cache_core.application.usecase
+    generic_ml_cache_core.application.port.outbound
+    generic_ml_cache_core.application.domain.service
 
 # Rule 5 — driven adapter sub-packages must not depend on each other.
 # Each adapter knows only about the port interfaces it implements.
@@ -122,19 +149,18 @@ forbidden_modules =
 name = Driven adapter sub-packages must not import each other
 type = independence
 modules =
-    generic_ml_cache_adapters.adapter.out.api
-    generic_ml_cache_adapters.adapter.out.client
-    generic_ml_cache_adapters.adapter.out.clock
-    generic_ml_cache_adapters.adapter.out.crypto
-    generic_ml_cache_adapters.adapter.out.fingerprint
-    generic_ml_cache_adapters.adapter.out.gateway
-    generic_ml_cache_adapters.adapter.out.metrics
-    generic_ml_cache_adapters.adapter.out.persistence
-    generic_ml_cache_adapters.adapter.out.storage
-    generic_ml_cache_adapters.adapter.out.diagnostics
-    generic_ml_cache_adapters.adapter.out.workspace
+    generic_ml_cache_adapters.adapter.outbound.api
+    generic_ml_cache_adapters.adapter.outbound.client
+    generic_ml_cache_adapters.adapter.outbound.clock
+    generic_ml_cache_adapters.adapter.outbound.crypto
+    generic_ml_cache_adapters.adapter.outbound.fingerprint
+    generic_ml_cache_adapters.adapter.outbound.metrics
+    generic_ml_cache_adapters.adapter.outbound.persistence
+    generic_ml_cache_adapters.adapter.outbound.storage
+    generic_ml_cache_adapters.adapter.outbound.diagnostics
+    generic_ml_cache_adapters.adapter.outbound.workspace
 
-# Rule 7 — package-level isolation: lower packages never import driver packages.
+# Rule 6 — package-level isolation: lower packages never import driver packages.
 # Adapters (infrastructure) and a driver must not reach "up" into another driver.
 # Freezes the current clean state so accidental coupling can't creep in later.
 [importlinter:contract:adapters-no-drivers]
@@ -146,7 +172,21 @@ forbidden_modules =
     generic_ml_cache_cli
     generic_ml_cache_daemon
 
-# Rule 8 — the daemon never imports the CLI (they are sibling drivers).
+# Rule 6b — bootstrap is the composition root: it wires core + adapters and is
+# imported only by the drivers. It must never reach "up" into a driver (that
+# would be the composition root depending on a thing it composes). It is allowed
+# to import core, adapters, and adapter.outbound — wiring is its job — so it is not
+# itself isolation-policed, only confined here.
+[importlinter:contract:bootstrap-no-drivers]
+name = Bootstrap must not import driver packages
+type = forbidden
+source_modules =
+    generic_ml_cache_bootstrap
+forbidden_modules =
+    generic_ml_cache_cli
+    generic_ml_cache_daemon
+
+# Rule 7 — the daemon never imports the CLI (they are sibling drivers).
 [importlinter:contract:daemon-not-cli]
 name = Daemon must not import the CLI
 type = forbidden
@@ -155,7 +195,7 @@ source_modules =
 forbidden_modules =
     generic_ml_cache_cli
 
-# Rule 9 — the CLI imports the daemon only through the optional lazy launcher
+# Rule 8 — the CLI imports the daemon only through the optional lazy launcher
 # (`gmlcache daemon start`), guarded by an ImportError so the daemon stays an
 # optional dependency. No other CLI module may depend on the daemon.
 [importlinter:contract:cli-not-daemon]

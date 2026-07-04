@@ -15,11 +15,12 @@ A guided entry point for the design, specification, usage, architecture, referen
 ---
 
 > [!NOTE]
-> The codebase is organized as four packages: `packages/core` (the hexagonal kernel —
-> domain model, use cases, port contracts; zero runtime dependencies),
-> `packages/adapters` (concrete port implementations — SQLite, filesystem, ML clients,
-> encryption), `packages/cli` (the `gmlcache` client), and `packages/daemon` (the local
-> HTTP daemon). Records are *executions* stored in a SQLite store with a
+> The codebase is organized as five packages: `packages/core` (the hexagonal kernel —
+> domain model, use cases, port contracts), `packages/adapters` (concrete port
+> implementations — SQLite, filesystem, ML clients, encryption), `packages/bootstrap`
+> (the composition root that wires core + adapters), `packages/cli` (the `gmlcache`
+> client), and `packages/daemon` (the local HTTP daemon). Records are *executions*
+> stored in a SQLite store with a
 > content-addressed blob store. The architecture is hexagonal (ports-and-adapters);
 > treat [`domain-model.md`](domain-model.md) as the normative domain reference.
 

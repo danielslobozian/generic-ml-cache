@@ -4,8 +4,10 @@
 
 A thin inbound driver: it reads configuration (an INI file), provides the data
 source (store location), and maps the ``gmlcache`` terminal commands onto the
-core library's public APIs. All the engine logic and adapters live in
-generic-ml-cache-core, on which this package depends.
+core library's public APIs. The engine logic lives in generic-ml-cache-core; the
+concrete adapters are assembled by generic-ml-cache-bootstrap (the composition
+root). This package depends on core and bootstrap only — never on the adapters
+package directly (W28 driver isolation).
 """
 
 from __future__ import annotations
@@ -18,7 +20,11 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
-from generic_ml_cache_cli.discovery import register  # noqa: E402  # adapter registration seam
 from generic_ml_cache_core.common.errors import UnknownClient  # noqa: E402
 
-__all__ = ["__version__", "register", "UnknownClient"]
+from generic_ml_cache_cli._compose import (
+    build_use_cases,  # noqa: E402  # public embedding entry point
+)
+from generic_ml_cache_cli.discovery import register  # noqa: E402  # adapter registration seam
+
+__all__ = ["__version__", "register", "UnknownClient", "build_use_cases"]

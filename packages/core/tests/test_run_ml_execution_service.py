@@ -1,313 +1,1045 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
+"""Tests for RunMlExecutionService — the unified managed + API + passthrough executor."""
+
 from __future__ import annotations
 
-import pytest
-from unittest.mock import create_autospec, MagicMock
+from datetime import datetime, timezone
+from pathlib import Path
 
-from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+import pytest
+
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    ArtifactStatus,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
-    ApiCallIdentity,
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
+from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
+from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
+from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
+from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
+from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
+from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
+from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
+from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
 )
-from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
-    ManagedCallIdentity,
-)
-from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
-    PassthroughCallIdentity,
-)
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_use_case import (
+    RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.api_passthrough_runner_port import (
+    ApiPassthroughRunnerPort,
+)
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
+)
+from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
+from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
+from generic_ml_cache_core.application.port.outbound.managed_local_runner_port import (
+    ManagedLocalRunnerPort,
+)
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.passthrough_local_runner_port import (
+    PassthroughLocalRunnerPort,
+)
+from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import RunMlExecutionService
+from generic_ml_cache_core.common.errors import (
+    CacheMiss,
+    RunInterrupted,
+    UnknownClient,
+    UnsupportedExecutionMode,
+)
+from generic_ml_cache_core.testing.in_memory_execution_repository import (
+    InMemoryExecutionRepository,
+)
+from generic_ml_cache_core.testing.in_process_execution_key_lock import (
+    InProcessExecutionKeyLock,
+)
 
 
-def _make_svc(
-    file_fingerprint=None, runners=None, purge_service=None, max_size=None, workspace=None
-):
-    return RunMlExecutionService(
-        file_fingerprint=file_fingerprint or create_autospec(FileFingerprintPort),
-        runners=runners or {},
-        blob_store=create_autospec(BlobStorePort),
-        repository=create_autospec(ExecutionRepositoryPort),
-        metrics=create_autospec(MetricsPort),
-        purge_service=purge_service,
-        max_size=max_size,
-        workspace=workspace,
+class FixedClock(ClockPort):
+    def now(self) -> datetime:
+        return datetime(2026, 6, 21, 9, 30, tzinfo=timezone.utc)
+
+
+def _as_answer(result: ClientRunResult) -> ClientAnswer:
+    return ClientAnswer(
+        exit_code=result.exit_code,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        token_usage=result.token_usage,
     )
 
 
-def _cmd(
-    kind=ExecutionKind.LOCAL_MANAGED, client="claude", model="sonnet", effort="high", **kwargs
-):
-    return RunMlExecutionCommand(
-        execution_kind=kind, client=client, model=model, effort=effort, **kwargs
-    )
+class FakeWorkspace(WorkspacePort):
+    """A no-op workspace: the managed use case drives it, but these tests assert on
+    stdout/exit/cache behavior, not captured artifacts, so capture returns nothing."""
+
+    def create(self) -> Workspace:
+        return Workspace(run_dir=Path("/run"), config_home=Path("/home"))
+
+    def write_config(self, workspace, config_file) -> None:
+        pass
+
+    def seed_credentials(self, workspace, credentials) -> None:
+        pass
+
+    def snapshot(self, run_dir) -> Snapshot:
+        return Snapshot()
+
+    def capture(self, run_dir, baseline) -> list:
+        return []
+
+    def dispose(self, workspace) -> None:
+        pass
 
 
-class TestBuildIdentity:
-    def test_local_managed_returns_managed_call_identity(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED)
-        identity = svc._build_identity(cmd)
-        assert isinstance(identity, ManagedCallIdentity)
+class FakeClientRunner:
+    name = "fake-managed"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
 
-    def test_local_managed_uses_file_fingerprint(self):
-        fp = create_autospec(FileFingerprintPort)
-        fp.fingerprint.return_value = "fp_abc"
-        svc = _make_svc(file_fingerprint=fp)
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, input_file_paths=["/a/file.txt"])
-        svc._build_identity(cmd)
-        fp.fingerprint.assert_called_once_with("/a/file.txt")
+    def __init__(self, *results: ClientRunResult) -> None:
+        self._results = list(results) or [ClientRunResult(exit_code=0, stdout="managed out\n")]
+        self.calls: list = []
 
-    def test_local_passthrough_returns_passthrough_call_identity(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH)
-        identity = svc._build_identity(cmd)
-        assert isinstance(identity, PassthroughCallIdentity)
+    def stage_inputs(self, request, workspace) -> None:
+        pass
 
-    def test_local_passthrough_client_field_matches_command(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, client="pass-claude")
-        identity = svc._build_identity(cmd)
-        assert identity.client == "pass-claude"
-
-    def test_api_returns_api_call_identity(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.API)
-        identity = svc._build_identity(cmd)
-        assert isinstance(identity, ApiCallIdentity)
-
-    def test_api_provider_and_model_fields(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.API, client="anthropic", model="claude-3-7")
-        identity = svc._build_identity(cmd)
-        assert identity.provider == "anthropic"
-        assert identity.model == "claude-3-7"
+    def execute_managed(self, request, workspace) -> ClientAnswer:
+        self.calls.append(request)
+        result = self._results.pop(0) if len(self._results) > 1 else self._results[0]
+        return _as_answer(result)
 
 
-class TestRunClient:
-    def test_api_runner_is_invoked_via_run(self):
-        # The API path is the surviving MlRunnerPort.run() route; local kinds no
-        # longer use it (they orchestrate via the workspace + LocalClientPort).
-        runner = MagicMock()
-        svc = _make_svc(runners={"claude": runner})
-        cmd = _cmd(kind=ExecutionKind.API, prompt="hello")
-        svc._run_client(cmd)
-        runner.run.assert_called_once()
+class FakeApiClient(ApiClientPort):
+    name = "fake-api-runner"
 
-    def test_runner_exists_returns_runner_result(self):
-        expected = MagicMock()
-        runner = MagicMock()
-        runner.run.return_value = expected
-        svc = _make_svc(runners={"claude": runner})
-        cmd = _cmd(kind=ExecutionKind.API, prompt="q")
-        result = svc._run_client(cmd)
-        assert result is expected
-
-    def test_no_runner_raises_runtime_error(self):
-        svc = _make_svc(runners={})
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED)
-        with pytest.raises(RuntimeError):
-            svc._run_client(cmd)
-
-    def test_local_managed_with_workspace_orchestrates_the_client(self):
-        # When a WorkspacePort is injected, LOCAL_MANAGED no longer calls runner.run;
-        # core drives the workspace and the client only stages inputs + makes the call.
-        from pathlib import Path
-
-        from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
-        from generic_ml_cache_core.application.domain.model.run.client_run_result import (
-            GeneratedFile,
-        )
-        from generic_ml_cache_core.application.domain.model.run.workspace import Snapshot, Workspace
-
-        handle = Workspace(run_dir=Path("/run"), config_home=Path("/home"))
-        workspace = MagicMock()
-        workspace.create.return_value = handle
-        workspace.snapshot.return_value = Snapshot()
-        workspace.capture.return_value = [GeneratedFile(name="out.txt", content=b"x")]
-
-        client = MagicMock()
-        client.build_grants_config_file.return_value = None
-        client.get_token_files.return_value = []
-        client.execute_managed.return_value = ClientAnswer(exit_code=0, stdout="done", stderr="")
-
-        svc = _make_svc(runners={"claude": client}, workspace=workspace)
-        result = svc._run_client(_cmd(kind=ExecutionKind.LOCAL_MANAGED, prompt="hi"))
-
-        client.run.assert_not_called()  # the old path is bypassed
-        client.execute_managed.assert_called_once()
-        assert result.exit_code == 0 and result.stdout == "done"
-        assert [f.name for f in result.files] == ["out.txt"]  # core captured the artifact
-        workspace.dispose.assert_called_once_with(handle)  # workspace always cleaned up
-
-    def test_local_passthrough_with_workspace_relays_via_the_client(self):
-        # With the hexagonal path wired, passthrough calls the client's relay and
-        # core packages the answer with no files — it never touches a workspace.
-        from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
-
-        workspace = MagicMock()
-        client = MagicMock()
-        client.execute_passthrough.return_value = ClientAnswer(
-            exit_code=7, stdout="out", stderr="err"
-        )
-
-        svc = _make_svc(runners={"claude": client}, workspace=workspace)
-        result = svc._run_client(
-            _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, native_args=["-c", "x"])
-        )
-
-        client.run.assert_not_called()  # old path bypassed
-        client.execute_passthrough.assert_called_once()
-        assert result.exit_code == 7 and result.stdout == "out" and result.stderr == "err"
-        assert result.files == []  # a passthrough never produces files
-        workspace.create.assert_not_called()  # passthrough needs no workspace
-
-
-class TestAfterRecord:
-    def test_purge_service_none_does_not_evict(self):
-        svc = _make_svc(purge_service=None, max_size=1000)
-        svc._after_record("key")
-
-    def test_max_size_none_does_not_evict(self):
-        purge_mock = create_autospec(PurgeService)
-        svc = _make_svc(purge_service=purge_mock, max_size=None)
-        svc._after_record("key")
-        purge_mock.evict_to_quota.assert_not_called()
-
-    def test_both_set_calls_evict_to_quota(self):
-        purge_mock = create_autospec(PurgeService)
-        svc = _make_svc(purge_service=purge_mock, max_size=5000)
-        svc._after_record("key")
-        purge_mock.evict_to_quota.assert_called_once_with(5000)
-
-
-class TestJournalFields:
-    def test_local_passthrough_returns_client_empty_empty(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, client="pass-claude", model="", effort="")
-        result = svc._journal_fields(cmd)
-        assert result == ("pass-claude", "", "")
-
-    def test_local_managed_returns_client_model_effort(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, client="claude", model="opus", effort="max")
-        result = svc._journal_fields(cmd)
-        assert result == ("claude", "opus", "max")
-
-    def test_api_returns_client_model_effort(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.API, client="anthropic", model="claude-3-7", effort="")
-        result = svc._journal_fields(cmd)
-        assert result == ("anthropic", "claude-3-7", "")
-
-
-class TestExecutionKind:
-    def test_delegates_to_command_execution_kind(self):
-        svc = _make_svc()
-        for kind in ExecutionKind:
-            cmd = _cmd(kind=kind)
-            assert svc._execution_kind(cmd) is kind
-
-
-class TestIsUncacheable:
-    def test_cacheable_managed_command_returns_false(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, allow_paths=[], scan_trust=False)
-        assert svc._is_uncacheable(cmd) is False
-
-    def test_uncacheable_managed_command_with_allow_paths_returns_true(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, allow_paths=["/some/dir"], scan_trust=False)
-        assert svc._is_uncacheable(cmd) is True
-
-    def test_scan_trust_overrides_allow_paths(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, allow_paths=["/some/dir"], scan_trust=True)
-        assert svc._is_uncacheable(cmd) is False
-
-    def test_api_is_always_cacheable(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.API)
-        assert svc._is_uncacheable(cmd) is False
-
-    def test_passthrough_is_always_cacheable(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH)
-        assert svc._is_uncacheable(cmd) is False
-
-
-class TestExecutionTags:
-    def test_strips_and_sorts_tags(self):
-        svc = _make_svc()
-        cmd = _cmd(tags=["  Tag1  ", "tag2"])
-        result = svc._execution_tags(cmd)
-        assert result == ["Tag1", "tag2"]
-
-    def test_empty_tags_returns_empty_list(self):
-        svc = _make_svc()
-        cmd = _cmd(tags=[])
-        assert svc._execution_tags(cmd) == []
-
-    def test_deduplicates_tags(self):
-        svc = _make_svc()
-        cmd = _cmd(tags=["foo", "foo", "bar"])
-        result = svc._execution_tags(cmd)
-        assert result == ["bar", "foo"]
-
-    def test_drops_blank_tags(self):
-        svc = _make_svc()
-        cmd = _cmd(tags=["  ", "", "valid"])
-        result = svc._execution_tags(cmd)
-        assert result == ["valid"]
-
-
-class TestInputParts:
-    def test_local_passthrough_returns_input_args_tuple(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_PASSTHROUGH, native_args=["--foo", "bar"])
-        parts = svc._input_parts(cmd)
-        assert len(parts) == 1
-        assert parts[0][0] is ArtifactType.INPUT_ARGS
-        assert parts[0][1] is None
-        assert parts[0][2] == b'["--foo", "bar"]'
-
-    def test_local_managed_with_context_prompt_system_returns_three_parts(self):
-        svc = _make_svc()
-        cmd = _cmd(
-            kind=ExecutionKind.LOCAL_MANAGED,
-            context="ctx",
-            prompt="pmt",
-            user_system_prompt="sys",
-        )
-        parts = svc._input_parts(cmd)
-        types = [p[0] for p in parts]
-        assert types == [
-            ArtifactType.INPUT_CONTEXT,
-            ArtifactType.INPUT_PROMPT,
-            ArtifactType.INPUT_SYSTEM,
+    def __init__(self, *results: ClientRunResult) -> None:
+        self._results = list(results) or [
+            ClientRunResult(exit_code=0, stdout="api reply\n", token_usage=TokenUsage(5, 10))
         ]
+        self.calls: list[MlRequest] = []
 
-    def test_local_managed_with_only_prompt_returns_one_part(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.LOCAL_MANAGED, context="", prompt="only prompt")
-        parts = svc._input_parts(cmd)
-        assert len(parts) == 1
-        assert parts[0][0] is ArtifactType.INPUT_PROMPT
-        assert parts[0][2] == b"only prompt"
+    def run(self, request: MlRequest) -> ClientRunResult:
+        self.calls.append(request)
+        if len(self._results) > 1:
+            return self._results.pop(0)
+        return self._results[0]
 
-    def test_api_with_prompt_returns_input_prompt_part(self):
-        svc = _make_svc()
-        cmd = _cmd(kind=ExecutionKind.API, context="", prompt="api question")
-        parts = svc._input_parts(cmd)
-        assert len(parts) == 1
-        assert parts[0][0] is ArtifactType.INPUT_PROMPT
-        assert parts[0][2] == b"api question"
+
+class FakePassthroughRunner:
+    name = "fake-pass"
+    execution_kind = ExecutionKind.LOCAL_PASSTHROUGH
+
+    def __init__(self, *results: ClientRunResult) -> None:
+        self._results = list(results) or [ClientRunResult(exit_code=0, stdout="native out\n")]
+        self.calls: list = []
+
+    def execute_passthrough(self, request) -> ClientAnswer:
+        self.calls.append(request)
+        result = self._results.pop(0) if len(self._results) > 1 else self._results[0]
+        return _as_answer(result)
+
+
+class FakeApiPassthroughRunner:
+    """A verbatim API-passthrough relay fake: each result's exit_code stands in for
+    the upstream HTTP status (0 == a 200), and stdout for the raw response body."""
+
+    name = "fake-relay"
+    execution_kind = ExecutionKind.API_PASSTHROUGH
+
+    def __init__(self, *results: ClientRunResult) -> None:
+        self._results = list(results) or [ClientRunResult(exit_code=0, stdout='{"ok":true}')]
+        self.calls: list = []
+
+    def execute_api_passthrough(self, request) -> ClientAnswer:
+        self.calls.append(request)
+        result = self._results.pop(0) if len(self._results) > 1 else self._results[0]
+        return _as_answer(result)
+
+
+class FakeFileFingerprint(FileFingerprintPort):
+    def fingerprint(self, path: str) -> str:
+        return "fp_" + path
+
+
+class FakeBlobStore(BlobStorePort):
+    def __init__(self) -> None:
+        self.store: dict[str, bytes] = {}
+        self.puts: list[str] = []
+
+    def get(self, key: str) -> bytes | None:
+        return self.store.get(key)
+
+    def put(self, key: str, output: bytes) -> None:
+        self.store[key] = output
+        self.puts.append(key)
+
+    def is_healthy(self) -> bool:
+        return True
+
+    def remove(self, key: str) -> None:
+        self.store.pop(key, None)
+
+
+class FakeMetrics(
+    RecordCallEventPort,
+    CallStatsPort,
+    SessionReportSourcePort,
+    SessionQueryPort,
+    PurgeJournalPort,
+    SessionTagsPort,
+    SessionSpecPort,
+):
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    def record_event(self, event, *, execution_key, client, model, effort, session_id=None) -> None:
+        self.events.append({"event": event, "client": client, "model": model})
+
+    def hit_counts_by_key(self) -> dict[str, int]:
+        return {}
+
+    def event_counts(self) -> dict[str, int]:
+        return {}
+
+    def session_event_counts(self, session_id) -> dict[str, int]:
+        return {}
+
+    def session_events(self, session_id):
+        return []
+
+    def last_access(self) -> dict[str, float]:
+        return {}
+
+    def execution_keys_for_session(self, session_id):
+        return []
+
+    def delete_events_for_key(self, execution_key) -> None:
+        pass
+
+    def add_session_tag(self, session_id, tag) -> None:
+        pass
+
+    def remove_session_tag(self, session_id, tag) -> None:
+        pass
+
+    def set_session_spec(self, session_id, spec: SessionSpec) -> None:
+        pass
+
+    def clear_session_spec(self, session_id) -> None:
+        pass
+
+    def session_spec(self, session_id) -> SessionSpec | None:
+        return None
+
+    def list_session_ids(self) -> list[str]:
+        return []
+
+    def session_tags(self, session_id) -> list[str]:
+        return []
+
+    def session_ids_for_tag(self, tag) -> list[str]:
+        return []
+
+    def event_names(self) -> list[str]:
+        return [r["event"] for r in self.events]
+
+
+def _managed_command(**overrides) -> RunMlExecutionCommand:
+    base = dict(
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        client="claude",
+        model="sonnet",
+        effort="",
+        context="",
+        prompt="hello",
+    )
+    base.update(overrides)
+    return RunMlExecutionCommand(**base)
+
+
+def _api_command(**overrides) -> RunMlExecutionCommand:
+    base = dict(
+        execution_kind=ExecutionKind.API,
+        client="openai",
+        model="gpt-x",
+        context="",
+        prompt="hi",
+    )
+    base.update(overrides)
+    return RunMlExecutionCommand(**base)
+
+
+def _passthrough_command(**overrides) -> RunMlExecutionCommand:
+    base = dict(
+        execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
+        client="claude",
+        model="",
+        native_args=["--print", "hello"],
+    )
+    base.update(overrides)
+    return RunMlExecutionCommand(**base)
+
+
+def _api_passthrough_command(**overrides) -> RunMlExecutionCommand:
+    base = dict(
+        execution_kind=ExecutionKind.API_PASSTHROUGH,
+        client="anthropic-subscription",
+        model="",
+        raw_body=b'{"model":"claude","messages":[]}',
+        forward_headers=(("authorization", "Bearer tok"),),
+    )
+    base.update(overrides)
+    return RunMlExecutionCommand(**base)
+
+
+class _DispatchRunner(LocalClientPort, MlRunnerPort, ApiPassthroughRunnerPort):
+    """One fake that answers every execution kind by delegating to the kind-specific
+    fake — so the harness can wire a single client name to all four. It really
+    implements every driven-client port (a real adapter answers only its own kind;
+    this is a test convenience so the existing per-kind fakes and their assertions
+    stay unchanged), which also satisfies the W18 capability check before dispatch."""
+
+    name = "fake"
+    execution_kind = ExecutionKind.LOCAL_MANAGED
+
+    def __init__(self, managed, passthrough, api, api_passthrough) -> None:
+        self._managed = managed
+        self._passthrough = passthrough
+        self._api = api
+        self._api_passthrough = api_passthrough
+
+    def stage_inputs(self, request, workspace) -> None:
+        self._managed.stage_inputs(request, workspace)
+
+    def execute_managed(self, request, workspace) -> ClientAnswer:
+        return self._managed.execute_managed(request, workspace)
+
+    def execute_passthrough(self, request) -> ClientAnswer:
+        return self._passthrough.execute_passthrough(request)
+
+    def execute_api_passthrough(self, request) -> ClientAnswer:
+        return self._api_passthrough.execute_api_passthrough(request)
+
+    def run(self, request: MlRequest) -> ClientRunResult:
+        return self._api.run(request)
+
+    # -- LocalClientPort probe/listing surface (unused by these tests) --------
+    def resolve_executable(self, override: str | None) -> str:
+        return override or "fake"
+
+    def version_argv(self, executable: str) -> list[str]:
+        return [executable, "--version"]
+
+    def models_argv(self, executable: str) -> list[str] | None:
+        return None
+
+    def parse_model_list(self, stdout: str) -> list[ModelInfo]:
+        return []
+
+
+class _AnyClientRunners(dict):
+    """A name->runner map that answers *every* client name with one dispatcher, so a
+    test need not enumerate client names. The real service receives an explicit map
+    with one entry per client it serves; tests just route everything to their fakes."""
+
+    def __init__(self, dispatcher: _DispatchRunner) -> None:
+        super().__init__()
+        self._dispatcher = dispatcher
+
+    def get(self, key, default=None):  # noqa: ARG002
+        return self._dispatcher
+
+
+def _runners_for(managed, passthrough, api, api_passthrough) -> _AnyClientRunners:
+    return _AnyClientRunners(_DispatchRunner(managed, passthrough, api, api_passthrough))
+
+
+class _Harness:
+    def __init__(
+        self,
+        client_runner: FakeClientRunner | None = None,
+        api_client: ApiClientPort | None = None,
+        passthrough_runner: FakePassthroughRunner | None = None,
+        api_passthrough_runner: FakeApiPassthroughRunner | None = None,
+    ) -> None:
+        self.runner = client_runner or FakeClientRunner()
+        self.api = api_client or FakeApiClient()
+        self.passthrough = passthrough_runner or FakePassthroughRunner()
+        self.api_passthrough = api_passthrough_runner or FakeApiPassthroughRunner()
+        self.blob = FakeBlobStore()
+        self.repo = InMemoryExecutionRepository(clock=FixedClock())
+        self.metrics = FakeMetrics()
+        self.service = RunMlExecutionService(
+            FakeFileFingerprint(),
+            _runners_for(self.runner, self.passthrough, self.api, self.api_passthrough),
+            self.blob,
+            save=self.repo,
+            read=self.repo,
+            annotate=self.repo,
+            record=self.metrics,
+            execution_key_lock=InProcessExecutionKeyLock(),
+            workspace=FakeWorkspace(),
+        )
+
+
+def _stdout(execution) -> bytes | None:
+    for a in execution.artifacts:
+        if a.artifact_type is ArtifactType.STDOUT:
+            return a.content
+    return None
+
+
+# --- port wiring -------------------------------------------------------------
+
+
+def test_inbound_port_cannot_be_instantiated_directly():
+    with pytest.raises(TypeError):
+        RunMlExecutionUseCase()  # type: ignore[abstract]
+
+
+def test_service_implements_the_inbound_port():
+    assert isinstance(_Harness().service, RunMlExecutionUseCase)
+
+
+# --- managed path ------------------------------------------------------------
+
+
+def test_managed_miss_runs_and_records():
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
+    execution = harness.service.execute(_managed_command())
+
+    assert execution.execution_state is ExecutionState.SUCCESS
+    assert execution.execution_kind is ExecutionKind.LOCAL_MANAGED
+    assert execution.output_persisted is True
+    assert _stdout(execution) == b"hi\n"
+    assert len(harness.runner.calls) == 1
+    assert harness.api.calls == []
+    assert harness.metrics.event_names() == ["record"]
+
+
+def test_recorded_run_marks_artifacts_stored():
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
+    execution = harness.service.execute(_managed_command())
+    assert execution.output_persisted is True
+    assert execution.artifacts  # stdout + stderr
+    assert all(a.status is ArtifactStatus.STORED for a in execution.artifacts)
+
+
+def test_blob_write_failure_is_intercepted_and_surfaced():
+    # DB-first + C-4: a failing blob write must NOT throw out of execute(); it marks
+    # the artifacts FAILED with a detail, leaves the run non-servable (not cached),
+    # and does not orphan a blob.
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
+
+    class _FailingBlobStore(FakeBlobStore):
+        def put(self, key: str, output: bytes) -> None:
+            raise OSError("disk full")
+
+    harness.blob = _FailingBlobStore()
+    harness.service = RunMlExecutionService(
+        FakeFileFingerprint(),
+        _runners_for(harness.runner, harness.passthrough, harness.api, harness.api_passthrough),
+        harness.blob,
+        save=harness.repo,
+        read=harness.repo,
+        annotate=harness.repo,
+        record=harness.metrics,
+        execution_key_lock=InProcessExecutionKeyLock(),
+        workspace=FakeWorkspace(),
+    )
+
+    execution = harness.service.execute(_managed_command())  # must not raise
+
+    key = execution.call_identity.generate_key()
+    assert execution.output_persisted is False
+    assert execution.artifacts
+    assert all(a.status is ArtifactStatus.FAILED for a in execution.artifacts)
+    assert all(a.status_detail for a in execution.artifacts)
+    # Not servable: a failed-to-store run is not cached.
+    assert harness.repo.find_current(key) is None
+    # No blob was orphaned (the put failed, so nothing landed).
+    assert harness.blob.store == {}
+    # A subsequent call re-runs the client (the store never became servable).
+    harness.service.execute(_managed_command())
+    assert len(harness.runner.calls) == 2
+
+
+def test_managed_second_call_is_a_cache_hit():
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=0, stdout="hi\n")))
+    harness.service.execute(_managed_command())
+    second = harness.service.execute(_managed_command())
+    assert len(harness.runner.calls) == 1
+    assert _stdout(second) == b"hi\n"
+    assert harness.metrics.event_names() == ["record", "hit"]
+
+
+def test_managed_identity_uses_client_and_inputs():
+    harness = _Harness()
+    exec_a = harness.service.execute(_managed_command(client="claude", model="m1"))
+    exec_b = harness.service.execute(_managed_command(client="codex", model="m1"))
+    assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
+
+
+def test_managed_journal_records_client():
+    harness = _Harness()
+    harness.service.execute(_managed_command(client="claude"))
+    assert harness.metrics.events[0]["client"] == "claude"
+
+
+def test_managed_failed_run_not_stored_by_default():
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stderr="boom")))
+    execution = harness.service.execute(_managed_command())
+    assert execution.execution_state is ExecutionState.FAILED
+    assert execution.output_persisted is False
+
+
+# --- api path ----------------------------------------------------------------
+
+
+def test_api_miss_runs_and_records():
+    harness = _Harness(
+        api_client=FakeApiClient(
+            ClientRunResult(exit_code=0, stdout="reply\n", token_usage=TokenUsage(3, 7))
+        )
+    )
+    execution = harness.service.execute(_api_command())
+
+    assert execution.execution_state is ExecutionState.SUCCESS
+    assert execution.execution_kind is ExecutionKind.API
+    assert execution.output_persisted is True
+    assert _stdout(execution) == b"reply\n"
+    assert execution.token_usage.input_tokens == 3
+    assert harness.runner.calls == []
+    assert len(harness.api.calls) == 1
+    assert harness.metrics.event_names() == ["record"]
+
+
+def test_api_second_call_is_a_cache_hit():
+    harness = _Harness()
+    harness.service.execute(_api_command())
+    harness.service.execute(_api_command())
+    assert len(harness.api.calls) == 1
+    assert harness.metrics.event_names() == ["record", "hit"]
+
+
+def test_api_identity_differs_by_provider_and_prompt():
+    harness = _Harness()
+    exec_a = harness.service.execute(_api_command(client="openai", prompt="a"))
+    exec_b = harness.service.execute(_api_command(client="openai", prompt="b"))
+    assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
+
+
+def test_api_journal_records_client_as_provider():
+    harness = _Harness()
+    harness.service.execute(_api_command(client="gemini"))
+    assert harness.metrics.events[0]["client"] == "gemini"
+
+
+# --- managed vs api keys are distinct ----------------------------------------
+
+
+def test_managed_and_api_keys_never_collide():
+    harness = _Harness()
+    cmd_m = _managed_command(client="same", model="m", prompt="p")
+    cmd_a = _api_command(client="same", model="m", prompt="p")
+    managed_key = harness.service.execute(cmd_m).call_identity.generate_key()
+    api_key = harness.service.execute(cmd_a).call_identity.generate_key()
+    assert managed_key != api_key
+
+
+# --- IN_PROGRESS lifecycle ---------------------------------------------------
+
+
+def test_in_progress_row_is_visible_while_the_client_runs_then_updated_in_place():
+    # W1: one row per run. It is saved IN_PROGRESS before the client is called (so
+    # an external observer sees the in-flight run), then transitioned in place to
+    # SUCCESS — never a second insert whose "latest by key" a racer could steal.
+    seen_during_run: list[list[ExecutionState]] = []
+
+    class _PeekingRunner(FakeClientRunner):
+        def execute_managed(self, request, workspace):
+            seen_during_run.append(
+                [
+                    execution.execution_state
+                    for key in harness.repo.all_execution_keys()
+                    for execution in harness.repo.find_all(key)
+                ]
+            )
+            return super().execute_managed(request, workspace)
+
+    harness = _Harness(client_runner=_PeekingRunner(ClientRunResult(exit_code=0, stdout="ok\n")))
+    execution = harness.service.execute(_managed_command())
+    key = execution.call_identity.generate_key()
+
+    assert seen_during_run == [[ExecutionState.IN_PROGRESS]]
+    history = harness.repo.find_all(key)
+    assert len(history) == 1
+    assert history[0].execution_state is ExecutionState.SUCCESS
+
+
+def test_in_progress_row_transitions_to_failure_in_place():
+    harness = _Harness(client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stderr="err")))
+    execution = harness.service.execute(_managed_command())
+    key = execution.call_identity.generate_key()
+    history = harness.repo.find_all(key)
+    assert len(history) == 1  # one row, updated in place (no orphan IN_PROGRESS — W2)
+    assert history[0].execution_state is ExecutionState.FAILED
+
+
+def test_uncacheable_run_does_not_record_in_progress():
+    harness = _Harness()
+    cmd = _managed_command(allow_paths=["/workspace"])
+    execution = harness.service.execute(cmd)
+    key = execution.call_identity.generate_key()
+    assert harness.repo.find_all(key) == []  # no IN_PROGRESS, no final
+
+
+def test_concurrent_same_key_runs_once(monkeypatch):
+    """Two threads with the same key: only one should call the client runner."""
+    import threading
+
+    results: list = []
+    runner = FakeClientRunner(
+        ClientRunResult(exit_code=0, stdout="first\n"),
+        ClientRunResult(exit_code=0, stdout="second\n"),
+    )
+    harness = _Harness(client_runner=runner)
+
+    def _run():
+        results.append(harness.service.execute(_managed_command()))
+
+    t1 = threading.Thread(target=_run)
+    t2 = threading.Thread(target=_run)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert len(runner.calls) == 1  # only one real client call
+    assert len(results) == 2  # both callers got a result
+    assert all(r.execution_state is ExecutionState.SUCCESS for r in results)
+
+
+# --- cache modes (shared behaviour) ------------------------------------------
+
+
+def test_offline_miss_raises():
+    harness = _Harness()
+    with pytest.raises(CacheMiss):
+        harness.service.execute(_managed_command(cache_mode=CacheMode.OFFLINE))
+    assert harness.runner.calls == []
+
+
+def test_refresh_bypasses_cache():
+    harness = _Harness(
+        client_runner=FakeClientRunner(
+            ClientRunResult(exit_code=0, stdout="old\n"),
+            ClientRunResult(exit_code=0, stdout="new\n"),
+        )
+    )
+    harness.service.execute(_managed_command())
+    harness.service.execute(_managed_command(cache_mode=CacheMode.REFRESH))
+    assert len(harness.runner.calls) == 2
+
+
+# --- passthrough path --------------------------------------------------------
+
+
+def test_passthrough_records_result_with_local_passthrough_kind():
+    harness = _Harness(
+        passthrough_runner=FakePassthroughRunner(
+            ClientRunResult(exit_code=0, stdout="native out\n")
+        )
+    )
+    execution = harness.service.execute(_passthrough_command())
+
+    assert execution.execution_state is ExecutionState.SUCCESS
+    assert execution.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
+    assert execution.output_persisted is True
+    assert _stdout(execution) == b"native out\n"
+    assert len(harness.passthrough.calls) == 1
+    assert harness.runner.calls == []
+    assert harness.api.calls == []
+    assert harness.metrics.event_names() == ["record"]
+
+
+def test_passthrough_cache_hit_replays():
+    harness = _Harness(
+        passthrough_runner=FakePassthroughRunner(
+            ClientRunResult(exit_code=0, stdout="native out\n")
+        )
+    )
+    harness.service.execute(_passthrough_command())
+    second = harness.service.execute(_passthrough_command())
+    assert len(harness.passthrough.calls) == 1
+    assert _stdout(second) == b"native out\n"
+    assert harness.metrics.event_names() == ["record", "hit"]
+
+
+def test_passthrough_is_tagged_local_passthrough():
+    harness = _Harness()
+    execution = harness.service.execute(_passthrough_command())
+    assert execution.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
+
+
+def test_passthrough_native_args_in_identity():
+    harness = _Harness()
+    exec_a = harness.service.execute(_passthrough_command(native_args=["--help"]))
+    exec_b = harness.service.execute(_passthrough_command(native_args=["--version"]))
+    assert exec_a.call_identity.generate_key() != exec_b.call_identity.generate_key()
+
+
+# --- LRU auto-eviction hook --------------------------------------------------
+
+
+class _SpyPurge:
+    """Minimal stub that records every evict_to_quota call."""
+
+    def __init__(self) -> None:
+        self.evict_calls: list[int] = []
+
+    def evict_to_quota(self, command: EvictToQuotaCommand) -> PurgeReport:
+        self.evict_calls.append(command.max_bytes)
+        return PurgeReport(executions_removed=0, bytes_freed=0, blobs_removed=0)
+
+    # PurgeService has other methods the hook doesn't call — not needed here.
+
+
+def _harness_with_quota(max_size: int | None) -> tuple:
+    harness = _Harness()
+    spy = _SpyPurge()
+    service = RunMlExecutionService(
+        FakeFileFingerprint(),
+        _runners_for(harness.runner, harness.passthrough, harness.api, harness.api_passthrough),
+        harness.blob,
+        save=harness.repo,
+        read=harness.repo,
+        annotate=harness.repo,
+        record=harness.metrics,
+        execution_key_lock=InProcessExecutionKeyLock(),
+        purge_service=spy,
+        max_size=max_size,
+        workspace=FakeWorkspace(),
+    )
+    return service, spy
+
+
+def test_eviction_triggered_after_successful_record():
+    service, spy = _harness_with_quota(max_size=1_000_000)
+    service.execute(_managed_command())
+    assert len(spy.evict_calls) == 1
+    assert spy.evict_calls[0] == 1_000_000
+
+
+def test_eviction_not_triggered_when_max_size_is_none():
+    service, spy = _harness_with_quota(max_size=None)
+    service.execute(_managed_command())
+    assert spy.evict_calls == []
+
+
+def test_eviction_not_triggered_on_cache_hit():
+    service, spy = _harness_with_quota(max_size=1_000_000)
+    service.execute(_managed_command())  # first run — record
+    assert len(spy.evict_calls) == 1
+    service.execute(_managed_command())  # second run — cache hit
+    assert len(spy.evict_calls) == 1  # eviction not called again
+
+
+def test_eviction_not_triggered_on_failed_run():
+    from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
+
+    service, spy = _harness_with_quota(max_size=1_000_000)
+    failing_harness = _Harness(
+        client_runner=FakeClientRunner(ClientRunResult(exit_code=1, stdout="", stderr="boom"))
+    )
+    failing_service = RunMlExecutionService(
+        FakeFileFingerprint(),
+        _runners_for(
+            failing_harness.runner,
+            failing_harness.passthrough,
+            failing_harness.api,
+            failing_harness.api_passthrough,
+        ),
+        failing_harness.blob,
+        save=failing_harness.repo,
+        read=failing_harness.repo,
+        annotate=failing_harness.repo,
+        record=failing_harness.metrics,
+        execution_key_lock=InProcessExecutionKeyLock(),
+        purge_service=spy,
+        max_size=1_000_000,
+        workspace=FakeWorkspace(),
+    )
+    failing_service.execute(_managed_command())
+    assert spy.evict_calls == []
+
+
+# --- W18: structured dispatch errors -----------------------------------------
+
+
+def _service_with_runners(runners) -> RunMlExecutionService:
+    repo = InMemoryExecutionRepository(clock=FixedClock())
+    return RunMlExecutionService(
+        FakeFileFingerprint(),
+        runners,
+        FakeBlobStore(),
+        save=repo,
+        read=repo,
+        annotate=repo,
+        record=FakeMetrics(),
+        execution_key_lock=InProcessExecutionKeyLock(),
+        workspace=FakeWorkspace(),
+    )
+
+
+def test_unknown_client_raises_unknown_client_not_runtime_error():
+    # No runner registered for the requested client — the core fallback raises a
+    # named UnknownClient (drivers map it), never a raw RuntimeError (W18).
+    service = _service_with_runners({})
+    with pytest.raises(UnknownClient):
+        service.execute(_managed_command(client="mistral"))
+
+
+def test_wrong_kind_runner_raises_unsupported_execution_mode():
+    # An API-only adapter (an MlRunnerPort, not a LocalClientPort) is registered but
+    # asked to run a managed local command. The capability is checked before the
+    # cast, so it raises UnsupportedExecutionMode, not an AttributeError (W18).
+    service = _service_with_runners({"claude": FakeApiClient()})
+    with pytest.raises(UnsupportedExecutionMode):
+        service.execute(_managed_command(client="claude"))
+
+
+# --- S3c-ii: clean up the in-progress row when the client raises -------------
+
+
+class _RaisingRunner(FakeClientRunner):
+    def __init__(self, exc: BaseException) -> None:
+        super().__init__()
+        self._exc = exc
+
+    def execute_managed(self, request, workspace) -> ClientAnswer:
+        raise self._exc
+
+
+def test_client_raise_marks_the_in_progress_row_failed_not_dangling():
+    harness = _Harness(client_runner=_RaisingRunner(ValueError("provider died")))
+    with pytest.raises(ValueError):
+        harness.service.execute(_managed_command())
+    keys = harness.repo.all_execution_keys()
+    assert len(keys) == 1
+    history = harness.repo.find_all(keys[0])
+    assert len(history) == 1  # one row, transitioned in place — no dangling IN_PROGRESS
+    assert history[0].execution_state is ExecutionState.FAILED
+
+
+def test_run_interrupted_removes_the_in_progress_row_entirely():
+    harness = _Harness(client_runner=_RaisingRunner(RunInterrupted("stopped by signal")))
+    with pytest.raises(RunInterrupted):
+        harness.service.execute(_managed_command())
+    # A requested stop is never recorded — the row is gone.
+    assert harness.repo.all_execution_keys() == []
+
+
+# --- W17/S4: corrupt-cassette self-heal --------------------------------------
+
+
+def test_missing_output_blob_on_hit_self_heals_by_rerunning():
+    runner = FakeClientRunner(
+        ClientRunResult(exit_code=0, stdout="v1\n"),
+        ClientRunResult(exit_code=0, stdout="v2\n"),
+    )
+    harness = _Harness(client_runner=runner)
+    first = harness.service.execute(_managed_command())
+    assert _stdout(first) == b"v1\n"
+
+    # Corrupt the cassette: its output blob vanishes from the store.
+    harness.blob.store.clear()
+
+    second = harness.service.execute(_managed_command())
+    # A would-be hit we cannot hydrate becomes a miss → re-run, replacing it.
+    assert _stdout(second) == b"v2\n"
+    assert len(harness.runner.calls) == 2  # ran again to self-heal
+
+
+def test_missing_output_blob_offline_degrades_to_a_clean_miss():
+    harness = _Harness()
+    harness.service.execute(_managed_command())
+    harness.blob.store.clear()  # corrupt the cassette
+    # OFFLINE cannot re-run, so it is a clean CacheMiss, not a crash or partial serve.
+    with pytest.raises(CacheMiss):
+        harness.service.execute(_managed_command(cache_mode=CacheMode.OFFLINE))
+
+
+def test_self_heal_removes_the_corrupt_executions_own_blobs_no_orphan():
+    # X25/X6: a managed run stores STDOUT + STDERR blobs. Corrupt the cassette by
+    # dropping ONE blob; on the next hit the missing blob triggers self-heal, which
+    # must delete the execution's OTHER (still-present) blob too — each blob is
+    # execution-owned, so leaving it behind would be an undiscoverable orphan (the
+    # re-run mints new execution-scoped keys and never reuses the old one).
+    runner = FakeClientRunner(
+        ClientRunResult(exit_code=0, stdout="v1\n"),
+        ClientRunResult(exit_code=0, stdout="v2\n"),
+    )
+    harness = _Harness(client_runner=runner)
+    harness.service.execute(_managed_command())
+
+    first_run_keys = list(harness.blob.store.keys())
+    assert len(first_run_keys) == 2  # STDOUT + STDERR
+    surviving_blob, dropped_blob = first_run_keys
+    del harness.blob.store[dropped_blob]  # corrupt: one blob vanishes
+
+    harness.service.execute(_managed_command())  # hit → self-heal → re-run
+
+    # The corrupt execution's other blob was removed, not orphaned; only the fresh
+    # re-run's (distinct, execution-scoped) blobs remain.
+    assert surviving_blob not in harness.blob.store
+    assert dropped_blob not in harness.blob.store
+
+
+# --- W24: role-port split of LocalClientPort ---------------------------------
+
+
+def test_a_runner_implementing_only_the_passthrough_role_cannot_run_managed():
+    # W24 ISP: a runner that implements only PassthroughLocalRunnerPort (not the
+    # managed role) is rejected for a managed command with a named error — the
+    # capability check narrows to the exact role port the mode needs.
+    class _PassthroughOnly(PassthroughLocalRunnerPort):
+        name = "pass-only"
+        execution_kind = ExecutionKind.LOCAL_PASSTHROUGH
+
+        def resolve_executable(self, override):
+            return override or "x"
+
+        def execute_passthrough(self, request):
+            return _as_answer(ClientRunResult(exit_code=0, stdout="native\n"))
+
+    service = _service_with_runners({"pass-only": _PassthroughOnly()})
+    with pytest.raises(UnsupportedExecutionMode):
+        service.execute(_managed_command(client="pass-only"))
+
+
+# --- W30: API-passthrough (verbatim relay) -----------------------------------
+
+
+def test_api_passthrough_miss_relays_and_records():
+    harness = _Harness(
+        api_passthrough_runner=FakeApiPassthroughRunner(
+            ClientRunResult(exit_code=0, stdout='{"content":"hi"}')
+        )
+    )
+    execution = harness.service.execute(_api_passthrough_command())
+
+    assert execution.execution_state is ExecutionState.SUCCESS
+    assert execution.execution_kind is ExecutionKind.API_PASSTHROUGH
+    assert execution.output_persisted is True
+    assert _stdout(execution) == b'{"content":"hi"}'
+    assert len(harness.api_passthrough.calls) == 1
+    assert harness.runner.calls == []
+    assert harness.api.calls == []
+    assert harness.metrics.event_names() == ["record"]
+
+
+def test_api_passthrough_forwards_raw_body_and_headers_to_the_relay():
+    harness = _Harness()
+    harness.service.execute(_api_passthrough_command())
+    request = harness.api_passthrough.calls[0]
+    assert request.raw_body == b'{"model":"claude","messages":[]}'
+    assert request.forward_headers["authorization"] == "Bearer tok"
+
+
+def test_api_passthrough_cache_hit_serves_from_repo_without_re_relaying():
+    # State-based: a second identical request is served from the finalized record,
+    # never re-hitting the relay — only-a-finalized-record-is-servable.
+    harness = _Harness(
+        api_passthrough_runner=FakeApiPassthroughRunner(
+            ClientRunResult(exit_code=0, stdout='{"content":"hi"}')
+        )
+    )
+    harness.service.execute(_api_passthrough_command())
+    second = harness.service.execute(_api_passthrough_command())
+    assert len(harness.api_passthrough.calls) == 1
+    assert _stdout(second) == b'{"content":"hi"}'
+    assert harness.metrics.event_names() == ["record", "hit"]
+
+
+def test_api_passthrough_body_fingerprint_keys_the_identity():
+    harness = _Harness()
+    first = harness.service.execute(_api_passthrough_command(raw_body=b'{"a":1}'))
+    second = harness.service.execute(_api_passthrough_command(raw_body=b'{"a":2}'))
+    assert first.call_identity.generate_key() != second.call_identity.generate_key()
+
+
+def test_api_passthrough_non_200_is_not_cached_and_re_runs():
+    # A non-200 upstream maps to a non-zero exit -> FAILED -> not stored. The body is
+    # still returned for the caller to forward verbatim, and the next identical
+    # request re-relays (a failure is never a servable hit).
+    harness = _Harness(
+        api_passthrough_runner=FakeApiPassthroughRunner(
+            ClientRunResult(exit_code=429, stdout='{"error":"rate_limited"}'),
+            ClientRunResult(exit_code=429, stdout='{"error":"rate_limited"}'),
+        )
+    )
+    first = harness.service.execute(_api_passthrough_command())
+    assert first.execution_state is ExecutionState.FAILED
+    assert first.output_persisted is False
+    assert first.failure is not None and first.failure.exit_code == 429
+    assert _stdout(first) == b'{"error":"rate_limited"}'
+
+    harness.service.execute(_api_passthrough_command())
+    assert len(harness.api_passthrough.calls) == 2  # re-ran, no hit
+
+
+def test_api_passthrough_keeps_request_body_at_dataset_depth():
+    harness = _Harness()
+    execution = harness.service.execute(
+        _api_passthrough_command(persistence_depth=PersistenceDepth.DATASET)
+    )
+    assert execution.input_persisted is True
+    input_bodies = [
+        artifact.content
+        for artifact in execution.artifacts
+        if artifact.artifact_type is ArtifactType.INPUT_MESSAGES
+    ]
+    assert input_bodies == [b'{"model":"claude","messages":[]}']
+
+
+def test_a_runner_without_the_api_passthrough_role_cannot_relay():
+    # W18 capability check: a runner that is not an ApiPassthroughRunnerPort is
+    # rejected with a named error, never a blind-cast AttributeError.
+    class _ManagedOnly(ManagedLocalRunnerPort):
+        name = "managed-only"
+        execution_kind = ExecutionKind.LOCAL_MANAGED
+
+        def resolve_executable(self, override):
+            return override or "x"
+
+        def stage_inputs(self, request, workspace):
+            pass
+
+        def execute_managed(self, request, workspace):
+            return _as_answer(ClientRunResult(exit_code=0, stdout="managed\n"))
+
+    service = _service_with_runners({"anthropic-subscription": _ManagedOnly()})
+    with pytest.raises(UnsupportedExecutionMode):
+        service.execute(_api_passthrough_command(client="anthropic-subscription"))

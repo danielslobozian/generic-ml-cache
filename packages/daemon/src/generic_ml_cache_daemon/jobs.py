@@ -12,8 +12,8 @@ from __future__ import annotations
 import concurrent.futures
 import secrets
 import threading
+from collections.abc import Callable
 from enum import Enum
-from typing import Dict, Optional
 
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 
@@ -29,11 +29,11 @@ class Job:
     def __init__(self, job_id: str) -> None:
         self.job_id = job_id
         self.state = JobState.PENDING
-        self.execution: Optional[MlExecution] = None
-        self.error: Optional[str] = None
+        self.execution: MlExecution | None = None
+        self.error: str | None = None
         self._done_event = threading.Event()
 
-    def wait(self, timeout: Optional[float] = None) -> bool:
+    def wait(self, timeout: float | None = None) -> bool:
         return self._done_event.wait(timeout=timeout)
 
     def mark_running(self) -> None:
@@ -54,13 +54,13 @@ class JobRegistry:
     """Thread-safe in-memory registry of submitted jobs."""
 
     def __init__(self) -> None:
-        self._jobs: Dict[str, Job] = {}
+        self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=4, thread_name_prefix="gmlc-job"
         )
 
-    def submit(self, fn, *args) -> Job:
+    def submit(self, run_execution: Callable[..., MlExecution], *args: object) -> Job:
         job_id = secrets.token_hex(8)
         job = Job(job_id)
         with self._lock:
@@ -69,18 +69,18 @@ class JobRegistry:
         def _run() -> None:
             job.mark_running()
             try:
-                execution = fn(*args)
+                execution = run_execution(*args)
                 job.mark_done(execution)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — in-process job boundary: any failure → job error
                 job.mark_error(str(exc))
 
         self._executor.submit(_run)
         return job
 
-    def get(self, job_id: str) -> Optional[Job]:
+    def get(self, job_id: str) -> Job | None:
         with self._lock:
             return self._jobs.get(job_id)
 
-    def list_ids(self) -> list:
+    def list_ids(self) -> list[str]:
         with self._lock:
             return list(self._jobs.keys())

@@ -26,7 +26,7 @@ classifiers = [
 ]
 dependencies = [
   "generic-ml-cache-core==0.28.*",
-  "generic-ml-cache-adapters==0.28.*",
+  "generic-ml-cache-bootstrap==0.28.*",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
@@ -41,13 +41,22 @@ Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANG
 [project.optional-dependencies]
 # Optional Prometheus /metrics endpoint. Off by default.
 metrics = ["prometheus-client>=0.20"]
+# `pip install "generic-ml-cache-daemon[encryption]"` pulls the encryption extra
+# (cryptography) at the SAME version — app.py uses encryption_token /
+# EncryptingBlobStore (wired in bootstrap). Routed through bootstrap (the daemon no
+# longer depends on the adapters package directly, W28). Lockstep-pinned.
+encryption = ["generic-ml-cache-bootstrap[encryption]==0.28.*"]
 dev = [
   "pytest>=7",
   "pytest-cov",
   "pytest-timeout",
   "coverage>=7",
   "ruff>=0.15",
+  # starlette>=1's TestClient requires httpx2; without it, importing
+  # starlette.testclient raises a StarletteDeprecationWarning that
+  # filterwarnings=error turns into a hard failure at daemon conftest import.
   "httpx>=0.27",
+  "httpx2>=2",
   "prometheus-client>=0.20",
   "import-linter>=2",
   "pyright>=1.1",
@@ -63,6 +72,11 @@ packages = ["src/generic_ml_cache_daemon"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Treat warnings as errors: a regression lock that catches the next upstream
+# deprecation (or our own) at first appearance (CA9). Add a narrow
+# "ignore::Cat:module" entry with a justification only for an unfixable
+# third-party warning — never blanket.
+filterwarnings = ["error"]
 addopts = "-ra --cov-branch --cov=generic_ml_cache_daemon --cov-fail-under=80"
 timeout = 60
 
@@ -71,7 +85,7 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-extend-select = ["C901"]
+extend-select = ["C901", "I", "B", "N", "S310", "UP", "BLE001"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

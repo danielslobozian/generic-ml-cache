@@ -1,24 +1,38 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Connection factory construction for PEP 249 datasources.
+"""SQLite connection-factory construction.
 
-Core accepts a ``Callable[[], Connection]`` for all database access. This module
-provides the canonical factory builder for SQLite, used by the CLI and daemon to
-construct and inject the factory without importing ``sqlite3`` into core.
+Core accepts a ``Callable[[], Connection]`` for all database access and forbids
+importing a driver itself. This module provides the shipped SQLite factory builder,
+used by the CLI and daemon to construct and inject the factory without pulling
+``sqlite3`` into core. It is SQLite-specific (it imports ``sqlite3`` and sets the
+``foreign_keys`` PRAGMA); another engine ships its own factory + adapter.
 """
 
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from sqlite3 import Connection
-from typing import Callable
+from urllib.parse import quote
+
+from generic_ml_cache_core.common.errors import StoreUnavailable
+
+#: How long a connection waits for a lock before raising ``database is locked``.
+#: Two processes on one store (a CLI run while the daemon writes) then WAIT their
+#: turn instead of erroring — the S2a "transient contention → retry" behaviour,
+#: handled by SQLite itself. The in-process ``threading.Lock`` in the cached
+#: service only stops same-process duplicate work; cross-process correctness is
+#: the database's job (Decision W1).
+_BUSY_TIMEOUT_MS = 5000
 
 
 def sqlite_connection_factory(
     db_path: Path,
     *,
     check_same_thread: bool = True,
+    read_only: bool = False,
 ) -> Callable[[], Connection]:
     """Return a factory that opens a fresh SQLite connection to *db_path* on each call.
 
@@ -29,11 +43,41 @@ def sqlite_connection_factory(
         check_same_thread: Pass ``False`` when the factory is shared across threads
             (e.g. the daemon's async thread pool). Defaults to ``True`` for
             single-threaded callers such as the CLI.
+        read_only: Open the database ``mode=ro`` — never create the file, the parent
+            directory, or write the WAL header. For a status probe (``doctor``) that
+            must not initialize the store it inspects (W26). The file must already
+            exist; the caller checks that first.
     """
     resolved = Path(db_path)
 
     def _connect() -> Connection:
-        resolved.parent.mkdir(parents=True, exist_ok=True)
-        return sqlite3.connect(str(resolved), check_same_thread=check_same_thread)
+        try:
+            if read_only:
+                # URI mode=ro: SQLite refuses any write to the main database (no
+                # CREATE, no new file), so a probe cannot initialize the store.
+                # Percent-encode the path (keeping ``/``) so a ``?`` or ``#`` in a valid
+                # on-disk path is not mis-parsed as URI query/fragment syntax (X22) —
+                # e.g. a store named ``store?abc.sqlite3`` opened the wrong file.
+                uri = f"file:{quote(str(resolved))}?mode=ro"
+                connection = sqlite3.connect(uri, uri=True, check_same_thread=check_same_thread)
+                connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
+                return connection
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(str(resolved), check_same_thread=check_same_thread)
+            # busy_timeout FIRST so the WAL-mode change (which needs a brief exclusive
+            # lock) waits its turn rather than failing a transient 'database is locked'.
+            connection.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
+            # WAL lets a reader and a writer proceed concurrently (a CLI read need not
+            # block behind the daemon's write).
+            connection.execute("PRAGMA journal_mode = WAL")
+            # SQLite enforces foreign keys only when asked, per connection (OFF by
+            # default). Without this every FK/ON DELETE CASCADE is silently inert.
+            connection.execute("PRAGMA foreign_keys = ON")
+            return connection
+        except (sqlite3.Error, OSError) as exc:
+            # A hard outage — the file cannot be opened, the disk/permissions deny it.
+            # Translate the driver/OS error to the project's own vocabulary so the
+            # tool fails loud (S2b), never leaking a raw sqlite3/OS error type.
+            raise StoreUnavailable(f"cache database is unavailable at {resolved}: {exc}") from exc
 
     return _connect

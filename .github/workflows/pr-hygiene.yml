@@ -1,0 +1,30 @@
+name: PR hygiene
+
+# Server-side enforcement of the "no AI attribution" rule for PR metadata.
+# The commit-msg hook covers commit messages locally; a PR's title and body are
+# only visible to GitHub, so they need a required check here (gh cannot enforce
+# this client-side). IaC-1.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  no-ai-attribution:
+    name: no AI attribution (title + body)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title and body
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n%s' "$TITLE" "$BODY" | grep -qiE \
+            'co-authored-by:[[:space:]]*.*(claude|copilot|chatgpt|gpt-|anthropic|openai)|generated with[[:space:]]+\[?(claude|copilot|chatgpt)|🤖[[:space:]]*generated'; then
+            echo "::error::PR title/body contains AI attribution — please remove it."
+            exit 1
+          fi
+          echo "OK: no AI attribution in PR title/body."

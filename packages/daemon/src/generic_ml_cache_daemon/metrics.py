@@ -4,14 +4,11 @@
 
 from __future__ import annotations
 
-try:
-    import prometheus_client  # type: ignore[import-untyped]  # noqa: F401
+import importlib.util
 
-    _AVAILABLE = True
-except ImportError:  # pragma: no cover
-    _AVAILABLE = False
+_PROMETHEUS_INSTALLED = importlib.util.find_spec("prometheus_client") is not None
 
 
 def is_prometheus_available() -> bool:
     """Return True when the prometheus-client extra is installed."""
-    return _AVAILABLE
+    return _PROMETHEUS_INSTALLED

@@ -5,56 +5,56 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
+from typing import cast
 
-from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
-from generic_ml_cache_cli.discovery import execution_kind_for
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
-from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.grants import GRANTS
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.domain.model.grants import GRANTS
 from generic_ml_cache_core.common.errors import (
     CacheError,
     CacheMiss,
     EncryptionTokenRequired,
     RunInterrupted,
+    RunTimedOut,
     UnknownClient,
     WrongEncryptionToken,
 )
 
 from generic_ml_cache_cli import async_jobs, config
+from generic_ml_cache_cli._compose import build_use_cases, get_encryption_state
 from generic_ml_cache_cli.composition import (
-    _db_conn_factory,
-    _make_diag,
-    _read_text_arg,
-    _resolve_allow_paths,
-    _resolve_input_file_paths,
-    _resolve_session,
-    _resolve_token,
+    make_diag,
+    read_text_arg,
+    resolve_allow_paths,
+    resolve_input_file_paths,
+    resolve_session,
+    resolve_token,
 )
+from generic_ml_cache_cli.discovery import execution_kind_for
 from generic_ml_cache_cli.presenters.shared import (
-    _apply_output_files,
-    _artifact_text,
-    _run_exit_code,
+    apply_output_files,
+    artifact_text,
+    run_exit_code,
 )
 
 #: capabilities a caller may open with --grant, sourced from the core domain
 #: vocabulary so the CLI choices, the help, and what the adapters implement can
 #: never drift.
-GRANT_CHOICES: List[str] = list(GRANTS)
-_GRANT_HELP = (
+GRANT_CHOICES: list[str] = list(GRANTS)
+GRANT_HELP = (
     "open a capability for the client -- enablement, not restriction. One of "
     "{net, read, write, shell, web-search}: net reaches the web, read/write/shell "
     "widen file and command access, web-search enables the search tool. Part of "
@@ -63,7 +63,9 @@ _GRANT_HELP = (
 )
 
 
-def _resolve_cache_mode(args: argparse.Namespace, settings: dict) -> CacheMode:
+def _resolve_cache_mode(
+    args: argparse.Namespace, settings: Mapping[str, tuple[object, str]]
+) -> CacheMode:
     """The cache mode for a run: --offline / --force are explicit flags and win over
     the resolved (config/env/default) mode. Shared by managed `run` and `alias`."""
     if args.offline:
@@ -73,19 +75,21 @@ def _resolve_cache_mode(args: argparse.Namespace, settings: dict) -> CacheMode:
     return CacheMode(str(settings["mode"][0]))
 
 
-def _resolve_managed_run(args: argparse.Namespace):
+def _resolve_managed_run(
+    args: argparse.Namespace,
+) -> tuple[dict[str, object], Path, str | None]:
     """Resolve a managed run into a JSON-serializable spec plus its run context.
 
     Returns ``(spec, store_root, token)``. The spec is the run fully resolved (prompt /
     context / system text, absolute paths, resolved mode / persist / timeout / executable),
     so it can drive a sync run *or* be written to a detached job's spec.json and replayed by
     the worker. Raises ConfigError."""
-    context = _read_text_arg(args.context, args.context_file, "context")
-    prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
+    context = read_text_arg(args.context, args.context_file, "context")
+    prompt = read_text_arg(args.prompt, args.prompt_file, "prompt")
     if not prompt:
         raise SystemExit("error: a non-empty --prompt or --prompt-file is required")
     system_prompt = (
-        _read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
+        read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
     )
 
     file_cfg = config.load()
@@ -94,15 +98,15 @@ def _resolve_managed_run(args: argparse.Namespace):
     )
     cache_mode = _resolve_cache_mode(args, settings)
 
-    spec = {
+    spec: dict[str, object] = {
         "client": args.client,
         "model": args.model,
         "effort": args.effort,
         "context": context,
         "prompt": prompt,
         "system_prompt": system_prompt,
-        "input_file_paths": _resolve_input_file_paths(args.input_file),
-        "allow_paths": _resolve_allow_paths(args.allow_path),
+        "input_file_paths": resolve_input_file_paths(args.input_file),
+        "allow_paths": resolve_allow_paths(args.allow_path),
         "trust_scan": bool(settings["trust_scan"][0]),
         "client_args": list(getattr(args, "client_arg", None) or []),
         "grants": list(getattr(args, "grant", None) or []),
@@ -110,50 +114,107 @@ def _resolve_managed_run(args: argparse.Namespace):
         "persistence_depth": str(settings["persist"][0]),
         "record_on_error": bool(args.record_on_error),
         "tags": list(getattr(args, "tag", None) or []),
-        "session_id": _resolve_session(args),
+        "session_id": resolve_session(args),
         "executable": config.executable_for(file_cfg, args.client, flag=args.executable),
-        "timeout": settings["timeout"][0],
-        "max_size": settings["max_size"][0],
+        "timeout": config.resolved_timeout(settings),
+        "max_size": config.resolved_max_size(settings),
         "adapters": sorted(file_cfg.adapters) if file_cfg.adapters is not None else None,
     }
-    return spec, Path(str(settings["store"][0])), _resolve_token(args)
+    return spec, Path(str(settings["store"][0])), resolve_token(args)
 
 
-def _spec_whitelist(spec: dict):
-    raw = spec.get("adapters")
-    return frozenset(raw) if raw is not None else None
+def _spec_string(spec: dict[str, object], field_name: str) -> str:
+    """A required string field of a run spec, validated at the JSON boundary."""
+    field_value = spec.get(field_name)
+    if not isinstance(field_value, str):
+        raise ValueError(f"run spec field {field_name!r} must be a string: {field_value!r}")
+    return field_value
 
 
-def _command_from_spec(spec: dict) -> RunMlExecutionCommand:
+def _spec_optional_string(spec: dict[str, object], field_name: str) -> str | None:
+    """An optional string field of a run spec, validated at the JSON boundary."""
+    field_value = spec.get(field_name)
+    if field_value is not None and not isinstance(field_value, str):
+        raise ValueError(f"run spec field {field_name!r} must be a string: {field_value!r}")
+    return field_value
+
+
+def _spec_strings(spec: dict[str, object], field_name: str) -> tuple[str, ...]:
+    """A list-of-strings field of a run spec, validated at the JSON boundary."""
+    field_value = spec.get(field_name)
+    if not isinstance(field_value, list):
+        raise ValueError(f"run spec field {field_name!r} must be a list: {field_value!r}")
+    items: list[str] = []
+    # Any list is a list of objects; the cast only widens the unknown item type.
+    for item in cast("list[object]", field_value):
+        if not isinstance(item, str):
+            raise ValueError(f"run spec field {field_name!r} must hold strings: {item!r}")
+        items.append(item)
+    return tuple(items)
+
+
+def spec_timeout(spec: dict[str, object]) -> float | None:
+    """The run timeout in seconds from a spec, or ``None`` for no timeout."""
+    field_value = spec.get("timeout")
+    if field_value is None:
+        return None
+    if isinstance(field_value, bool) or not isinstance(field_value, (int, float)):
+        raise ValueError(f"run spec field 'timeout' must be a number: {field_value!r}")
+    return float(field_value)
+
+
+def spec_max_size(spec: dict[str, object]) -> int | None:
+    """The store size cap in bytes from a spec, or ``None`` when uncapped."""
+    field_value = spec.get("max_size")
+    if field_value is None:
+        return None
+    if isinstance(field_value, bool) or not isinstance(field_value, int):
+        raise ValueError(f"run spec field 'max_size' must be an integer: {field_value!r}")
+    return field_value
+
+
+def spec_whitelist(spec: dict[str, object]) -> frozenset[str] | None:
+    if spec.get("adapters") is None:
+        return None
+    return frozenset(_spec_strings(spec, "adapters"))
+
+
+def command_from_spec(spec: dict[str, object]) -> RunMlExecutionCommand:
+    client = _spec_string(spec, "client")
     return RunMlExecutionCommand(
-        execution_kind=execution_kind_for(spec["client"], _spec_whitelist(spec)),
-        client=spec["client"],
-        model=spec["model"],
-        effort=spec["effort"],
-        context=spec["context"],
-        prompt=spec["prompt"],
-        user_system_prompt=spec["system_prompt"],
-        input_file_paths=[str(Path(p)) for p in spec["input_file_paths"]],
-        allow_paths=[str(Path(p)) for p in spec["allow_paths"]],
-        scan_trust=spec["trust_scan"],
-        client_args=list(spec["client_args"]),
-        grants=list(spec["grants"]),
-        cache_mode=CacheMode(spec["cache_mode"]),
-        persistence_depth=PersistenceDepth(spec["persistence_depth"]),
-        record_on_error=spec["record_on_error"],
-        tags=list(spec["tags"]),
-        session_id=spec["session_id"],
+        execution_kind=execution_kind_for(client, spec_whitelist(spec)),
+        client=client,
+        model=_spec_string(spec, "model"),
+        effort=_spec_string(spec, "effort"),
+        context=_spec_string(spec, "context"),
+        prompt=_spec_string(spec, "prompt"),
+        user_system_prompt=_spec_optional_string(spec, "system_prompt"),
+        input_file_paths=tuple(
+            str(Path(input_file_path))
+            for input_file_path in _spec_strings(spec, "input_file_paths")
+        ),
+        allow_paths=tuple(
+            str(Path(allow_path)) for allow_path in _spec_strings(spec, "allow_paths")
+        ),
+        scan_trust=bool(spec.get("trust_scan")),
+        client_args=_spec_strings(spec, "client_args"),
+        grants=_spec_strings(spec, "grants"),
+        cache_mode=CacheMode(_spec_string(spec, "cache_mode")),
+        persistence_depth=PersistenceDepth(_spec_string(spec, "persistence_depth")),
+        record_on_error=bool(spec.get("record_on_error")),
+        tags=_spec_strings(spec, "tags"),
+        session_id=_spec_optional_string(spec, "session_id"),
     )
 
 
-def _spec_executable_override(spec: dict):
-    executable = spec.get("executable")
+def spec_executable_override(spec: dict[str, object]) -> Callable[[str], str | None]:
+    executable = _spec_optional_string(spec, "executable")
     return lambda client: executable
 
 
-def _run_cached_execution(
+def run_cached_execution(
     execute: Callable[[], MlExecution],
-) -> Tuple[Optional[MlExecution], Optional[int]]:
+) -> tuple[MlExecution | None, int | None]:
     """Run a wired ``execute()`` call, translating the failure modes shared by every
     cached command into ``(None, exit_code)``; on success returns ``(execution, None)``.
 
@@ -166,13 +227,12 @@ def _run_cached_execution(
         # conventional "terminated by Ctrl-C".
         print(f"gmlc: {exc}", file=sys.stderr)
         return None, 130
-    except subprocess.TimeoutExpired as exc:
-        # The real call ran past --timeout and was killed before any record. Exit
-        # 124 is the timeout(1) convention, distinct from miss (3) and error (4).
-        print(
-            f"gmlc: real call exceeded the {exc.timeout}s timeout and was killed; nothing recorded",
-            file=sys.stderr,
-        )
+    except RunTimedOut as exc:
+        # The real call ran past --timeout and was killed; the adapter translated the
+        # raw subprocess timeout to RunTimedOut (Y4), so the CLI never catches a stdlib
+        # type here. Exit 124 is the timeout(1) convention, distinct from miss (3) and
+        # error (4). Caught before the generic CacheError branch so it keeps its own code.
+        print(f"gmlc: {exc}", file=sys.stderr)
         return None, 124
     except CacheMiss as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
@@ -188,14 +248,14 @@ def _run_cached_execution(
         return None, 4
 
 
-def _relay_execution(execution: MlExecution) -> int:
+def relay_execution(execution: MlExecution) -> int:
     """Reproduce a (live or replayed) call's stdout, stderr and exit code exactly --
     the quiet-mode fidelity contract shared by `run` and `alias`."""
-    sys.stdout.write(_artifact_text(execution, ArtifactType.STDOUT))
+    sys.stdout.write(artifact_text(execution, ArtifactType.STDOUT))
     sys.stdout.flush()
-    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
+    sys.stderr.write(artifact_text(execution, ArtifactType.STDERR))
     sys.stderr.flush()
-    return _run_exit_code(execution)
+    return run_exit_code(execution)
 
 
 def _print_run_json(execution: MlExecution, command: RunMlExecutionCommand) -> int:
@@ -204,23 +264,23 @@ def _print_run_json(execution: MlExecution, command: RunMlExecutionCommand) -> i
     usage = execution.token_usage
     files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
     status = "success" if execution.execution_state is ExecutionState.SUCCESS else "failed"
-    payload = {
+    payload: dict[str, object] = {
         "status": status,
-        "exit": _run_exit_code(execution),
+        "exit": run_exit_code(execution),
         "client": command.client,
         "model": command.model,
         "effort": command.effort,
         "files": len(files),
         "usage": usage.to_dict() if usage is not None else None,
-        "stdout": _artifact_text(execution, ArtifactType.STDOUT),
+        "stdout": artifact_text(execution, ArtifactType.STDOUT),
     }
     print(json.dumps(payload, indent=2))
-    sys.stderr.write(_artifact_text(execution, ArtifactType.STDERR))
+    sys.stderr.write(artifact_text(execution, ArtifactType.STDERR))
     sys.stderr.flush()
-    return _run_exit_code(execution)
+    return run_exit_code(execution)
 
 
-def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
+def _submit_detached(spec: dict[str, object], store_root: Path, token: str | None) -> int:
     """`run --detach`: write the job spec, spawn a detached worker, print the job id."""
     # On an encrypted store the worker needs the token to write its result. It is passed to the
     # worker through its environment (never to disk), the same exposure as a sync call holding
@@ -253,7 +313,7 @@ def _submit_detached(spec: dict, store_root: Path, token: Optional[str]) -> int:
     return 0
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
+def cmd_run(args: argparse.Namespace) -> int:
     from generic_ml_cache_core.common.errors import ConfigError
 
     try:
@@ -266,22 +326,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return _submit_detached(spec, store_root, token)
 
     try:
-        command = _command_from_spec(spec)
+        command = command_from_spec(spec)
     except UnknownClient as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
-    execution, error = _run_cached_execution(
+    execution, error = run_cached_execution(
         lambda: build_use_cases(
-            _db_conn_factory(store_root),
             store_root,
-            _spec_executable_override(spec),
-            spec["timeout"],
+            spec_executable_override(spec),
+            spec_timeout(spec),
             encryption_token=token,
             stream_path=getattr(args, "stream", None),
-            client=spec["client"],
-            max_size=spec.get("max_size"),
-            whitelist=_spec_whitelist(spec),
-            diag=_make_diag(args),
+            client=command.client,
+            max_size=spec_max_size(spec),
+            whitelist=spec_whitelist(spec),
+            diag=make_diag(args),
         ).run_ml.execute(command)
     )
     if error is not None:
@@ -289,15 +348,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
     assert execution is not None
 
     # Materialise captured files into the cwd, exactly as the real client would.
-    _apply_output_files(execution, Path.cwd())
+    apply_output_files(execution, Path.cwd())
 
     if getattr(args, "json", False):
         return _print_run_json(execution, command)
 
-    return _relay_execution(execution)
+    return relay_execution(execution)
 
 
-def _cmd_alias(args: argparse.Namespace) -> int:
+def cmd_alias(args: argparse.Namespace) -> int:
     """`alias`: the thin native-client wrapper. Everything after the client is an
     opaque native-argument tail, forwarded verbatim and keyed (by fingerprint) as
     the cache identity. No isolation and no file capture -- a replay reproduces the
@@ -325,27 +384,26 @@ def _cmd_alias(args: argparse.Namespace) -> int:
         execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
         client=args.client,
         model="",
-        native_args=native_args,
+        native_args=tuple(native_args),
         cache_mode=_resolve_cache_mode(args, settings),
         persistence_depth=PersistenceDepth(str(settings["persist"][0])),
         record_on_error=bool(args.record_on_error),
-        session_id=_resolve_session(args),
+        session_id=resolve_session(args),
     )
     store_root = Path(str(settings["store"][0]))
-    execution, error = _run_cached_execution(
+    execution, error = run_cached_execution(
         lambda: build_use_cases(
-            _db_conn_factory(store_root),
             store_root,
             lambda _client: executable,
-            float(settings["timeout"][0]) if settings["timeout"][0] is not None else None,  # type: ignore[arg-type]
-            encryption_token=_resolve_token(args),
+            config.resolved_timeout(settings),
+            encryption_token=resolve_token(args),
             client=args.client,
-            max_size=int(settings["max_size"][0]) if settings["max_size"][0] is not None else None,  # type: ignore[arg-type]
+            max_size=config.resolved_max_size(settings),
             whitelist=file_cfg.adapters,
-            diag=_make_diag(args),
+            diag=make_diag(args),
         ).run_ml.execute(command)
     )
     if error is not None:
         return error
     assert execution is not None
-    return _relay_execution(execution)
+    return relay_execution(execution)

@@ -1,19 +1,22 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for POST /gateway/claude/{session_id}/v1/messages."""
+"""Tests for POST /gateway/claude/{session_id}/v1/messages.
+
+State-based: the real wired daemon runs the whole cache protocol (dispatch → relay →
+store → serve); only the relay's upstream HTTP call is stubbed. Assertions are about
+observable behaviour — a 200 is cached and served without re-relaying, a failure is
+returned verbatim and never cached — not about mock call shapes.
+"""
 
 from __future__ import annotations
 
 import json
+import urllib.error
+from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from starlette.testclient import TestClient
-
-from generic_ml_cache_core.application.domain.model.gateway.gateway_response import GatewayResponse
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
-    RunMlGatewayCommand,
-)
 
 _SESSION = "test-session-abc"
 _URL = f"/gateway/claude/{_SESSION}/v1/messages"
@@ -30,142 +33,201 @@ _ANTHROPIC_BODY = json.dumps(
     }
 ).encode()
 
-_SINGLE_TURN = {
-    "model": "claude-opus-4-8",
-    "messages": [{"role": "user", "content": "Hello!"}],
-}
+_SINGLE_TURN = {"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Hello!"}]}
 
 
-def _make_gateway_response(
-    cache_hit: bool = False,
-    status_code: int = 200,
-    body: bytes = _ANTHROPIC_BODY,
-) -> GatewayResponse:
-    return GatewayResponse(
-        response_body_bytes=body,
-        status_code=status_code,
-        cache_hit=cache_hit,
-    )
-
-
-def _patched_client(tmp_path: Path, gateway_response: GatewayResponse) -> TestClient:
+def _client(tmp_path: Path) -> TestClient:
     from generic_ml_cache_daemon.app import create_app
 
-    app = create_app(tmp_path)
-    app.state.wired.run_gateway.execute = MagicMock(return_value=gateway_response)
-    return TestClient(app)
+    return TestClient(create_app(tmp_path))
+
+
+def _ok_upstream(body: bytes = _ANTHROPIC_BODY, status: int = 200) -> MagicMock:
+    response = MagicMock()
+    response.__enter__ = lambda self: self
+    response.__exit__ = MagicMock(return_value=False)
+    response.status = status
+    response.read.return_value = body
+    return response
 
 
 # ---------------------------------------------------------------------------
-# Happy path — status code and response body
+# Miss → relay + cache; hit → serve from the store
 # ---------------------------------------------------------------------------
 
 
-def test_gateway_returns_200(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        assert tc.post(_URL, json=_SINGLE_TURN).status_code == 200
+def test_miss_relays_and_returns_the_body_verbatim(tmp_path: Path) -> None:
+    with (
+        _client(tmp_path) as client,
+        patch("urllib.request.urlopen", return_value=_ok_upstream()) as urlopen,
+    ):
+        response = client.post(_URL, json=_SINGLE_TURN)
+    assert response.status_code == 200
+    assert response.content == _ANTHROPIC_BODY  # full envelope, not distilled text
+    assert urlopen.call_count == 1
 
 
-def test_gateway_returns_response_body_verbatim(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        assert tc.post(_URL, json=_SINGLE_TURN).content == _ANTHROPIC_BODY
+def test_second_identical_request_is_served_from_cache_without_re_relaying(tmp_path: Path) -> None:
+    with (
+        _client(tmp_path) as client,
+        patch("urllib.request.urlopen", return_value=_ok_upstream()) as urlopen,
+    ):
+        first = client.post(_URL, json=_SINGLE_TURN)
+        second = client.post(_URL, json=_SINGLE_TURN)
+    assert first.content == second.content == _ANTHROPIC_BODY
+    assert urlopen.call_count == 1  # the hit served off the finalized record
 
 
-def test_gateway_x_cache_hit_false_on_miss(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response(cache_hit=False)) as tc:
-        assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "false"
-
-
-def test_gateway_x_cache_hit_true_on_hit(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response(cache_hit=True)) as tc:
-        assert tc.post(_URL, json=_SINGLE_TURN).headers["x-cache-hit"] == "true"
-
-
-# ---------------------------------------------------------------------------
-# Command construction — verify what the route passes to the use case
-# ---------------------------------------------------------------------------
-
-
-def test_gateway_command_carries_api_token(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        tc.post(_URL, json=_SINGLE_TURN, headers={"x-api-key": "sk-ant-test"})
-        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-        assert command.api_token == "sk-ant-test"
-
-
-def test_gateway_command_carries_model(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        tc.post(_URL, json=_SINGLE_TURN)
-        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-        assert command.gateway_request.model == "claude-opus-4-8"
-
-
-def test_gateway_command_carries_messages(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        tc.post(_URL, json=_SINGLE_TURN)
-        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-        assert command.gateway_request.messages[0]["role"] == "user"
-
-
-def test_gateway_command_carries_system(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        body = {**_SINGLE_TURN, "system": "You are a helpful assistant."}
-        tc.post(_URL, json=body)
-        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-        assert command.gateway_request.system == "You are a helpful assistant."
-
-
-def test_gateway_session_id_from_url_path(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        tc.post(_URL, json=_SINGLE_TURN)
-        command: RunMlGatewayCommand = tc.app.state.wired.run_gateway.execute.call_args[0][0]
-        assert command.session_id == _SESSION
+def test_a_different_body_is_a_separate_cache_entry(tmp_path: Path) -> None:
+    other = {"model": "claude-opus-4-8", "messages": [{"role": "user", "content": "Bye"}]}
+    with (
+        _client(tmp_path) as client,
+        patch("urllib.request.urlopen", return_value=_ok_upstream()) as urlopen,
+    ):
+        client.post(_URL, json=_SINGLE_TURN)
+        client.post(_URL, json=other)
+    assert urlopen.call_count == 2  # distinct request bodies key distinct entries
 
 
 # ---------------------------------------------------------------------------
-# Multi-turn and extra fields
+# Upstream error → forwarded verbatim, never cached
 # ---------------------------------------------------------------------------
 
 
-def test_gateway_multi_turn_returns_200(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        multi_turn = {
-            "model": "claude-opus-4-8",
-            "messages": [
-                {"role": "user", "content": "Hi"},
-                {"role": "assistant", "content": "Hello!"},
-                {"role": "user", "content": "How are you?"},
-            ],
-        }
-        assert tc.post(_URL, json=multi_turn).status_code == 200
-
-
-def test_gateway_extra_fields_ignored(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        body = {**_SINGLE_TURN, "metadata": {"user_id": "abc"}, "stream": False}
-        assert tc.post(_URL, json=body).status_code == 200
-
-
-# ---------------------------------------------------------------------------
-# Upstream error forwarding
-# ---------------------------------------------------------------------------
-
-
-def test_gateway_forwards_upstream_4xx_status(tmp_path: Path) -> None:
+def test_upstream_error_is_forwarded_verbatim_with_its_real_status(tmp_path: Path) -> None:
     error_body = json.dumps({"type": "error", "error": {"type": "rate_limit_error"}}).encode()
-    with _patched_client(tmp_path, _make_gateway_response(status_code=429, body=error_body)) as tc:
-        response = tc.post(_URL, json=_SINGLE_TURN)
-        assert response.status_code == 429
-        assert response.content == error_body
+    http_error = urllib.error.HTTPError(
+        url="https://api.anthropic.com/v1/messages",
+        code=429,
+        msg="Too Many Requests",
+        hdrs=MagicMock(),
+        fp=BytesIO(error_body),
+    )
+    with _client(tmp_path) as client, patch("urllib.request.urlopen", side_effect=http_error):
+        response = client.post(_URL, json=_SINGLE_TURN)
+    assert response.status_code == 429  # the real upstream status (W15)
+    assert response.content == error_body
+
+
+def test_upstream_error_is_not_cached_and_re_relays(tmp_path: Path) -> None:
+    error_body = b'{"type":"error"}'
+    http_error = urllib.error.HTTPError(
+        url="https://api.anthropic.com/v1/messages",
+        code=500,
+        msg="Server Error",
+        hdrs=MagicMock(),
+        fp=BytesIO(error_body),
+    )
+    with (
+        _client(tmp_path) as client,
+        patch("urllib.request.urlopen", side_effect=http_error) as urlopen,
+    ):
+        client.post(_URL, json=_SINGLE_TURN)
+        client.post(_URL, json=_SINGLE_TURN)
+    assert urlopen.call_count == 2  # a failure is never a servable hit
+
+
+def test_network_failure_maps_to_502(tmp_path: Path) -> None:
+    with (
+        _client(tmp_path) as client,
+        patch("urllib.request.urlopen", side_effect=urllib.error.URLError("connection refused")),
+    ):
+        response = client.post(_URL, json=_SINGLE_TURN)
+    assert response.status_code == 502  # ProviderApiError(status 0) -> daemon 502 (W16)
 
 
 # ---------------------------------------------------------------------------
-# Validation — missing required field
+# Verbatim forwarding of the request
 # ---------------------------------------------------------------------------
 
 
-def test_gateway_missing_model_returns_422(tmp_path: Path) -> None:
-    with _patched_client(tmp_path, _make_gateway_response()) as tc:
-        assert (
-            tc.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]}).status_code == 422
-        )
+def test_forwards_the_request_body_verbatim_upstream(tmp_path: Path) -> None:
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["data"] = req.data
+        return _ok_upstream()
+
+    body = {**_SINGLE_TURN, "temperature": 0.3, "tools": [{"name": "search"}]}
+    with _client(tmp_path) as client, patch("urllib.request.urlopen", fake_urlopen):
+        client.post(_URL, json=body)
+    # The exact bytes the caller sent are forwarded — no field fabricated or dropped.
+    assert json.loads(captured["data"]) == body
+
+
+def test_forwards_the_caller_auth_header(tmp_path: Path) -> None:
+    captured: dict = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["headers"] = dict(req.headers)
+        return _ok_upstream()
+
+    with _client(tmp_path) as client, patch("urllib.request.urlopen", fake_urlopen):
+        client.post(_URL, json=_SINGLE_TURN, headers={"authorization": "Bearer sub-tok"})
+    assert captured["headers"].get("Authorization") == "Bearer sub-tok"
+
+
+# ---------------------------------------------------------------------------
+# Probe + validation
+# ---------------------------------------------------------------------------
+
+
+def test_probe_endpoint_answers(tmp_path: Path) -> None:
+    with _client(tmp_path) as client:
+        assert client.get(f"/gateway/claude/{_SESSION}").status_code == 200
+
+
+def test_missing_model_is_rejected_locally_without_relaying(tmp_path: Path) -> None:
+    with _client(tmp_path) as client, patch("urllib.request.urlopen") as urlopen:
+        response = client.post(_URL, json={"messages": [{"role": "user", "content": "hi"}]})
+    assert response.status_code == 422
+    urlopen.assert_not_called()  # rejected before any upstream call
+
+
+# ---------------------------------------------------------------------------
+# _to_http_response: a real upstream status of 0 must not be masked as 502 (Y11 nit)
+# ---------------------------------------------------------------------------
+
+
+def test_upstream_status_zero_is_preserved_not_rewritten_to_502() -> None:
+    from types import SimpleNamespace
+
+    from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
+        ExecutionFailure,
+        FailureReason,
+    )
+    from generic_ml_cache_core.application.domain.model.execution.execution_state import (
+        ExecutionState,
+    )
+
+    from generic_ml_cache_daemon.controllers.gateway import _to_http_response
+
+    execution = SimpleNamespace(
+        execution_state=ExecutionState.FAILED,
+        failure=ExecutionFailure(reason=FailureReason.NONZERO_EXIT, message="x", exit_code=0),
+        artifacts=[],
+    )
+    status, _ = _to_http_response(execution)  # type: ignore[arg-type]
+    assert status == 0  # a real 0 is falsy but valid — not silently rewritten to 502
+
+
+def test_absent_upstream_status_falls_back_to_502() -> None:
+    from types import SimpleNamespace
+
+    from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
+        ExecutionFailure,
+        FailureReason,
+    )
+    from generic_ml_cache_core.application.domain.model.execution.execution_state import (
+        ExecutionState,
+    )
+
+    from generic_ml_cache_daemon.controllers.gateway import _to_http_response
+
+    execution = SimpleNamespace(
+        execution_state=ExecutionState.FAILED,
+        failure=ExecutionFailure(reason=FailureReason.CLIENT_ERROR, message="x", exit_code=None),
+        artifacts=[],
+    )
+    status, _ = _to_http_response(execution)  # type: ignore[arg-type]
+    assert status == 502  # a genuinely absent status still falls back

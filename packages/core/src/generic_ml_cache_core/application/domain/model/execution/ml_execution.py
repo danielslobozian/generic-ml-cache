@@ -4,17 +4,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, List, Optional
 
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
-from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    Artifact,
+    ArtifactStatus,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_failure import (
     ExecutionFailure,
 )
+from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
 
 
@@ -39,14 +43,23 @@ class MlExecution:
     execution_state: ExecutionState
     execution_kind: ExecutionKind
     output_persisted: bool
+    #: Surrogate identity, minted at construction (before persistence). The DB-first
+    #: write path targets mark/finalize by this id, never "the latest row by key".
+    execution_id: ExecutionId = field(default_factory=ExecutionId.generate)
     input_persisted: bool = False
-    artifacts: List[Artifact] = field(default_factory=list)
-    token_usage: Optional[TokenUsage] = None
-    failure: Optional[ExecutionFailure] = None
-    superseded_at: Optional[datetime] = None
+    artifacts: list[Artifact] = field(default_factory=list[Artifact])
+    token_usage: TokenUsage | None = None
+    failure: ExecutionFailure | None = None
+    superseded_at: datetime | None = None
+
+    @property
+    def has_failed_persistence(self) -> bool:
+        """True when any artifact's blob write failed (C-4). Such a run is not
+        servable; a repair pass reconciles it against the blob store."""
+        return any(a.status is ArtifactStatus.FAILED for a in self.artifacts)
 
 
-def normalize_tags(raw_tags: Iterable[str]) -> List[str]:
+def normalize_tags(raw_tags: Iterable[str]) -> list[str]:
     """Normalise user-supplied tags: trim, drop blanks, de-duplicate, sort.
 
     Tags are metadata, never part of the cache key. Normalising at the boundary

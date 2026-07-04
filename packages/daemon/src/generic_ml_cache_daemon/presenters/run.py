@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 from pydantic import BaseModel
 
 
@@ -15,13 +13,13 @@ class RunBody(BaseModel):
     effort: str = ""
     prompt: str = ""
     context: str = ""
-    tags: List[str] = []
-    session_id: Optional[str] = None
+    tags: list[str] = []
+    session_id: str | None = None
 
 
 class RunResponse(BaseModel):
     execution_key: str
     state: str
     cache_hit: bool
-    stdout: Optional[str] = None
-    stderr: Optional[str] = None
+    stdout: str | None = None
+    stderr: str | None = None

@@ -9,8 +9,6 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from starlette.testclient import TestClient
-
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
     ArtifactType,
@@ -20,6 +18,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_state im
     ExecutionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from starlette.testclient import TestClient
 
 
 def _make_mock_execution(stdout: str = "job-output") -> MlExecution:

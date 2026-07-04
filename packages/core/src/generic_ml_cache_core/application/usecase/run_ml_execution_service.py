@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Dict, List, Optional, Tuple, cast
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
@@ -14,9 +13,15 @@ from generic_ml_cache_core.application.domain.model.execution.ml_execution impor
 from generic_ml_cache_core.application.domain.model.identity.api_call_identity import (
     ApiCallIdentity,
 )
+from generic_ml_cache_core.application.domain.model.identity.api_passthrough_call_identity import (
+    ApiPassthroughCallIdentity,
+)
 from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.identity.passthrough_call_identity import (
     PassthroughCallIdentity,
+)
+from generic_ml_cache_core.application.domain.model.run.api_passthrough_request import (
+    ApiPassthroughRequest,
 )
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
@@ -26,33 +31,59 @@ from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequ
 from generic_ml_cache_core.application.domain.model.run.passthrough_request import (
     PassthroughRequest,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
+    EvictToQuotaCommand,
+)
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.execution_repository_port import (
-    ExecutionRepositoryPort,
+from generic_ml_cache_core.application.port.outbound.api_passthrough_runner_port import (
+    ApiPassthroughRunnerPort,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
-from generic_ml_cache_core.application.port.out.client_config_port import ClientConfigPort
-from generic_ml_cache_core.application.port.out.local_client_port import LocalClientPort
-from generic_ml_cache_core.application.port.out.metrics_port import MetricsPort
-from generic_ml_cache_core.application.port.out.ml_runner_port import MlRunnerPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
-from generic_ml_cache_core.application.port.out.workspace_port import WorkspacePort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
+from generic_ml_cache_core.application.port.outbound.client_config_port import ClientConfigPort
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
+from generic_ml_cache_core.application.port.outbound.managed_local_runner_port import (
+    ManagedLocalRunnerPort,
+)
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
+    AnnotateMlRunPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
+)
+from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
+from generic_ml_cache_core.application.port.outbound.passthrough_local_runner_port import (
+    PassthroughLocalRunnerPort,
+)
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
+    RegisteredAdapterPort,
+)
+from generic_ml_cache_core.application.port.outbound.store_lock_port import StoreLockPort
+from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
-from generic_ml_cache_core.common.checksum import fingerprint_arguments, text_checksum
+from generic_ml_cache_core.application.usecase.purge_service import PurgeService
+from generic_ml_cache_core.common.checksum import (
+    file_content_fingerprint,
+    fingerprint_arguments,
+    text_checksum,
+)
+from generic_ml_cache_core.common.errors import UnknownClient, UnsupportedExecutionMode
 
 
-class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
+class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], RunMlExecutionUseCase):
     """Record-or-replay any ML execution — managed local, API, or passthrough.
 
     Two orthogonal axes drive a call. The **client name** (``command.client``)
@@ -69,16 +100,22 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
     def __init__(
         self,
         file_fingerprint: FileFingerprintPort,
-        runners: Dict[str, RegisteredAdapter],
+        runners: dict[str, RegisteredAdapterPort],
         blob_store: BlobStorePort,
-        repository: ExecutionRepositoryPort,
-        metrics: MetricsPort,
-        purge_service: Optional[PurgeService] = None,
-        max_size: Optional[int] = None,
-        workspace: Optional[WorkspacePort] = None,
-        diag: Optional[DiagnosticsPort] = None,
+        save: SaveMlRunPort,
+        read: ReadMlRunPort,
+        annotate: AnnotateMlRunPort,
+        record: RecordCallEventPort,
+        execution_key_lock: ExecutionKeyLockPort,
+        store_lock: StoreLockPort | None = None,
+        purge_service: PurgeService | None = None,
+        max_size: int | None = None,
+        workspace: WorkspacePort | None = None,
+        diag: DiagnosticsPort | None = None,
     ) -> None:
-        super().__init__(blob_store, repository, metrics, diag)
+        super().__init__(
+            blob_store, save, read, annotate, record, execution_key_lock, store_lock, diag
+        )
         self._file_fingerprint = file_fingerprint
         self._runners = runners
         self._purge = purge_service
@@ -92,6 +129,11 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
             return PassthroughCallIdentity(
                 client=command.client,
                 native_args_fingerprint=fingerprint_arguments(command.native_args),
+            )
+        if command.execution_kind is ExecutionKind.API_PASSTHROUGH:
+            return ApiPassthroughCallIdentity(
+                client=command.client,
+                body_fingerprint=file_content_fingerprint(command.raw_body),
             )
         return ApiCallIdentity(
             provider=command.client,
@@ -114,7 +156,7 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
                     client=command.client,
                     kind=str(command.execution_kind),
                 )
-            raise RuntimeError(
+            raise UnknownClient(
                 f"No runner registered for client {command.client!r}; "
                 "pass client= to build_use_cases or wire a runner for this client"
             )
@@ -132,20 +174,11 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
         elif command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             # The adapter makes the raw call; core packages it (no files).
             result = self._run_passthrough(command, runner)
+        elif command.execution_kind is ExecutionKind.API_PASSTHROUGH:
+            # The relay forwards the raw body verbatim and returns the wire response.
+            result = self._run_api_passthrough(command, runner)
         else:
-            # API: the legacy MlRunnerPort.run path — a single REST call.
-            request = MlRequest(
-                model=command.model,
-                effort=command.effort,
-                context=command.context,
-                prompt=command.prompt,
-                user_system_prompt=command.user_system_prompt,
-                input_file_paths=command.input_file_paths,
-                allow_paths=command.allow_paths,
-                client_args=command.client_args,
-                grants=frozenset(command.grants),
-            )
-            result = cast(MlRunnerPort, runner).run(request)
+            result = self._run_api(command, runner)
         if self._diag:
             self._diag.debug(
                 "invoking client EXIT",
@@ -157,23 +190,27 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
         return result
 
     def _run_managed(
-        self, command: RunMlExecutionCommand, runner: RegisteredAdapter
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
     ) -> ClientRunResult:
         """Orchestrate one isolated managed run: prepare the workspace, let the
         client make its call, capture the generated files, and package the result.
         The client knows *how* (argv, config, parsing); core owns *the workspace*."""
         if self._workspace is None:
             raise RuntimeError("managed execution requires a WorkspacePort; none was injected")
-        client = cast(LocalClientPort, runner)
+        if not isinstance(runner, ManagedLocalRunnerPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support managed local execution"
+            )
+        client = runner
         request = ManagedLocalRequest(
             model=command.model,
             effort=command.effort,
             context=command.context,
             prompt=command.prompt,
             user_system_prompt=command.user_system_prompt,
-            allowed_read_paths=sorted([*command.input_file_paths, *command.allow_paths]),
-            add_dir_paths=sorted(command.allow_paths),
-            client_args=list(command.client_args),
+            allowed_read_paths=tuple(sorted([*command.input_file_paths, *command.allow_paths])),
+            add_dir_paths=tuple(sorted(command.allow_paths)),
+            client_args=tuple(command.client_args),
             grants=frozenset(command.grants),
         )
         workspace = self._workspace.create()
@@ -196,52 +233,113 @@ class RunMlExecutionService(CachedMlExecutionService, RunMlExecutionUseCase):
             exit_code=answer.exit_code,
             stdout=answer.stdout,
             stderr=answer.stderr,
-            files=files,
+            files=tuple(files),
             token_usage=answer.token_usage,
         )
 
     def _run_passthrough(
-        self, command: RunMlExecutionCommand, runner: RegisteredAdapter
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
     ) -> ClientRunResult:
         """Relay a native passthrough call through the client and package it. There
         is no workspace and no artifact capture — a passthrough never produces files."""
-        client = cast(LocalClientPort, runner)
+        if not isinstance(runner, PassthroughLocalRunnerPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support passthrough local execution"
+            )
+        client = runner
         answer = client.execute_passthrough(
-            PassthroughRequest(native_args=list(command.native_args))
+            PassthroughRequest(native_args=tuple(command.native_args))
         )
         return ClientRunResult(
             exit_code=answer.exit_code,
             stdout=answer.stdout,
             stderr=answer.stderr,
-            files=[],
+            files=(),
+            token_usage=answer.token_usage,
+        )
+
+    def _run_api(
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
+    ) -> ClientRunResult:
+        """The structured API path — a single REST call through MlRunnerPort. Check
+        the capability before use so a miswired registry (an adapter that is not
+        actually an MlRunnerPort) yields a named error, not an AttributeError from a
+        blind cast (W18)."""
+        if not isinstance(runner, MlRunnerPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support "
+                f"{command.execution_kind.value} execution"
+            )
+        request = MlRequest(
+            model=command.model,
+            effort=command.effort,
+            context=command.context,
+            prompt=command.prompt,
+            user_system_prompt=command.user_system_prompt,
+            input_file_paths=command.input_file_paths,
+            allow_paths=command.allow_paths,
+            client_args=command.client_args,
+            grants=frozenset(command.grants),
+        )
+        return runner.run(request)
+
+    def _run_api_passthrough(
+        self, command: RunMlExecutionCommand, runner: RegisteredAdapterPort
+    ) -> ClientRunResult:
+        """Relay the raw request bytes through the API-passthrough adapter and
+        package the verbatim wire response as a single stdout blob (no files). The
+        adapter maps the upstream HTTP status onto the answer's exit code, so a 200
+        becomes a servable success and any other status a non-cached failure that is
+        still returned. Check the capability before use so a miswired registry yields
+        a named error, not an AttributeError (W18)."""
+        if not isinstance(runner, ApiPassthroughRunnerPort):
+            raise UnsupportedExecutionMode(
+                f"client {command.client!r} does not support API-passthrough execution"
+            )
+        client = runner
+        answer = client.execute_api_passthrough(
+            ApiPassthroughRequest(
+                raw_body=command.raw_body, forward_headers=dict(command.forward_headers)
+            )
+        )
+        return ClientRunResult(
+            exit_code=answer.exit_code,
+            stdout=answer.stdout,
+            stderr=answer.stderr,
+            files=(),
             token_usage=answer.token_usage,
         )
 
     def _after_record(self, execution_key: str) -> None:
         if self._purge is not None and self._max_size is not None:
-            self._purge.evict_to_quota(self._max_size)
+            self._purge.evict_to_quota(EvictToQuotaCommand(self._max_size))
 
     def _execution_kind(self, command: RunMlExecutionCommand) -> ExecutionKind:
         return command.execution_kind
 
-    def _journal_fields(self, command: RunMlExecutionCommand) -> Tuple[str, str, str]:
-        if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
+    def _journal_fields(self, command: RunMlExecutionCommand) -> tuple[str, str, str]:
+        if command.execution_kind in (
+            ExecutionKind.LOCAL_PASSTHROUGH,
+            ExecutionKind.API_PASSTHROUGH,
+        ):
             return command.client, "", ""
         return command.client, command.model, command.effort
 
     def _is_uncacheable(self, command: RunMlExecutionCommand) -> bool:
         return command.is_uncacheable
 
-    def _execution_tags(self, command: RunMlExecutionCommand) -> List[str]:
+    def _execution_tags(self, command: RunMlExecutionCommand) -> list[str]:
         return normalize_tags(command.tags)
 
     def _input_parts(
         self, command: RunMlExecutionCommand
-    ) -> List[Tuple[ArtifactType, Optional[str], bytes]]:
+    ) -> list[tuple[ArtifactType, str | None, bytes]]:
         if command.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH:
             payload = json.dumps(list(command.native_args))
             return [(ArtifactType.INPUT_ARGS, None, payload.encode("utf-8"))]
-        parts: List[Tuple[ArtifactType, Optional[str], bytes]] = []
+        if command.execution_kind is ExecutionKind.API_PASSTHROUGH:
+            return [(ArtifactType.INPUT_MESSAGES, None, command.raw_body)]
+        parts: list[tuple[ArtifactType, str | None, bytes]] = []
         if command.context:
             parts.append((ArtifactType.INPUT_CONTEXT, None, command.context.encode("utf-8")))
         parts.append((ArtifactType.INPUT_PROMPT, None, command.prompt.encode("utf-8")))

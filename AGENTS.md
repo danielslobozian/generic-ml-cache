@@ -29,7 +29,7 @@ This is a hexagonal application shipped as a **monorepo of two package rings**: 
 (`packages/cli` today, a daemon later). The **library is the whole application
 *except* the user interface and the data source**: it contains the hexagon's
 `application/` rings (domain, use cases, ports — the business rules, depending on
-nothing outward), **and the default outbound adapters** (`adapter/out/...`: client
+nothing outward), **and the default outbound adapters** (`adapter/outbound/...`: client
 runner, blob store, SQLite repository, metrics), **and** the composition factory that
 wires them. The aggregate is an **ML execution** — a demand to run a client and what
 came back. A **client** is thin: it provides the data source and configuration and
@@ -132,9 +132,9 @@ packages/core/   THE LIBRARY (generic_ml_cache_core) — everything but the UI &
   application/usecase/         use cases — orchestration; each names an action and
                                takes a command as input.
   application/port/inbound/    inbound port contracts (the use-case interfaces).
-  application/port/out/        outbound port contracts (store, metrics, client
+  application/port/outbound/        outbound port contracts (store, metrics, client
                                runner) — owned by the core ring.
-  adapter/out/...              the DEFAULT outbound adapters (client runner, blob
+  adapter/outbound/...              the DEFAULT outbound adapters (client runner, blob
                                store, SQLite repository, metrics) — implementations
                                that SHIP with the library. Dumb, swappable.
   adapter/inbound/             the composition factory (build_use_cases): wires the
@@ -156,33 +156,56 @@ library's `adapter/`; the library's `adapter/inbound/` holds only the wiring fac
 
 ### The use-case triple (inbound naming, settled)
 
-Each use case is **three files in two homes**, following the ports-and-adapters
-convention:
+**Every user-driven capability is an inbound port** — defined by the *boundary*
+it sits on (a CLI command, a daemon route reaching it), not by the number of
+implementations. Each capability lives in a **by-capability sub-package** so its
+ports and commands stay together:
 
-- `port/inbound/<action>_use_case.py` → **`<Action>UseCase`** — the inbound port,
-  an `ABC` with the single `execute(command) -> <Result>` method. The driving
-  adapter depends on *this*, never on the implementation.
-- `port/inbound/<action>_command.py` → **`<Action>Command`** — the command. It is
-  part of the inbound contract (the port method takes it), so it lives with the
-  port, **not** with the implementation.
-- `usecase/<action>_service.py` → **`<Action>Service`** — the implementation,
-  which subclasses the port. This is the orchestration.
+- `port/inbound/<capability>/<action>_use_case.py` → **`<Action>UseCase`** — the
+  inbound port, an `ABC`. A single-method use case (one operation, its command,
+  its result). The driving adapter depends on *this*, never the implementation.
+- `port/inbound/<capability>/<action>_command.py` → **`<Action>Command`** — the
+  command, part of the inbound contract (the port method takes it), so it lives
+  with the port, **not** with the implementation. (No command for a no-input
+  query.)
+- `usecase/<capability>_service.py` → **`<Capability>Service`** — the
+  implementation. A capability with several operations regroups its single-method
+  use cases into **one** service implementing all their ABCs, each as a
+  **distinctly-named method** (e.g. `SessionTagsService.tag` / `.untag` /
+  `.list_tags`). The single-operation form (run/probe/gateway) keeps the
+  `execute(command)` method name.
 
 So the interface carries the `UseCase` name and the implementation carries
-`Service`. The failing case: a concrete class named `<Action>UseCase` in
-`usecase/` with no interface above it is wrong — the name belongs to the port,
-and the driving adapter has nothing to depend on but the concrete class.
+`Service`. A **mere option is a command field, not a new use case** (`hard` is
+`PurgeByTagCommand(tag, hard=False)`, never a `HardDeleteByTagUseCase`) — the
+command is the evolution seam. The **discriminator-in-one-method** form (one
+`execute` switching on a target/type tag) is **forbidden** — it is the if/elif
+ladder §9 forbids. *Failing cases: a concrete `<Action>UseCase` in `usecase/`
+with no interface above it; dropping a new `*_use_case.py` into a flat `inbound/`
+once the capability has a sub-package; omitting a `PurgeUseCase` because
+`PurgeService` has one implementation.*
 
-**The one exception — a coordinating service with a single implementation.**
-A service that is called only from the composition root (never driven by an
-external actor through a port) and has exactly one concrete form does not need
-an inbound port ABC. It lives in `application/usecase/`, is named `<Concept>Service`,
-and is injected as a concrete dependency through the composition root.
-`PurgeService` is the model: the CLI drives it through the wired object, not
-through an interface, because there will never be an alternative purge strategy.
-*Failing case: inventing a `PurgeUseCase` ABC with one implementor just to
-"follow the pattern" — adding an interface with no second implementation is
-ceremony, not architecture.*
+**The genuine exception — a purely-internal service.** A service invoked only by
+other use cases or the composition root, *never reachable by a driving adapter*,
+gets no inbound port — regardless of its implementation count. Note the inverse
+is NOT a reason to omit a port: a primary port characteristically has exactly
+**one** implementation (the application service itself), and it still gets a
+port. The boundary is the test, not the count. The capability services are
+exposed to controllers only through the narrowed `ApplicationApi` bundle (§5);
+the composition root keeps the out-adapters and injects them into the impls.
+
+> **The core exposes inbound ports to the outside, never implementations.**
+> Everything a driving adapter can invoke from outside the application is an
+> **inbound port** — an `ABC` in `port/inbound/`, reached through the
+> `ApplicationApi` bundle. A `*Service` implementation is never exposed across the
+> boundary; it is wired behind its ports in the composition root and reached only
+> as the port type. This holds for *every* capability without exception — breadth
+> of surface or a single implementation is **not** a licence to skip the ports
+> (purge has many operations and one implementation, and it still gets a full set
+> of per-operation `*UseCase` ABCs + command DTOs, exactly like every other
+> capability). *Failing case: a controller importing or being handed a concrete
+> `…Service` instead of its inbound port — the implementation has leaked across
+> the boundary the ports exist to seal.*
 
 ### The base-use-case hook (post-record side effects)
 
@@ -234,6 +257,15 @@ passes every test.
 - **Ports are owned by the core ring.** The interface lives in `application/port/...`;
   the implementation lives in `adapter/...` (still inside the library). The core ring
   names the contract and depends on the contract, never on the concrete adapter.
+- **Driving adapters reach the application only through inbound ports.** A
+  controller (a CLI command, a daemon route) invokes the domain ONLY via the
+  inbound ports handed to it in the `ApplicationApi` bundle — which carries inbound
+  ports *only* (no `blob_store`/`repository`/`metrics`/`diag`). It must not import a
+  use-case implementation, an outbound port, or a domain service; an outbound
+  adapter is unreachable from a controller by construction. Enforced by import-linter
+  Rule 10 (`hex-controllers-inbound-only`) + the narrowed bundle. *Failing case: a
+  controller calling `wired.repository.find(...)` instead of an
+  `execution_query.find_current(...)` inbound port.*
 - **No I/O in the domain.** Domain objects and domain services read no files, open
   no sockets, touch no database. I/O is an adapter concern. (A domain object may
   compute over data it already holds — e.g. generate a key from in-memory
@@ -414,10 +446,38 @@ return blob_path.read_bytes()
 - **Parse at the edge.** Untyped external input (CLI args, JSON, client stdout) is
   converted into typed objects **once, at the adapter boundary**; the core then
   trusts the types. Dicts of loose strings do not travel into the domain.
-- **Ports are explicit `ABC`s** with `@abstractmethod`. An adapter declares the port
-  it implements by subclassing it (the nominal "implements"); a half-built adapter
-  fails to instantiate. (Prefer `ABC` over `Protocol` here: the explicit declaration
-  and the runtime refusal are wanted.)
+- **Ports are explicit `ABC`s with `@abstractmethod` — by default.** An adapter
+  declares the port it implements by subclassing it (the nominal "implements"); a
+  half-built adapter fails to instantiate. The explicit declaration and the runtime
+  refusal are the point. **`Protocol` is allowed only when the type is structural by
+  intent** — a structural supertype narrowed at runtime, or a structural shape over
+  domain/command objects that must not inherit a port. *The test: does/should the
+  implementor write `class X(ThePort)`? Yes ⇒ ABC; satisfied incidentally ⇒
+  Protocol.* When an adapter provides a port's surface by **composition** rather than
+  by defining the methods itself (e.g. a CLI client adapter that delegates
+  `LocalClientPort` to a composed `CliRuntime`), it still subclasses the ABC through a
+  thin delegating base (`ComposedLocalClient`) so the nominal "implements" — and the
+  fail-to-instantiate guarantee — hold; composition is *how* the methods are provided,
+  not a reason to drop to a Protocol. *Failing case: a `LocalClientPort` that adapters
+  only match structurally while its sibling `MlRunnerPort` is an ABC they subclass —
+  the two driven-client ports must enforce conformance the same way.* The only
+  remaining `Protocol`s are the three genuinely-structural ones: `RegisteredAdapterPort`
+  (a structural supertype narrowed at runtime), `CacheableExecutionCommand`, and
+  `KeyedCallInputs` (structural shapes over command/identity objects).
+- **Frozen objects are deeply immutable.** `@dataclass(frozen=True)` freezes only the
+  attribute *bindings*; a `list`/`dict`/`set` field is still mutable in place, so the
+  object is only shallowly immutable — a soundness hole for a cache identity or a
+  command that is keyed on. A frozen object's collection fields are therefore
+  immutable: `tuple[...]` / `frozenset[...]` / `Mapping` backed by `MappingProxyType`,
+  normalized in `__post_init__` (`object.__setattr__`), accepting any iterable input at
+  the boundary. Nested structures are **deep-frozen** via `common/immutable.deep_freeze`
+  — notably `GatewayRequest.body`, which the gateway both keys on and forwards: a mutable
+  body opens a TOCTOU gap between keyed/recorded and forwarded, and one frozen snapshot
+  guarantees keyed ≡ forwarded ≡ recorded. The rare code that must JSON-serialize a
+  frozen structure thaws it once at that boundary (`common/immutable.thaw`;
+  `MappingProxyType` is not `json`-serializable). *Failing case: a `@dataclass(frozen=True)`
+  with a bare `list`/`dict`/`set` field — shallow immutability on a cache identity or
+  command object is a defect.*
 - **Ship `py.typed`.** The package publishes its types so consumers (a daemon, the
   workflow engine) get them.
 
@@ -447,13 +507,13 @@ return blob_path.read_bytes()
   5. `python -m pytest packages/daemon/tests --cov=generic_ml_cache_daemon --cov-fail-under=80 --cov-report=xml:packages/daemon/coverage.xml`
   6. `lint-imports` — enforces the four hexagonal import contracts in `.importlinter`:
      application ring must not import adapters; driver packages must not reach past the
-     composition root into `adapter.out`; domain model must not import use cases;
+     composition root into `adapter.outbound`; domain model must not import use cases;
      driven adapter sub-packages must not import each other. A BROKEN contract is an
      architecture defect, not a style issue.
-  7. `pyright` — static type checking (basic mode) against `pyrightconfig.json`.
-     Zero errors required. `# type: ignore` is acceptable only for provably safe casts
-     that cannot be expressed in the type system; a comment must be present explaining
-     why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
+  7. `pyright` — static type checking (**strict mode**) against `pyrightconfig.json`.
+     Zero errors required. `# type: ignore` / `# pyright: ignore` is acceptable only for
+     provably safe casts that cannot be expressed in the type system; a comment must be
+     present explaining why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
 
   Gates 6 and 7 also run automatically as **pre-commit hooks** (`.pre-commit-config.yaml`).
   After cloning, run `.venv/bin/pre-commit install` once to wire them into `git commit`.

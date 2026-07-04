@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from generic_ml_cache_adapters.discovery.composition import get_adapter
+from generic_ml_cache_bootstrap.discovery.composition import get_adapter
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.catalog.client_capability import (
     ClientCapability,

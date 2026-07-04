@@ -7,13 +7,51 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, TypedDict
 
-from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
+    Artifact,
     ArtifactType,
 )
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.domain.model.probe.probe_report import ProbeReport
+from generic_ml_cache_core.application.domain.model.usage.token_usage import TokenUsage
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
+    ReadArtifactBlobCommand,
+)
+from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_use_case import (
+    ReadArtifactBlobUseCase,
+)
+from generic_ml_cache_core.application.port.inbound.execution_query.find_current_execution_command import (
+    FindCurrentExecutionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.execution_query.find_executions_by_key_prefix_command import (
+    FindExecutionsByKeyPrefixCommand,
+)
+from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_execution_command import (
+    TagsForExecutionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
+    PurgeByKeyCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_command import (
+    PurgeBySessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_tag_command import (
+    PurgeBySessionTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_command import (
+    PurgeByTagCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.execution_keys_for_session_command import (
+    ExecutionKeysForSessionCommand,
+)
+from generic_ml_cache_core.application.port.inbound.session_admin.sessions_for_tag_command import (
+    SessionsForTagCommand,
+)
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 from generic_ml_cache_core.common.errors import (
     ConfigError,
     EncryptionTokenRequired,
@@ -21,23 +59,23 @@ from generic_ml_cache_core.common.errors import (
 )
 
 from generic_ml_cache_cli import config
+from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
-    _db_conn_factory,
-    _make_diag,
-    _read_text_arg,
-    _resolve_allow_paths,
-    _resolve_input_file_paths,
-    _resolve_token,
+    make_diag,
+    read_text_arg,
+    resolve_allow_paths,
+    resolve_input_file_paths,
+    resolve_token,
 )
 from generic_ml_cache_cli.presenters.shared import (
-    _AMBER,
-    _BOLD,
-    _GREEN,
-    _GREY,
-    _TEAL,
-    _format_bytes,
-    _paint,
-    _usage_summary,
+    AMBER,
+    BOLD,
+    GREEN,
+    GREY,
+    TEAL,
+    format_bytes,
+    paint,
+    usage_summary,
 )
 
 _PURGE_ALL_PHRASE = "purge all"
@@ -50,15 +88,21 @@ _INPUT_FIELD_BY_TYPE = {
 }
 
 
-def _print_check_result(report, args, execution, usage, file_count) -> None:
+def _print_check_result(
+    report: ProbeReport,
+    args: argparse.Namespace,
+    execution: MlExecution | None,
+    usage: TokenUsage | None,
+    file_count: int,
+) -> None:
     from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
 
-    status_styles = {
-        ProbeStatus.HIT: (_GREEN, _BOLD),
-        ProbeStatus.MISS: (_AMBER, _BOLD),
-        ProbeStatus.NON_CACHEABLE: (_GREY,),
+    status_styles: dict[ProbeStatus, tuple[str, ...]] = {
+        ProbeStatus.HIT: (GREEN, BOLD),
+        ProbeStatus.MISS: (AMBER, BOLD),
+        ProbeStatus.NON_CACHEABLE: (GREY,),
     }
-    print(f"status  : {_paint(report.status.value, *status_styles.get(report.status, ()))}")
+    print(f"status  : {paint(report.status.value, *status_styles.get(report.status, ()))}")
     print(f"client  : {args.client}")
     print(f"model   : {args.model}")
     print(f"effort  : {args.effort}")
@@ -68,20 +112,23 @@ def _print_check_result(report, args, execution, usage, file_count) -> None:
         if usage is None:
             print("usage   : (none captured)")
         else:
-            print(f"usage   : {_usage_summary(usage)}")
+            print(f"usage   : {usage_summary(usage)}")
     elif report.status is ProbeStatus.NON_CACHEABLE:
         print("note    : declares allow-path folders the cache cannot fingerprint, so this")
         print("          call always runs fresh and is never cached.")
 
 
-def _cmd_check(args: argparse.Namespace) -> int:
+def cmd_check(args: argparse.Namespace) -> int:
     import json
 
     from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
-    from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
+    from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
 
-    context = _read_text_arg(args.context, args.context_file, "context")
-    prompt = _read_text_arg(args.prompt, args.prompt_file, "prompt")
+    context = read_text_arg(args.context, args.context_file, "context")
+    prompt = read_text_arg(args.prompt, args.prompt_file, "prompt")
+    system_prompt = (
+        read_text_arg(args.system_prompt, args.system_prompt_file, "system-prompt") or None
+    )
     if not prompt:
         raise SystemExit("error: a non-empty --prompt or --prompt-file is required")
     try:
@@ -97,15 +144,14 @@ def _cmd_check(args: argparse.Namespace) -> int:
         effort=args.effort,
         context=context,
         prompt=prompt,
-        input_file_paths=_resolve_input_file_paths(args.input_file),
-        allow_paths=_resolve_allow_paths(args.allow_path),
+        user_system_prompt=system_prompt,
+        input_file_paths=tuple(resolve_input_file_paths(args.input_file)),
+        allow_paths=tuple(resolve_allow_paths(args.allow_path)),
         scan_trust=bool(settings["trust_scan"][0]),
-        client_args=list(getattr(args, "client_arg", None) or []),
-        grants=list(getattr(args, "grant", None) or []),
+        client_args=tuple(getattr(args, "client_arg", None) or []),
+        grants=tuple(getattr(args, "grant", None) or []),
     )
-    report = build_use_cases(
-        _db_conn_factory(store_root), store_root, diag=_make_diag(args)
-    ).probe.execute(command)
+    report = build_use_cases(store_root, diag=make_diag(args)).probe.execute(command)
     execution = report.execution
     usage = execution.token_usage if execution is not None else None
     file_count = (
@@ -115,7 +161,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
     )
 
     if args.json:
-        payload = {
+        payload: dict[str, object] = {
             "status": report.status.value,
             "cached": report.status is ProbeStatus.HIT,
             "client": args.client,
@@ -133,7 +179,34 @@ def _cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_inspect(args: argparse.Namespace) -> int:
+def _artifact_status_suffix(artifact: Artifact) -> str:
+    """A ``[pending]``/``[failed]`` marker for a non-STORED artifact (C-4); empty
+    for the normal STORED case, so a healthy execution reads unchanged."""
+    return "" if artifact.is_stored else f" [{artifact.status.value}]"
+
+
+def _print_inspect_artifacts(execution: MlExecution) -> None:
+    output_files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
+    print(f"files  : {len(output_files)}")
+    for artifact in output_files:
+        suffix = _artifact_status_suffix(artifact)
+        print(
+            f"         - {artifact.name} ({artifact.encoding}, {artifact.size_bytes} bytes){suffix}"
+        )
+    input_parts = [a for a in execution.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES]
+    if input_parts:
+        print(f"input  : stored ({len(input_parts)} part(s))")
+        for artifact in input_parts:
+            label = artifact.artifact_type.value.replace("input_", "")
+            suffix = _artifact_status_suffix(artifact)
+            print(f"         - {label} ({artifact.encoding}, {artifact.size_bytes} bytes){suffix}")
+    else:
+        print("input  : not stored")
+    if execution.has_failed_persistence:
+        print("persist: INCOMPLETE — some artifacts failed to store; run `gmlcache repair`")
+
+
+def cmd_inspect(args: argparse.Namespace) -> int:
     try:
         settings = config.resolve_settings(config.load())
     except ConfigError as exc:
@@ -142,8 +215,10 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
 
     store_root = Path(str(settings["store"][0]))
     matches = build_use_cases(
-        _db_conn_factory(store_root), store_root, diag=_make_diag(args)
-    ).repository.find_current_by_key_prefix(args.execution)
+        store_root, diag=make_diag(args)
+    ).find_executions_by_key_prefix.find_by_key_prefix(
+        FindExecutionsByKeyPrefixCommand(args.execution)
+    )
     if not matches:
         print(f"gmlc: no current execution matches key {args.execution!r}", file=sys.stderr)
         return 4
@@ -160,31 +235,42 @@ def _cmd_inspect(args: argparse.Namespace) -> int:
     print(f"key    : {execution.call_identity.generate_key()}")
     print(f"kind   : {execution.execution_kind.value}")
     print(f"state  : {execution.execution_state.value}")
-    output_files = [a for a in execution.artifacts if a.artifact_type is ArtifactType.OUTPUT_FILE]
-    print(f"files  : {len(output_files)}")
-    for artifact in output_files:
-        print(f"         - {artifact.name} ({artifact.encoding}, {artifact.size_bytes} bytes)")
-    input_parts = [a for a in execution.artifacts if a.artifact_type in INPUT_ARTIFACT_TYPES]
-    if input_parts:
-        print(f"input  : stored ({len(input_parts)} part(s))")
-        for artifact in input_parts:
-            label = artifact.artifact_type.value.replace("input_", "")
-            print(f"         - {label} ({artifact.encoding}, {artifact.size_bytes} bytes)")
-    else:
-        print("input  : not stored")
+    _print_inspect_artifacts(execution)
     usage = execution.token_usage
     if usage is None:
         print("usage  : (none captured)")
     else:
-        print(f"usage  : {_usage_summary(usage)}")
+        print(f"usage  : {usage_summary(usage)}")
         if usage.cost_usd is not None:
             print(f"         cost ~ ${usage.cost_usd:.4f} (client estimate, not authoritative)")
     return 0
 
 
-def _cmd_stats(args: argparse.Namespace) -> int:
+def cmd_repair(args: argparse.Namespace) -> int:
+    """Reconcile runs left non-servable by an interrupted/failed blob write against
+    what is actually in the blob store (C-4). Never re-runs the client."""
+    try:
+        settings = config.resolve_settings(config.load())
+    except ConfigError as exc:
+        print(f"gmlc: {exc}", file=sys.stderr)
+        return 4
+
+    store_root = Path(str(settings["store"][0]))
+    wired = build_use_cases(store_root, diag=make_diag(args))
+    report = wired.repair_store.repair()
+    total = report.runs_recovered + report.runs_unrecoverable
+    if total == 0:
+        print("store repair: nothing to reconcile — all runs are fully persisted")
+        return 0
+    print(f"store repair: {total} run(s) had incomplete persistence")
+    print(f"  recovered     : {report.runs_recovered} (blob present — now servable again)")
+    print(f"  unrecoverable : {report.runs_unrecoverable} (blob missing — re-run with --refresh)")
+    print(f"  blobs reconciled: {report.blobs_reconciled}, still missing: {report.blobs_missing}")
+    return 0
+
+
+def cmd_stats(args: argparse.Namespace) -> int:
     import json
-    from typing import Dict
 
     try:
         settings = config.resolve_settings(config.load())
@@ -192,17 +278,13 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    max_size_bytes: Optional[int] = (
-        int(settings["max_size"][0])  # type: ignore[arg-type]
-        if settings["max_size"][0] is not None
-        else None
-    )
+    max_size_bytes = config.resolved_max_size(settings)
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    summaries = wired.repository.current_execution_summaries()
-    store_bytes = wired.repository.total_stored_bytes()
-    access = wired.metrics.event_counts()
-    by_client_model: Dict[tuple, int] = {}
+    wired = build_use_cases(store_root, diag=make_diag(args))
+    summaries = wired.list_execution_summaries.list_summaries()
+    store_bytes = wired.total_stored_bytes.total_stored_bytes()
+    access = wired.event_counts.event_counts()
+    by_client_model: dict[tuple[str, str], int] = {}
     for summary in summaries:
         by_client_model[(summary.client, summary.model)] = (
             by_client_model.get((summary.client, summary.model), 0) + 1
@@ -226,28 +308,28 @@ def _cmd_stats(args: argparse.Namespace) -> int:
         )
         return 0
 
-    print(f"executions : {_paint(str(len(summaries)), _TEAL, _BOLD)}")
+    print(f"executions : {paint(str(len(summaries)), TEAL, BOLD)}")
     if max_size_bytes:
         pct = int(store_bytes * 100 / max_size_bytes) if max_size_bytes > 0 else 0
-        size_color = _AMBER if store_bytes >= max_size_bytes * 0.8 else _TEAL
-        size_text = f"{_paint(_format_bytes(store_bytes), size_color)} / {_format_bytes(max_size_bytes)} ({pct}%)"
+        size_color = AMBER if store_bytes >= max_size_bytes * 0.8 else TEAL
+        size_text = f"{paint(format_bytes(store_bytes), size_color)} / {format_bytes(max_size_bytes)} ({pct}%)"
     else:
-        size_text = _paint(_format_bytes(store_bytes), _TEAL)
+        size_text = paint(format_bytes(store_bytes), TEAL)
     print(f"store size : {size_text}")
     if by_client_model:
         print("by client / model:")
         for (client, model), count in sorted(by_client_model.items()):
             print(f"  {client:<8} {model:<26} {count:>5}")
     if access:
-        event_styles = {
-            "hit": (_GREEN,),
-            "miss": (_AMBER,),
-            "record": (_TEAL,),
-            "would_hit": (_GREEN,),
-            "would_miss": (_AMBER,),
+        event_styles: dict[str, tuple[str, ...]] = {
+            "hit": (GREEN,),
+            "miss": (AMBER,),
+            "record": (TEAL,),
+            "would_hit": (GREEN,),
+            "would_miss": (AMBER,),
         }
         parts = ", ".join(
-            f"{_paint(event, *event_styles.get(event, ()))}={count}"
+            f"{paint(event, *event_styles.get(event, ()))}={count}"
             for event, count in sorted(access.items())
         )
         print(f"access     : {parts}")
@@ -256,23 +338,28 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
-def _dispatch_purge(svc, key, tag, session, session_tag, hard):
+def _dispatch_purge(
+    wired: ApplicationApi,
+    key: str | None,
+    tag: str | None,
+    session: str | None,
+    session_tag: str | None,
+    hard: bool,
+) -> Any:
     if key:
-        return svc.hard_delete_one(key) if hard else svc.purge_one(key)
+        return wired.purge_by_key.purge_by_key(PurgeByKeyCommand(key, hard=hard))
     if tag:
-        return svc.hard_delete_by_tag(tag) if hard else svc.purge_by_tag(tag)
+        return wired.purge_by_tag.purge_by_tag(PurgeByTagCommand(tag, hard=hard))
     if session:
-        return svc.hard_delete_by_session(session) if hard else svc.purge_by_session(session)
+        return wired.purge_by_session.purge_by_session(PurgeBySessionCommand(session, hard=hard))
     if session_tag:
-        return (
-            svc.hard_delete_by_session_tag(session_tag)
-            if hard
-            else svc.purge_by_session_tag(session_tag)
+        return wired.purge_by_session_tag.purge_by_session_tag(
+            PurgeBySessionTagCommand(session_tag, hard=hard)
         )
-    return svc.hard_delete_all() if hard else svc.purge_all()
+    return wired.purge_all.purge_all(PurgeAllCommand(hard=hard))
 
 
-def _cmd_purge(args: argparse.Namespace) -> int:
+def cmd_purge(args: argparse.Namespace) -> int:
     import json
 
     try:
@@ -315,8 +402,8 @@ def _cmd_purge(args: argparse.Namespace) -> int:
             return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    report = _dispatch_purge(wired.purge, key, tag, session, session_tag, hard)
+    wired = build_use_cases(store_root, diag=make_diag(args))
+    report = _dispatch_purge(wired, key, tag, session, session_tag, hard)
 
     if args.json:
         print(
@@ -338,39 +425,59 @@ def _cmd_purge(args: argparse.Namespace) -> int:
     verb = "deleted" if hard else "purged"
     print(
         f"{verb:<8} : "
-        f"{_paint(str(report.executions_removed), _TEAL, _BOLD)} execution(s), "
-        f"{_paint(_format_bytes(report.bytes_freed), _TEAL)} freed, "
+        f"{paint(str(report.executions_removed), TEAL, BOLD)} execution(s), "
+        f"{paint(format_bytes(report.bytes_freed), TEAL)} freed, "
         f"{report.blobs_removed} blob(s) removed"
     )
     return 0
 
 
-def _keys_for_session_tags(wired, wanted_session_tags: list) -> set:
-    allowed: set = set()
+def _keys_for_session_tags(
+    wired: ApplicationApi,
+    wanted_session_tags: list[str],
+) -> set[str]:
+    allowed: set[str] = set()
     for session_tag in wanted_session_tags:
-        for session_id in wired.metrics.session_ids_for_tag(session_tag):
-            allowed.update(wired.metrics.execution_keys_for_session(session_id))
+        for session_id in wired.sessions_for_tag.sessions_for_tag(
+            SessionsForTagCommand(session_tag)
+        ):
+            allowed.update(
+                wired.execution_keys_for_session.execution_keys_for_session(
+                    ExecutionKeysForSessionCommand(session_id)
+                )
+            )
     return allowed
 
 
-def _print_list_text(entries) -> None:
+class _ListedExecution(TypedDict):
+    """One row of `gmlcache list`: an execution summary plus its hits and tags."""
+
+    client: str
+    model: str
+    kind: str
+    key: str
+    hits: int
+    tags: list[str]
+
+
+def _print_list_text(entries: list[_ListedExecution]) -> None:
     if not entries:
         print("no current executions")
         return
-    print(f"executions : {_paint(str(len(entries)), _TEAL, _BOLD)}")
+    print(f"executions : {paint(str(len(entries)), TEAL, BOLD)}")
     for entry in sorted(entries, key=lambda item: (item["client"], item["model"], item["key"])):
         hits = entry["hits"]
-        hits_text = _paint(str(hits), _GREEN) if hits else _paint(str(hits), _GREY)
+        hits_text = paint(str(hits), GREEN) if hits else paint(str(hits), GREY)
         line = (
             f"  {entry['client']:<8} {entry['model']:<20} {entry['kind']:<18} "
-            f"{_paint(entry['key'][:12], _GREY)}  hits:{hits_text}"
+            f"{paint(entry['key'][:12], GREY)}  hits:{hits_text}"
         )
         if entry["tags"]:
-            line += "  tags:" + _paint(",".join(entry["tags"]), _TEAL)
+            line += "  tags:" + paint(",".join(entry["tags"]), TEAL)
         print(line)
 
 
-def _cmd_list(args: argparse.Namespace) -> int:
+def cmd_list(args: argparse.Namespace) -> int:
     import json
 
     try:
@@ -380,28 +487,30 @@ def _cmd_list(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    hit_counts = wired.metrics.hit_counts_by_key()
-    entries = [
+    wired = build_use_cases(store_root, diag=make_diag(args))
+    hit_counts = wired.hit_counts_by_key.hit_counts_by_key()
+    entries: list[_ListedExecution] = [
         {
             "client": summary.client,
             "model": summary.model,
             "kind": summary.kind,
             "key": summary.execution_key,
             "hits": hit_counts.get(summary.execution_key, 0),
-            "tags": wired.repository.tags_for(summary.execution_key),
+            "tags": wired.tags_for_execution.tags_for(
+                TagsForExecutionCommand(summary.execution_key)
+            ),
         }
-        for summary in wired.repository.current_execution_summaries()
+        for summary in wired.list_execution_summaries.list_summaries()
         if (not args.client or summary.client == args.client)
         and (not args.model or summary.model == args.model)
     ]
-    wanted_tags = set(getattr(args, "tag", None) or [])
+    wanted_tags: set[str] = set(getattr(args, "tag", None) or [])
     if wanted_tags:
         entries = [entry for entry in entries if wanted_tags & set(entry["tags"])]
-    excluded_tags = set(getattr(args, "exclude_tag", None) or [])
+    excluded_tags: set[str] = set(getattr(args, "exclude_tag", None) or [])
     if excluded_tags:
         entries = [entry for entry in entries if not excluded_tags & set(entry["tags"])]
-    wanted_session_tags = list(getattr(args, "session_tag", None) or [])
+    wanted_session_tags: list[str] = list(getattr(args, "session_tag", None) or [])
     if wanted_session_tags:
         allowed_keys = _keys_for_session_tags(wired, wanted_session_tags)
         entries = [entry for entry in entries if entry["key"] in allowed_keys]
@@ -414,7 +523,7 @@ def _cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_tags(args: argparse.Namespace) -> int:
+def cmd_tags(args: argparse.Namespace) -> int:
     import json
 
     try:
@@ -424,10 +533,12 @@ def _cmd_tags(args: argparse.Namespace) -> int:
         return 4
 
     store_root = Path(str(settings["store"][0]))
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
-    counts: dict = {}
-    for summary in wired.repository.current_execution_summaries():
-        for tag in wired.repository.tags_for(summary.execution_key):
+    wired = build_use_cases(store_root, diag=make_diag(args))
+    counts: dict[str, int] = {}
+    for summary in wired.list_execution_summaries.list_summaries():
+        for tag in wired.tags_for_execution.tags_for(
+            TagsForExecutionCommand(summary.execution_key)
+        ):
             counts[tag] = counts.get(tag, 0) + 1
 
     tags = [{"tag": tag, "count": counts[tag]} for tag in sorted(counts)]
@@ -440,26 +551,33 @@ def _cmd_tags(args: argparse.Namespace) -> int:
         print("no tags")
         return 0
 
-    print(f"tags : {_paint(str(len(tags)), _TEAL, _BOLD)}")
+    print(f"tags : {paint(str(len(tags)), TEAL, BOLD)}")
     for entry in tags:
-        count_text = _paint("count:" + str(entry["count"]), _GREY)
+        count_text = paint("count:" + str(entry["count"]), GREY)
         print(f"  {entry['tag']:<24} {count_text}")
     return 0
 
 
-def _export_record(summary, execution, tags, blob_store) -> dict:
+def _export_record(
+    summary: Any,  # an ExecutionSummary from the outbound repository port; typed after decision B-1
+    execution: MlExecution,
+    tags: list[str],
+    artifacts: ReadArtifactBlobUseCase,
+) -> dict[str, object]:
     """Assemble one raw corpus record: the stored input parts and the output,
     hydrated from the blob store. Curation is the user's (tags); this never
     judges quality."""
     import base64
     import json
 
-    def text(artifact) -> str:
-        return (blob_store.get(artifact.blob_key) or b"").decode("utf-8", "replace")
+    def text(artifact: Artifact) -> str:
+        return (artifacts.read_blob(ReadArtifactBlobCommand(artifact.blob_key)) or b"").decode(
+            "utf-8", "replace"
+        )
 
-    input_obj: dict = {}
+    input_obj: dict[str, object] = {}
     stdout = ""
-    files = []
+    files: list[dict[str, object]] = []
     for artifact in execution.artifacts:
         field_name = _INPUT_FIELD_BY_TYPE.get(artifact.artifact_type)
         if field_name is not None:
@@ -472,14 +590,14 @@ def _export_record(summary, execution, tags, blob_store) -> dict:
             stdout = text(artifact)
         elif artifact.artifact_type is ArtifactType.OUTPUT_FILE:
             if artifact.encoding == "binary":
-                raw = blob_store.get(artifact.blob_key) or b""
+                raw = artifacts.read_blob(ReadArtifactBlobCommand(artifact.blob_key)) or b""
                 files.append(
                     {"name": artifact.name, "content_base64": base64.b64encode(raw).decode("ascii")}
                 )
             else:
                 files.append({"name": artifact.name, "content": text(artifact)})
 
-    output_obj: dict = {"stdout": stdout}
+    output_obj: dict[str, object] = {"stdout": stdout}
     if files:
         output_obj["files"] = files
     return {
@@ -493,43 +611,48 @@ def _export_record(summary, execution, tags, blob_store) -> dict:
     }
 
 
-def _collect_export_lines(wired, include, exclude) -> tuple:
+def _collect_export_lines(
+    wired: ApplicationApi,
+    include: set[str],
+    exclude: set[str],
+) -> tuple[list[str], int]:
     import json
 
-    lines = []
+    lines: list[str] = []
     skipped_no_input = 0
-    for summary in wired.repository.current_execution_summaries():
-        tags = wired.repository.tags_for(summary.execution_key)
+    for summary in wired.list_execution_summaries.list_summaries():
+        tags = wired.tags_for_execution.tags_for(TagsForExecutionCommand(summary.execution_key))
         if include and not include & set(tags):
             continue
         if exclude and exclude & set(tags):
             continue
-        execution = wired.repository.find_current(summary.execution_key)
+        execution = wired.find_current_execution.find_current(
+            FindCurrentExecutionCommand(summary.execution_key)
+        )
         # Only DATASET-depth entries carry the input side of the corpus.
         if execution is None or not execution.input_persisted:
             skipped_no_input += 1
             continue
-        lines.append(json.dumps(_export_record(summary, execution, tags, wired.blob_store)))
+        lines.append(json.dumps(_export_record(summary, execution, tags, wired.read_artifact_blob)))
     return lines, skipped_no_input
 
 
-def _cmd_export(args: argparse.Namespace) -> int:
+def cmd_export(args: argparse.Namespace) -> int:
     try:
         settings = config.resolve_settings(config.load())
     except ConfigError as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    include = set(getattr(args, "tag", None) or [])
-    exclude = set(getattr(args, "exclude_tag", None) or [])
+    include: set[str] = set(getattr(args, "tag", None) or [])
+    exclude: set[str] = set(getattr(args, "exclude_tag", None) or [])
 
     store_root = Path(str(settings["store"][0]))
     try:
         wired = build_use_cases(
-            _db_conn_factory(store_root),
             store_root,
-            encryption_token=_resolve_token(args),
-            diag=_make_diag(args),
+            encryption_token=resolve_token(args),
+            diag=make_diag(args),
         )
         lines, skipped_no_input = _collect_export_lines(wired, include, exclude)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:

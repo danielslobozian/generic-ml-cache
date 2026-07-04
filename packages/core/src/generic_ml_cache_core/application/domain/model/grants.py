@@ -11,7 +11,5 @@ See ``docs/reference/grants.md``.
 
 from __future__ import annotations
 
-from typing import Tuple
-
 #: capabilities the cache can OPEN via each client's uniform config-file mechanism
-GRANTS: Tuple[str, ...] = ("net", "read", "write", "shell", "web-search")
+GRANTS: tuple[str, ...] = ("net", "read", "write", "shell", "web-search")

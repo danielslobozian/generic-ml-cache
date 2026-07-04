@@ -4,8 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -17,5 +16,8 @@ class PassthroughRequest:
     no artifact capture, no config rewriting.
     """
 
-    native_args: List[str] = field(default_factory=list)
-    timeout: Optional[float] = None
+    native_args: tuple[str, ...] = ()
+    timeout: float | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "native_args", tuple(self.native_args))

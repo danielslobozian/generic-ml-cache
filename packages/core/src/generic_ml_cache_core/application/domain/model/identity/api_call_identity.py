@@ -5,10 +5,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
-from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.common.checksum import checksum_input_data
 
 
@@ -26,7 +25,7 @@ class ApiCallIdentity(CallIdentity):
     model: str
     context_fingerprint: str
     prompt_fingerprint: str
-    system_fingerprint: Optional[str] = None
+    system_fingerprint: str | None = None
     effort: str = ""
 
     def generate_key(self) -> str:
@@ -41,3 +40,11 @@ class ApiCallIdentity(CallIdentity):
         if self.system_fingerprint:
             data["system"] = self.system_fingerprint
         return checksum_input_data(data)
+
+    @property
+    def summary_client(self) -> str:
+        return self.provider
+
+    @property
+    def summary_model(self) -> str:
+        return self.model

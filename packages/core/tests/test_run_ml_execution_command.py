@@ -4,12 +4,14 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
 
@@ -57,27 +59,27 @@ def test_defaults():
     assert command.context == ""
     assert command.prompt == ""
     assert command.user_system_prompt is None
-    assert command.input_file_paths == []
-    assert command.allow_paths == []
+    assert command.input_file_paths == ()
+    assert command.allow_paths == ()
     assert command.scan_trust is False
-    assert command.client_args == []
-    assert command.grants == []
+    assert command.client_args == ()
+    assert command.grants == ()
     assert command.cache_mode is CacheMode.CACHE
     assert command.persistence_depth is PersistenceDepth.CACHE
     assert command.record_on_error is False
-    assert command.tags == []
+    assert command.tags == ()
     assert command.session_id is None
 
 
 def test_is_frozen():
     command = _managed()
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         command.prompt = "other"  # type: ignore[misc]
 
 
 def test_carries_raw_paths_not_fingerprints():
     command = _managed(input_file_paths=["/src/a.py", "/src/b.py"])
-    assert command.input_file_paths == ["/src/a.py", "/src/b.py"]
+    assert command.input_file_paths == ("/src/a.py", "/src/b.py")
 
 
 # --- cacheability (managed) --------------------------------------------------

@@ -5,13 +5,14 @@ from __future__ import annotations
 import subprocess
 import sys
 
-from generic_ml_cache_cli.cli import main
-from generic_ml_cache_adapters.adapter.out.client.discover import (
+from generic_ml_cache_bootstrap.discovery.client_discover import (
     list_models,
     list_models_all,
     probe,
     probe_all,
 )
+
+from generic_ml_cache_cli.cli import main
 
 
 def test_probe_present_client_reports_version():
@@ -64,7 +65,7 @@ def test_doctor_shows_schema_version_after_first_run(tmp_path, monkeypatch, caps
     assert rc == 0
     out = capsys.readouterr().out
     assert "store schema" in out
-    assert "0001.unified-schema" in out
+    assert "0001.initial-schema" in out
     assert "migration(s) applied" in out
 
 
@@ -78,7 +79,7 @@ def test_doctor_json_includes_schema_key(tmp_path, monkeypatch, capsys):
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert "clients" in data and "schema" in data
-    assert any(m["migration_id"] == "0001.unified-schema" for m in data["schema"])
+    assert any(m["migration_id"] == "0001.initial-schema" for m in data["schema"])
 
 
 # --- list_models --------------------------------------------------------------
@@ -139,30 +140,30 @@ def test_probe_reports_version_check_failed_when_subprocess_raises(monkeypatch):
 # --- whitelist filtering (0.16.0) -------------------------------------------
 
 
-def test_probe_all_whitelist_restricts_to_named_adapters():
-    # Only the 'fake' adapter is in the whitelist; 'fake_stdin' and others must be absent.
+def test_probe_all_whitelist_does_not_hide_registered_adapters():
+    # G1: the whitelist gates third-party entry-point loading only. Registered
+    # (in-process) and bundled adapters always load — so whitelisting 'fake'
+    # does NOT hide its registered sibling 'fake_stdin'.
     results = probe_all(whitelist=frozenset({"fake"}))
     names = {s.name for s in results}
     assert "fake" in names
-    assert "fake_stdin" not in names
+    assert "fake_stdin" in names
 
 
-def test_probe_all_none_whitelist_returns_all_local_adapters():
+def test_probe_all_whitelist_of_builtins_is_a_noop():
     no_filter = probe_all(whitelist=None)
     filtered = probe_all(whitelist=frozenset({"fake"}))
-    assert len(no_filter) > len(filtered)
+    assert {s.name for s in no_filter} == {s.name for s in filtered}
 
 
-def test_list_models_all_whitelist_restricts_to_named_adapters():
+def test_list_models_all_whitelist_does_not_hide_registered_adapters():
     results = list_models_all(whitelist=frozenset({"fake"}))
     names = {m.name for m in results}
     assert "fake" in names
-    assert "fake_stdin" not in names
+    assert "fake_stdin" in names
 
 
-def test_list_models_whitelist_blocks_excluded_adapter():
-    from generic_ml_cache_core.common.errors import UnknownClient
-    import pytest
-
-    with pytest.raises(UnknownClient, match="unknown adapter"):
-        list_models("fake_stdin", whitelist=frozenset({"fake"}))
+def test_list_models_whitelist_does_not_block_a_registered_adapter():
+    # 'fake_stdin' is registered, so it is reachable regardless of the whitelist.
+    result = list_models("fake_stdin", whitelist=frozenset({"fake"}))
+    assert result.name == "fake_stdin"

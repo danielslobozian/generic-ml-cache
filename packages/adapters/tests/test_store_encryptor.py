@@ -8,27 +8,32 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: E402
-from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (  # noqa: E402
-    EncryptingBlobStore,
-    TokenRequiredBlobStore,
-)
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
-    FilesystemEncryptionManifestStore,
-)
-from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import StoreEncryptor  # noqa: E402
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (  # noqa: E402
-    FilesystemStoreLock,
-)
-from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import (  # noqa: E402
-    FilesystemBlobStore,
-)
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (  # noqa: E402
     EncryptionState,
 )
 from generic_ml_cache_core.common.errors import (  # noqa: E402
     EncryptionStateError,
     WrongEncryptionToken,
+)
+
+from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import (
+    AesGcmCipher,  # noqa: E402
+)
+from generic_ml_cache_adapters.adapter.outbound.crypto.encrypting_blob_store import (  # noqa: E402
+    EncryptingBlobStore,
+    TokenRequiredBlobStore,
+)
+from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (  # noqa: E402
+    FilesystemEncryptionManifestStore,
+)
+from generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor import (
+    StoreEncryptor,  # noqa: E402
+)
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (  # noqa: E402
+    FilesystemStoreLock,
+)
+from generic_ml_cache_adapters.adapter.outbound.storage.filesystem_blob_store import (  # noqa: E402
+    FilesystemBlobStore,
 )
 
 _MARKER = "encryption.committing.json"
@@ -104,6 +109,24 @@ def test_enable_then_disable_round_trips_byte_identical(tmp_path):
     assert _state(store) is EncryptionState.PUBLIC
     blobs = FilesystemBlobStore(store / "blobs")
     assert {k: blobs.get(k) for k in items} == items  # plaintext restored exactly
+
+
+def test_enable_disable_transforms_a_dotted_key_blob(tmp_path):
+    # Y8: a BlobKey may legally contain a dot ([A-Za-z0-9._-]); the encryptor must
+    # transform it, not skip it as a *.tmp leftover. The old "no dots" filter left a
+    # dotted-key blob PLAINTEXT on enable() and unmovable on disable().
+    store = tmp_path / "store"
+    key = "exec1.deadbeef"  # a dotted execution-owned key
+    _seed(store, {key: b"PLAINMARKER-dotted"})
+    token = _token()
+    enc = _encryptor(store)
+
+    enc.enable(token)
+    assert b"PLAINMARKER-dotted" not in _raw(store, key)  # encrypted, NOT skipped
+    assert _read_decrypted(store, token, key) == b"PLAINMARKER-dotted"
+
+    enc.disable(token)
+    assert FilesystemBlobStore(store / "blobs").get(key) == b"PLAINMARKER-dotted"  # restored
 
 
 # --- rotate ------------------------------------------------------------------

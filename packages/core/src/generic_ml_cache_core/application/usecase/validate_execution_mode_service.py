@@ -11,7 +11,7 @@ application logic; the available universe is the injected catalog.
 from __future__ import annotations
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.out.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
 from generic_ml_cache_core.common.errors import UnknownClient, UnsupportedExecutionMode
 
 

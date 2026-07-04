@@ -7,14 +7,15 @@ from __future__ import annotations
 import io
 import urllib.error
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.api.gemini_direct_adapter import GeminiDirectAdapter
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
+
+from generic_ml_cache_adapters.adapter.outbound.api.gemini_direct_adapter import GeminiDirectAdapter
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -23,7 +24,7 @@ from generic_ml_cache_core.application.port.out.api_client_port import ApiClient
 # Mirrors the actual curl response from the real API (gemini-3.5-flash).
 # The part has both "text" and "thoughtSignature" — the adapter must take
 # only the text and ignore thoughtSignature.
-_FIXTURE_RESPONSE: Dict[str, Any] = {
+_FIXTURE_RESPONSE: dict[str, Any] = {
     "candidates": [
         {
             "content": {
@@ -50,7 +51,7 @@ _FIXTURE_RESPONSE: Dict[str, Any] = {
 }
 
 # Response that includes cachedContentTokenCount (cache hit scenario).
-_FIXTURE_CACHED_RESPONSE: Dict[str, Any] = {
+_FIXTURE_CACHED_RESPONSE: dict[str, Any] = {
     "candidates": [
         {
             "content": {
@@ -75,7 +76,7 @@ def _adapter(api_key: str = "test-key") -> GeminiDirectAdapter:
     return GeminiDirectAdapter(api_key=api_key)
 
 
-def _patch_post(adapter: GeminiDirectAdapter, response: Dict[str, Any]):
+def _patch_post(adapter: GeminiDirectAdapter, response: dict[str, Any]):
     """Monkeypatch _post to return a fixture without touching the network."""
     adapter._post = lambda url, body: response  # type: ignore[assignment]
 
@@ -293,7 +294,7 @@ def test_run_files_is_empty():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
     result = adapter.run(_request())
-    assert result.files == []
+    assert result.files == ()
 
 
 # ---------------------------------------------------------------------------
@@ -342,7 +343,7 @@ def test_run_passes_effort_to_body():
 def test_missing_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     adapter = GeminiDirectAdapter()  # no api_key=
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+    with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
         adapter.run(_request())
 
 
@@ -369,7 +370,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
         adapter = _adapter()
-        with pytest.raises(RuntimeError, match="403"):
+        with pytest.raises(ProviderApiError, match="403"):
             adapter.run(_request())
 
 
@@ -377,7 +378,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
 # list_models()
 # ---------------------------------------------------------------------------
 
-_MODELS_RESPONSE: Dict[str, Any] = {
+_MODELS_RESPONSE: dict[str, Any] = {
     "models": [
         {
             "name": "models/gemini-2.5-flash",
@@ -447,5 +448,5 @@ def test_list_models_http_error_raises_runtime_error():
         fp=io.BytesIO(error_body),
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             _adapter().list_models()

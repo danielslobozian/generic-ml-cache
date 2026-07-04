@@ -19,7 +19,7 @@ Each field is length-prefixed before hashing so that, e.g., ``{"context": "ab",
 from __future__ import annotations
 
 import hashlib
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 # Control characters used purely as internal framing while hashing. They never
 # touch user data and never appear in the stored record on disk.
@@ -56,7 +56,7 @@ def fingerprint_arguments(arguments: Sequence[str]) -> str:
     return text_checksum(_ARGUMENT_SEP.join(arguments))
 
 
-def checksum_input_data(input_data: Mapping[str, str]) -> str:
+def checksum_input_data(input_data: Mapping[str, object]) -> str:
     """Return the container-independent SHA-256 checksum of ``input_data``.
 
     ``input_data`` is the cache input mapping, e.g. ``{"context": ..., "prompt":

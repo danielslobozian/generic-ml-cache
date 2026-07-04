@@ -12,20 +12,26 @@ from __future__ import annotations
 import base64
 import sys
 from pathlib import Path
-from typing import List
 
 import pytest
-
+from generic_ml_cache_bootstrap.discovery.in_memory_adapter_registry import register
+from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
+    AdapterDescriptor,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import StubApiClientAdapter
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.discovery.descriptors import api_descriptor, local_cli_descriptor
-from generic_ml_cache_adapters.discovery.in_memory_adapter_registry import register
+
+from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
+    StubApiClientAdapter,
+)
+from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+    ComposedLocalClient,
+)
 
 FAKE_SCRIPT = str(Path(__file__).with_name("fake_client.py"))
 
 
-class FakeAdapter:
+class FakeAdapter(ComposedLocalClient):
     name = "fake"
     # An absolute path with a separator -> resolve_executable uses it verbatim.
     default_executable = sys.executable
@@ -36,7 +42,7 @@ class FakeAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("fake", (), "Fake")
+        return AdapterDescriptor.local_cli("fake", (), "Fake")
 
     def prepare(self, run_dir, context, prompt, system_prompt) -> None:
         (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")
@@ -54,7 +60,7 @@ class FakeAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         return [
             executable,
             FAKE_SCRIPT,
@@ -71,7 +77,7 @@ class FakeAdapter:
         ]
 
 
-class FakeStdinAdapter:
+class FakeStdinAdapter(ComposedLocalClient):
     """Like FakeAdapter but delivers the prompt on stdin."""
 
     name = "fake_stdin"
@@ -83,7 +89,7 @@ class FakeStdinAdapter:
 
     @classmethod
     def descriptor(cls):
-        return local_cli_descriptor("fake_stdin", (), "Fake (stdin)")
+        return AdapterDescriptor.local_cli("fake_stdin", (), "Fake (stdin)")
 
     def prepare(self, run_dir, context, prompt, system_prompt) -> None:
         (run_dir / "_in_context.txt").write_text(context, encoding="utf-8")
@@ -100,7 +106,7 @@ class FakeStdinAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         return [
             executable,
             FAKE_SCRIPT,
@@ -124,7 +130,7 @@ class _FakeApiAdapter(StubApiClientAdapter):
 
     @classmethod
     def descriptor(cls):
-        return api_descriptor("fake-api", (), "Fake API")
+        return AdapterDescriptor.api("fake-api", (), "Fake API")
 
 
 @pytest.fixture(autouse=True, scope="session")

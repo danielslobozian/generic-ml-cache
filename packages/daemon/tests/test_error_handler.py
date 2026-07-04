@@ -8,18 +8,19 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from starlette.testclient import TestClient
-
 from generic_ml_cache_core.common.errors import (
     ArtifactBlobMissing,
     CacheError,
     CacheMiss,
     EncryptionStateError,
     EncryptionTokenRequired,
+    RunTimedOut,
     StoreLocked,
+    StoreUnavailable,
     UnknownClient,
     WrongEncryptionToken,
 )
+from starlette.testclient import TestClient
 
 
 def _client_raising(exc: Exception, tmp_path: Path) -> TestClient:
@@ -48,6 +49,8 @@ def _post_run(tc: TestClient):
         (WrongEncryptionToken("bad token"), 401, "crypto.wrong_token"),
         (EncryptionTokenRequired("need token"), 401, "crypto.token_required"),
         (ArtifactBlobMissing("blob gone"), 404, "store.blob_missing"),
+        (StoreUnavailable("db down"), 503, "store.unavailable"),
+        (RunTimedOut(client="claude", timeout_seconds=0.5), 504, "run.timed_out"),
         (CacheError("unexpected"), 500, "cache.error"),
     ],
 )
@@ -63,7 +66,7 @@ def test_cache_error_handler(
 
 
 def test_unknown_client_from_build_command(client: TestClient) -> None:
-    """UnknownClient raised in _build_command is caught by the global handler."""
+    """UnknownClient raised in build_command is caught by the global handler."""
     response = client.post(
         "/run",
         json={"client": "no_such_adapter_xyz", "model": "m", "prompt": "hi"},

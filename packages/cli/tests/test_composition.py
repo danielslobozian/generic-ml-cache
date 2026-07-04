@@ -9,16 +9,16 @@ client runner, blob store, SQLite repository, and metrics — with the fake clie
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional
 
-from generic_ml_cache_cli._compose import build_use_cases
-from generic_ml_cache_adapters.discovery.composition import execution_kind_for
+from generic_ml_cache_bootstrap.discovery.composition import execution_kind_for
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
+
+from generic_ml_cache_cli._compose import build_use_cases
 
 
 def _factory(tmp_path):
@@ -31,15 +31,26 @@ def _factory(tmp_path):
     return _connect
 
 
-def _stdout(execution) -> Optional[bytes]:
+def _stdout(execution) -> bytes | None:
     for artifact in execution.artifacts:
         if artifact.artifact_type is ArtifactType.STDOUT:
             return artifact.content
     return None
 
 
+def _repo(tmp_path):
+    # White-box: build the repository out-port directly (it is no longer on the
+    # narrowed ApplicationApi) to assert the stored audit trail.
+    from generic_ml_cache_adapters.adapter.outbound.clock.system_clock import SystemClock
+    from generic_ml_cache_adapters.adapter.outbound.persistence.sqlite.execution_repository import (
+        SqliteExecutionRepository,
+    )
+
+    return SqliteExecutionRepository(_factory(tmp_path), SystemClock())
+
+
 def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
-    wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake")
+    wired = build_use_cases(tmp_path, client="fake")
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_MANAGED,
         client="fake",
@@ -59,8 +70,10 @@ def test_managed_records_then_replays_through_the_whole_stack(tmp_path):
     assert _stdout(second) == _stdout(first)  # replay reproduces the output
 
     key = first.call_identity.generate_key()
-    assert len(wired.repository.find_all(key)) == 2  # IN_PROGRESS + SUCCESS from one real run
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    # One row per real run: the IN_PROGRESS row is updated in place to SUCCESS
+    # (W1 — no second insert), and the replay is a cache hit that writes nothing.
+    assert len(_repo(tmp_path).find_all(key)) == 1
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_managed_durable_across_a_fresh_wiring(tmp_path):
@@ -72,19 +85,17 @@ def test_managed_durable_across_a_fresh_wiring(tmp_path):
         context="",
         prompt="STDOUT durable",
     )
-    build_use_cases(_factory(tmp_path), tmp_path, client="fake").run_ml.execute(command)
+    build_use_cases(tmp_path, client="fake").run_ml.execute(command)
     # A brand-new wiring on the same store serves the prior run from disk.
-    replay = build_use_cases(_factory(tmp_path), tmp_path, client="fake").run_ml.execute(command)
+    replay = build_use_cases(tmp_path, client="fake").run_ml.execute(command)
     assert b"durable" in _stdout(replay)
     key = replay.call_identity.generate_key()
-    assert (
-        len(build_use_cases(_factory(tmp_path), tmp_path, client="fake").repository.find_all(key))
-        == 2
-    )
+    # One row for the real run (updated in place); the fresh-wiring replay hits it.
+    assert len(_repo(tmp_path).find_all(key)) == 1
 
 
 def test_passthrough_records_then_replays(tmp_path):
-    wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake")
+    wired = build_use_cases(tmp_path, client="fake")
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.LOCAL_PASSTHROUGH,
         client="fake",
@@ -95,11 +106,11 @@ def test_passthrough_records_then_replays(tmp_path):
     assert first.execution_kind is ExecutionKind.LOCAL_PASSTHROUGH
     assert b"pt" in _stdout(first)
     wired.run_ml.execute(command)
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_api_records_then_replays_with_the_stub(tmp_path):
-    wired = build_use_cases(_factory(tmp_path), tmp_path)
+    wired = build_use_cases(tmp_path)
     command = RunMlExecutionCommand(
         execution_kind=ExecutionKind.API, client="openai", model="gpt-x", context="", prompt="hi"
     )
@@ -108,11 +119,11 @@ def test_api_records_then_replays_with_the_stub(tmp_path):
     assert first.token_usage is not None
     second = wired.run_ml.execute(command)
     assert _stdout(second) == _stdout(first)
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}
 
 
 def test_api_client_routes_to_api_adapter(tmp_path):
-    wired = build_use_cases(_factory(tmp_path), tmp_path, client="fake-api")
+    wired = build_use_cases(tmp_path, client="fake-api")
     command = RunMlExecutionCommand(
         execution_kind=execution_kind_for("fake-api"),
         client="fake-api",
@@ -125,4 +136,4 @@ def test_api_client_routes_to_api_adapter(tmp_path):
     assert first.token_usage is not None
     second = wired.run_ml.execute(command)
     assert _stdout(second) == _stdout(first)
-    assert wired.metrics.event_counts() == {"record": 1, "hit": 1}
+    assert wired.event_counts.event_counts() == {"record": 1, "hit": 1}

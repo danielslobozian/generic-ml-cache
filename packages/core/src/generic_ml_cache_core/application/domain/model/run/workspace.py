@@ -9,9 +9,10 @@ are performed by a WorkspacePort adapter, so core itself touches no filesystem.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict
+from types import MappingProxyType
 
 
 @dataclass(frozen=True)
@@ -34,4 +35,7 @@ class Snapshot:
     post-run diff can tell which files the client created or modified. Core treats
     it as opaque and only hands it back to the WorkspacePort."""
 
-    digests: Dict[str, str] = field(default_factory=dict)
+    digests: Mapping[str, str] = field(default_factory=lambda: MappingProxyType({}))
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "digests", MappingProxyType(dict(self.digests)))

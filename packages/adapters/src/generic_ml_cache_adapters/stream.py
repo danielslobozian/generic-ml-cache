@@ -9,7 +9,7 @@ for the workflow engine relaying progress to its own user.
 This is infrastructure (it opens files), so it lives in the adapters package, not
 the pure core. It sits at the package top level — like ``discovery`` — because it
 is shared by an out adapter (the CLI runtime) and a driver (the CLI's async-jobs
-runner); it is not itself a driven ``adapter/out`` implementation behind a port.
+runner); it is not itself a driven ``adapter/outbound`` implementation behind a port.
 
 Design:
 
@@ -31,7 +31,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 class StreamWriter:
@@ -40,7 +40,7 @@ class StreamWriter:
     unaffected."""
 
     def __init__(self, path: Path) -> None:
-        self._fh: Optional[Any] = None
+        self._fh: Any | None = None
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             # Text append; newline="\n" writes bare line feeds on every OS (no

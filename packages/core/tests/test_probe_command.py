@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
-from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
+from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
 
 
 def _command(**overrides) -> ProbeCommand:
@@ -17,11 +19,11 @@ def _command(**overrides) -> ProbeCommand:
 
 def test_defaults():
     command = _command()
-    assert command.input_file_paths == []
-    assert command.allow_paths == []
+    assert command.input_file_paths == ()
+    assert command.allow_paths == ()
     assert command.scan_trust is False
-    assert command.client_args == []
-    assert command.grants == []
+    assert command.client_args == ()
+    assert command.grants == ()
 
 
 def test_plain_call_is_cacheable():
@@ -44,5 +46,5 @@ def test_carries_no_run_policy():
 
 def test_is_frozen():
     command = _command()
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         command.prompt = "other"  # type: ignore[misc]

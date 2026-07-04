@@ -9,7 +9,9 @@ detected without the client declaring them.
 
 from __future__ import annotations
 
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
+from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
+    FilesystemWorkspace,
+)
 
 
 def test_create_makes_two_distinct_existing_directories():

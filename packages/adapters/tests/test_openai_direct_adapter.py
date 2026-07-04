@@ -11,20 +11,21 @@ from __future__ import annotations
 import io
 import urllib.error
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from generic_ml_cache_adapters.adapter.out.api.openai_direct_adapter import OpenAIDirectAdapter
 from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.common.errors import ConfigError, ProviderApiError
+
+from generic_ml_cache_adapters.adapter.outbound.api.openai_direct_adapter import OpenAIDirectAdapter
 
 # ---------------------------------------------------------------------------
 # Fixtures — derived from a real Responses API call
 # ---------------------------------------------------------------------------
 
-_FIXTURE_RESPONSE: Dict[str, Any] = {
+_FIXTURE_RESPONSE: dict[str, Any] = {
     "id": "resp_0f440ab3bd3a8c88006a3c3f3d975481",
     "object": "response",
     "model": "gpt-4.1-mini-2025-04-14",
@@ -55,7 +56,7 @@ _FIXTURE_RESPONSE: Dict[str, Any] = {
 }
 
 # Response that includes non-zero cache and reasoning counts.
-_FIXTURE_CACHED_RESPONSE: Dict[str, Any] = {
+_FIXTURE_CACHED_RESPONSE: dict[str, Any] = {
     "id": "resp_02",
     "object": "response",
     "model": "gpt-4.1-mini-2025-04-14",
@@ -82,7 +83,7 @@ def _adapter(api_key: str = "test-key") -> OpenAIDirectAdapter:
     return OpenAIDirectAdapter(api_key=api_key)
 
 
-def _patch_post(adapter: OpenAIDirectAdapter, response: Dict[str, Any]):
+def _patch_post(adapter: OpenAIDirectAdapter, response: dict[str, Any]):
     adapter._post = lambda path, body: response  # type: ignore[assignment]
 
 
@@ -317,7 +318,7 @@ def test_run_files_is_empty():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
     result = adapter.run(_request())
-    assert result.files == []
+    assert result.files == ()
 
 
 def test_run_sends_correct_model():
@@ -354,7 +355,7 @@ def test_run_posts_to_responses_endpoint():
 def test_missing_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     adapter = OpenAIDirectAdapter()
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+    with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
         adapter.run(_request())
 
 
@@ -381,7 +382,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
         adapter = _adapter()
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             adapter.run(_request())
 
 
@@ -389,7 +390,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
 # list_models()
 # ---------------------------------------------------------------------------
 
-_MODELS_RESPONSE: Dict[str, Any] = {
+_MODELS_RESPONSE: dict[str, Any] = {
     "object": "list",
     "data": [
         {"id": "gpt-4.1", "object": "model", "created": 1744143600, "owned_by": "openai"},
@@ -444,5 +445,5 @@ def test_list_models_http_error_raises_runtime_error():
         fp=io.BytesIO(error_body),
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             _adapter().list_models()

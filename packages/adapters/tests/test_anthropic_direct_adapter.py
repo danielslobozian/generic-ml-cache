@@ -7,23 +7,28 @@ from __future__ import annotations
 import io
 import urllib.error
 import urllib.request
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
+from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort
+from generic_ml_cache_core.common.errors import (
+    ConfigError,
+    ProviderApiError,
+    ProviderProtocolError,
+)
 
-from generic_ml_cache_adapters.adapter.out.api.anthropic_direct_adapter import (
+from generic_ml_cache_adapters.adapter.outbound.api.anthropic_direct_adapter import (
     AnthropicDirectAdapter,
 )
-from generic_ml_cache_core.application.domain.model.run.ml_request import MlRequest
-from generic_ml_cache_core.application.port.out.api_client_port import ApiClientPort
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 # Realistic response from the Anthropic Messages API.
-_FIXTURE_RESPONSE: Dict[str, Any] = {
+_FIXTURE_RESPONSE: dict[str, Any] = {
     "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
     "type": "message",
     "role": "assistant",
@@ -42,7 +47,7 @@ _FIXTURE_RESPONSE: Dict[str, Any] = {
 }
 
 # Response that includes cache token counts.
-_FIXTURE_CACHED_RESPONSE: Dict[str, Any] = {
+_FIXTURE_CACHED_RESPONSE: dict[str, Any] = {
     "id": "msg_02",
     "type": "message",
     "role": "assistant",
@@ -62,7 +67,7 @@ def _adapter(api_key: str = "test-key") -> AnthropicDirectAdapter:
     return AnthropicDirectAdapter(api_key=api_key)
 
 
-def _patch_post(adapter: AnthropicDirectAdapter, response: Dict[str, Any]):
+def _patch_post(adapter: AnthropicDirectAdapter, response: dict[str, Any]):
     adapter._post = lambda path, body: response  # type: ignore[assignment]
 
 
@@ -254,6 +259,16 @@ def test_run_returns_client_run_result_with_text():
     assert "AI analyzes" in result.stdout
 
 
+def test_run_translates_malformed_response_to_protocol_error():
+    # A "text" block missing its "text" field would leak a raw KeyError from
+    # _extract_text; it must surface as a ProviderProtocolError (W19).
+    adapter = _adapter()
+    _patch_post(adapter, {"content": [{"type": "text"}], "usage": {}})
+    with pytest.raises(ProviderProtocolError) as raised:
+        adapter.run(_request())
+    assert raised.value.provider == "anthropic"
+
+
 def test_run_token_usage_flows_through():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
@@ -267,7 +282,7 @@ def test_run_files_is_empty():
     adapter = _adapter()
     _patch_post(adapter, _FIXTURE_RESPONSE)
     result = adapter.run(_request())
-    assert result.files == []
+    assert result.files == ()
 
 
 def test_run_sends_correct_model():
@@ -291,7 +306,7 @@ def test_run_sends_correct_model():
 def test_missing_api_key_raises_runtime_error(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     adapter = AnthropicDirectAdapter()
-    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(ConfigError, match="ANTHROPIC_API_KEY"):
         adapter.run(_request())
 
 
@@ -318,7 +333,7 @@ def test_http_error_raises_runtime_error_with_status(monkeypatch):
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
         adapter = _adapter()
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             adapter.run(_request())
 
 
@@ -385,5 +400,5 @@ def test_list_models_http_error_raises_runtime_error():
         fp=io.BytesIO(error_body),
     )
     with patch("urllib.request.urlopen", side_effect=http_error):
-        with pytest.raises(RuntimeError, match="401"):
+        with pytest.raises(ProviderApiError, match="401"):
             _adapter().list_models()

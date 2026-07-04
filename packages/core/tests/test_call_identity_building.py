@@ -4,20 +4,20 @@
 
 from __future__ import annotations
 
-from typing import List
-
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.out.file_fingerprint_port import FileFingerprintPort
+from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
+    FileFingerprintPort,
+)
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.common.checksum import text_checksum
 
 
 class FakeFingerprint(FileFingerprintPort):
     def __init__(self) -> None:
-        self.fingerprinted: List[str] = []
+        self.fingerprinted: list[str] = []
 
     def fingerprint(self, path: str) -> str:
         self.fingerprinted.append(path)
@@ -70,6 +70,25 @@ def test_client_args_fingerprint_is_set_when_present():
 def test_grants_become_a_frozenset():
     identity = build_call_identity(FakeFingerprint(), _command(grants=["net", "read"]))
     assert identity.grants == frozenset({"net", "read"})
+
+
+def test_user_system_prompt_is_fingerprinted_into_the_identity():
+    with_sys = build_call_identity(FakeFingerprint(), _command(user_system_prompt="be terse"))
+    without = build_call_identity(FakeFingerprint(), _command())
+    assert with_sys.system_fingerprint is not None
+    assert without.system_fingerprint is None
+    assert with_sys.generate_key() != without.generate_key()
+
+
+def test_allow_paths_become_a_frozenset_in_the_identity():
+    identity = build_call_identity(FakeFingerprint(), _command(allow_paths=["/a", "/b"]))
+    assert identity.allow_paths == frozenset({"/a", "/b"})
+
+
+def test_allow_paths_change_the_key():
+    with_paths = build_call_identity(FakeFingerprint(), _command(allow_paths=["/a"]))
+    without = build_call_identity(FakeFingerprint(), _command())
+    assert with_paths.generate_key() != without.generate_key()
 
 
 def test_key_is_deterministic():

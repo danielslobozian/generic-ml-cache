@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from generic_ml_cache_core.application.domain.model.session.session_report import SessionReport
 
-from generic_ml_cache_cli.presenters.shared import _activity_bar, _comma
+from generic_ml_cache_cli.presenters.shared import activity_bar, comma
 
 
-def _render_session_report(report, tags: Optional[list] = None) -> str:
+def render_session_report(report: SessionReport, tags: list[str] | None = None) -> str:
     lines = [f"session     : {report.session_id}"]
     if tags:
         lines.append(f"tags        : {', '.join(sorted(tags))}")
@@ -27,28 +27,37 @@ def _render_session_report(report, tags: Optional[list] = None) -> str:
     )
     if report.unknown_usage:
         lines.append(f"unknown     : {report.unknown_usage} execution(s) reported no usage")
+    if report.runs_with_failed_persistence:
+        lines.append(
+            f"persist     : {report.runs_with_failed_persistence} run(s) with incomplete "
+            "persistence — run `gmlcache repair`"
+        )
     if report.by_model:
         lines.append("")
         lines.append("by provider / model:")
-        for m in report.by_model:
+        for model_usage in report.by_model:
             lines.append(
-                f"  {m.client + ' / ' + m.model:<16} spent {_comma(m.spent_tokens):>9} tok"
-                f" (in {_comma(m.spent_input):>8} · out {_comma(m.spent_output):>7})"
-                f"   saved {_comma(m.saved_tokens):>9} tok   {m.executions} exec · {m.hits} hit"
+                f"  {model_usage.client + ' / ' + model_usage.model:<16}"
+                f" spent {comma(model_usage.spent_tokens):>9} tok"
+                f" (in {comma(model_usage.spent_input):>8}"
+                f" · out {comma(model_usage.spent_output):>7})"
+                f"   saved {comma(model_usage.saved_tokens):>9} tok"
+                f"   {model_usage.executions} exec · {model_usage.hits} hit"
             )
     if report.by_day:
         lines.append("")
         lines.append("by day (activity):")
-        maxinv = max(d.invocations for d in report.by_day)
-        for d in report.by_day:
+        max_invocations = max(day_activity.invocations for day_activity in report.by_day)
+        for day_activity in report.by_day:
             lines.append(
-                f"  {d.day}  {_activity_bar(d.invocations, maxinv)}  {d.invocations:>3} calls"
-                f"   ({d.executions} exec · {d.hits} hit)"
+                f"  {day_activity.day}  {activity_bar(day_activity.invocations, max_invocations)}"
+                f"  {day_activity.invocations:>3} calls"
+                f"   ({day_activity.executions} exec · {day_activity.hits} hit)"
             )
     return "\n".join(lines)
 
 
-def _session_report_json(report, tags: list) -> dict:
+def session_report_json(report: SessionReport, tags: list[str]) -> dict[str, object]:
     return {
         "session": report.session_id,
         "tags": tags,
@@ -56,27 +65,28 @@ def _session_report_json(report, tags: list) -> dict:
         "executions": report.executions,
         "hits": report.hits,
         "unknown_usage": report.unknown_usage,
+        "runs_with_failed_persistence": report.runs_with_failed_persistence,
         "span": {"start": report.span_start, "end": report.span_end, "days": report.day_count},
         "by_model": [
             {
-                "client": m.client,
-                "model": m.model,
-                "spent_input": m.spent_input,
-                "spent_output": m.spent_output,
-                "spent_tokens": m.spent_tokens,
-                "saved_tokens": m.saved_tokens,
-                "executions": m.executions,
-                "hits": m.hits,
+                "client": model_usage.client,
+                "model": model_usage.model,
+                "spent_input": model_usage.spent_input,
+                "spent_output": model_usage.spent_output,
+                "spent_tokens": model_usage.spent_tokens,
+                "saved_tokens": model_usage.saved_tokens,
+                "executions": model_usage.executions,
+                "hits": model_usage.hits,
             }
-            for m in report.by_model
+            for model_usage in report.by_model
         ],
         "by_day": [
             {
-                "day": d.day,
-                "invocations": d.invocations,
-                "executions": d.executions,
-                "hits": d.hits,
+                "day": day_activity.day,
+                "invocations": day_activity.invocations,
+                "executions": day_activity.executions,
+                "hits": day_activity.hits,
             }
-            for d in report.by_day
+            for day_activity in report.by_day
         ],
     }

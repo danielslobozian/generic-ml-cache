@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.common.checksum import checksum_input_data
 
 
@@ -33,3 +33,11 @@ class PassthroughCallIdentity(CallIdentity):
                 "args": self.native_args_fingerprint,
             }
         )
+
+    @property
+    def summary_client(self) -> str:
+        return self.client
+
+    @property
+    def summary_model(self) -> str:
+        return ""

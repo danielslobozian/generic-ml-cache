@@ -1,108 +1,55 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Private composition root for the CLI.
+"""CLI composition helpers.
 
-Assembles all concrete outbound adapters from ``generic_ml_cache_adapters``
-and wires the use-case layer.  Nothing outside this module and
-``composition.py`` should import from ``generic_ml_cache_adapters.adapter.out``
-directly.
+The shared application wiring lives in ``generic_ml_cache_bootstrap`` now; this
+module supplies only the CLI's *strategy* — it runs one selected client per
+invocation — over the bootstrap composition-root hooks.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Dict, FrozenSet, Optional, cast
+from typing import cast
 
-from generic_ml_cache_adapters.adapter.out.clock.system_clock import SystemClock
-from generic_ml_cache_adapters.adapter.out.crypto.encrypting_blob_store import (
-    EncryptingBlobStore,
-    TokenRequiredBlobStore,
-)
-from generic_ml_cache_adapters.adapter.out.crypto.filesystem_encryption_manifest_store import (
-    FilesystemEncryptionManifestStore,
-)
-from generic_ml_cache_adapters.adapter.out.crypto.store_encryptor import StoreEncryptor
-from generic_ml_cache_adapters.adapter.out.diagnostics.null_diagnostics_adapter import (
-    NullDiagnosticsAdapter,
-)
-from generic_ml_cache_adapters.adapter.out.fingerprint.filesystem_file_fingerprint import (
-    FilesystemFileFingerprint,
-)
-from generic_ml_cache_adapters.adapter.out.gateway.http_gateway_forward_adapter import (
-    HttpGatewayForwardAdapter,
-)
-from generic_ml_cache_adapters.adapter.out.metrics.access_registry import AccessRegistry
-from generic_ml_cache_adapters.adapter.out.metrics.journal_metrics import JournalMetrics
-from generic_ml_cache_adapters.adapter.out.persistence.execution_repository import (
-    ExecutionRepository,
-)
-from generic_ml_cache_adapters.adapter.out.persistence.filesystem_store_lock import (
-    FilesystemStoreLock,
-)
-from generic_ml_cache_adapters.adapter.out.storage.filesystem_blob_store import FilesystemBlobStore
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
-from generic_ml_cache_adapters.migration_runner import run_migrations
-from generic_ml_cache_cli.discovery import catalog_for, default_resolver, execution_kind_for
-from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
+from generic_ml_cache_bootstrap.application import build_application_api
+from generic_ml_cache_bootstrap.encryption import StoreEncryptionOps
+from generic_ml_cache_bootstrap.stub_runners import stub_api_runners
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import AdapterCatalogPort
+from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
+    AdapterResolverPort,
+)
+from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
+    RegisteredAdapterPort,
+)
 from generic_ml_cache_core.application.usecase.select_adapter_for_execution_service import (
     SelectAdapterForExecutionService,
 )
-from generic_ml_cache_core.application.wiring.wired_use_cases import WiredUseCases
-from generic_ml_cache_core.application.port.out.blob_store_port import BlobStorePort
-from generic_ml_cache_core.application.port.out.diagnostics_port import DiagnosticsPort
-from generic_ml_cache_core.application.port.out.registered_adapter import RegisteredAdapter
-from generic_ml_cache_core.application.usecase.probe_service import ProbeService
-from generic_ml_cache_core.application.usecase.purge_service import PurgeService
-from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
-    RunMlExecutionService,
-)
-from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
-from generic_ml_cache_adapters.db import DbConnection
+from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 
-_BLOBS_DIRNAME = "blobs"
+from generic_ml_cache_cli.discovery import execution_kind_for
 
-ExecutableOverride = Callable[[str], Optional[str]]
-
-
-def _recover_store(store_root: Path) -> None:
-    StoreEncryptor(
-        store_root,
-        FilesystemEncryptionManifestStore(store_root),
-        FilesystemStoreLock(store_root),
-    ).recover()
-
-
-def _resolve_blob_store(store_root: Path, encryption_token: Optional[str]) -> BlobStorePort:
-    blob_store: BlobStorePort = FilesystemBlobStore(store_root / _BLOBS_DIRNAME)
-    manifest = FilesystemEncryptionManifestStore(store_root).load()
-    if manifest is None:
-        return blob_store
-    if encryption_token is None:
-        return TokenRequiredBlobStore(blob_store)
-    from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: PLC0415
-
-    cipher = AesGcmCipher()
-    data_key = cipher.open_envelope(encryption_token, manifest)
-    return EncryptingBlobStore(blob_store, cipher, data_key)
+ExecutableOverride = Callable[[str], str | None]
 
 
 def _build_runners(
-    client: Optional[str],
-    kind: Optional[ExecutionKind],
-    executable_override: Optional[ExecutableOverride],
-    timeout: Optional[float],
-    stream_path: Optional[str],
-    whitelist: Optional[FrozenSet[str]] = None,
-) -> Dict[str, RegisteredAdapter]:
+    catalog: AdapterCatalogPort,
+    resolver: AdapterResolverPort,
+    client: str | None,
+    kind: ExecutionKind | None,
+    executable_override: ExecutableOverride | None,
+    timeout: float | None,
+    stream_path: str | None,
+) -> dict[str, RegisteredAdapterPort]:
     # Keyed by client NAME: the service selects the adapter by command.client and
     # dispatches the method by command.execution_kind. The CLI runs one selected
     # client per invocation, so this is a one-entry map.
-    catalog = catalog_for(whitelist)
-    resolver = default_resolver()
     if kind is ExecutionKind.LOCAL_MANAGED:
         assert client is not None
         descriptor = SelectAdapterForExecutionService(catalog).select(
@@ -111,7 +58,7 @@ def _build_runners(
         exe_override = executable_override(client) if executable_override else None
         # One adapter instance answers both managed and passthrough for this client.
         cli_adapter = cast(
-            RegisteredAdapter,
+            RegisteredAdapterPort,
             resolver.resolve_local_client(
                 descriptor.adapter_id, exe_override, timeout, stream_path
             ),
@@ -120,98 +67,45 @@ def _build_runners(
     if kind is ExecutionKind.API:
         assert client is not None
         descriptor = SelectAdapterForExecutionService(catalog).select(client, ExecutionKind.API)
-        return {client: cast(RegisteredAdapter, resolver.resolve_runner(descriptor.adapter_id))}
+        return {client: cast(RegisteredAdapterPort, resolver.resolve_runner(descriptor.adapter_id))}
     # No client selected: stub mode — every API client name is served by the
     # in-process stub adapter (records/replays a canned response, no live call), so
     # demos and cache tests can exercise the pipeline without real credentials.
-    from generic_ml_cache_adapters.adapter.out.api.stub_api_client_adapter import (
-        StubApiClientAdapter,
-    )  # noqa: PLC0415
-
-    stub = cast(RegisteredAdapter, StubApiClientAdapter())
-    return {
-        d.client_name: stub for d in catalog.list_adapters() if d.boundary is AdapterBoundary.API
-    }
+    return stub_api_runners(catalog)
 
 
 def build_use_cases(
-    conn_factory: Callable[[], DbConnection],
     store_root: Path,
-    executable_override: Optional[ExecutableOverride] = None,
-    timeout: Optional[float] = None,
-    encryption_token: Optional[str] = None,
-    stream_path: Optional[str] = None,
-    client: Optional[str] = None,
-    max_size: Optional[int] = None,
-    whitelist: Optional[FrozenSet[str]] = None,
-    diag: Optional[DiagnosticsPort] = None,
-) -> WiredUseCases:
-    store_root = Path(store_root)
-    _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
-    _recover_store(store_root)
-    clock = SystemClock()
-    blob_store = _resolve_blob_store(store_root, encryption_token)
-    run_migrations(conn_factory, _diag)
-    repository = ExecutionRepository(conn_factory, clock)
-    metrics = JournalMetrics(AccessRegistry(conn_factory, diag=_diag))
-    file_fingerprint = FilesystemFileFingerprint()
+    executable_override: ExecutableOverride | None = None,
+    timeout: float | None = None,
+    encryption_token: str | None = None,
+    stream_path: str | None = None,
+    client: str | None = None,
+    max_size: int | None = None,
+    whitelist: frozenset[str] | None = None,
+    diag: DiagnosticsPort | None = None,
+) -> ApplicationApi:
+    """Wire the application for the CLI: one selected client per invocation."""
     kind = execution_kind_for(client, whitelist) if client is not None else None
-    runners = _build_runners(
-        client, kind, executable_override, timeout, stream_path, whitelist=whitelist
-    )
-    purge = PurgeService(repository, blob_store, metrics, diag=_diag)
-    gateway_forward = HttpGatewayForwardAdapter()
-    run_gateway = RunMlGatewayService(
-        blob_store=blob_store,
-        gateway_forward_port=gateway_forward,
-        repository=repository,
-        metrics=metrics,
-        diag=_diag,
-    )
-    return WiredUseCases(
-        run_ml=RunMlExecutionService(
-            file_fingerprint,
-            runners,
-            blob_store,
-            repository,
-            metrics,
-            purge_service=purge,
-            max_size=max_size,
-            workspace=FilesystemWorkspace(),
-            diag=_diag,
-        ),
-        probe=ProbeService(file_fingerprint, repository),
-        purge=purge,
-        blob_store=blob_store,
-        repository=repository,
-        metrics=metrics,
-        run_gateway=run_gateway,
-        diag=_diag,
+
+    def _runners(
+        catalog: AdapterCatalogPort, resolver: AdapterResolverPort
+    ) -> dict[str, RegisteredAdapterPort]:
+        return _build_runners(
+            catalog, resolver, client, kind, executable_override, timeout, stream_path
+        )
+
+    return build_application_api(
+        store_root,
+        _runners,
+        encryption_token=encryption_token,
+        max_size=max_size,
+        whitelist=whitelist,
+        client_timeout=timeout,
+        diag=diag,
     )
 
 
 def get_encryption_state(store_root: Path) -> EncryptionState:
     """Return the current encryption state of the store at ``store_root``."""
-    return FilesystemEncryptionManifestStore(store_root).state()
-
-
-def load_cipher():
-    """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
-    try:
-        from generic_ml_cache_adapters.adapter.out.crypto.aesgcm_cipher import AesGcmCipher  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover
-        raise SystemExit(
-            "error: encryption needs an optional dependency — install with "
-            '`pip install "generic-ml-cache-adapters[encryption]"`'
-        ) from exc
-    return AesGcmCipher()
-
-
-def build_store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
-    """Construct a StoreEncryptor for the store at ``store_root``."""
-    return StoreEncryptor(
-        store_root,
-        FilesystemEncryptionManifestStore(store_root),
-        FilesystemStoreLock(store_root),
-        cipher,
-    )
+    return StoreEncryptionOps(store_root).status()

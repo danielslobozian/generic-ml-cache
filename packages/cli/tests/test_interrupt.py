@@ -13,22 +13,26 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import List
 
 import pytest
-
-from generic_ml_cache_cli import cli
-import generic_ml_cache_cli.controllers.run as run_ctrl
+from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_cli_client
+from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+    ComposedLocalClient,
+)
+from generic_ml_cache_adapters.adapter.outbound.workspace.filesystem_workspace import (
+    FilesystemWorkspace,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.managed_local_request import (
     ManagedLocalRequest,
 )
 from generic_ml_cache_core.common.errors import RunInterrupted
-from generic_ml_cache_adapters.adapter.out.client.cli_runtime import wire_cli_client
-from generic_ml_cache_adapters.adapter.out.workspace.filesystem_workspace import FilesystemWorkspace
+
+import generic_ml_cache_cli.controllers.run as run_ctrl
+from generic_ml_cache_cli import cli
 
 
-class _SleepAdapter:
+class _SleepAdapter(ComposedLocalClient):
     """A client that just sleeps far longer than the test -- so the only way the
     call ends in time is by being stopped."""
 
@@ -53,7 +57,7 @@ class _SleepAdapter:
         system_prompt,
         client_args=(),
         grants=(),
-    ) -> List[str]:
+    ) -> list[str]:
         return [executable, "-c", "sleep 30"]
 
 

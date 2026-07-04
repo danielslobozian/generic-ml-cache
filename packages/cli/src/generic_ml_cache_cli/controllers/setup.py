@@ -6,44 +6,82 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
-from generic_ml_cache_cli._compose import get_encryption_state
 from generic_ml_cache_core.common.errors import ConfigError, UnknownClient
 
 from generic_ml_cache_cli import config
-from generic_ml_cache_cli.composition import _db_conn_factory, _make_diag
+from generic_ml_cache_cli._compose import get_encryption_state
+from generic_ml_cache_cli.composition import make_diag
+
+if TYPE_CHECKING:
+    from generic_ml_cache_bootstrap.discovery.client_discover import ModelListing
+
+
+class _StorePermissions(TypedDict):
+    """The doctor's store-permission probe results."""
+
+    exists: bool
+    readable: bool
+    writable: bool
+
+
+class _DaemonReachability(TypedDict):
+    """The doctor's daemon-liveness probe results."""
+
+    host: str
+    port: int
+    reachable: bool
+
+
+class _DoctorPayload(TypedDict):
+    """The full doctor diagnostic payload (also the --json / --bundle shape)."""
+
+    python: str
+    os: str
+    config_path: str
+    store_path: str
+    store_permissions: _StorePermissions
+    daemon: _DaemonReachability
+    clients: list[dict[str, Any]]
+    schema: list[dict[str, object]]
+    adapter_extensions: dict[str, str]
 
 
 def _probe_daemon(host: str, port: int) -> bool:
     """Return True if the daemon /health endpoint responds with HTTP 200."""
-    import urllib.error  # noqa: PLC0415
-    import urllib.request  # noqa: PLC0415
+    import urllib.request
 
     url = f"http://{host}:{port}/health"  # NOSONAR — localhost daemon, plain HTTP is correct
     try:
         with urllib.request.urlopen(url, timeout=2) as resp:  # noqa: S310
             return int(resp.status) == 200
-    except Exception:
+    except Exception:  # noqa: BLE001 — liveness probe: any failure means "daemon not reachable"
         return False
 
 
-def _doctor_payload(args: argparse.Namespace) -> dict:
+def _doctor_payload(args: argparse.Namespace) -> _DoctorPayload:
     """Collect the full diagnostic payload (no credentials included)."""
-    import os  # noqa: PLC0415
-    import platform  # noqa: PLC0415
-    from dataclasses import asdict  # noqa: PLC0415
+    import os
+    import platform
+    from dataclasses import asdict
 
-    from generic_ml_cache_cli.discovery import adapter_sources  # noqa: PLC0415
-    from generic_ml_cache_adapters.adapter.out.client.discover import probe_all  # noqa: PLC0415
-    from generic_ml_cache_adapters.migration_runner import schema_version  # noqa: PLC0415
+    from generic_ml_cache_bootstrap.discovery.client_discover import probe_all
+    from generic_ml_cache_bootstrap.store_status import applied_migrations
+
+    from generic_ml_cache_cli.discovery import adapter_sources
 
     file_cfg = config.load()
     settings = config.resolve_settings(file_cfg)
     store_root = Path(str(settings["store"][0]))
-    _diag = _make_diag(args)
+    _diag = make_diag(args)
 
-    applied = schema_version(_db_conn_factory(store_root), diag=_diag)
+    # A read-only probe: it reports the applied migrations without initializing the
+    # store (W26 — a mistyped path must not spawn an empty store). The cast pins the
+    # JSON-shaped rows onto the payload's `list[dict[str, object]]`.
+    applied = cast("list[dict[str, object]]", applied_migrations(store_root))
     statuses = probe_all(
         timeout=args.timeout,
         executables=file_cfg.executables,
@@ -52,8 +90,8 @@ def _doctor_payload(args: argparse.Namespace) -> dict:
     )
     ep_sources = adapter_sources(whitelist=file_cfg.adapters)
 
-    host = getattr(args, "host", "127.0.0.1")
-    port = getattr(args, "port", 8765)
+    host = str(getattr(args, "host", "127.0.0.1"))
+    port = int(getattr(args, "port", 8765))
     store_exists = store_root.exists()
 
     return {
@@ -77,8 +115,8 @@ def _doctor_payload(args: argparse.Namespace) -> dict:
     }
 
 
-def _print_doctor_text(payload: dict) -> None:
-    import platform  # noqa: PLC0415
+def _print_doctor_text(payload: _DoctorPayload) -> None:
+    import platform
 
     py_short = sys.version.split()[0]
     print(f"python      : {py_short}  ({platform.system()} {platform.release()})")
@@ -90,9 +128,9 @@ def _print_doctor_text(payload: dict) -> None:
         print(f"store perms : {rw or 'none'}")
     else:
         print("store perms : (not initialised)")
-    d = payload["daemon"]
-    reach = "reachable" if d["reachable"] else "not running"
-    print(f"daemon      : {reach}  ({d['host']}:{d['port']})")
+    daemon_probe = payload["daemon"]
+    reach = "reachable" if daemon_probe["reachable"] else "not running"
+    print(f"daemon      : {reach}  ({daemon_probe['host']}:{daemon_probe['port']})")
     print()
 
     statuses_raw = payload["clients"]
@@ -100,13 +138,15 @@ def _print_doctor_text(payload: dict) -> None:
         print("no client adapters are registered")
     else:
         print("configured clients (advisory — discovery never chooses or gates a run):")
-        for s in statuses_raw:
-            if s["present"]:
+        for client_status in statuses_raw:
+            if client_status["present"]:
                 print(
-                    f"  {s['name']:<8} present  {(s.get('version') or 'version unknown'):<28}  {s.get('executable', '')}"
+                    f"  {client_status['name']:<8} present  "
+                    f"{(client_status.get('version') or 'version unknown'):<28}  "
+                    f"{client_status.get('executable', '')}"
                 )
             else:
-                print(f"  {s['name']:<8} missing  {s.get('detail') or ''}")
+                print(f"  {client_status['name']:<8} missing  {client_status.get('detail') or ''}")
 
     ep_sources = payload["adapter_extensions"]
     if ep_sources:
@@ -119,15 +159,13 @@ def _print_doctor_text(payload: dict) -> None:
     applied = payload["schema"]
     if applied:
         latest = applied[-1]
-        print(
-            f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}  ({latest['applied_at_utc']})"
-        )
+        print(f"store schema : {len(applied)} migration(s) applied — {latest['migration_id']}")
     else:
         print("store schema : not initialised (run any gmlcache command to apply migrations)")
 
 
-def _cmd_doctor(args: argparse.Namespace) -> int:
-    import json  # noqa: PLC0415
+def cmd_doctor(args: argparse.Namespace) -> int:
+    import json
 
     try:
         payload = _doctor_payload(args)
@@ -140,7 +178,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         return 0
 
     if getattr(args, "bundle", False):
-        from datetime import datetime, timezone  # noqa: PLC0415
+        from datetime import datetime, timezone
 
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         bundle_path = Path(f"gmlcache-bundle-{ts}.json")
@@ -152,32 +190,34 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_model_listing(ml) -> None:
-    if not ml.present:
-        print(f"  {ml.name:<8} absent   {ml.reason or ''}")
+def _print_model_listing(listing: ModelListing) -> None:
+    if not listing.present:
+        print(f"  {listing.name:<8} absent   {listing.reason or ''}")
         return
-    if not ml.supported:
-        print(f"  {ml.name:<8} —        {ml.reason or 'model listing not supported'}")
+    if not listing.supported:
+        print(f"  {listing.name:<8} —        {listing.reason or 'model listing not supported'}")
         return
-    if ml.models is None:
-        print(f"  {ml.name:<8} —        {ml.reason or 'could not list models'}")
+    if listing.models is None:
+        print(f"  {listing.name:<8} —        {listing.reason or 'could not list models'}")
         return
-    print(f"  {ml.name:<8} {len(ml.models)} model(s) (advisory; relayed from the client):")
-    for m in ml.models:
-        if m.default:
+    print(
+        f"  {listing.name:<8} {len(listing.models)} model(s) (advisory; relayed from the client):"
+    )
+    for model in listing.models:
+        if model.default:
             marker = " (default)"
-        elif m.current:
+        elif model.current:
             marker = " (current)"
         else:
             marker = ""
-        print(f"      {m.id:<34} {m.name}{marker}")
+        print(f"      {model.id:<34} {model.name}{marker}")
 
 
-def _cmd_models(args: argparse.Namespace) -> int:
+def cmd_models(args: argparse.Namespace) -> int:
     from dataclasses import asdict
 
-    from generic_ml_cache_adapters.adapter.out.api.api_discover import list_api_models
-    from generic_ml_cache_adapters.adapter.out.client.discover import list_models, list_models_all
+    from generic_ml_cache_bootstrap.discovery.api_discover import list_api_models
+    from generic_ml_cache_bootstrap.discovery.client_discover import list_models, list_models_all
 
     try:
         file_cfg = config.load()
@@ -185,7 +225,7 @@ def _cmd_models(args: argparse.Namespace) -> int:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
 
-    _diag = _make_diag(args)
+    _diag = make_diag(args)
     if args.client:
         executable = config.executable_for(file_cfg, args.client, flag=args.executable)
         try:
@@ -214,15 +254,22 @@ def _cmd_models(args: argparse.Namespace) -> int:
 
         # Always valid JSON on every path (absent / unsupported / listed), so a
         # caller can parse the output unconditionally.
-        print(json.dumps([asdict(m) for m in listings], indent=2))
+        print(json.dumps([asdict(listing) for listing in listings], indent=2))
         return 0
 
-    for ml in listings:
-        _print_model_listing(ml)
+    for listing in listings:
+        _print_model_listing(listing)
     return 0
 
 
-def _print_status_text(settings, file_cfg, path, loaded, encryption, adapters_whitelist) -> None:
+def _print_status_text(
+    settings: Mapping[str, tuple[object, str]],
+    file_cfg: config.FileConfig,
+    path: Path,
+    loaded: bool,
+    encryption: str,
+    adapters_whitelist: list[str] | None,
+) -> None:
     print(f"config file : {path}  ({'loaded' if loaded else 'not present'})")
     print(f"encryption  : {encryption}")
     print("effective settings (no run flags applied):")
@@ -244,7 +291,7 @@ def _print_status_text(settings, file_cfg, path, loaded, encryption, adapters_wh
         print("executables : none configured (clients resolved on PATH)")
 
 
-def _cmd_status(args: argparse.Namespace) -> int:
+def cmd_status(args: argparse.Namespace) -> int:
     try:
         file_cfg = config.load()
         settings = config.resolve_settings(file_cfg)  # no run flags: env > file > default
@@ -279,7 +326,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_init(_args: argparse.Namespace) -> int:
+def cmd_init(_args: argparse.Namespace) -> int:
     try:
         path, created = config.write_default_config()
     except OSError as exc:
