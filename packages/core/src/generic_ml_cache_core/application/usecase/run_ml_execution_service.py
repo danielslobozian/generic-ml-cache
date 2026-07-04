@@ -68,6 +68,7 @@ from generic_ml_cache_core.application.port.outbound.passthrough_local_runner_po
 from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
     RegisteredAdapterPort,
 )
+from generic_ml_cache_core.application.port.outbound.store_lock_port import StoreLockPort
 from generic_ml_cache_core.application.port.outbound.workspace_port import WorkspacePort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
@@ -106,12 +107,15 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         annotate: AnnotateMlRunPort,
         record: RecordCallEventPort,
         execution_key_lock: ExecutionKeyLockPort,
+        store_lock: StoreLockPort | None = None,
         purge_service: PurgeService | None = None,
         max_size: int | None = None,
         workspace: WorkspacePort | None = None,
         diag: DiagnosticsPort | None = None,
     ) -> None:
-        super().__init__(blob_store, save, read, annotate, record, execution_key_lock, diag)
+        super().__init__(
+            blob_store, save, read, annotate, record, execution_key_lock, store_lock, diag
+        )
         self._file_fingerprint = file_fingerprint
         self._runners = runners
         self._purge = purge_service

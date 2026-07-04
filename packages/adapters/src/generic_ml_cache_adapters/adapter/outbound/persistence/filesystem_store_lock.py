@@ -1,11 +1,17 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""FilesystemStoreLock: an exclusive store lock for whole-store operations.
+"""FilesystemStoreLock: a whole-store readers-writer lock.
 
 Uses OS-level file locking (fcntl.flock on Unix/macOS, msvcrt.locking on Windows).
 The lock is held by the OS on behalf of the process and is released automatically
 when the process exits or crashes — no stale lock files after a crash.
-Acquisition fails immediately instead of blocking.
+
+Two modes (X8): the exclusive acquire (the encryption migration) fails fast; the
+shared acquire (the normal content write) blocks while an exclusive holder runs, then
+proceeds. Shared locking is an fcntl (Unix/macOS) capability; msvcrt has no shared
+mode, so on Windows the shared acquire is a documented no-op — the migration's
+exclusive lock is not enforced against a concurrent writer there (a best-effort gap on
+the secondary platform for this single-user local tool).
 """
 
 from __future__ import annotations
@@ -44,8 +50,20 @@ def _unlock(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def _lock_shared_blocking(fd: int) -> bool:
+    """Take a shared (read) lock, BLOCKING until any exclusive holder releases.
+    Returns whether a real lock was taken — False on Windows, which has no advisory
+    shared mode via msvcrt (the shared acquire is then a no-op there)."""
+    if sys.platform == "win32":
+        return False
+    import fcntl
+
+    fcntl.flock(fd, fcntl.LOCK_SH)
+    return True
+
+
 class FilesystemStoreLock(StoreLockPort):
-    """Whole-store exclusive lock over ``<store>/store.lock``."""
+    """Whole-store readers-writer lock over ``<store>/store.lock``."""
 
     def __init__(self, store_root: Path) -> None:
         self._path = Path(store_root) / _FILENAME
@@ -72,4 +90,19 @@ class FilesystemStoreLock(StoreLockPort):
             yield
         finally:
             _unlock(fd)
+            os.close(fd)
+
+    @contextmanager
+    def acquire_shared(self) -> Generator[None]:
+        # The normal content-write path: coexist with other writers, wait out a
+        # migration. Unlike the exclusive acquire this BLOCKS (a write should wait the
+        # rare migration out, not fail), so no StoreLocked is raised here.
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(self._path), os.O_CREAT | os.O_RDONLY)
+        locked = _lock_shared_blocking(fd)
+        try:
+            yield
+        finally:
+            if locked:
+                _unlock(fd)
             os.close(fd)

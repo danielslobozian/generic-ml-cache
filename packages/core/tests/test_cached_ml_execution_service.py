@@ -26,6 +26,7 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ReadMlRunPort,
     SaveMlRunPort,
 )
+from generic_ml_cache_core.application.port.outbound.store_lock_port import StoreLockPort
 from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
     CachedMlExecutionService,
 )
@@ -489,6 +490,47 @@ class TestExecutionKeyLock:
         svc.execute(_Cmd())
 
         assert spy.acquired == ["test-key"]  # the miss ran under the per-key lock
+
+
+class _SpyStoreLock(StoreLockPort):
+    """Records shared vs exclusive store-lock acquisitions (X8)."""
+
+    def __init__(self) -> None:
+        self.shared_acquisitions = 0
+        self.exclusive_acquisitions = 0
+
+    @contextmanager
+    def acquire(self):
+        self.exclusive_acquisitions += 1
+        yield
+
+    @contextmanager
+    def acquire_shared(self):
+        self.shared_acquisitions += 1
+        yield
+
+
+class TestStoreLock:
+    def test_a_content_write_holds_the_store_lock_shared(self):
+        # X8: writing the output blobs on a miss takes the store lock SHARED (never
+        # exclusive), so concurrent writes coexist but a migration excludes them all.
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.return_value = None
+        store_lock = _SpyStoreLock()
+        svc = _RunSvc(
+            blob=create_autospec(BlobStorePort),
+            repo=repo,
+            metrics=create_autospec(RecordCallEventPort),
+            runner=runner,
+            execution_key_lock=InProcessExecutionKeyLock(),
+            store_lock=store_lock,
+        )
+
+        svc.execute(_Cmd())
+
+        assert store_lock.shared_acquisitions >= 1
+        assert store_lock.exclusive_acquisitions == 0
 
 
 class TestStoreUnavailable:

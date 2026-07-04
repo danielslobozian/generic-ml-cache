@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import replace
 from typing import Generic, Protocol, TypeVar
 
@@ -38,6 +40,7 @@ from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     ReadMlRunPort,
     SaveMlRunPort,
 )
+from generic_ml_cache_core.application.port.outbound.store_lock_port import StoreLockPort
 from generic_ml_cache_core.common import journal_events
 from generic_ml_cache_core.common.errors import (
     ArtifactBlobMissing,
@@ -95,6 +98,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         annotate: AnnotateMlRunPort,
         record: RecordCallEventPort,
         execution_key_lock: ExecutionKeyLockPort,
+        store_lock: StoreLockPort | None = None,
         diag: DiagnosticsPort | None = None,
     ) -> None:
         self._blob_store = blob_store
@@ -106,6 +110,11 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         # filesystem impl composes an in-process stripe lock with a per-key OS file
         # lock) rather than only the threads of one process as the old W29 stripe did.
         self._execution_key_lock = execution_key_lock
+        # The whole-store readers-writer lock (X8): a content write holds it SHARED so
+        # a rare encryption migration (exclusive) cannot run concurrently and leave a
+        # plaintext blob in a store being encrypted. Optional — a non-filesystem store
+        # manages its own consistency, so it is a no-op when absent.
+        self._store_lock: StoreLockPort | None = store_lock
         self._diag: DiagnosticsPort | None = diag
 
     def execute(self, command: TCommand) -> MlExecution:  # noqa: C901
@@ -355,8 +364,9 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             # each blob and flip to STORED/FAILED — no orphaned back-filled blobs.
             # mark/finalize target the current execution's own execution_id.
             self._annotate.add_input_artifacts(execution_key, input_artifacts)
-            for artifact in input_artifacts:
-                self._store_blob(current_execution.execution_id, artifact)
+            with self._content_write_lock():
+                for artifact in input_artifacts:
+                    self._store_blob(current_execution.execution_id, artifact)
 
     def _run_uncacheable(
         self, command: TCommand, call_identity: CallIdentity, execution_key: str
@@ -557,9 +567,10 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             if store_input
             else []
         )
-        resolved, all_stored = self._persist_documents(
-            execution.execution_id, output_artifacts + input_artifacts
-        )
+        with self._content_write_lock():
+            resolved, all_stored = self._persist_documents(
+                execution.execution_id, output_artifacts + input_artifacts
+            )
         if all_stored:
             self._save.finalize_output_persisted(execution.execution_id)
             if self._diag:
@@ -675,6 +686,17 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         return Artifact.from_content(
             artifact_type, blob_key, content_bytes, name=artifact_name, status=status
         )
+
+    @contextmanager
+    def _content_write_lock(self) -> Generator[None]:
+        """Hold a SHARED store lock over a content (blob) write so an encryption
+        migration (exclusive) cannot run concurrently (X8). A no-op when no store lock
+        is injected — a non-filesystem store manages its own consistency."""
+        if self._store_lock is None:
+            yield
+            return
+        with self._store_lock.acquire_shared():
+            yield
 
     def _persist_documents(
         self, execution_id: ExecutionId, artifacts: list[Artifact]

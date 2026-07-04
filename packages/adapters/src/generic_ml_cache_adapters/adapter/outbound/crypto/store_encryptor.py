@@ -19,7 +19,11 @@ Recovery (idempotent, runs on every open, needs no token or crypto):
 - marker absent, staging present -> crashed while staging: **roll back** (drop
   staging; the live blobs were never touched).
 
-Everything runs under an exclusive store lock, so a migration is the only writer.
+The migration runs under an EXCLUSIVE store lock; the normal content-write path holds
+the SAME lock SHARED (X8), so a write and a migration are mutually excluded — a write
+completes first or waits the migration out, and no plaintext blob lands in a store
+mid-encryption. (Before X8 only the migration acquired the lock, so a concurrent write
+could slip through — the lock was one-sided.)
 """
 
 from __future__ import annotations

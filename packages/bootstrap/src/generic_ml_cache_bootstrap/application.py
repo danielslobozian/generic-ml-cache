@@ -217,6 +217,7 @@ def build_application_api(
             annotate=persistence.annotate_ml_run,
             record=persistence.record_call_event,
             execution_key_lock=FilesystemExecutionKeyLock(store_root, _diag),
+            store_lock=FilesystemStoreLock(store_root),
             purge_service=purge,
             max_size=max_size,
             workspace=FilesystemWorkspace(),
