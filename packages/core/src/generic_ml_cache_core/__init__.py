@@ -8,7 +8,8 @@ This is a stateless library: it holds the domain model, the use cases, and the
 port contracts — the hexagonal core, and nothing more. The outbound adapters that
 implement those ports (execution repository, filesystem blob store, local CLI and
 API clients, metrics, clock, fingerprint) live in the separate
-``generic-ml-cache-adapters`` package; adapter discovery lives there too, behind
+``generic-ml-cache-adapters`` package; adapter discovery lives in the
+``generic-ml-cache-bootstrap`` composition package (the v4 split), behind
 :class:`AdapterCatalogPort`. Core bakes in *structure* (table names, blob naming,
 schema) but no *location* -- the data source (store path) and configuration are
 injected by the caller. Wire it from a driver application's private composition
@@ -29,8 +30,8 @@ Under SemVer:
   guide will be published with the release.
 
 Anything *not* listed in ``__all__`` — including all sub-modules under
-``application/``, ``common/``, and ``migrations/`` — is internal.
-Internal paths may change in any release, including patch releases.
+``application/`` and ``common/`` — is internal. Internal paths may change in any
+release, including patch releases.
 
 **Public API (``__all__``):**
 
@@ -55,12 +56,11 @@ Internal paths may change in any release, including patch releases.
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as _pkg_version
+import importlib.metadata as _metadata  # module-qualified so no public name leaks (X18)
 
 try:
-    __version__ = _pkg_version("generic-ml-cache-core")
-except PackageNotFoundError:  # running from an uninstalled source tree
+    __version__ = _metadata.version("generic-ml-cache-core")
+except _metadata.PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
 # Domain vocabulary the public outbound ports reference — an embedder implementing

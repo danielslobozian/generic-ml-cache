@@ -50,6 +50,25 @@ def _referenced_core_types(port: type) -> set[type]:
     return seen
 
 
+def test_public_namespace_has_no_unintended_leaks() -> None:
+    # X18: a public (non-underscore) module attribute that is neither a declared
+    # export nor an unavoidable artifact is an accidental leak — e.g. a stdlib
+    # PackageNotFoundError imported at module scope (now module-qualified). Submodules
+    # bound by `from x.y import ...` and the `annotations` future-flag attribute are
+    # the only unavoidable public artifacts.
+    import types
+
+    leaked = {
+        name
+        for name, value in vars(core).items()
+        if not name.startswith("_")
+        and name not in core.__all__
+        and name != "annotations"
+        and not isinstance(value, types.ModuleType)
+    }
+    assert leaked == set()
+
+
 def test_every_all_symbol_is_importable() -> None:
     # A missing import behind an __all__ entry (or a renamed symbol) is a broken
     # public contract — this catches it. Guards the injectable-SPI surface embedders
