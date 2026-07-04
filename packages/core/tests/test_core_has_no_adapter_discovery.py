@@ -15,6 +15,7 @@ forbidden, yet still does I/O in the pure core.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import generic_ml_cache_core
@@ -74,3 +75,44 @@ def test_no_raw_io_in_core():
             if sig in text:
                 offenders.append(f"{path.relative_to(_CORE_SRC).as_posix()}: {sig!r}")
     assert offenders == [], f"core must not perform raw I/O: {offenders}"
+
+
+# The concrete-driver family core must never import — a DB driver, the HTTP/socket
+# stack, subprocess, the crypto lib, the web frameworks, the logging backend. Core
+# names a DBAPI2/port SEAM and lets the caller inject the driver. Mirrors the widened
+# .importlinter `no-db-driver-in-core` forbidden set (Y15).
+_FORBIDDEN_DRIVER_ROOTS = frozenset(
+    {
+        "sqlite3",
+        "urllib",
+        "http",
+        "socket",
+        "subprocess",
+        "cryptography",
+        "fastapi",
+        "starlette",
+        "uvicorn",
+        "structlog",
+    }
+)
+
+
+def test_core_imports_no_concrete_driver():
+    """Y15: core stays driver-agnostic. This AST-level twin of the widened
+    ``no-db-driver-in-core`` import-linter contract fails the instant a core module
+    grows e.g. ``import urllib`` or ``import cryptography`` — the very slip the old
+    sqlite3-only forbidden set would have passed green."""
+    offenders = []
+    for path in _core_python_files():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                imported = [node.module or ""]
+            else:
+                continue
+            for name in imported:
+                if name.split(".")[0] in _FORBIDDEN_DRIVER_ROOTS:
+                    offenders.append(f"{path.relative_to(_CORE_SRC).as_posix()}: {name}")
+    assert offenders == [], f"core must not import a concrete driver: {offenders}"

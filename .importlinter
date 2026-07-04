@@ -80,15 +80,32 @@ source_modules =
 forbidden_modules =
     generic_ml_cache_core.testing
 
-# Rule 4 — core must not import any specific database driver.
-# Core is driver-agnostic: it accepts a DBAPI2 connection injected by the caller.
+# Rule 4 — core must not import any concrete driver.
+# Core is driver-agnostic: it accepts a DBAPI2 connection, an HTTP client, a
+# subprocess runner, etc. injected by the caller through a port. The invariant is
+# "core imports only stdlib + generic_ml_cache_core.*", but import-linter has no
+# allowlist contract type, so (per the Y15 fallback) we widen the forbidden set to the
+# whole concrete-driver family — a DB driver, the HTTP/socket stack, subprocess, the
+# crypto lib, the web-server frameworks, the logging backend — instead of just sqlite3.
+# This catches the NEXT stray driver import (e.g. urllib/cryptography/fastapi), not only
+# the one we already named. The core-purity pytest guard (test_core_has_no_adapter_
+# discovery) is its AST-level twin.
 [importlinter:contract:no-db-driver-in-core]
-name = Core must not import a database driver
+name = Core must not import a concrete driver
 type = forbidden
 source_modules =
     generic_ml_cache_core
 forbidden_modules =
     sqlite3
+    urllib
+    http
+    socket
+    subprocess
+    cryptography
+    fastapi
+    starlette
+    uvicorn
+    structlog
 
 # Rule 10 — driver runtime modules reach the application only through inbound ports.
 # A driving adapter (a CLI command controller, a daemon route, and any driver
