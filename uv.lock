@@ -511,12 +511,16 @@ dev = [
     { name = "pytest-timeout" },
     { name = "ruff" },
 ]
+encryption = [
+    { name = "generic-ml-cache-adapters", extra = ["encryption"] },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "argcomplete", specifier = ">=3,<4" },
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "generic-ml-cache-adapters", editable = "packages/adapters" },
+    { name = "generic-ml-cache-adapters", extras = ["encryption"], marker = "extra == 'encryption'", editable = "packages/adapters" },
     { name = "generic-ml-cache-bootstrap", editable = "packages/bootstrap" },
     { name = "generic-ml-cache-core", editable = "packages/core" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2" },
@@ -526,7 +530,7 @@ requires-dist = [
     { name = "pytest-timeout", marker = "extra == 'dev'" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "encryption"]
 
 [[package]]
 name = "generic-ml-cache-core"
@@ -584,6 +588,9 @@ dev = [
     { name = "pytest-timeout" },
     { name = "ruff" },
 ]
+encryption = [
+    { name = "generic-ml-cache-adapters", extra = ["encryption"] },
+]
 metrics = [
     { name = "prometheus-client" },
 ]
@@ -593,6 +600,7 @@ requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "generic-ml-cache-adapters", editable = "packages/adapters" },
+    { name = "generic-ml-cache-adapters", extras = ["encryption"], marker = "extra == 'encryption'", editable = "packages/adapters" },
     { name = "generic-ml-cache-bootstrap", editable = "packages/bootstrap" },
     { name = "generic-ml-cache-core", editable = "packages/core" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
@@ -608,7 +616,7 @@ requires-dist = [
     { name = "sse-starlette", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
-provides-extras = ["dev", "metrics"]
+provides-extras = ["dev", "encryption", "metrics"]
 
 [[package]]
 name = "grimp"

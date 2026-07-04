@@ -41,6 +41,10 @@ Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANG
 gmlcache = "generic_ml_cache_cli.cli:main"
 
 [project.optional-dependencies]
+# `pip install "generic-ml-cache-cli[encryption]"` pulls the adapters' encryption
+# extra (cryptography) at the SAME version — the CLI's encrypt/decrypt/rotate
+# commands need it. Lockstep-pinned to the workspace version.
+encryption = ["generic-ml-cache-adapters[encryption]==0.28.*"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [tool.hatch.version]

@@ -42,6 +42,10 @@ Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANG
 [project.optional-dependencies]
 # Optional Prometheus /metrics endpoint. Off by default.
 metrics = ["prometheus-client>=0.20"]
+# `pip install "generic-ml-cache-daemon[encryption]"` pulls the adapters' encryption
+# extra (cryptography) at the SAME version — app.py uses encryption_token /
+# EncryptingBlobStore. Lockstep-pinned to the workspace version.
+encryption = ["generic-ml-cache-adapters[encryption]==0.28.*"]
 dev = [
   "pytest>=7",
   "pytest-cov",
