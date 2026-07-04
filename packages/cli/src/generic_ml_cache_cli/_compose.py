@@ -4,7 +4,7 @@
 
 The shared application wiring lives in ``generic_ml_cache_bootstrap`` now; this
 module supplies only the CLI's *strategy* — it runs one selected client per
-invocation — plus the encryption helpers its controllers use directly.
+invocation — over the bootstrap composition-root hooks.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import cast
 
 from generic_ml_cache_bootstrap.application import build_application_api
 from generic_ml_cache_bootstrap.encryption import StoreEncryptionOps
-from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
+from generic_ml_cache_bootstrap.stub_runners import stub_api_runners
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
 )
@@ -71,14 +71,7 @@ def _build_runners(
     # No client selected: stub mode — every API client name is served by the
     # in-process stub adapter (records/replays a canned response, no live call), so
     # demos and cache tests can exercise the pipeline without real credentials.
-    from generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter import (
-        StubApiClientAdapter,
-    )
-
-    stub = cast(RegisteredAdapterPort, StubApiClientAdapter())
-    return {
-        d.client_name: stub for d in catalog.list_adapters() if d.boundary is AdapterBoundary.API
-    }
+    return stub_api_runners(catalog)
 
 
 def build_use_cases(

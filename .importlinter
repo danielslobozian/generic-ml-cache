@@ -43,8 +43,6 @@ ignore_imports =
     # The bulk application wiring moved to generic_ml_cache_bootstrap (the
     # composition root), so the long list of _compose/app -> adapter.outbound edges is
     # gone. What remains are the few adapters the drivers still touch directly:
-    # The CLI's stub adapter for demos (no-credential record/replay).
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter
     # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
     generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app
 
