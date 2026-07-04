@@ -51,11 +51,33 @@ def default_catalog() -> AdapterCatalogPort:
 
 
 def default_resolver() -> AdapterResolverPort:
-    """Resolve an adapter id from the entry points or the in-process registry."""
+    """Resolve an adapter id from the DEFAULT (trusted-only) catalog's vetted classes
+    or the in-process registry. Bound to the same entry-point catalog as
+    :func:`default_catalog`, so it constructs only adapters that catalog gated in
+    (X15) — never by re-loading an ungated plugin."""
     global _resolver
     if _resolver is None:
-        _resolver = CompositeAdapterResolver([EntryPointAdapterResolver(), default_registry()])
+        _resolver = CompositeAdapterResolver(
+            [EntryPointAdapterResolver(_entrypoint()), default_registry()]
+        )
     return _resolver
+
+
+def catalog_and_resolver_for(
+    whitelist: frozenset[str] | None = None,
+) -> tuple[AdapterCatalogPort, AdapterResolverPort]:
+    """A catalog and a resolver that SHARE one gated entry-point catalog, so the
+    resolver constructs exactly the adapters the catalog vetted — one trust gate, one
+    place (X15). Use this whenever a caller both lists and resolves under the same
+    ``whitelist``, so listing and resolution can never diverge."""
+    if whitelist is None:
+        return default_catalog(), default_resolver()
+    entrypoint = EntryPointAdapterCatalog(whitelist=whitelist)
+    registry = default_registry()
+    return (
+        CompositeAdapterCatalog([entrypoint, registry]),
+        CompositeAdapterResolver([EntryPointAdapterResolver(entrypoint), registry]),
+    )
 
 
 def catalog_for(whitelist: frozenset[str] | None = None) -> AdapterCatalogPort:
@@ -81,12 +103,11 @@ def get_adapter(name: str, whitelist: frozenset[str] | None = None) -> object:
     """Resolve a constructed adapter by client name (a local client or an API
     runner). A convenience over the catalog + resolver; raises :class:`UnknownClient`
     if the client is absent. Lives here, in infrastructure — never in core."""
-    catalog = catalog_for(whitelist)
+    catalog, resolver = catalog_and_resolver_for(whitelist)
     descriptors = catalog.find_by_client_name(name)
     if not descriptors:
         raise _unknown_adapter(name, catalog)
     descriptor = descriptors[0]
-    resolver = default_resolver()
     if descriptor.boundary is AdapterBoundary.API:
         return resolver.resolve_runner(descriptor.adapter_id)
     return resolver.resolve_local_client(descriptor.adapter_id)

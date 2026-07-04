@@ -57,6 +57,10 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
         self._trusted = trusted_distributions
         self._descriptors: list[AdapterDescriptor] | None = None
         self._sources: dict[str, str] = {}
+        # The vetted adapter classes, keyed by adapter_id — populated during the same
+        # gated scan that builds the descriptors, so the resolver can construct ONLY
+        # what this catalog already trusted, never re-loading an ungated plugin (X15).
+        self._classes: dict[str, type] = {}
 
     def _is_allowed_to_load(self, entry_point: importlib.metadata.EntryPoint) -> bool:
         """Trust gate, evaluated BEFORE entry_point.load(): a trusted distribution
@@ -106,9 +110,27 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
                 )
                 continue
 
+            if descriptor.adapter_id in self._classes:
+                # Two plugins claim the same adapter_id: ambiguous provenance. Reject
+                # deterministically rather than let iteration order pick a winner (X15)
+                # — a silent last-writer could let an untrusted plugin shadow a trusted
+                # one. Fail loud so the operator resolves the conflict.
+                raise ValueError(
+                    f"gmlcache: duplicate adapter_id {descriptor.adapter_id!r} — provided by both "
+                    f"{self._sources[descriptor.adapter_id]!r} and {describe_source(entry_point)!r}; "
+                    "uninstall one of the conflicting plugins"
+                )
             descriptors.append(descriptor)
             self._sources[descriptor.adapter_id] = describe_source(entry_point)
+            self._classes[descriptor.adapter_id] = cls
         return descriptors
+
+    def resolve_class(self, adapter_id: str) -> type | None:
+        """The vetted class for ``adapter_id``, or None if this catalog does not trust
+        it. The resolver constructs from THIS — never by re-loading entry points — so
+        a plugin the catalog gated out is never imported at resolution time (X15)."""
+        self._ensure_loaded()
+        return self._classes.get(adapter_id)
 
     def _ensure_loaded(self) -> list[AdapterDescriptor]:
         if self._descriptors is None:

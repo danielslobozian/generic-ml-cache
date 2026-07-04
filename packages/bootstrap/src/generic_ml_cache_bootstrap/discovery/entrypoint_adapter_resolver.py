@@ -3,18 +3,18 @@
 """EntryPointAdapterResolver — construct a concrete adapter from its id.
 
 The resolver's counterpart to EntryPointAdapterCatalog: where the catalog reads
-``descriptor()`` to answer "what exists?", the resolver loads the class and
-constructs it to answer "give me the implementation." Local clients are built
-with the per-run config; API runners take none.
+``descriptor()`` to answer "what exists?", the resolver constructs the vetted class
+to answer "give me the implementation." It resolves ONLY from the catalog's
+already-gated classes (X15) — it never enumerates or ``load()``s entry points itself,
+so resolving one adapter can no longer run the import-time code of every installed
+plugin (a non-whitelisted plugin the catalog gated out is never imported). Local
+clients are built with the per-run config; API runners take none.
 """
 
 from __future__ import annotations
 
 from typing import cast
 
-from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
-    AdapterDescriptor,
-)
 from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
     AdapterResolverPort,
 )
@@ -22,37 +22,17 @@ from generic_ml_cache_core.application.port.outbound.local_client_port import Lo
 from generic_ml_cache_core.application.port.outbound.ml_runner_port import MlRunnerPort
 from generic_ml_cache_core.common.errors import UnknownClient
 
-from generic_ml_cache_bootstrap.discovery._entrypoints import (
-    ADAPTER_ENTRYPOINT_GROUP,
-    iter_entry_points,
-)
+from generic_ml_cache_bootstrap.discovery.entrypoint_adapter_catalog import EntryPointAdapterCatalog
 
 
 class EntryPointAdapterResolver(AdapterResolverPort):
-    """Resolve an ``adapter_id`` to a constructed adapter via the entry points."""
+    """Resolve an ``adapter_id`` to a constructed adapter from the catalog's vetted classes."""
 
-    def __init__(self, group: str = ADAPTER_ENTRYPOINT_GROUP) -> None:
-        self._group = group
-        self._by_id: dict[str, type] | None = None
-
-    def _classes(self) -> dict[str, type]:
-        if self._by_id is None:
-            mapping: dict[str, type] = {}
-            for ep in iter_entry_points(self._group):
-                try:
-                    cls = ep.load()
-                    describe = getattr(cls, "descriptor", None)
-                    if not callable(describe):
-                        continue
-                    descriptor = cast(AdapterDescriptor, describe())
-                except Exception:  # noqa: BLE001 — EntryPointAdapterCatalog already warns
-                    continue
-                mapping[descriptor.adapter_id] = cls
-            self._by_id = mapping
-        return self._by_id
+    def __init__(self, catalog: EntryPointAdapterCatalog) -> None:
+        self._catalog = catalog
 
     def _class_for(self, adapter_id: str) -> type:
-        cls = self._classes().get(adapter_id)
+        cls = self._catalog.resolve_class(adapter_id)
         if cls is None:
             raise UnknownClient(f"no adapter for id {adapter_id!r}")
         return cls

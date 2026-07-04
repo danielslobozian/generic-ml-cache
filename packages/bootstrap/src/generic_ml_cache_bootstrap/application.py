@@ -81,7 +81,7 @@ from generic_ml_cache_core.application.usecase.store_stats_service import StoreS
 from generic_ml_cache_core.application.wiring.application_api import ApplicationApi
 from generic_ml_cache_core.common.errors import PersistenceContractOutdated
 
-from generic_ml_cache_bootstrap.discovery.composition import catalog_for, default_resolver
+from generic_ml_cache_bootstrap.discovery.composition import catalog_and_resolver_for
 from generic_ml_cache_bootstrap.persistence_backend import (
     PersistenceBackend,
     sqlite_persistence_backend,
@@ -177,7 +177,8 @@ def build_application_api(
     # same object.
     execution_key_lock = FilesystemExecutionKeyLock(store_root, _diag)
     provision_store(persistence.migration)
-    runners = build_runners(catalog_for(whitelist), default_resolver())
+    catalog, resolver = catalog_and_resolver_for(whitelist)
+    runners = build_runners(catalog, resolver)
     # The caching HTTP gateway (the daemon's /gateway/claude route) dispatches an
     # API_PASSTHROUGH command to this verbatim relay through the shared run use case —
     # it is not a user-selectable client, so it is wired here rather than discovered.

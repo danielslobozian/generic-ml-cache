@@ -27,8 +27,7 @@ from generic_ml_cache_core.application.port.outbound.local_client_port import Lo
 from generic_ml_cache_core.common.errors import ClientNotFound, UnknownClient
 
 from generic_ml_cache_bootstrap.discovery.composition import (
-    catalog_for,
-    default_resolver,
+    catalog_and_resolver_for,
     registered_local_names,
 )
 
@@ -38,13 +37,14 @@ _LIST_MODELS_EXIT = "list-models EXIT"
 def _resolve_local_client(name: str, whitelist: frozenset[str] | None = None) -> LocalClientPort:
     """Resolve a local-managed client adapter by client name, via the catalog +
     resolver. Raises :class:`UnknownClient` if no local adapter serves ``name``."""
-    descriptors = list(catalog_for(whitelist).find_by_client_name(name))
+    catalog, resolver = catalog_and_resolver_for(whitelist)
+    descriptors = list(catalog.find_by_client_name(name))
     if not descriptors:
         raise UnknownClient(f"unknown adapter {name!r}")
     local = [d for d in descriptors if d.supports_mode(ExecutionKind.LOCAL_MANAGED)]
     if not local:
         raise UnknownClient(f"not a local managed adapter: {name!r}")
-    return default_resolver().resolve_local_client(local[0].adapter_id)
+    return resolver.resolve_local_client(local[0].adapter_id)
 
 
 def _probe_version(

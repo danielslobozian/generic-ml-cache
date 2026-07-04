@@ -175,3 +175,19 @@ def test_bundled_distribution_loads_without_a_whitelist(monkeypatch):
     )
     catalog = EntryPointAdapterCatalog()
     assert [d.client_name for d in catalog.list_adapters()] == ["acme"]
+
+
+def test_duplicate_adapter_id_is_rejected_deterministically(monkeypatch):
+    # X15: two plugins claiming the same adapter_id is ambiguous provenance — reject
+    # loud rather than let iteration order silently pick a last-writer winner.
+    monkeypatch.setattr(
+        epc_module,
+        "iter_entry_points",
+        lambda group: [
+            _FakeEntryPoint("acme1", lambda: _AcmeAdapter),
+            _FakeEntryPoint("acme2", lambda: _AcmeAdapter),  # same descriptor -> same id
+        ],
+    )
+    catalog = EntryPointAdapterCatalog()
+    with pytest.raises(ValueError, match="duplicate adapter_id"):
+        catalog.list_adapters()
