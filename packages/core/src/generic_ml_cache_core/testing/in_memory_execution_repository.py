@@ -63,7 +63,11 @@ class InMemoryExecutionRepository(
     def __init__(self, clock: ClockPort) -> None:
         self._clock = clock
         self._by_key: dict[str, list[MlExecution]] = {}
-        self._tags_by_key: dict[str, set[str]] = {}
+        # Tags belong to an execution ROW (its execution_id), NOT the key (Y16) — the
+        # durable SQLite store tags execution_tags.execution_id, so after a supersession
+        # the new current row starts untagged and the old tags do not carry over. Keying
+        # by execution_id keeps this test double faithful to that row-scoped semantics.
+        self._tags_by_execution_id: dict[ExecutionId, set[str]] = {}
 
     def find_current(self, execution_key: str) -> MlExecution | None:
         for execution in self._by_key.get(execution_key, []):
@@ -166,11 +170,12 @@ class InMemoryExecutionRepository(
             return  # already gone — idempotent cleanup
         execution_key, execution = located
         self._by_key[execution_key].remove(execution)
+        # Tags are row-scoped (by execution_id), so dropping a row drops exactly its tags.
+        self._tags_by_execution_id.pop(execution.execution_id, None)
         # If it was the last execution for the key, drop the key entirely so an
         # interrupted run leaves no trace (matching the durable adapter).
         if not self._by_key[execution_key]:
             self._by_key.pop(execution_key)
-            self._tags_by_key.pop(execution_key, None)
 
     def _require_by_id(self, execution_id: ExecutionId) -> tuple[str, MlExecution]:
         located = self._locate_by_id(execution_id)
@@ -199,16 +204,25 @@ class InMemoryExecutionRepository(
                 runs.append(UnpersistedRun(key, latest.execution_id, tuple(blob_keys)))
         return runs
 
+    def _current_execution_id(self, execution_key: str) -> ExecutionId | None:
+        current = self.find_current(execution_key)
+        return current.execution_id if current is not None else None
+
     def add_tags(self, execution_key: str, tags: list[str]) -> None:
-        # Tags the key's current execution; a no-op when there is none.
-        if not tags or self.find_current(execution_key) is None:
+        # Tags the key's CURRENT execution row (by execution_id); a no-op when there
+        # is none. Matches SQLite's INSERT INTO execution_tags(execution_id, tag).
+        if not tags:
             return
-        self._tags_by_key.setdefault(execution_key, set()).update(tags)
+        execution_id = self._current_execution_id(execution_key)
+        if execution_id is None:
+            return
+        self._tags_by_execution_id.setdefault(execution_id, set()).update(tags)
 
     def tags_for(self, execution_key: str) -> list[str]:
-        if self.find_current(execution_key) is None:
+        execution_id = self._current_execution_id(execution_key)
+        if execution_id is None:
             return []
-        return sorted(self._tags_by_key.get(execution_key, set()))
+        return sorted(self._tags_by_execution_id.get(execution_id, set()))
 
     def add_input_artifacts(self, execution_key: str, artifacts: list[Artifact]) -> None:
         # Back-fill the input onto the key's current execution; idempotent and a
@@ -242,8 +256,11 @@ class InMemoryExecutionRepository(
             execution.input_persisted = False
 
     def hard_delete_execution(self, execution_key: str) -> None:
-        self._by_key.pop(execution_key, None)
-        self._tags_by_key.pop(execution_key, None)
+        # Drop every row for the key AND each row's tags (SQLite DELETEs execution_tags
+        # for all the key's execution_ids). soft_purge, in contrast, keeps the tag rows
+        # (it only clears artifacts + output_persisted), matching the durable adapter.
+        for execution in self._by_key.pop(execution_key, []):
+            self._tags_by_execution_id.pop(execution.execution_id, None)
 
     def total_stored_bytes(self) -> int:
         return sum(
@@ -267,12 +284,17 @@ class InMemoryExecutionRepository(
         ]
 
     def executions_by_tag(self, tag: str) -> list[str]:
-        return [
-            key
-            for key, executions in self._by_key.items()
-            if any(self._is_servable(e) for e in executions)
-            and tag in self._tags_by_key.get(key, set())
-        ]
+        # A key matches when its CURRENT execution row carries the tag — a tag on a
+        # superseded or soft-purged (non-current) row does not surface the key, matching
+        # SQLite's JOIN on the current execution.
+        matched: list[str] = []
+        for key in self._by_key:
+            execution_id = self._current_execution_id(key)
+            if execution_id is not None and tag in self._tags_by_execution_id.get(
+                execution_id, set()
+            ):
+                matched.append(key)
+        return matched
 
     def all_execution_keys(self) -> list[str]:
         return list(self._by_key.keys())

@@ -59,6 +59,7 @@ class MlRunStore(Protocol):
     # Accounting / retention surface (X24): quota, size summaries, blob-key collection,
     # tagging, and hard delete — where a third-party backend most easily diverges.
     def add_tags(self, execution_key: str, tags: list[str]) -> None: ...
+    def tags_for(self, execution_key: str) -> list[str]: ...
     def total_stored_bytes(self) -> int: ...
     def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]: ...
     def hard_delete_execution(self, execution_key: str) -> None: ...
@@ -317,3 +318,46 @@ class MlRunStoreConformance:
         store.add_tags(key, ["keep"])
         assert store.executions_by_tag("keep") == [key]
         assert store.executions_by_tag("absent") == []
+
+    def test_tags_for_returns_the_current_rows_tags(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity))
+        store.add_tags(key, ["keep", "review"])
+        assert store.tags_for(key) == ["keep", "review"]  # sorted, on the current row
+
+    def test_tags_do_not_carry_across_supersession(self, tmp_path: Path) -> None:
+        # Y16: tags belong to an execution ROW (its execution_id), not the key. After a
+        # new servable success supersedes the tagged one, the new current row is
+        # untagged — this is exactly the seam where a key-scoped fake would diverge.
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity, b"old"))
+        store.add_tags(key, ["keep"])
+        store.save(_servable(identity, b"new"))  # supersedes the tagged row
+        assert store.tags_for(key) == []
+        assert store.executions_by_tag("keep") == []
+
+    def test_tags_are_hidden_once_a_soft_purge_unservables_the_row(self, tmp_path: Path) -> None:
+        # soft_purge clears artifacts + output_persisted, so the row is no longer
+        # current; tags_for / executions_by_tag key off the current row, so both empty.
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity))
+        store.add_tags(key, ["keep"])
+        store.soft_purge_execution(key)
+        assert store.tags_for(key) == []
+        assert store.executions_by_tag("keep") == []
+
+    def test_tags_are_deleted_by_a_hard_delete(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity))
+        store.add_tags(key, ["keep"])
+        store.hard_delete_execution(key)
+        assert store.tags_for(key) == []
+        assert store.executions_by_tag("keep") == []
