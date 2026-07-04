@@ -8,12 +8,18 @@ Writes structured diagnostic lines to a rotating log file. Each line carries:
 Format is human-readable text (logback convention) by default; pass
 ``fmt="json"`` for newline-delimited JSON suitable for log aggregators.
 
-All string values — including rendered exception tracebacks — are passed through
-a PII scrubbing processor before being written. The scrubber redacts:
+All string values — including rendered exception tracebacks and secrets nested in
+mapping/sequence values — are passed through a PII scrubbing processor before being
+written. The scrubber redacts:
   - E-mail addresses  →  [email]
   - Bearer / API tokens in Authorization-style headers  →  [token]
+  - Our own encryption token by its ``gmlc_`` provenance prefix, and AWS ``AKIA``
+    access-key ids  →  [secret]
   - Long opaque strings that look like secrets (base64/hex ≥ 32 chars)  →  [secret]
   - Values stored under sensitive key names (token, secret, password, …)  →  [redacted]
+
+Over-redaction silently destroys logs, so bare lowercase-hex (SHA-256 content keys)
+is deliberately preserved — our own token is caught by its prefix, not its entropy.
 
 Usage (composition root in CLI or daemon):
 
@@ -28,6 +34,7 @@ import re
 import sys
 import threading
 import traceback
+from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
 from typing import IO, Any
@@ -82,6 +89,14 @@ _PII_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         re.compile(r"(?i)(bearer|token|api[-_]?key)\s+[A-Za-z0-9\-._~+/=]{8,}"),
         r"\1 [token]",
     ),
+    # Our own encryption token, carrying the ``gmlc_`` provenance prefix (CG9-bis).
+    # The prefix is what makes it value-redactable at all: the token body is bare
+    # lowercase hex, indistinguishable from a SHA-256 content key without the prefix,
+    # so the generic entropy rule below deliberately cannot (and must not) catch it.
+    (re.compile(r"gmlc_[0-9a-f]{32,}"), "[secret]"),
+    # AWS access key id: a fixed ``AKIA`` prefix + 16 upper-case/digit chars (20 total),
+    # too short for the ≥32 entropy rule but a hard secret indicator by prefix.
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[secret]"),
     # Long opaque strings ≥ 32 chars that look like API keys or encryption tokens.
     # Requires at least one uppercase letter or base64 special char (+/) so that
     # pure-lowercase-hex strings (SHA-256 content-addressed keys) are left intact.
@@ -99,20 +114,29 @@ def _scrub_string(value: str) -> str:
 
 
 def _scrub_value(value: Any) -> Any:
+    """Scrub a value recursively: strings by pattern; nested mappings/sequences
+    element-wise (so a secret buried in a dict or list value never leaks in the
+    rendered repr). Scalars pass through unchanged."""
     if isinstance(value, str):
         return _scrub_string(value)
+    if isinstance(value, Mapping):
+        return {key: _scrub_field(key, item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_scrub_value(item) for item in value)
     return value
 
 
+def _scrub_field(key: Any, value: Any) -> Any:
+    """Redact by key name first (a sensitive key's value never appears whatever its
+    shape), then scrub the value. Shared by the top-level processor and nested maps."""
+    if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS:
+        return "[redacted]"
+    return _scrub_value(value)
+
+
 def _scrub_processor(logger: WrappedLogger, method: str, event_dict: EventDict) -> EventDict:
-    """Redact PII from every string field before the event reaches the renderer."""
-    scrubbed: EventDict = {}
-    for k, v in event_dict.items():
-        if isinstance(k, str) and k.lower() in _SENSITIVE_KEYS:
-            scrubbed[k] = "[redacted]"
-        else:
-            scrubbed[k] = _scrub_value(v)
-    return scrubbed
+    """Redact PII from every field before the event reaches the renderer."""
+    return {key: _scrub_field(key, value) for key, value in event_dict.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -263,3 +287,10 @@ class StructlogDiagnosticsAdapter(DiagnosticsPort):
             self._file.flush()
         except Exception:  # noqa: BLE001 — R5: diagnostics failure must never propagate
             pass
+
+    def close(self) -> None:
+        """Close the underlying log file handle, if open. Idempotent; the adapter
+        can still be used afterwards (the next emit reopens in append mode)."""
+        if self._file is not None:
+            self._file.close()
+            self._file = None

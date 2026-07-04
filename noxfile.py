@@ -46,6 +46,14 @@ _EXTRAS: dict[str, str] = {"adapters": "[dev,encryption]"}
 # Distribution name -> import package name, for ``--cov=``.
 _IMPORT_NAME: dict[str, str] = {pkg: f"generic_ml_cache_{pkg}" for pkg in PACKAGES}
 
+# The security-critical secret scrubber runs on every command's log path, so a
+# coverage gap there risks leaking tokens. It carries a per-module floor above the
+# package-wide 80% average, which would otherwise hide a regression in this one file (CG8).
+_SCRUBBER_MODULE = (
+    "generic_ml_cache_adapters.adapter.out.diagnostics.structlog_diagnostics_adapter"
+)
+_SCRUBBER_FLOOR = 90
+
 
 def _editable_specs() -> list[str]:
     """``-e packages/<pkg><extra>`` for every package.
@@ -105,6 +113,30 @@ def tests(session: nox.Session, package: str) -> None:
         session.run("python", "-m", "pytest", *session.posargs)
 
 
+def _run_scrubber_floor(session: nox.Session) -> None:
+    """Enforce the per-module coverage floor for the secret scrubber. Runs the full
+    adapters suite (every test that touches the module counts) with coverage scoped
+    to that one file; ``-o addopts=`` drops the package-wide ``--cov`` so the floor
+    applies to the module alone."""
+    with session.chdir("packages/adapters"):
+        session.run(
+            "python",
+            "-m",
+            "pytest",
+            "-o",
+            "addopts=",
+            f"--cov={_SCRUBBER_MODULE}",
+            f"--cov-fail-under={_SCRUBBER_FLOOR}",
+        )
+
+
+@nox.session
+def scrubber_floor(session: nox.Session) -> None:
+    """CG8 — the secret scrubber's per-module coverage floor (see _SCRUBBER_FLOOR)."""
+    _install_all(session)
+    _run_scrubber_floor(session)
+
+
 @nox.session
 def sonar(session: nox.Session) -> None:
     """Write the per-package coverage XMLs that Sonar ingests.
@@ -137,6 +169,7 @@ def green(session: nox.Session) -> None:
     for pkg in PACKAGES:
         with session.chdir(f"packages/{pkg}"):
             session.run("python", "-m", "pytest")
+    _run_scrubber_floor(session)
 
 
 @nox.session(venv_backend="none")
