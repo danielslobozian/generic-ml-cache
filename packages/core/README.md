@@ -10,7 +10,7 @@
 #### The hexagonal engine behind gmlcache — embeddable and stateless
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/LICENSE)
-[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
+[![Status: Beta](https://img.shields.io/badge/Status-Beta-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
 
 The reusable **hexagonal kernel** behind
 [`gmlcache`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/cli):
@@ -41,7 +41,7 @@ for the shipped infrastructure, then wire them in your composition root:
 
 ```python
 from generic_ml_cache_core import ApplicationApi
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
 

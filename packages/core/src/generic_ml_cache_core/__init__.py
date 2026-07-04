@@ -34,10 +34,20 @@ Internal paths may change in any release, including patch releases.
 
 **Public API (``__all__``):**
 
-- :class:`ApplicationApi` — typed container of wired use-case references
-- :class:`RunMlExecutionCommand` — inbound command value object
-- :class:`MlRunnerPort` — outbound runner contract
-- :class:`AdapterCatalogPort` — the injected adapter universe (discovery lives in the adapters package)
+- :class:`ApplicationApi` — the bundle of inbound-port fields the drivers call
+- :class:`RunMlExecutionCommand` — the inbound command value object
+- **Outbound ports an embedder implements to run on their own infrastructure**
+  (V33 groups the DB-backed ones into a ``PersistenceBackend`` at the bootstrap
+  composition root): the ML-run store ports (:class:`SaveMlRunPort`,
+  :class:`ReadMlRunPort`, :class:`AnnotateMlRunPort`, :class:`InspectMlRunsPort`,
+  :class:`PurgeMlRunsPort`, :class:`RepairMlRunsPort`); the call-journal ports
+  (:class:`RecordCallEventPort`, :class:`CallStatsPort`,
+  :class:`SessionReportSourcePort`, :class:`SessionQueryPort`,
+  :class:`PurgeJournalPort`, :class:`SessionTagsPort`, :class:`SessionSpecPort`);
+  :class:`StoreMigrationPort` (+ :data:`CURRENT_MODEL_VERSION`);
+  :class:`BlobStorePort`; :class:`MlRunnerPort`; :class:`AdapterCatalogPort`; and
+  their DTOs (:class:`ExecutionSummary`, :class:`ExecutionSizeEntry`,
+  :class:`UnpersistedRun`, :class:`SessionEventRow`).
 - Error hierarchy rooted at :class:`CacheError`
 - Checksum utilities: :func:`checksum_input_data`, :func:`text_checksum`,
   :func:`file_content_fingerprint`
@@ -53,11 +63,46 @@ try:
 except PackageNotFoundError:  # running from an uninstalled source tree
     __version__ = "0+unknown"
 
+from generic_ml_cache_core.application.domain.model.session.session_event_row import (  # noqa: E402  # fmt: skip
+    SessionEventRow,
+)
 from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (  # noqa: E402  # fmt: skip
     RunMlExecutionCommand,
 )
+from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import (  # noqa: E402  # fmt: skip
+    AdapterCatalogPort,
+)
+from generic_ml_cache_core.application.port.outbound.blob_store_port import (  # noqa: E402  # fmt: skip
+    BlobStorePort,
+)
+from generic_ml_cache_core.application.port.outbound.call_journal_ports import (  # noqa: E402  # fmt: skip
+    CallStatsPort,
+    PurgeJournalPort,
+    RecordCallEventPort,
+    SessionQueryPort,
+    SessionReportSourcePort,
+    SessionSpecPort,
+    SessionTagsPort,
+)
+from generic_ml_cache_core.application.port.outbound.ml_run_ports import (  # noqa: E402  # fmt: skip
+    AnnotateMlRunPort,
+    ExecutionSizeEntry,
+    ExecutionSummary,
+    InspectMlRunsPort,
+    PurgeMlRunsPort,
+    ReadMlRunPort,
+    SaveMlRunPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_runner_port import (
     MlRunnerPort,  # noqa: E402  # fmt: skip
+)
+from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import (  # noqa: E402  # fmt: skip
+    RepairMlRunsPort,
+    UnpersistedRun,
+)
+from generic_ml_cache_core.application.port.outbound.store_migration_port import (  # noqa: E402  # fmt: skip
+    CURRENT_MODEL_VERSION,
+    StoreMigrationPort,
 )
 from generic_ml_cache_core.application.wiring.application_api import (  # noqa: E402  # fmt: skip
     ApplicationApi,
@@ -89,8 +134,32 @@ __all__ = [
     "ApplicationApi",
     # Inbound port
     "RunMlExecutionCommand",
-    # Outbound port contracts
+    # Outbound persistence ports — an embedder implements these to run on their own
+    # store (V33 groups the DB-backed ones into a PersistenceBackend at composition).
+    "SaveMlRunPort",
+    "ReadMlRunPort",
+    "AnnotateMlRunPort",
+    "InspectMlRunsPort",
+    "PurgeMlRunsPort",
+    "RepairMlRunsPort",
+    "ExecutionSummary",
+    "ExecutionSizeEntry",
+    "UnpersistedRun",
+    # Outbound call-journal ports (+ its row DTO)
+    "RecordCallEventPort",
+    "CallStatsPort",
+    "SessionReportSourcePort",
+    "SessionQueryPort",
+    "PurgeJournalPort",
+    "SessionTagsPort",
+    "SessionSpecPort",
+    "SessionEventRow",
+    # Outbound migration / blob / runner / catalog ports
+    "StoreMigrationPort",
+    "CURRENT_MODEL_VERSION",
+    "BlobStorePort",
     "MlRunnerPort",
+    "AdapterCatalogPort",
     # Checksum utilities
     "checksum_input_data",
     "text_checksum",

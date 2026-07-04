@@ -14,7 +14,7 @@
 <br>
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-185FA5?style=for-the-badge&labelColor=403E3A)](LICENSE)
-[![Status: Alpha](https://img.shields.io/badge/status-alpha-BA7517?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
+[![Status: Beta](https://img.shields.io/badge/status-beta-BA7517?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
 
 [![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/claude.py)
 [![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/codex.py)
@@ -26,7 +26,7 @@
 
 <br>
 
-[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Four packages](#four-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
+[Install](#install)&nbsp;&nbsp;•&nbsp;&nbsp;[Five packages](#five-packages)&nbsp;&nbsp;•&nbsp;&nbsp;[Docs](docs/README.md)&nbsp;&nbsp;•&nbsp;&nbsp;[Roadmap](docs/ROADMAP.md)
 
 </div>
 
@@ -67,27 +67,31 @@ It is **not** a gateway, **not** a multi-user router, and **not** a way to make 
 
 <br>
 
-## Four packages
+## Five packages
 
-`gmlcache` — the terminal client — is the face most people use. Behind it sits a **reusable engine** you can embed in your own application, and an optional **HTTP daemon** that exposes the same cache as a local REST API.
+`gmlcache` — the terminal client — is the face most people use. Behind it sits a **reusable engine** you can embed in your own application, a **composition root** that wires it, and an optional **HTTP daemon** that exposes the same cache as a local REST API.
 
 | Package | What it is | Install |
 |---|---|---|
 | [`generic-ml-cache-cli`](packages/cli) | the `gmlcache` terminal client | `pip install generic-ml-cache-cli` |
 | [`generic-ml-cache-core`](packages/core) | the hexagonal kernel — domain model, use cases, and port contracts | `pip install generic-ml-cache-core` |
 | [`generic-ml-cache-adapters`](packages/adapters) | concrete port implementations — SQLite, filesystem, ML clients, API adapters, encryption | `pip install generic-ml-cache-adapters` |
-| [`generic-ml-cache-daemon`](packages/daemon) | local HTTP API over the cache store; Claude gateway proxy | `pip install generic-ml-cache-daemon` |
+| [`generic-ml-cache-bootstrap`](packages/bootstrap) | the composition root — wires core + adapters, discovers ML-runner plugins, runs the boot version handshake | `pip install generic-ml-cache-bootstrap` |
+| [`generic-ml-cache-daemon`](packages/daemon) | local HTTP API over the cache store; gateway proxy | `pip install generic-ml-cache-daemon` |
 
-The CLI and the daemon are both inbound drivers over the same engine. The dependency arrow is strictly `adapters → core`; the core itself has no runtime dependencies and knows nothing about concrete infrastructure. To embed the engine, depend on `generic-ml-cache-core` for the ports and use cases, and on `generic-ml-cache-adapters` for the shipped infrastructure — then wire them together:
+The CLI and the daemon are both inbound drivers over the same engine. The dependency arrows point inward: `adapters → core`, and `bootstrap → core + adapters` (the one place allowed to import both). The core knows nothing about concrete infrastructure — it depends only on the port contracts, and the data source is injected by the caller. To embed the engine, depend on `generic-ml-cache-core` for the ports and use cases, `generic-ml-cache-adapters` for the shipped infrastructure, and `generic-ml-cache-bootstrap` to wire them into a ready `ApplicationApi`:
 
 ```python
-from generic_ml_cache_core import WiredUseCases
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_bootstrap.application import build_application_api
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
 
-# wired: WiredUseCases — constructed by your composition root
-result = wired.run_ml.execute(command)
+# build_application_api returns an ApplicationApi — the bundle of inbound-port
+# fields the drivers call. Inject your own PersistenceBackend / blob store to run
+# on Postgres/S3; inject nothing for the batteries-included SQLite + filesystem stack.
+wired = build_application_api(store_root, build_runners)
+result = wired.run_ml.execute(RunMlExecutionCommand(...))
 ```
 
 <br>
@@ -111,7 +115,7 @@ gmlcache ships built-in adapters for every port in the engine. Because the archi
 
 ### Storage
 
-The engine stores executions across two complementary backends, both zero-dependency and zero-config by default.
+The engine stores executions across two complementary backends, both zero-config by default and built on only the Python standard library.
 
 | Backend | Role | Status |
 |---|---|:---:|

@@ -8,7 +8,7 @@
 #### Detached ML Execution Cache — the terminal client
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/LICENSE)
-[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
+[![Status: Beta](https://img.shields.io/badge/Status-Beta-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
 
 `gmlcache` runs, records, and replays detached ML workloads — record a real client (or API)
 call once, replay it forever by its content key, offline and byte-for-byte.
