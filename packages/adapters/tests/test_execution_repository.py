@@ -139,6 +139,86 @@ def test_locked_read_translates_to_store_locked(tmp_path):
     assert connection.calls == ["execute", "close"]
 
 
+# --- X2: a malformed row (outside the artifact fields) → StoreCorrupt ---------
+
+
+def _corrupt(db_path, sql: str) -> None:
+    """Tamper one column of a stored row via a raw connection — simulating on-disk
+    corruption the reconstruction must survive as a self-healable StoreCorrupt."""
+    connection = sqlite3.connect(str(db_path))
+    try:
+        connection.execute(sql)
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _servable_repo(tmp_path):
+    db_path = tmp_path / "executions.sqlite3"
+    factory = _make_factory(db_path)
+    run_migrations(factory)
+    return SqliteExecutionRepository(factory, clock=FixedClock()), db_path
+
+
+def test_corrupt_kind_is_store_corrupt_on_the_serve_path(tmp_path):
+    # X2: a bad enum outside the artifact fields must not raise a raw ValueError that
+    # denies the whole key — it is a corrupt cassette the serve path can self-heal.
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET kind = 'not-a-kind'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_failure_reason_is_store_corrupt(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET failure_reason = 'not-a-reason'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_identity_json_is_store_corrupt(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE call_identities SET identity_json = '{ not valid json'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_token_usage_json_is_store_corrupt(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    usage = TokenUsage(input_tokens=1, output_tokens=1, raw={"x": 1})
+    repository.save(_execution(identity, token_usage=usage))
+    _corrupt(db_path, "UPDATE token_usage SET raw_json = '{ not valid json'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_current(identity.generate_key())
+
+
+def test_corrupt_state_is_store_corrupt_on_read_all(tmp_path):
+    # ``state`` is in find_current's WHERE filter, so a bad value hides the row from
+    # the serve path; find_all (the unfiltered history) still reconstructs it.
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET state = 'not-a-state'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_all(identity.generate_key())
+
+
+def test_corrupt_superseded_timestamp_is_store_corrupt_on_read_all(tmp_path):
+    repository, db_path = _servable_repo(tmp_path)
+    identity = _managed_identity()
+    repository.save(_execution(identity))
+    _corrupt(db_path, "UPDATE executions SET superseded_at = 'not-a-timestamp'")
+    with pytest.raises(StoreCorrupt):
+        repository.find_all(identity.generate_key())
+
+
 def _make_factory(db_path):
     def _connect():
         return sqlite3.connect(str(db_path))

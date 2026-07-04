@@ -531,30 +531,41 @@ class SqliteExecutionRepository(
             failure_exit_code,
             execution_id,
         ) = row
-        artifacts = self._load_artifacts(connection, row_id)
-        return MlExecution(
-            call_identity=self._load_identity(connection, execution_key),
-            execution_state=ExecutionState(state),
-            execution_kind=ExecutionKind(kind),
-            output_persisted=bool(output_persisted),
-            # A legacy pre-0004 row has no stored id; mint one (it is historical and
-            # never re-targeted, so a fresh surrogate is harmless).
-            execution_id=ExecutionId(execution_id) if execution_id else ExecutionId.generate(),
-            # Derived, not a column: input is persisted iff INPUT_* artifacts exist.
-            input_persisted=any(a.artifact_type in INPUT_ARTIFACT_TYPES for a in artifacts),
-            artifacts=artifacts,
-            token_usage=self._load_token_usage(connection, row_id),
-            failure=(
-                ExecutionFailure(
-                    reason=FailureReason(failure_reason),
-                    message=failure_message,
-                    exit_code=failure_exit_code,
-                )
-                if failure_reason is not None
-                else None
-            ),
-            superseded_at=datetime.fromisoformat(superseded_at) if superseded_at else None,
-        )
+        try:
+            artifacts = self._load_artifacts(connection, row_id)
+            return MlExecution(
+                call_identity=self._load_identity(connection, execution_key),
+                execution_state=ExecutionState(state),
+                execution_kind=ExecutionKind(kind),
+                output_persisted=bool(output_persisted),
+                # A legacy pre-0004 row has no stored id; mint one (it is historical and
+                # never re-targeted, so a fresh surrogate is harmless).
+                execution_id=ExecutionId(execution_id) if execution_id else ExecutionId.generate(),
+                # Derived, not a column: input is persisted iff INPUT_* artifacts exist.
+                input_persisted=any(a.artifact_type in INPUT_ARTIFACT_TYPES for a in artifacts),
+                artifacts=artifacts,
+                token_usage=self._load_token_usage(connection, row_id),
+                failure=(
+                    ExecutionFailure(
+                        reason=FailureReason(failure_reason),
+                        message=failure_message,
+                        exit_code=failure_exit_code,
+                    )
+                    if failure_reason is not None
+                    else None
+                ),
+                superseded_at=datetime.fromisoformat(superseded_at) if superseded_at else None,
+            )
+        except (ValueError, TypeError, KeyError) as exc:
+            # A malformed persisted row anywhere in the reconstruction — a bad
+            # kind/state/failure enum, a missing/duplicate or malformed identity, bad
+            # token-usage JSON, a bad timestamp — is a corrupt cassette. Surface a
+            # catchable StoreCorrupt the serve path self-heals (quarantine + re-run),
+            # never a raw ValueError/TypeError that denies the whole key uncaught (X2 —
+            # extends W17/S4 from the artifacts to the WHOLE row). ``_load_artifacts``
+            # already raises StoreCorrupt with a per-artifact message; that passes
+            # through here unchanged (it is not one of the caught types).
+            raise StoreCorrupt(f"corrupt execution row for key {execution_key!r}: {exc}") from exc
 
     @staticmethod
     def _load_identity(connection: DbConnection, execution_key: str) -> CallIdentity:
