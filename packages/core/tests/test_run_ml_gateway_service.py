@@ -6,7 +6,7 @@ from generic_ml_cache_core.application.domain.model.gateway.forwarded_response i
     ForwardedResponse,
 )
 from generic_ml_cache_core.application.domain.model.gateway.gateway_request import GatewayRequest
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_command import (
     RunMlGatewayCommand,
 )
 from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService

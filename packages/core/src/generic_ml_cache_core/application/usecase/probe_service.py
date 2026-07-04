@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from generic_ml_cache_core.application.domain.model.probe.probe_report import ProbeReport
 from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
-from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
-from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
+from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
+from generic_ml_cache_core.application.port.inbound.probe.probe_use_case import ProbeUseCase
 from generic_ml_cache_core.application.port.outbound.execution_repository_port import (
     ExecutionRepositoryPort,
 )

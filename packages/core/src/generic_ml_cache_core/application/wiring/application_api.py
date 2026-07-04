@@ -22,7 +22,7 @@ from generic_ml_cache_core.application.port.inbound.execution_query.tags_for_exe
 from generic_ml_cache_core.application.port.inbound.execution_query.total_stored_bytes_use_case import (
     TotalStoredBytesUseCase,
 )
-from generic_ml_cache_core.application.port.inbound.probe_use_case import ProbeUseCase
+from generic_ml_cache_core.application.port.inbound.probe.probe_use_case import ProbeUseCase
 from generic_ml_cache_core.application.port.inbound.purge.evict_stale_use_case import (
     EvictStaleUseCase,
 )
@@ -42,10 +42,10 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_session_use_c
 from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_use_case import (
     PurgeByTagUseCase,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_use_case import (
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_use_case import (
     RunMlGatewayUseCase,
 )
 from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_spec_use_case import (

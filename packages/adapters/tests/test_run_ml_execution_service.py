@@ -22,10 +22,10 @@ from generic_ml_cache_core.application.domain.model.usage.token_usage import Tok
 from generic_ml_cache_core.application.port.inbound.purge.evict_to_quota_command import (
     EvictToQuotaCommand,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_use_case import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
 from generic_ml_cache_core.application.port.outbound.api_client_port import ApiClientPort

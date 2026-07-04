@@ -7,7 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from generic_ml_cache_core.application.domain.model.gateway.gateway_response import GatewayResponse
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_command import (
     RunMlGatewayCommand,
 )
 

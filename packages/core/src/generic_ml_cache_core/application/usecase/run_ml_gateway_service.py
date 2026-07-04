@@ -20,10 +20,10 @@ from generic_ml_cache_core.application.domain.model.gateway.gateway_response imp
 from generic_ml_cache_core.application.domain.model.identity.gateway_call_identity import (
     GatewayCallIdentity,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_command import (
     RunMlGatewayCommand,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_use_case import (
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_use_case import (
     RunMlGatewayUseCase,
 )
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort

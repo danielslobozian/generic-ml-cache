@@ -28,7 +28,7 @@ from generic_ml_cache_core.application.domain.model.execution.execution_kind imp
 from generic_ml_cache_core.application.domain.model.execution.execution_state import (  # noqa: E402
     ExecutionState,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (  # noqa: E402
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (  # noqa: E402
     RunMlExecutionCommand,
 )
 from generic_ml_cache_core.common.errors import (  # noqa: E402

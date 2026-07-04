@@ -123,7 +123,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     import json
 
     from generic_ml_cache_core.application.domain.model.probe.probe_status import ProbeStatus
-    from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
+    from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
 
     context = read_text_arg(args.context, args.context_file, "context")
     prompt = read_text_arg(args.prompt, args.prompt_file, "prompt")

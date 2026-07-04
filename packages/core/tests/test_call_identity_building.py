@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
-from generic_ml_cache_core.application.port.inbound.run_ml_execution_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
     RunMlExecutionCommand,
 )
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (

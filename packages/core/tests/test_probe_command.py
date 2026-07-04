@@ -8,7 +8,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from generic_ml_cache_core.application.port.inbound.probe_command import ProbeCommand
+from generic_ml_cache_core.application.port.inbound.probe.probe_command import ProbeCommand
 
 
 def _command(**overrides) -> ProbeCommand:

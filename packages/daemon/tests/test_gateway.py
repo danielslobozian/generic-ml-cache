@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from generic_ml_cache_core.application.domain.model.gateway.gateway_response import GatewayResponse
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway_command import (
+from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_command import (
     RunMlGatewayCommand,
 )
 from starlette.testclient import TestClient
