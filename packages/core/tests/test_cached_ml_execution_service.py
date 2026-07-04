@@ -164,11 +164,12 @@ def _make_svc(blob=None, repo=None, metrics=None, runner=None):
 
 
 class _StatefulBlobStore(BlobStorePort):
-    """An in-memory blob store that really stores bytes; can fail every write."""
+    """An in-memory blob store that really stores bytes; can fail every write/remove."""
 
-    def __init__(self, fail_all_puts: bool = False):
+    def __init__(self, fail_all_puts: bool = False, fail_all_removes: bool = False):
         self.blobs: dict[str, bytes] = {}
         self._fail_all_puts = fail_all_puts
+        self._fail_all_removes = fail_all_removes
 
     def get(self, key):
         return self.blobs.get(str(key))
@@ -182,6 +183,8 @@ class _StatefulBlobStore(BlobStorePort):
         return True
 
     def remove(self, key):
+        if self._fail_all_removes:
+            raise StoreUnavailable(f"injected blob remove failure for {key!r}")
         self.blobs.pop(str(key), None)
 
 
@@ -194,6 +197,7 @@ class _StatefulWriteStore(_MlRunStore):
         self.artifact_status: dict[tuple[str, str], ArtifactStatus] = {}
         self.finalized: set[str] = set()
         self.mark_failed_calls: list[tuple[str, str]] = []
+        self.removed_executions: list[str] = []
         self._fail_mark_stored = fail_mark_stored
 
     def save(self, execution):
@@ -206,6 +210,7 @@ class _StatefulWriteStore(_MlRunStore):
         self.artifact_status[(execution_id, str(artifact.blob_key))] = ArtifactStatus.PENDING
 
     def remove_execution(self, execution_id):
+        self.removed_executions.append(execution_id)
         self.executions.pop(execution_id, None)
 
     def mark_artifacts_stored(self, execution_id, blob_key):
@@ -739,3 +744,32 @@ class TestStoreBlobPhaseSplit:
         assert set(repo.artifact_status.values()) == {ArtifactStatus.STORED}
         assert repo.finalized  # finalize_output_persisted ran
         assert result.output_persisted is True
+
+
+class TestSelfHealRemovalOrder:
+    """Y7: self-heal deletes the blobs (the pointed-to bytes) BEFORE the rows (the
+    pointer), so a blob-remove failure leaves a discoverable row, not an orphan."""
+
+    def test_clean_self_heal_removes_both_blobs_and_rows(self):
+        repo = _StatefulWriteStore()
+        blob = _StatefulBlobStore()
+        blob.blobs["blob-1"] = b"corrupt"
+        svc = _make_svc(repo=repo, blob=blob)
+
+        svc._remove_execution_and_blobs(_make_execution())
+
+        assert "blob-1" not in blob.blobs  # the blob was removed
+        assert repo.removed_executions  # and then the row
+
+    def test_blob_remove_failure_leaves_the_row_intact_no_orphan(self):
+        repo = _StatefulWriteStore()
+        blob = _StatefulBlobStore(fail_all_removes=True)
+        svc = _make_svc(repo=repo, blob=blob)
+
+        with pytest.raises(StoreUnavailable):
+            svc._remove_execution_and_blobs(_make_execution())
+
+        # Blobs-first: the remove failed before the row delete ran, so the naming row
+        # is intact and the blob is still discoverable for a later repair/purge — the
+        # old rows-first order would have deleted the row and orphaned the blob.
+        assert repo.removed_executions == []
