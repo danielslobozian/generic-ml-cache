@@ -37,6 +37,10 @@ class EncryptingBlobStore(BlobStorePort):
     def put(self, key: str, output: bytes) -> None:
         self._inner.put(key, self._cipher.encrypt(self._data_key, output))
 
+    def exists(self, key: str) -> bool:
+        # Presence is about the ciphertext file, not its plaintext — no decryption.
+        return self._inner.exists(key)
+
     def remove(self, key: str) -> None:
         self._inner.remove(key)
 
@@ -58,6 +62,10 @@ class TokenRequiredBlobStore(BlobStorePort):
 
     def put(self, key: str, output: bytes) -> None:
         raise EncryptionTokenRequired("the store is encrypted — provide the token to record")
+
+    def exists(self, key: str) -> bool:
+        # A presence test reads no content, so it works without the token (like remove).
+        return self._inner.exists(key)
 
     def remove(self, key: str) -> None:
         self._inner.remove(key)

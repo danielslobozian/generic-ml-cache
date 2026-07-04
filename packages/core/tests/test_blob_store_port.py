@@ -21,6 +21,9 @@ class InMemoryBlobStore(BlobStorePort):
     def put(self, key: str, output: bytes) -> None:
         self._store[key] = output
 
+    def exists(self, key: str) -> bool:
+        return key in self._store
+
     def remove(self, key: str) -> None:
         self._store.pop(key, None)
 
@@ -49,6 +52,23 @@ def test_different_keys_are_independent():
     blob_store.put("key2", b"value2")
     assert blob_store.get("key1") == b"value1"
     assert blob_store.get("key2") == b"value2"
+
+
+def test_exists_is_false_for_unknown_key():
+    assert InMemoryBlobStore().exists("unknown") is False
+
+
+def test_exists_is_true_after_put():
+    blob_store = InMemoryBlobStore()
+    blob_store.put("key1", b"value")
+    assert blob_store.exists("key1") is True
+
+
+def test_exists_is_false_after_remove():
+    blob_store = InMemoryBlobStore()
+    blob_store.put("key1", b"value")
+    blob_store.remove("key1")
+    assert blob_store.exists("key1") is False
 
 
 def test_remove_deletes_stored_bytes():
@@ -83,6 +103,9 @@ def test_port_requires_get_implementation():
         def put(self, key: str, output: bytes) -> None:
             pass
 
+        def exists(self, key: str) -> bool:
+            return False
+
         def remove(self, key: str) -> None:
             pass
 
@@ -95,11 +118,29 @@ def test_port_requires_put_implementation():
         def get(self, key: str):
             return None
 
+        def exists(self, key: str) -> bool:
+            return False
+
         def remove(self, key: str) -> None:
             pass
 
     with pytest.raises(TypeError):
         MissingPut()  # type: ignore[abstract]
+
+
+def test_port_requires_exists_implementation():
+    class MissingExists(BlobStorePort):
+        def get(self, key: str):
+            return None
+
+        def put(self, key: str, output: bytes) -> None:
+            pass
+
+        def remove(self, key: str) -> None:
+            pass
+
+    with pytest.raises(TypeError):
+        MissingExists()  # type: ignore[abstract]
 
 
 def test_port_requires_remove_implementation():
@@ -109,6 +150,9 @@ def test_port_requires_remove_implementation():
 
         def put(self, key: str, output: bytes) -> None:
             pass
+
+        def exists(self, key: str) -> bool:
+            return False
 
     with pytest.raises(TypeError):
         MissingRemove()  # type: ignore[abstract]

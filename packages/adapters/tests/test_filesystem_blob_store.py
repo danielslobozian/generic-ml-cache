@@ -41,6 +41,15 @@ def test_put_overwrites(tmp_path):
     assert blob_store.get("key1") == b"second"
 
 
+def test_exists_reflects_presence(tmp_path):
+    blob_store = FilesystemBlobStore(tmp_path)
+    assert blob_store.exists("key1") is False
+    blob_store.put("key1", b"value")
+    assert blob_store.exists("key1") is True
+    blob_store.remove("key1")
+    assert blob_store.exists("key1") is False
+
+
 def test_remove_deletes(tmp_path):
     blob_store = FilesystemBlobStore(tmp_path)
     blob_store.put("key1", b"value")

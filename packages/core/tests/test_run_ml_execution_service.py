@@ -156,6 +156,9 @@ class FakeBlobStore(BlobStorePort):
         self.store[key] = output
         self.puts.append(key)
 
+    def exists(self, key: str) -> bool:
+        return key in self.store
+
     def remove(self, key: str) -> None:
         self.store.pop(key, None)
 

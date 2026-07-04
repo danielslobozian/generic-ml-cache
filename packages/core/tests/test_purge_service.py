@@ -73,6 +73,9 @@ class InMemoryBlobStore(BlobStorePort):
     def put(self, key: str, output: bytes) -> None:
         self._store[key] = output
 
+    def exists(self, key: str) -> bool:
+        return key in self._store
+
     def remove(self, key: str) -> None:
         self._store.pop(key, None)
 

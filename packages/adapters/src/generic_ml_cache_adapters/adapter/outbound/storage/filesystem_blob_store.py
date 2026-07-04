@@ -33,6 +33,9 @@ class FilesystemBlobStore(BlobStorePort):
             return None
         return path.read_bytes()
 
+    def exists(self, key: str) -> bool:
+        return self._path_for(key).exists()
+
     def put(self, key: str, output: bytes) -> None:
         self._root.mkdir(parents=True, exist_ok=True)
         path = self._path_for(key)

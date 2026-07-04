@@ -27,6 +27,15 @@ class BlobStorePort(ABC):
         """Persist ``output`` under ``key``, overwriting any prior value."""
 
     @abstractmethod
+    def exists(self, key: str) -> bool:
+        """Return whether a blob is stored under ``key``.
+
+        A cheap, keyless presence test: it fetches no bytes and performs no
+        decryption. The DB-first write path uses it to LINK an already-stored
+        content-addressed blob (mark it STORED without rewriting) instead of
+        putting identical bytes again."""
+
+    @abstractmethod
     def remove(self, key: str) -> None:
         """Delete the bytes stored under ``key``; a no-op if nothing is stored.
 
