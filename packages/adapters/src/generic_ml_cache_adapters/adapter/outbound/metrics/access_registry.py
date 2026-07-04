@@ -6,7 +6,7 @@ It is **non-load-bearing by construction** -- it records *that* a hit / miss /
 record / eviction happened, for `stats` and `prune` to read, but it never gates
 correctness. Every operation swallows its own errors: if the database is missing,
 locked, unwritable, or corrupt, the cache still resolves exactly as it would
-without it. Schema is owned by the yoyo migration ``0001.unified-schema``.
+without it. Schema is owned by the ``0001.initial-schema`` migration.
 """
 
 from __future__ import annotations

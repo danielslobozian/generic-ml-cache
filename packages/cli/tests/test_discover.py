@@ -65,7 +65,7 @@ def test_doctor_shows_schema_version_after_first_run(tmp_path, monkeypatch, caps
     assert rc == 0
     out = capsys.readouterr().out
     assert "store schema" in out
-    assert "0005.execution-owned-blobs" in out
+    assert "0001.initial-schema" in out
     assert "migration(s) applied" in out
 
 
@@ -79,7 +79,7 @@ def test_doctor_json_includes_schema_key(tmp_path, monkeypatch, capsys):
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert "clients" in data and "schema" in data
-    assert any(m["migration_id"] == "0001.unified-schema" for m in data["schema"])
+    assert any(m["migration_id"] == "0001.initial-schema" for m in data["schema"])
 
 
 # --- list_models --------------------------------------------------------------

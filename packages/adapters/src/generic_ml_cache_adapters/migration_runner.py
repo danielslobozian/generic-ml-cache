@@ -29,16 +29,12 @@ from generic_ml_cache_core.common.errors import MigrationFailed, StoreSchemaTooN
 from generic_ml_cache_adapters.db import DbConnection
 
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
-_CURRENT_VERSION = 5
+_CURRENT_VERSION = 1
 
-#: Applied-migration identifiers, indexed by version number (1-based).
-_MIGRATION_IDS = (
-    "0001.unified-schema",
-    "0002.integrity-constraints",
-    "0003.artifact-status",
-    "0004.execution-id",
-    "0005.execution-owned-blobs",
-)
+#: Applied-migration identifiers, indexed by version number (1-based). Pre-1.0 the
+#: former 0001-0005 history is compressed into a single initial schema (every schema
+#: change is a full reset anyway); real per-version migrations resume at 1.0.0.
+_MIGRATION_IDS = ("0001.initial-schema",)
 
 _CREATE_VERSION_TABLE = "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)"
 

@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Tests for the CG10 database integrity constraints (migration 0002).
+"""Tests for the CG10 database integrity constraints.
 
-Foreign keys with ON DELETE CASCADE, session-tag uniqueness, the per-connection
-``PRAGMA foreign_keys = ON``, and the orphan purge the rebuild performs.
+Foreign keys with ON DELETE CASCADE, session-tag uniqueness, and the per-connection
+``PRAGMA foreign_keys = ON``. These constraints ship in the single initial schema
+(pre-1.0 the former 0002 rebuild is compressed into 0001).
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from generic_ml_cache_adapters import migration_runner
 from generic_ml_cache_adapters.datasource import sqlite_connection_factory
 from generic_ml_cache_adapters.migration_runner import run_migrations
 
@@ -99,41 +99,3 @@ def test_session_tags_insert_or_ignore_is_idempotent(tmp_path: Path) -> None:
         assert count == 1
     finally:
         conn.close()
-
-
-def test_migration_0002_purges_pre_existing_orphans(tmp_path: Path) -> None:
-    db_path = tmp_path / "gmlcache.sqlite3"
-    # Build a version-1 database (pre-FK) holding an orphan artifact + a duplicate
-    # session tag — the shape a released 0.x store could carry.
-    raw = sqlite3.connect(str(db_path))
-    try:
-        schema_0001 = (migration_runner._MIGRATIONS_DIR / "0001.unified-schema.sql").read_text(
-            encoding="utf-8"
-        )
-        raw.executescript(schema_0001)
-        raw.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
-        raw.execute("INSERT INTO schema_version (version) VALUES (1)")
-        raw.execute(
-            "INSERT INTO artifacts (execution_id, artifact_type, encoding, blob_key, size_bytes) "
-            "VALUES (999, 'OUTPUT', 'utf-8', 'orphan', 1)"
-        )
-        raw.execute("INSERT INTO session_tags (session_id, tag) VALUES ('s', 'dup')")
-        raw.execute("INSERT INTO session_tags (session_id, tag) VALUES ('s', 'dup')")
-        raw.commit()
-    finally:
-        raw.close()
-
-    run_migrations(sqlite_connection_factory(db_path))
-
-    conn = sqlite_connection_factory(db_path)()
-    try:
-        orphans = conn.execute(
-            "SELECT COUNT(*) FROM artifacts WHERE execution_id = 999"
-        ).fetchone()[0]
-        dup_tags = conn.execute(
-            "SELECT COUNT(*) FROM session_tags WHERE session_id = 's' AND tag = 'dup'"
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    assert orphans == 0  # the FK-checked rebuild dropped the parentless artifact
-    assert dup_tags == 1  # the UNIQUE rebuild collapsed the duplicate session tag

@@ -23,11 +23,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 #: The model-contract version this build requires the persistence adapter to
-#: implement. Bumped whenever a migration changes the persisted domain model
-#: (e.g. the C-4 per-artifact status extended it; X25 re-keys blobs to
-#: ``<execution_id>_<fingerprint>``). An adapter reporting a lower
-#: ``implemented_version()`` is refused at boot.
-CURRENT_MODEL_VERSION = 5
+#: implement. Bumped whenever a migration changes the persisted domain model. Pre-1.0
+#: the migration history is compressed to a single initial schema (every schema change
+#: is a full reset), so the contract lineage restarts at 1; it will be bumped per real
+#: migration from 1.0.0 on. An adapter reporting a lower ``implemented_version()`` is
+#: refused at boot.
+CURRENT_MODEL_VERSION = 1
 
 
 class StoreMigrationPort(ABC):

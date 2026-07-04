@@ -81,7 +81,7 @@ def test_migration_records_applied_migration(tmp_path: Path) -> None:
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 5
+    assert version == 1
 
 
 def test_a_store_newer_than_this_build_fails_loud(tmp_path: Path) -> None:
@@ -112,10 +112,10 @@ def test_migration_creates_indexes(tmp_path: Path) -> None:
         conn.close()
     assert "idx_executions_key" in indexes
     assert "idx_artifacts_execution" in indexes
-    assert "idx_executions_execution_id" in indexes  # migration 0004
+    assert "idx_executions_execution_id" in indexes  # the W1 execution_id unique index
 
 
-def test_migration_0004_adds_execution_id_column(tmp_path: Path) -> None:
+def test_executions_table_has_execution_id_column(tmp_path: Path) -> None:
     factory = _factory(tmp_path / "gmlcache.sqlite3")
     run_migrations(factory)
     conn = factory()
@@ -141,10 +141,11 @@ def test_applied_schema_version_returns_empty_on_broken_connection() -> None:
 def test_missing_migration_file_fails_loud_at_the_last_good_version(tmp_path: Path) -> None:
     db_path = tmp_path / "gmlcache.sqlite3"
     factory = _factory(db_path)
-    # Patch _CURRENT_VERSION past the shipped files so the run applies 1..5, then finds
-    # no file for version 6 and fails loud with the project's MigrationFailed (§10 — the
-    # StopIteration never leaks). Per-file commits mean the store lands cleanly at the
-    # last successfully-applied version (5), not rolled back to 0.
+    # Patch _CURRENT_VERSION past the shipped files so the run applies version 1 (the
+    # real initial schema), then finds no file for version 2 and fails loud with the
+    # project's MigrationFailed (§10 — the StopIteration never leaks). Per-file commits
+    # mean the store lands cleanly at the last successfully-applied version (1), not
+    # rolled back to 0.
     import generic_ml_cache_adapters.migration_runner as _m
 
     original = _m._CURRENT_VERSION
@@ -160,7 +161,7 @@ def test_missing_migration_file_fails_loud_at_the_last_good_version(tmp_path: Pa
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
     finally:
         conn.close()
-    assert version == 5  # the last good version, cleanly applied
+    assert version == 1  # the last good version, cleanly applied
 
 
 def _synthetic_migration(
@@ -271,7 +272,7 @@ def test_applied_schema_version_reports_all_migrations_after_run(tmp_path: Path)
     run_migrations(factory)
     applied = applied_schema_version(factory)
     assert len(applied) == CURRENT_MODEL_VERSION
-    assert applied[-1]["migration_id"] == "0005.execution-owned-blobs"
+    assert applied[-1]["migration_id"] == "0001.initial-schema"
 
 
 def test_applied_schema_version_on_an_unmigrated_db_is_empty(tmp_path: Path) -> None:
