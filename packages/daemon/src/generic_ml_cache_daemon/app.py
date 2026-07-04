@@ -52,6 +52,15 @@ _CACHE_ERROR_HTTP: dict[str, int] = {
 _LOG_FILE_NAME = "gmlcache.log"
 
 
+async def _cache_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Map a :class:`CacheError` to its HTTP status. Registered only for
+    ``CacheError``, so ``exc`` is always one; the ``Exception`` parameter type is
+    the signature Starlette's handler registry requires."""
+    code = exc.code if isinstance(exc, CacheError) else "internal_error"
+    status = _CACHE_ERROR_HTTP.get(code, 500)
+    return JSONResponse(status_code=status, content={"code": code, "detail": str(exc)})
+
+
 def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
     # The library's canonical factory: it creates the parent dir and, crucially,
     # sets PRAGMA foreign_keys = ON per connection so the schema's FKs are enforced.
@@ -170,10 +179,7 @@ def create_app(
         lifespan=lifespan,
     )
 
-    @application.exception_handler(CacheError)
-    async def _cache_error_handler(request: Request, exc: CacheError) -> JSONResponse:
-        status = _CACHE_ERROR_HTTP.get(exc.code, 500)
-        return JSONResponse(status_code=status, content={"code": exc.code, "detail": str(exc)})
+    application.add_exception_handler(CacheError, _cache_error_handler)
 
     application.state.wired = wired_use_cases
     application.state.store_root = store_root

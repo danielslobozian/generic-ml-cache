@@ -14,31 +14,32 @@ ADAPTER_ENTRYPOINT_GROUP = "gmlcache.adapters"
 ADAPTER_CONTRACT_VERSION = "1"
 
 
-def iter_entry_points(group: str = ADAPTER_ENTRYPOINT_GROUP) -> list:
-    """Return the entry points in ``group`` (Python 3.9-safe)."""
+def iter_entry_points(
+    group: str = ADAPTER_ENTRYPOINT_GROUP,
+) -> list[importlib.metadata.EntryPoint]:
+    """Return the entry points in ``group``."""
     return list(importlib.metadata.entry_points(group=group))
-    return list(importlib.metadata.entry_points().get(group, []))  # type: ignore[union-attr]
 
 
-def distribution_name(ep: object) -> str:
-    """The name of the distribution providing ``ep`` (``""`` if unknown).
+def distribution_name(entry_point: importlib.metadata.EntryPoint) -> str:
+    """The name of the distribution providing ``entry_point`` (``""`` if unknown).
 
     Used to decide trust at load time: an entry point whose distribution is in
     the trusted set is loaded; others are third-party, off unless whitelisted.
     """
-    dist = getattr(ep, "dist", None)
-    if dist is None:
+    dist = entry_point.dist
+    if dist is None or not dist.metadata:
         return ""
-    return (dist.metadata.get("Name", "") or "") if dist.metadata else ""
+    return dist.name or ""
 
 
-def describe_source(ep: object) -> str:
-    """Human-readable "<package> <version>" for the distribution providing ``ep``."""
-    dist = getattr(ep, "dist", None)
+def describe_source(entry_point: importlib.metadata.EntryPoint) -> str:
+    """Human-readable "<package> <version>" for the distribution providing ``entry_point``."""
+    dist = entry_point.dist
     if dist is None:
-        return getattr(ep, "value", str(ep))
-    name = dist.metadata.get("Name", "") or ""
-    version = dist.metadata.get("Version", "") or ""
+        return entry_point.value
+    name = dist.name or ""
+    version = dist.version or ""
     if name and version:
         return f"{name} {version}"
-    return name or getattr(ep, "value", str(ep))
+    return name or entry_point.value

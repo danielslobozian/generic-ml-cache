@@ -37,7 +37,7 @@ import traceback
 from collections.abc import Mapping
 from enum import Enum
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, cast
 
 import structlog
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
@@ -113,20 +113,25 @@ def _scrub_string(value: str) -> str:
     return value
 
 
-def _scrub_value(value: Any) -> Any:
+def _scrub_value(value: object) -> object:
     """Scrub a value recursively: strings by pattern; nested mappings/sequences
     element-wise (so a secret buried in a dict or list value never leaks in the
     rendered repr). Scalars pass through unchanged."""
     if isinstance(value, str):
         return _scrub_string(value)
     if isinstance(value, Mapping):
-        return {key: _scrub_field(key, item) for key, item in value.items()}
+        # Safe read-only widening: any runtime mapping is a mapping of objects,
+        # but isinstance narrowing cannot parameterize the generic itself.
+        mapping_value = cast("Mapping[object, object]", value)
+        return {key: _scrub_field(key, item) for key, item in mapping_value.items()}
     if isinstance(value, (list, tuple)):
-        return type(value)(_scrub_value(item) for item in value)
+        # Same widening as above, for the two sequence shapes rebuilt in place.
+        sequence_value = cast("list[object] | tuple[object, ...]", value)
+        return type(sequence_value)(_scrub_value(item) for item in sequence_value)
     return value
 
 
-def _scrub_field(key: Any, value: Any) -> Any:
+def _scrub_field(key: object, value: object) -> object:
     """Redact by key name first (a sensitive key's value never appears whatever its
     shape), then scrub the value. Shared by the top-level processor and nested maps."""
     if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS:
@@ -148,7 +153,9 @@ def _caller_info_processor(logger: WrappedLogger, method: str, event_dict: Event
     """Walk the call stack to find the first frame outside this module and
     the structlog internals, then inject class, method, and line number."""
     this_file = __file__.rstrip("c")  # strip .pyc → .py
-    frame = sys._getframe(1)
+    # sys._getframe is CPython-specific but deliberate: the stdlib offers no
+    # equally-cheap public frame accessor for this logging hot path.
+    frame = sys._getframe(1)  # pyright: ignore[reportPrivateUsage]
     while frame is not None:
         fname = frame.f_code.co_filename.rstrip("c")
         if fname != this_file and "structlog" not in fname:

@@ -9,6 +9,7 @@ with the seam and adjust here if the CLI changes.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,7 @@ from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client imp
 from generic_ml_cache_adapters.adapter.outbound.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
+    is_json_object,
 )
 
 
@@ -49,24 +51,29 @@ class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
     default_executable = "claude"
     execution_kind = ExecutionKind.LOCAL_MANAGED
 
-    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+    def __init__(
+        self,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
+    ) -> None:
         wire_cli_client(self, executable_override, timeout, stream_path)
 
     @classmethod
-    def descriptor(cls):
+    def descriptor(cls) -> AdapterDescriptor:
         return AdapterDescriptor.local_cli("claude", {ClientCapability.RUN}, "Claude Code")
 
     def build_argv(
         self,
-        executable,
-        run_dir,
-        model,
-        effort,
-        context,
-        prompt,
-        system_prompt,
-        client_args=(),
-        grants=(),
+        executable: str,
+        run_dir: Path,
+        model: str,
+        effort: str,
+        context: str,
+        prompt: str,
+        system_prompt: str,
+        client_args: Sequence[str] = (),
+        grants: Sequence[str] = (),
     ) -> list[str]:
         # The prompt and context are delivered on stdin (see stdin_payload), never
         # as an argv argument, so an arbitrarily large prompt cannot hit the OS
@@ -121,18 +128,18 @@ class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
             # Not the shape we expected -- keep the raw output, skip usage.
             return ParsedOutput(text=stdout, usage=None)
 
-        _usage_val = doc.get("usage")
-        block: dict[str, Any] = _usage_val if isinstance(_usage_val, dict) else {}
+        usage_value = doc.get("usage")
+        usage_block: dict[str, Any] = usage_value if is_json_object(usage_value) else {}
         raw: dict[str, Any] = {}
         for key in ("usage", "modelUsage", "total_cost_usd"):
             if key in doc:
                 raw[key] = doc[key]
 
         usage = Usage(
-            input_tokens=int_or_none(block.get("input_tokens")),
-            output_tokens=int_or_none(block.get("output_tokens")),
-            cache_read_tokens=int_or_none(block.get("cache_read_input_tokens")),
-            cache_write_tokens=int_or_none(block.get("cache_creation_input_tokens")),
+            input_tokens=int_or_none(usage_block.get("input_tokens")),
+            output_tokens=int_or_none(usage_block.get("output_tokens")),
+            cache_read_tokens=int_or_none(usage_block.get("cache_read_input_tokens")),
+            cache_write_tokens=int_or_none(usage_block.get("cache_creation_input_tokens")),
             # Claude folds reasoning into output_tokens; it is not separable here.
             reasoning_tokens=None,
             cost_usd=float_or_none(doc.get("total_cost_usd")),
@@ -140,19 +147,19 @@ class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
         )
         return ParsedOutput(text=ensure_trailing_newline(text), usage=usage)
 
-    def stdin_payload(self, context, prompt, system_prompt) -> str | None:
+    def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> str | None:
         # Prompt + context go to the client on stdin. The system prompt is a
         # separate, small argv flag (--append-system-prompt), so it stays in argv.
         return f"{context}\n\n{prompt}" if context else prompt
 
-    def read_access_argv(self, paths):
+    def read_access_argv(self, paths: Sequence[str]) -> list[str]:
         # Claude Code grants read access to extra directories via --add-dir.
-        argv = []
-        for p in paths:
-            argv += ["--add-dir", p]
+        argv: list[str] = []
+        for readable_path in paths:
+            argv += ["--add-dir", readable_path]
         return argv
 
-    def build_grants_config_file(self, grants):
+    def build_grants_config_file(self, grants: Sequence[str]) -> GrantConfigFile:
         # Uniform door: settings.json in a redirected CLAUDE_CONFIG_DIR so the FILE
         # (not a flag) enables capabilities. Verified against the live CLI: the
         # redirected home governs because the run folder is clean of a project
@@ -174,12 +181,12 @@ class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
             file_name="settings.json", content=json.dumps(settings).encode("utf-8")
         )
 
-    def get_token_files(self):
+    def get_token_files(self) -> list[CredentialFile]:
         # Seed credentials so the relocated home is authenticated. Subscription
         # login lives in ~/.claude; an API key in the env carries over on its own.
         # Bulk caches (projects/history/todos/shell-snapshots) are skipped; a stray
         # settings.local.json would outrank ours, so it is dropped.
-        creds = []
+        credential_files: list[CredentialFile] = []
         src = Path.home() / ".claude"
         if src.is_dir():
             skip = {
@@ -193,7 +200,7 @@ class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
             for child in src.iterdir():
                 if child.name in skip:
                     continue
-                creds.append(CredentialFile(source=child, target_name=child.name))
+                credential_files.append(CredentialFile(source=child, target_name=child.name))
         # Claude Code also keeps a top-level ~/.claude.json (account, onboarding,
         # project trust) BESIDE the ~/.claude dir; under a redirected CLAUDE_CONFIG_DIR
         # it is expected at <home>/.claude.json. Seed it too, or Claude Code finds no
@@ -201,35 +208,35 @@ class ClaudeCliAdapter(ComposedLocalClient, ClientConfigPort):
         # internal phase (harmless but noisy). Deleted with the run like the rest.
         main_config = Path.home() / ".claude.json"
         if main_config.is_file():
-            creds.append(CredentialFile(source=main_config, target_name=".claude.json"))
-        return creds
+            credential_files.append(CredentialFile(source=main_config, target_name=".claude.json"))
+        return credential_files
 
-    def config_home_env_var(self):
+    def config_home_env_var(self) -> str:
         return "CLAUDE_CONFIG_DIR"
 
-    def stream_event(self, raw_line):
+    def stream_event(self, raw_line: str) -> dict[str, str | None] | None:
         try:
-            d = json.loads(raw_line)
+            line_event = json.loads(raw_line)
         except (json.JSONDecodeError, ValueError):
             return None
-        if not isinstance(d, dict):
+        if not is_json_object(line_event):
             return None
-        t = d.get("type")
-        if t == "system":
-            sub = d.get("subtype")
-            if sub == "init":
+        event_type = line_event.get("type")
+        if event_type == "system":
+            subtype = line_event.get("subtype")
+            if subtype == "init":
                 return {"kind": "start"}
-            if sub == "thinking_tokens":
+            if subtype == "thinking_tokens":
                 return {"kind": "thinking"}
             return None
-        if t == "stream_event":
-            ev = d.get("event")
-            if isinstance(ev, dict) and ev.get("type") == "content_block_start":
-                block = ev.get("content_block")
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    return {"kind": "tool", "name": block.get("name")}
+        if event_type == "stream_event":
+            inner_event = line_event.get("event")
+            if is_json_object(inner_event) and inner_event.get("type") == "content_block_start":
+                content_block = inner_event.get("content_block")
+                if is_json_object(content_block) and content_block.get("type") == "tool_use":
+                    return {"kind": "tool", "name": content_block.get("name")}
             return None
-        if t == "result":
+        if event_type == "result":
             return {"kind": "result"}
         return None
 

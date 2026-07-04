@@ -128,7 +128,7 @@ def run_migrations(
 
 def schema_version(
     conn_factory: Callable[[], DbConnection], diag: DiagnosticsPort | None = None
-) -> list[dict]:
+) -> list[dict[str, str | None]]:
     """Return the current schema version as a list, or ``[]`` if unmigrated."""
     _t = time.perf_counter()
     if diag:

@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
 
-from generic_ml_cache_daemon.controllers.run import _build_command, _extract_artifact
+from generic_ml_cache_daemon.controllers.run import build_command, extract_artifact
 from generic_ml_cache_daemon.jobs import Job, JobState
 from generic_ml_cache_daemon.presenters.job import JobResponse, JobSubmitBody
 
@@ -29,8 +29,8 @@ def _job_to_response(job: Job) -> JobResponse:
     stderr: str | None = None
     if job.execution is not None:
         execution_key = job.execution.call_identity.generate_key()
-        stdout = _extract_artifact(job.execution, _STDOUT)
-        stderr = _extract_artifact(job.execution, _STDERR)
+        stdout = extract_artifact(job.execution, _STDOUT)
+        stderr = extract_artifact(job.execution, _STDERR)
     return JobResponse(
         job_id=job.job_id,
         state=job.state.value,
@@ -45,7 +45,7 @@ def _job_to_response(job: Job) -> JobResponse:
 def submit_job(body: JobSubmitBody, request: Request) -> JobResponse:
     """Submit an execution to run in the background. Returns immediately with
     a job_id in 'pending' state."""
-    command = _build_command(body, request.app.state.whitelist)  # type: ignore[arg-type]
+    command = build_command(body, request.app.state.whitelist)
     wired = request.app.state.wired
     registry = request.app.state.job_registry
     job = registry.submit(wired.run_ml.execute, command)

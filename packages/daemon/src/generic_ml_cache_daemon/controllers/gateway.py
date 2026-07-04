@@ -25,7 +25,7 @@ _HOP_BY_HOP = frozenset(
 
 @router.get("/{session_id}", include_in_schema=False)
 @router.head("/{session_id}", include_in_schema=False)
-async def gateway_probe(session_id: str) -> dict:
+async def gateway_probe(session_id: str) -> dict[str, str]:
     """Connectivity probe — Claude Code sends HEAD/GET here on startup."""
     return {}
 

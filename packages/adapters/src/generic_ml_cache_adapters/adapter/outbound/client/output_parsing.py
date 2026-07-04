@@ -11,7 +11,14 @@ behavior, not a core port contract.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, TypeGuard
+
+
+def is_json_object(candidate: object) -> TypeGuard[dict[str, Any]]:
+    """Answer whether a decoded JSON value is an object. The narrowing to
+    ``dict[str, Any]`` is sound for values produced by ``json.loads``, which
+    only ever builds string-keyed dicts."""
+    return isinstance(candidate, dict)
 
 
 def final_result_object(stdout: str) -> dict[str, Any] | None:
@@ -30,12 +37,12 @@ def final_result_object(stdout: str) -> dict[str, Any] | None:
         return None
     # Single object (today's --output-format json): parses whole, in one shot.
     try:
-        doc = json.loads(text)
-        if isinstance(doc, dict):
-            return doc
+        whole_document: object = json.loads(text)
     except (json.JSONDecodeError, ValueError):
-        pass  # not a single object -> it is an NDJSON stream; scan for the result
-    last = None
+        whole_document = None  # not a single object -> NDJSON stream; scan for the result
+    if is_json_object(whole_document):
+        return whole_document
+    last_result_object: dict[str, Any] | None = None
     for line in stdout.splitlines():
         line = line.strip()
         if not line:
@@ -44,9 +51,9 @@ def final_result_object(stdout: str) -> dict[str, Any] | None:
             event = json.loads(line)
         except (json.JSONDecodeError, ValueError):
             continue
-        if isinstance(event, dict) and event.get("type") == "result":
-            last = event
-    return last
+        if is_json_object(event) and event.get("type") == "result":
+            last_result_object = event
+    return last_result_object
 
 
 def ensure_trailing_newline(text: str) -> str:

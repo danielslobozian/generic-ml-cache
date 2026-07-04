@@ -53,16 +53,16 @@ def build_session_report(
     ``events`` are rows with ``ts`` / ``event`` / ``client`` / ``model`` / ``execution_key``
     (oldest first); ``usage_by_key`` maps an execution key to its :class:`TokenUsage`.
     """
-    models: dict[tuple, dict[str, int]] = {}
+    models: dict[tuple[str, str], dict[str, int]] = {}
     days: dict[str, dict[str, int]] = {}
     invocations = executions = hits = unknown = 0
 
     for row in events:
         invocations += 1
         day = (row.ts or "")[:10]
-        d = days.setdefault(day, {"invocations": 0, "executions": 0, "hits": 0})
-        d["invocations"] += 1
-        m = models.setdefault(
+        day_counts = days.setdefault(day, {"invocations": 0, "executions": 0, "hits": 0})
+        day_counts["invocations"] += 1
+        model_counts = models.setdefault(
             (row.client, row.model),
             {
                 "in": 0,
@@ -79,21 +79,21 @@ def build_session_report(
 
         if row.event == _HIT:
             hits += 1
-            d["hits"] += 1
-            m["hits"] += 1
+            day_counts["hits"] += 1
+            model_counts["hits"] += 1
             saved = _tokens(usage)
             if saved is not None:
-                m["saved"] += saved
+                model_counts["saved"] += saved
         elif row.event in EXECUTED_EVENTS:
             executions += 1
-            d["executions"] += 1
-            m["executions"] += 1
+            day_counts["executions"] += 1
+            model_counts["executions"] += 1
             if usage is not None and _tokens(usage) is not None:
-                m["in"] += usage.input_tokens or 0
-                m["out"] += usage.output_tokens or 0
-                m["cache_read"] += usage.cache_read_tokens or 0
-                m["cache_write"] += usage.cache_write_tokens or 0
-                m["reasoning"] += usage.reasoning_tokens or 0
+                model_counts["in"] += usage.input_tokens or 0
+                model_counts["out"] += usage.output_tokens or 0
+                model_counts["cache_read"] += usage.cache_read_tokens or 0
+                model_counts["cache_write"] += usage.cache_write_tokens or 0
+                model_counts["reasoning"] += usage.reasoning_tokens or 0
             else:
                 unknown += 1
 
@@ -101,22 +101,25 @@ def build_session_report(
         ModelUsage(
             client=client,
             model=model,
-            spent_input=v["in"],
-            spent_output=v["out"],
-            cache_read_tokens=v["cache_read"],
-            cache_write_tokens=v["cache_write"],
-            reasoning_tokens=v["reasoning"],
-            saved_tokens=v["saved"],
-            executions=v["executions"],
-            hits=v["hits"],
+            spent_input=counts["in"],
+            spent_output=counts["out"],
+            cache_read_tokens=counts["cache_read"],
+            cache_write_tokens=counts["cache_write"],
+            reasoning_tokens=counts["reasoning"],
+            saved_tokens=counts["saved"],
+            executions=counts["executions"],
+            hits=counts["hits"],
         )
-        for (client, model), v in sorted(models.items())
+        for (client, model), counts in sorted(models.items())
     ]
     by_day = [
         DayActivity(
-            day=day, invocations=v["invocations"], executions=v["executions"], hits=v["hits"]
+            day=day,
+            invocations=counts["invocations"],
+            executions=counts["executions"],
+            hits=counts["hits"],
         )
-        for day, v in sorted(days.items())
+        for day, counts in sorted(days.items())
     ]
     return SessionReport(
         session_id=session_id,

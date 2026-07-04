@@ -26,12 +26,14 @@ overridden with ``GMLCACHE_GATEWAY_CAPTURE_PATH``.
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp
 
 _GATEWAY_PREFIX = "/gateway/"
@@ -58,12 +60,14 @@ class GatewayCaptureMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._capture_path = capture_path
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if not request.url.path.startswith(_GATEWAY_PREFIX):
             return await call_next(request)
         return await self._capture_exchange(request, call_next)
 
-    async def _capture_exchange(self, request: Request, call_next) -> Response:
+    async def _capture_exchange(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         import time
 
         start_ns = time.monotonic_ns()
@@ -72,7 +76,12 @@ class GatewayCaptureMiddleware(BaseHTTPMiddleware):
         upstream_response = await call_next(request)
         duration_ms = (time.monotonic_ns() - start_ns) // 1_000_000
 
-        response_body_bytes = b"".join([chunk async for chunk in upstream_response.body_iterator])
+        # BaseHTTPMiddleware always yields a streaming response, so its body is an
+        # async chunk stream we must drain to read (and later re-emit) the bytes.
+        body_iterator = cast(
+            "AsyncIterator[bytes]", cast(StreamingResponse, upstream_response).body_iterator
+        )
+        response_body_bytes = b"".join([chunk async for chunk in body_iterator])
 
         self._append_record(
             request=request,

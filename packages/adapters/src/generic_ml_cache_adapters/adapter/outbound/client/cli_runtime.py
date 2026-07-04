@@ -20,7 +20,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, TypeVar
 
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
@@ -39,7 +39,14 @@ from generic_ml_cache_adapters.adapter.outbound.client.cli_process_runner import
 from generic_ml_cache_adapters.adapter.outbound.client.prime_directive import build_system_prompt
 from generic_ml_cache_adapters.stream import StreamWriter
 
+if TYPE_CHECKING:
+    from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
+        ComposedLocalClient,
+    )
+
 _TEXT_ENCODING = "utf-8"
+
+HookResult = TypeVar("HookResult")
 
 
 class CliRuntime:
@@ -47,7 +54,7 @@ class CliRuntime:
 
     def __init__(
         self,
-        client,
+        client: ComposedLocalClient,
         executable_override: str | None = None,
         timeout: float | None = None,
         stream_path: str | None = None,
@@ -58,12 +65,14 @@ class CliRuntime:
         self._stream_path = stream_path
         self._process = CliProcessRunner()
 
-    def _hook(self, name: str, *args, default: Any = None) -> Any:
+    def _hook(self, name: str, *args: object, default: HookResult) -> HookResult:
         """Call an optional client hook, falling back to a default when the client
         does not define it. Lets a minimal adapter implement only what it
-        customizes (e.g. cursor has no stdin; the fake has no grants config)."""
-        fn = getattr(self._client, name, None)
-        return fn(*args) if callable(fn) else default
+        customizes (e.g. cursor has no stdin; the fake has no grants config).
+        The caller's ``default`` fixes the expected result type; the hook itself
+        is dynamic, so its result is trusted to match."""
+        hook: Callable[..., HookResult] | None = getattr(self._client, name, None)
+        return hook(*args) if callable(hook) else default
 
     # ------------------------------------------------------------------
     # Generic plumbing
@@ -128,9 +137,12 @@ class CliRuntime:
             )
 
             def _emit(line: str) -> None:
-                event = self._hook("stream_event", line, default=None)
-                if event:
-                    writer.event(event.pop("kind"), **event)
+                event: dict[str, str | None] | None = self._hook("stream_event", line, default=None)
+                if not event:
+                    return
+                event_kind = event.pop("kind")
+                if event_kind is not None:
+                    writer.event(event_kind, **event)
 
             on_line = _emit
 
@@ -146,18 +158,22 @@ class CliRuntime:
                 list(request.client_args),
                 list(request.grants),
             )
-            argv += self._hook("read_access_argv", request.add_dir_paths, default=[])
-            argv += self._hook("grant_argv", list(request.grants), default=[])
-            env_var = self._hook("config_home_env_var", default=None)
+            read_access_arguments: list[str] = self._hook(
+                "read_access_argv", request.add_dir_paths, default=[]
+            )
+            grant_arguments: list[str] = self._hook("grant_argv", list(request.grants), default=[])
+            argv += read_access_arguments
+            argv += grant_arguments
+            env_var: str | None = self._hook("config_home_env_var", default=None)
             run_env = {**os.environ, env_var: str(config_home)} if env_var else None
-            stdin_payload = self._hook(
+            stdin_payload: str | None = self._hook(
                 "stdin_payload", request.context, request.prompt, system_prompt, default=None
             )
 
             stdout, stderr, returncode = self._process.run(
                 argv, run_dir, stdin_payload, timeout, run_env, on_line
             )
-            parsed = self._hook(
+            parsed: ParsedOutput = self._hook(
                 "parse_output", stdout, default=ParsedOutput(text=stdout, usage=None)
             )
 
@@ -203,20 +219,20 @@ class CliRuntime:
 
 
 def wire_cli_client(
-    adapter,
+    adapter: ComposedLocalClient,
     executable_override: str | None = None,
     timeout: float | None = None,
     stream_path: str | None = None,
 ) -> CliRuntime:
-    """Compose a CliRuntime into ``adapter`` by setting ``adapter._call``.
+    """Compose a CliRuntime into ``adapter`` by setting ``adapter.call``.
 
     This is the composition seam every standalone local client adapter calls from
     its ``__init__``. The adapter subclasses :class:`ComposedLocalClient`, which
     exposes the never-overridden LocalClientPort surface as delegations to this
-    ``_call`` runtime; the adapter itself defines only its client-specific hooks
+    ``call`` runtime; the adapter itself defines only its client-specific hooks
     (``build_argv``, ``parse_output`` …) and its config knowledge. The call
     template lives once, in CliRuntime.
     """
     runtime = CliRuntime(adapter, executable_override, timeout, stream_path)
-    adapter._call = runtime
+    adapter.call = runtime
     return runtime

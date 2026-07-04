@@ -151,13 +151,13 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
     # -- reporting ------------------------------------------------------------
 
     def current_execution_summaries(self) -> list[ExecutionSummary]:
-        result = []
+        summaries: list[ExecutionSummary] = []
         for key, executions in self._by_key.items():
             for execution in executions:
                 if not self._is_servable(execution):
                     continue
                 serialized = serialize_identity(execution.call_identity)
-                result.append(
+                summaries.append(
                     ExecutionSummary(
                         execution_key=key,
                         kind=execution.execution_kind.value,
@@ -165,7 +165,7 @@ class InMemoryExecutionRepository(ExecutionRepositoryPort):
                         model=serialized.model,
                     )
                 )
-        return result
+        return summaries
 
     def find_current_by_key_prefix(self, key_prefix: str) -> list[MlExecution]:
         return [

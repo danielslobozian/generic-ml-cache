@@ -39,7 +39,7 @@ class AdapterDescriptor:
     client_name: str
     boundary: AdapterBoundary
     supported_modes: frozenset[ExecutionKind]
-    capabilities: frozenset[ClientCapability] = field(default_factory=frozenset)
+    capabilities: frozenset[ClientCapability] = field(default_factory=frozenset[ClientCapability])
     display_name: str = ""
     priority: int = 0
 

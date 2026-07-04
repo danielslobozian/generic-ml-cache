@@ -78,7 +78,7 @@ class AnthropicDirectAdapter(ApiClientPort, ModelListingPort):
         return key
 
     def _build_body(self, request: MlRequest) -> dict[str, Any]:
-        system_parts = []
+        system_parts: list[str] = []
         if request.context:
             system_parts.append(request.context)
         if request.user_system_prompt:

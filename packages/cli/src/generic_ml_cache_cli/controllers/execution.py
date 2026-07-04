@@ -8,8 +8,10 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 from generic_ml_cache_core.application.port.inbound.artifact_content.read_artifact_blob_command import (
     ReadArtifactBlobCommand,
 )
@@ -25,50 +27,52 @@ from generic_ml_cache_core.common.errors import (
 from generic_ml_cache_cli import async_jobs
 from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
-    _db_conn_factory,
-    _make_diag,
-    _resolve_token,
-    _store_root,
+    db_conn_factory,
+    make_diag,
+    resolve_token,
+    store_root,
 )
 from generic_ml_cache_cli.controllers.run import (
-    _command_from_spec,
-    _spec_executable_override,
-    _spec_whitelist,
+    command_from_spec,
+    spec_executable_override,
+    spec_max_size,
+    spec_timeout,
+    spec_whitelist,
 )
 from generic_ml_cache_cli.presenters.shared import (
-    _AMBER,
-    _GREEN,
-    _GREY,
-    _TEAL,
-    _paint,
-    _run_exit_code,
-    _stored_artifact_text,
+    AMBER,
+    GREEN,
+    GREY,
+    TEAL,
+    paint,
+    run_exit_code,
+    stored_artifact_text,
 )
 
 
-def _state_style(state: str):
+def _state_style(state: str) -> tuple[str, ...]:
     # Built at call time: the ANSI palette constants are defined in presenters/shared.
     return {
-        async_jobs.RUNNING: (_TEAL,),
-        async_jobs.SUBMITTED: (_GREY,),
-        async_jobs.SUCCEEDED: (_GREEN,),
-        async_jobs.FAILED: (_AMBER,),
-        async_jobs.INTERRUPTED: (_AMBER,),
+        async_jobs.RUNNING: (TEAL,),
+        async_jobs.SUBMITTED: (GREY,),
+        async_jobs.SUCCEEDED: (GREEN,),
+        async_jobs.FAILED: (AMBER,),
+        async_jobs.INTERRUPTED: (AMBER,),
     }.get(state, ())
 
 
-def _job_state(store: async_jobs.JobStore, job_id: str):
+def _job_state(store: async_jobs.JobStore, job_id: str) -> tuple[dict[str, object] | None, str]:
     """(status dict or None, derived state) for a job, applying the liveness probe."""
     status = store.read_status(job_id)
     held = async_jobs.job_lock_held(store.lock_path(job_id))
     return status, async_jobs.derived_state(status, held)
 
 
-def _cmd_worker(args: argparse.Namespace) -> int:
+def cmd_worker(args: argparse.Namespace) -> int:
     """Hidden: the detached worker. Run the job's managed execution while holding its
     liveness lock, recording the outcome to status.json. Never writes to the cwd."""
-    store_root = Path(args.store_root)
-    store = async_jobs.JobStore(store_root)
+    store_root_path = Path(args.store_root)
+    store = async_jobs.JobStore(store_root_path)
     job_id = args.job_id
     try:
         spec = store.read_spec(job_id)
@@ -80,21 +84,21 @@ def _cmd_worker(args: argparse.Namespace) -> int:
             store.update_status(job_id, state=async_jobs.RUNNING, started_at=async_jobs.now())
             async_jobs.append_event(events, "running", client=spec["client"], model=spec["model"])
             try:
-                command = _command_from_spec(spec)
+                command = command_from_spec(spec)
                 # On an encrypted store the token arrives via the environment (set by the
                 # spawner), never from disk; a public store ignores it.
                 token = os.environ.get("GMLCACHE_TOKEN") or None
                 wired = build_use_cases(
-                    _db_conn_factory(store_root),
-                    store_root,
-                    _spec_executable_override(spec),
-                    spec["timeout"],
+                    db_conn_factory(store_root_path),
+                    store_root_path,
+                    spec_executable_override(spec),
+                    spec_timeout(spec),
                     encryption_token=token,
                     stream_path=str(events),  # client live events land in the job's log
-                    client=spec["client"],
-                    max_size=spec.get("max_size"),
-                    whitelist=_spec_whitelist(spec),
-                    diag=_make_diag(args),
+                    client=command.client,
+                    max_size=spec_max_size(spec),
+                    whitelist=spec_whitelist(spec),
+                    diag=make_diag(args),
                 )
                 execution = wired.run_ml.execute(command)
             except Exception as exc:  # noqa: BLE001 — detached-worker boundary: any failure → job FAILED
@@ -104,7 +108,7 @@ def _cmd_worker(args: argparse.Namespace) -> int:
                 async_jobs.append_event(events, "failed", error=str(exc))
                 return 1
             key = execution.call_identity.generate_key()
-            exit_code = _run_exit_code(execution)
+            exit_code = run_exit_code(execution)
             store.update_status(
                 job_id,
                 state=async_jobs.SUCCEEDED,
@@ -118,9 +122,9 @@ def _cmd_worker(args: argparse.Namespace) -> int:
         return 1
 
 
-def _print_job_status_text(job_id: str, status: dict, state: str) -> None:
+def _print_job_status_text(job_id: str, status: dict[str, object], state: str) -> None:
     print(f"job        : {job_id}")
-    print(f"state      : {_paint(state, *_state_style(state))}")
+    print(f"state      : {paint(state, *_state_style(state))}")
     if status.get("client"):
         print(f"client     : {status['client']} / {status.get('model', '')}")
     for label, field in (
@@ -133,18 +137,21 @@ def _print_job_status_text(job_id: str, status: dict, state: str) -> None:
     if status.get("exit_code") is not None:
         print(f"exit       : {status['exit_code']}")
     if state == async_jobs.SUCCEEDED and status.get("execution_key"):
-        print(f"result     : {status['execution_key'][:12]}  (gmlcache execution result {job_id})")
+        print(
+            f"result     : {str(status['execution_key'])[:12]}"
+            f"  (gmlcache execution result {job_id})"
+        )
     if state == async_jobs.INTERRUPTED:
         print("note       : the worker vanished before finishing (lock released, no result)")
     elif state == async_jobs.FAILED and status.get("error"):
         print(f"error      : {status['error']}")
 
 
-def _cmd_execution_status(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_execution_status(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    store = async_jobs.JobStore(store_root)
+    store = async_jobs.JobStore(store_root_path)
     if not store.exists(args.job_id):
         print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
         return 4
@@ -159,11 +166,11 @@ def _cmd_execution_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_execution_result(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_execution_result(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    store = async_jobs.JobStore(store_root)
+    store = async_jobs.JobStore(store_root_path)
     if not store.exists(args.job_id):
         print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
         return 4
@@ -186,16 +193,16 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
         return 1
 
     key = status.get("execution_key")
-    if not key:
+    if not isinstance(key, str) or not key:
         print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
         return 4
-    token = _resolve_token(args)
+    token = resolve_token(args)
     try:
         wired = build_use_cases(
-            _db_conn_factory(store_root),
-            store_root,
+            db_conn_factory(store_root_path),
+            store_root_path,
             encryption_token=token,
-            diag=_make_diag(args),
+            diag=make_diag(args),
         )
         execution = wired.execution_query.find_current(FindCurrentExecutionCommand(key))
         if execution is None:
@@ -204,8 +211,8 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 4
-        out = _stored_artifact_text(execution, wired.artifacts, ArtifactType.STDOUT)
-        err = _stored_artifact_text(execution, wired.artifacts, ArtifactType.STDERR)
+        out = stored_artifact_text(execution, wired.artifacts, ArtifactType.STDOUT)
+        err = stored_artifact_text(execution, wired.artifacts, ArtifactType.STDERR)
     except (EncryptionTokenRequired, WrongEncryptionToken) as exc:
         print(f"gmlc: {exc} (set --token or GMLCACHE_TOKEN)", file=sys.stderr)
         return 4
@@ -213,15 +220,16 @@ def _cmd_execution_result(args: argparse.Namespace) -> int:
     sys.stdout.flush()
     sys.stderr.write(err)
     sys.stderr.flush()
-    return int(status.get("exit_code") or 0)
+    recorded_exit_code = status.get("exit_code")
+    return recorded_exit_code if isinstance(recorded_exit_code, int) else 0
 
 
-def _cmd_execution_list(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_execution_list(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    store = async_jobs.JobStore(store_root)
-    rows = []
+    store = async_jobs.JobStore(store_root_path)
+    rows: list[tuple[str, str, object, object, object]] = []
     for job_id in store.list_ids():
         status, state = _job_state(store, job_id)
         status = status or {}
@@ -252,7 +260,7 @@ def _cmd_execution_list(args: argparse.Namespace) -> int:
         print("no detached jobs")
         return 0
     for job_id, state, client, model, submitted in rows:
-        painted = _paint(f"{state:<11}", *_state_style(state))
+        painted = paint(f"{state:<11}", *_state_style(state))
         print(f"{job_id}  {painted} {client}/{model}  {submitted}")
     return 0
 
@@ -271,16 +279,16 @@ def _print_event(line: str) -> None:
     if isinstance(ts, (int, float)):
         when = datetime.fromtimestamp(ts, timezone.utc).strftime("%H:%M:%S") + "  "
     extra = "  ".join(f"{k}={v}" for k, v in event.items() if k not in ("ts", "kind"))
-    print(f"{when}{_paint(kind, *_state_style(kind))}  {extra}".rstrip())
+    print(f"{when}{paint(kind, *_state_style(kind))}  {extra}".rstrip())
 
 
-def _cmd_execution_watch(args: argparse.Namespace) -> int:
+def cmd_execution_watch(args: argparse.Namespace) -> int:
     import time
 
-    store_root = _store_root()
-    if store_root is None:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    store = async_jobs.JobStore(store_root)
+    store = async_jobs.JobStore(store_root_path)
     if not store.exists(args.job_id):
         print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
         return 4
@@ -314,7 +322,11 @@ def _cmd_execution_watch(args: argparse.Namespace) -> int:
         time.sleep(0.2)
 
 
-def _materialize_output_files(execution, artifacts, output_dir: Path) -> int:
+def _materialize_output_files(
+    execution: MlExecution,
+    artifacts: Any,  # the ArtifactContentService inbound surface; typed after decision B-1
+    output_dir: Path,
+) -> int:
     """Write a stored execution's OUTPUT_FILE artifacts into ``output_dir`` (hydrating
     content via the artifact-content port). Returns the number of files written."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -335,11 +347,11 @@ def _materialize_output_files(execution, artifacts, output_dir: Path) -> int:
     return count
 
 
-def _cmd_execution_materialize(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_execution_materialize(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    store = async_jobs.JobStore(store_root)
+    store = async_jobs.JobStore(store_root_path)
     if not store.exists(args.job_id):
         print(f"gmlc: no such job {args.job_id!r}", file=sys.stderr)
         return 4
@@ -349,17 +361,17 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
         print(f"gmlc: job {args.job_id} is {state}; nothing to materialize", file=sys.stderr)
         return 4
     key = status.get("execution_key")
-    if not key:
+    if not isinstance(key, str) or not key:
         print(f"gmlc: job {args.job_id} has no stored result", file=sys.stderr)
         return 4
-    token = _resolve_token(args)
+    token = resolve_token(args)
     output_dir = Path(args.output_dir)
     try:
         wired = build_use_cases(
-            _db_conn_factory(store_root),
-            store_root,
+            db_conn_factory(store_root_path),
+            store_root_path,
             encryption_token=token,
-            diag=_make_diag(args),
+            diag=make_diag(args),
         )
         execution = wired.execution_query.find_current(FindCurrentExecutionCommand(key))
         if execution is None:
@@ -373,7 +385,7 @@ def _cmd_execution_materialize(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_execution(_args: argparse.Namespace) -> int:
+def cmd_execution(_args: argparse.Namespace) -> int:
     print(
         "usage: gmlcache execution status <id> | result <id> | watch <id> | "
         "materialize <id> --output-dir <path> | list",

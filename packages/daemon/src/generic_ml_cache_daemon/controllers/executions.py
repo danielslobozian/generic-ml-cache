@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Request  # noqa: F401
+from fastapi import APIRouter, Body, HTTPException, Request
 from generic_ml_cache_core.application.port.inbound.purge.purge_all_command import PurgeAllCommand
 from generic_ml_cache_core.application.port.inbound.purge.purge_by_key_command import (
     PurgeByKeyCommand,
@@ -29,7 +29,6 @@ from generic_ml_cache_daemon.presenters.execution import (
     PurgeByAll,
     PurgeByKey,
     PurgeBySession,
-    PurgeBySessionTag,
     PurgeByTag,
     PurgeResponse,
 )
@@ -104,10 +103,11 @@ def purge(body: Annotated[PurgeBody, Body(discriminator="by")], request: Request
         report = purge_service.purge_by_tag(PurgeByTagCommand(body.target))
     elif isinstance(body, PurgeBySession):
         report = purge_service.purge_by_session(PurgeBySessionCommand(body.target))
-    elif isinstance(body, PurgeBySessionTag):
+    else:
+        # Exhaustive by construction: the Body(discriminator="by") union admits
+        # exactly these five scopes, so the remaining case is PurgeBySessionTag —
+        # any invalid discriminator is rejected as 422 before this handler runs.
         report = purge_service.purge_by_session_tag(PurgeBySessionTagCommand(body.target))
-    else:  # pragma: no cover
-        raise HTTPException(status_code=422, detail="unsupported purge scope")
     return PurgeResponse(
         executions_removed=report.executions_removed,
         bytes_freed=report.bytes_freed,

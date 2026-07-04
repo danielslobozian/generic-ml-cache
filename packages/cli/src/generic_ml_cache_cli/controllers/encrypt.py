@@ -13,22 +13,18 @@ from generic_ml_cache_core.common.errors import (
     WrongEncryptionToken,
 )
 
-from generic_ml_cache_cli.composition import (
-    _load_cipher,
-    _resolve_token,
-    _store_encryptor,
-    _store_root,
-)
+from generic_ml_cache_cli._compose import build_store_encryptor, load_cipher
+from generic_ml_cache_cli.composition import resolve_token, store_root
 
 
-def _cmd_encrypt(_args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_encrypt(_args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    cipher = _load_cipher()
+    cipher = load_cipher()
     token = cipher.generate_token()
     try:
-        _store_encryptor(store_root, cipher).enable(token)
+        build_store_encryptor(store_root_path, cipher).enable(token)
     except (EncryptionStateError, StoreLocked) as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
@@ -38,16 +34,16 @@ def _cmd_encrypt(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_decrypt(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_decrypt(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    token = _resolve_token(args)
+    token = resolve_token(args)
     if not token:
         print("gmlc: provide the token with --token or GMLCACHE_TOKEN", file=sys.stderr)
         return 4
     try:
-        _store_encryptor(store_root, _load_cipher()).disable(token)
+        build_store_encryptor(store_root_path, load_cipher()).disable(token)
     except (WrongEncryptionToken, EncryptionStateError, StoreLocked) as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
@@ -55,18 +51,18 @@ def _cmd_decrypt(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_rotate(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_rotate(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    old_token = _resolve_token(args)
+    old_token = resolve_token(args)
     if not old_token:
         print("gmlc: provide the current token with --token or GMLCACHE_TOKEN", file=sys.stderr)
         return 4
-    cipher = _load_cipher()
+    cipher = load_cipher()
     new_token = cipher.generate_token()
     try:
-        _store_encryptor(store_root, cipher).rotate(old_token, new_token)
+        build_store_encryptor(store_root_path, cipher).rotate(old_token, new_token)
     except (WrongEncryptionToken, EncryptionStateError, StoreLocked) as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4
@@ -75,9 +71,9 @@ def _cmd_rotate(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_invalidate(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_invalidate(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
     if not args.yes:
         print(
@@ -87,7 +83,7 @@ def _cmd_invalidate(args: argparse.Namespace) -> int:
         )
         return 4
     try:
-        _store_encryptor(store_root).invalidate()  # no token needed
+        build_store_encryptor(store_root_path).invalidate()  # no token needed
     except StoreLocked as exc:
         print(f"gmlc: {exc}", file=sys.stderr)
         return 4

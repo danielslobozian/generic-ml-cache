@@ -30,6 +30,7 @@ import os
 import shutil
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.encryption.encryption_manifest import (
     EncryptionManifest,
@@ -149,11 +150,11 @@ class StoreEncryptor:
             tmp.write_bytes(transform(blob.read_bytes()))
             os.replace(tmp, self._staging / blob.name)
 
-    def _commit(self, marker: dict) -> None:
+    def _commit(self, marker: dict[str, Any]) -> None:
         self._write_marker(marker)
         self._finish_commit(marker)
 
-    def _finish_commit(self, marker: dict) -> None:
+    def _finish_commit(self, marker: dict[str, Any]) -> None:
         # Move every staged blob into place (atomic per file); idempotent on replay.
         if self._staging.exists():
             self._blobs.mkdir(parents=True, exist_ok=True)
@@ -168,19 +169,19 @@ class StoreEncryptor:
             self._manifest_store.delete()
         self._marker.unlink(missing_ok=True)
 
-    def _write_marker(self, marker: dict) -> None:
+    def _write_marker(self, marker: dict[str, Any]) -> None:
         tmp = self._marker.with_name(_MARKER + ".tmp")
         tmp.write_text(json.dumps(marker), encoding="utf-8")
         os.replace(tmp, self._marker)
 
-    def _blob_files(self):
+    def _blob_files(self) -> list[Path]:
         if not self._blobs.exists():
             return []
         # a blob is named by its content fingerprint (hex, no dots); skip *.tmp leftovers.
         return [p for p in self._blobs.iterdir() if p.is_file() and "." not in p.name]
 
 
-def _dump_manifest(manifest: EncryptionManifest) -> dict:
+def _dump_manifest(manifest: EncryptionManifest) -> dict[str, str | int]:
     return {
         "version": manifest.version,
         "kdf_salt": base64.b64encode(manifest.kdf_salt).decode("ascii"),
@@ -188,7 +189,7 @@ def _dump_manifest(manifest: EncryptionManifest) -> dict:
     }
 
 
-def _load_manifest(data: dict) -> EncryptionManifest:
+def _load_manifest(data: dict[str, Any]) -> EncryptionManifest:
     return EncryptionManifest(
         kdf_salt=base64.b64decode(data["kdf_salt"]),
         wrapped_data_key=base64.b64decode(data["wrapped_data_key"]),

@@ -3,7 +3,7 @@
 """ComposedLocalClient — the LocalClientPort surface, delegated to a CliRuntime.
 
 Every local CLI client adapter subclasses this base and calls ``wire_cli_client``
-from its ``__init__`` to set ``self._call``. The base presents the never-overridden
+from its ``__init__`` to set ``self.call``. The base presents the never-overridden
 LocalClientPort methods as thin delegations to that composed runtime — no call
 logic lives here; it lives once in :class:`CliRuntime`. The base exists so an
 adapter *nominally* implements ``LocalClientPort`` (``class X(ComposedLocalClient)``):
@@ -14,7 +14,8 @@ guarantee. A client that lists models (e.g. cursor) overrides ``models_argv`` an
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from abc import abstractmethod
+from typing import TYPE_CHECKING, ClassVar
 
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.run.client_answer import ClientAnswer
@@ -28,32 +29,59 @@ from generic_ml_cache_core.application.domain.model.run.workspace import Workspa
 from generic_ml_cache_core.application.port.outbound.local_client_port import LocalClientPort
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from pathlib import Path
+
     from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import CliRuntime
 
 
 class ComposedLocalClient(LocalClientPort):
     """Base for local CLI adapters: the LocalClientPort surface as delegations to
-    the composed ``CliRuntime`` (``self._call``), wired in by ``wire_cli_client``."""
+    the composed ``CliRuntime`` (``self.call``), wired in by ``wire_cli_client``.
+    ``call`` is set from outside the class (by ``wire_cli_client``), so it is a
+    public attribute, not a private one."""
 
-    _call: CliRuntime
+    #: The adapter's registry name (e.g. ``"claude"``).
+    name: ClassVar[str]
+    #: The executable looked up on PATH when no override is given.
+    default_executable: ClassVar[str]
+
+    call: CliRuntime
+
+    @abstractmethod
+    def build_argv(
+        self,
+        executable: str,
+        run_dir: Path,
+        model: str,
+        effort: str,
+        context: str,
+        prompt: str,
+        system_prompt: str,
+        client_args: Sequence[str] = (),
+        grants: Sequence[str] = (),
+    ) -> list[str]:
+        """Translate the request into the client's own command line. The one hook
+        every adapter must supply; the optional hooks (``stdin_payload``,
+        ``stream_event``, …) are looked up dynamically by the runtime."""
 
     def stage_inputs(self, request: ManagedLocalRequest, workspace: Workspace) -> None:
-        self._call.stage_inputs(request, workspace)
+        self.call.stage_inputs(request, workspace)
 
     def execute_managed(self, request: ManagedLocalRequest, workspace: Workspace) -> ClientAnswer:
-        return self._call.execute_managed(request, workspace)
+        return self.call.execute_managed(request, workspace)
 
     def execute_passthrough(self, request: PassthroughRequest) -> ClientAnswer:
-        return self._call.execute_passthrough(request)
+        return self.call.execute_passthrough(request)
 
     def resolve_executable(self, override: str | None) -> str:
-        return self._call.resolve_executable(override)
+        return self.call.resolve_executable(override)
 
     def version_argv(self, executable: str) -> list[str]:
-        return self._call.version_argv(executable)
+        return self.call.version_argv(executable)
 
     def models_argv(self, executable: str) -> list[str] | None:
-        return self._call.models_argv(executable)
+        return self.call.models_argv(executable)
 
     def parse_model_list(self, stdout: str) -> list[ModelInfo]:
         # No model listing by default; a listing client overrides this (and

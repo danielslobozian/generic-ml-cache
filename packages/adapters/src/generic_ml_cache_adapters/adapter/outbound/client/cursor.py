@@ -9,6 +9,8 @@ the model string. Best-effort for v0.0.1; correct here as needed.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
+from pathlib import Path
 
 from generic_ml_cache_core.application.domain.model.catalog.adapter_descriptor import (
     AdapterDescriptor,
@@ -19,7 +21,10 @@ from generic_ml_cache_core.application.domain.model.catalog.client_capability im
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.model_info import ModelInfo
 from generic_ml_cache_core.application.domain.model.parsed_output import ParsedOutput
-from generic_ml_cache_core.application.domain.model.run.client_config import GrantConfigFile
+from generic_ml_cache_core.application.domain.model.run.client_config import (
+    CredentialFile,
+    GrantConfigFile,
+)
 from generic_ml_cache_core.application.domain.model.usage.usage import Usage, int_or_none
 from generic_ml_cache_core.application.port.outbound.client_config_port import ClientConfigPort
 
@@ -30,6 +35,7 @@ from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client imp
 from generic_ml_cache_adapters.adapter.outbound.client.output_parsing import (
     ensure_trailing_newline,
     final_result_object,
+    is_json_object,
 )
 
 
@@ -41,26 +47,31 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
     default_executable = "cursor-agent"
     execution_kind = ExecutionKind.LOCAL_MANAGED
 
-    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+    def __init__(
+        self,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
+    ) -> None:
         wire_cli_client(self, executable_override, timeout, stream_path)
 
     @classmethod
-    def descriptor(cls):
+    def descriptor(cls) -> AdapterDescriptor:
         return AdapterDescriptor.local_cli(
             "cursor", {ClientCapability.RUN, ClientCapability.LIST_MODELS}, "Cursor Agent"
         )
 
     def build_argv(
         self,
-        executable,
-        run_dir,
-        model,
-        effort,
-        context,
-        prompt,
-        system_prompt,
-        client_args=(),
-        grants=(),
+        executable: str,
+        run_dir: Path,
+        model: str,
+        effort: str,
+        context: str,
+        prompt: str,
+        system_prompt: str,
+        client_args: Sequence[str] = (),
+        grants: Sequence[str] = (),
     ) -> list[str]:
         # cursor-agent takes the prompt ONLY as a positional argument -- its CLI has
         # no stdin/file path for the prompt (verified against `cursor-agent --help`:
@@ -77,7 +88,7 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
         # (system prompt) and context are folded into the prompt argument itself.
         # None of this enters the Request, so input_data and the cache key are
         # unchanged: cursor keys identically to claude/codex.
-        segments = [system_prompt] if system_prompt else []
+        segments: list[str] = [system_prompt] if system_prompt else []
         if context:
             segments.append(context)
         segments.append(prompt)
@@ -142,7 +153,7 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
             )
         return ParsedOutput(text=ensure_trailing_newline(text), usage=usage)
 
-    def write_access_argv(self, run_dir):
+    def write_access_argv(self, run_dir: Path) -> list[str]:
         # cursor-agent refuses an untrusted workspace ("Workspace Trust Required")
         # in the isolated run folder. --trust accepts it; in --print mode the agent
         # already has its write tool, so trust alone is sufficient to write (the
@@ -150,7 +161,7 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
         # Verified against cursor-agent --print on the live CLI.
         return ["--trust"]
 
-    def build_grants_config_file(self, grants):
+    def build_grants_config_file(self, grants: Sequence[str]) -> GrantConfigFile:
         # Uniform door: $CURSOR_CONFIG_DIR/cli-config.json so the FILE enables
         # capabilities. The project-level permission file was stripped by a security
         # fix (GHSA-v64q-396f-7m79), so we redirect the config home instead. Write
@@ -167,28 +178,29 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
         if "net" in grants or "web-search" in grants:
             allow.append("WebFetch(**)")
         # de-dup, preserve order
-        seen, ordered = set(), []
-        for tok in allow:
-            if tok not in seen:
-                seen.add(tok)
-                ordered.append(tok)
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for allow_token in allow:
+            if allow_token not in seen:
+                seen.add(allow_token)
+                ordered.append(allow_token)
         config = {"version": 1, "permissions": {"allow": ordered}}
         return GrantConfigFile(
             file_name="cli-config.json", content=json.dumps(config).encode("utf-8")
         )
 
-    def get_token_files(self):
+    def get_token_files(self) -> list[CredentialFile]:
         return []  # Cursor seeds no credentials into its config home
 
-    def config_home_env_var(self):
+    def config_home_env_var(self) -> str:
         return "CURSOR_CONFIG_DIR"
 
-    def stdin_payload(self, context, prompt, system_prompt):
+    def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> str | None:
         # cursor-agent has no stdin prompt path; the prompt rides as the trailing
         # argv positional (see build_argv), so nothing is delivered on stdin.
         return None
 
-    def grant_argv(self, grants):
+    def grant_argv(self, grants: Sequence[str]) -> list[str]:
         # Cursor's sandbox blocks external network egress and its sandbox.json
         # networkPolicy is IGNORED under headless --print (upstream bug), so the
         # file cannot open the network. The verified headless egress lever is
@@ -227,19 +239,19 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
             models.append(ModelInfo(id=ident, name=label, default=default, current=current))
         return models
 
-    def stream_event(self, raw_line):
+    def stream_event(self, raw_line: str) -> dict[str, str | None] | None:
         try:
-            d = json.loads(raw_line)
+            line_event = json.loads(raw_line)
         except (json.JSONDecodeError, ValueError):
             return None
-        if not isinstance(d, dict):
+        if not is_json_object(line_event):
             return None
-        t = d.get("type")
-        if t == "system" and d.get("subtype") == "init":
+        event_type = line_event.get("type")
+        if event_type == "system" and line_event.get("subtype") == "init":
             return {"kind": "start"}
-        if t == "assistant":
+        if event_type == "assistant":
             return {"kind": "message"}
-        if t == "result":
+        if event_type == "result":
             return {"kind": "result"}
         return None
 

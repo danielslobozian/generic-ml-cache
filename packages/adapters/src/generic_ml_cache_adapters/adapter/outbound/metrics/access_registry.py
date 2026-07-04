@@ -132,7 +132,7 @@ class AccessRegistry:
             self._warn_db_error("session_event_counts", exc)
             return {}
 
-    def session_events(self, session_id: str) -> list[tuple]:
+    def session_events(self, session_id: str) -> list[tuple[str, str, str, str, str | None]]:
         """Return (ts, event, client, model, match_key) rows for one session, oldest
         first ([] if unknown or unavailable)."""
         try:

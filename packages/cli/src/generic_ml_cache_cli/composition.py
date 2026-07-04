@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import cast
 
@@ -21,20 +21,18 @@ from generic_ml_cache_adapters.db import DbConnection
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
 from generic_ml_cache_core.common.errors import ConfigError
 
-from generic_ml_cache_cli._compose import build_store_encryptor, load_cipher
-
 from . import config
 
 _DB_NAME = "executions.sqlite3"
 
 
-def _db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
+def db_conn_factory(store_root: Path) -> Callable[[], DbConnection]:
     # The library's canonical factory: it creates the parent dir and, crucially,
     # sets PRAGMA foreign_keys = ON per connection so the schema's FKs are enforced.
     return cast("Callable[[], DbConnection]", sqlite_connection_factory(store_root / _DB_NAME))
 
 
-def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:
+def make_diag(args: argparse.Namespace) -> DiagnosticsPort:
     """Build the DiagnosticsPort from resolved settings.
 
     Precedence: --log-level flag > GMLCACHE_LOG_LEVEL env > config key > off (quiet).
@@ -58,7 +56,7 @@ def _make_diag(args: argparse.Namespace) -> DiagnosticsPort:
     return StructlogDiagnosticsAdapter(log_file, level=str(resolved_level))
 
 
-def _store_root() -> Path | None:
+def store_root() -> Path | None:
     try:
         return Path(str(config.resolve_settings(config.load())["store"][0]))
     except ConfigError as exc:
@@ -68,21 +66,21 @@ def _store_root() -> Path | None:
         return None
 
 
-def _resolve_token(args: argparse.Namespace) -> str | None:
+def resolve_token(args: argparse.Namespace) -> str | None:
     """The encryption token for this call: the --token flag, else GMLCACHE_TOKEN.
     A token is a secret, so it is never read from the config file."""
     flag = getattr(args, "token", None)
     return flag if flag else (os.environ.get("GMLCACHE_TOKEN") or None)
 
 
-def _resolve_session(args: argparse.Namespace) -> str | None:
+def resolve_session(args: argparse.Namespace) -> str | None:
     """The session id for this run: the --session flag, else GMLCACHE_SESSION. A session
     groups a workflow's calls; it is journal metadata, never part of the cache key."""
     flag = getattr(args, "session", None)
     return flag if flag else (os.environ.get("GMLCACHE_SESSION") or None)
 
 
-def _read_text_arg(inline: str | None, path: str | None, name: str) -> str:
+def read_text_arg(inline: str | None, path: str | None, name: str) -> str:
     if inline is not None and path is not None:
         raise SystemExit(f"error: pass only one of --{name} / --{name}-file")
     if path is not None:
@@ -90,26 +88,18 @@ def _read_text_arg(inline: str | None, path: str | None, name: str) -> str:
     return inline if inline is not None else ""
 
 
-def _resolve_input_file_paths(raw_paths) -> list[str]:
+def resolve_input_file_paths(raw_paths: Iterable[str] | None) -> list[str]:
     """Declared input files, resolved to absolute (path-sensitive keying). The
     use case's fingerprint adapter validates readability and raises on a bad one."""
-    return [str(Path(raw).resolve()) for raw in (raw_paths or [])]
+    return [str(Path(raw_path).resolve()) for raw_path in (raw_paths or [])]
 
 
-def _resolve_allow_paths(raw_paths) -> list[str]:
+def resolve_allow_paths(raw_paths: Iterable[str] | None) -> list[str]:
     """Declared scan folders: validated directories, normalised to absolute."""
     resolved: list[str] = []
-    for raw in raw_paths or []:
-        path = Path(raw)
-        if not path.is_dir():
-            raise SystemExit(f"error: allow-path is not a directory: {raw}")
-        resolved.append(str(path.resolve()))
+    for raw_path in raw_paths or []:
+        allow_path = Path(raw_path)
+        if not allow_path.is_dir():
+            raise SystemExit(f"error: allow-path is not a directory: {raw_path}")
+        resolved.append(str(allow_path.resolve()))
     return resolved
-
-
-def _load_cipher():
-    return load_cipher()
-
-
-def _store_encryptor(store_root: Path, cipher=None):
-    return build_store_encryptor(store_root, cipher)

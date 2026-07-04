@@ -510,10 +510,10 @@ return blob_path.read_bytes()
      composition root into `adapter.outbound`; domain model must not import use cases;
      driven adapter sub-packages must not import each other. A BROKEN contract is an
      architecture defect, not a style issue.
-  7. `pyright` — static type checking (standard mode) against `pyrightconfig.json`.
-     Zero errors required. `# type: ignore` is acceptable only for provably safe casts
-     that cannot be expressed in the type system; a comment must be present explaining
-     why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
+  7. `pyright` — static type checking (**strict mode**) against `pyrightconfig.json`.
+     Zero errors required. `# type: ignore` / `# pyright: ignore` is acceptable only for
+     provably safe casts that cannot be expressed in the type system; a comment must be
+     present explaining why (e.g. `# type: ignore[arg-type]  # settings dict values are object`).
 
   Gates 6 and 7 also run automatically as **pre-commit hooks** (`.pre-commit-config.yaml`).
   After cloning, run `.venv/bin/pre-commit install` once to wire them into `git commit`.

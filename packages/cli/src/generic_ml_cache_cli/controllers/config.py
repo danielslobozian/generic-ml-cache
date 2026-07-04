@@ -12,12 +12,12 @@ from generic_ml_cache_core.common.errors import ConfigError
 from generic_ml_cache_cli import config
 
 
-def _cmd_config(args: argparse.Namespace) -> int:
+def cmd_config(_args: argparse.Namespace) -> int:
     print("usage: gmlcache config <validate|show>", file=sys.stderr)
     return 1
 
 
-def _cmd_config_validate(args: argparse.Namespace) -> int:
+def cmd_config_validate(args: argparse.Namespace) -> int:
     from generic_ml_cache_cli.config import validate
 
     path = config.resolve_config_path()
@@ -58,7 +58,7 @@ def _cmd_config_validate(args: argparse.Namespace) -> int:
     return 4 if errors else 0
 
 
-def _cmd_config_show(args: argparse.Namespace) -> int:
+def cmd_config_show(args: argparse.Namespace) -> int:
     try:
         file_cfg = config.load()
         settings = config.resolve_settings(file_cfg)

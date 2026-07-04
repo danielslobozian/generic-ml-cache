@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import (
     INPUT_ARTIFACT_TYPES,
@@ -39,6 +40,12 @@ from generic_ml_cache_adapters.db import DbConnection
 
 #: stored string values of the input artifact types, for the idempotency check.
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
+
+#: One ``executions`` row, in ``_EXECUTION_COLUMNS`` order. ``failure_message``
+#: is NULL exactly when ``failure_reason`` is (they are written together from one
+#: ``ExecutionFailure``) — a correlation the type system cannot express, so it
+#: stays ``Any`` and is only read behind the ``failure_reason`` guard.
+_ExecutionRow = tuple[int, str, str, str, int, str | None, str | None, Any, int | None]
 
 
 class ExecutionRepository(ExecutionRepositoryPort):
@@ -300,7 +307,7 @@ class ExecutionRepository(ExecutionRepositoryPort):
 
     # -- reconstruction ---------------------------------------------------
 
-    def _load_execution(self, connection: DbConnection, row: tuple) -> MlExecution:
+    def _load_execution(self, connection: DbConnection, row: _ExecutionRow) -> MlExecution:
         (
             execution_id,
             execution_key,

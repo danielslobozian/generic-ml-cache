@@ -11,7 +11,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import AesGcmCipher
+    from generic_ml_cache_core.application.port.outbound.cipher_port import CipherPort
 
 from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (
     FilesystemEncryptionManifestStore,
@@ -126,7 +130,7 @@ def get_encryption_state(store_root: Path) -> EncryptionState:
     return FilesystemEncryptionManifestStore(store_root).state()
 
 
-def load_cipher():
+def load_cipher() -> AesGcmCipher:
     """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
     try:
         from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import AesGcmCipher
@@ -138,7 +142,7 @@ def load_cipher():
     return AesGcmCipher()
 
 
-def build_store_encryptor(store_root: Path, cipher=None) -> StoreEncryptor:
+def build_store_encryptor(store_root: Path, cipher: CipherPort | None = None) -> StoreEncryptor:
     """Construct a StoreEncryptor for the store at ``store_root``."""
     return StoreEncryptor(
         store_root,

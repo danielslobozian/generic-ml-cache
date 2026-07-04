@@ -71,7 +71,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
         return key
 
     def _build_body(self, request: MlRequest) -> dict[str, Any]:
-        system_parts = []
+        system_parts: list[str] = []
         if request.context:
             system_parts.append(request.context)
         if request.user_system_prompt:
@@ -129,7 +129,7 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
 
     def _extract_text(self, response: dict[str, Any]) -> str:
         # Traverse output[*].content[*] and collect parts with type "output_text".
-        texts = []
+        texts: list[str] = []
         for item in response.get("output", []):
             if item.get("type") == "message":
                 for part in item.get("content", []):
@@ -141,15 +141,15 @@ class OpenAIDirectAdapter(ApiClientPort, ModelListingPort):
         return text if text.endswith("\n") else text + "\n"
 
     def _extract_usage(self, response: dict[str, Any]) -> TokenUsage:
-        u = response.get("usage", {})
-        details_in = u.get("input_tokens_details") or {}
-        details_out = u.get("output_tokens_details") or {}
+        usage_block: dict[str, Any] = response.get("usage", {})
+        input_token_details: dict[str, Any] = usage_block.get("input_tokens_details") or {}
+        output_token_details: dict[str, Any] = usage_block.get("output_tokens_details") or {}
         return TokenUsage(
-            input_tokens=int_or_none(u.get("input_tokens")),
-            output_tokens=int_or_none(u.get("output_tokens")),
-            cache_read_tokens=int_or_none(details_in.get("cached_tokens")),
+            input_tokens=int_or_none(usage_block.get("input_tokens")),
+            output_tokens=int_or_none(usage_block.get("output_tokens")),
+            cache_read_tokens=int_or_none(input_token_details.get("cached_tokens")),
             cache_write_tokens=None,  # OpenAI's cache is automatic read-only
-            reasoning_tokens=int_or_none(details_out.get("reasoning_tokens")),
+            reasoning_tokens=int_or_none(output_token_details.get("reasoning_tokens")),
             cost_usd=None,
-            raw=dict(u),
+            raw=dict(usage_block),
         )

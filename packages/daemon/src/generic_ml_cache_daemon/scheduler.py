@@ -55,7 +55,7 @@ class EvictionScheduler:
         self._purge = purge
         self._stats = stats
         self._interval = interval
-        self._task: asyncio.Task | None = None  # type: ignore[type-arg]
+        self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
         """Schedule the recurring eviction task on the running event loop."""

@@ -63,6 +63,7 @@ from __future__ import annotations
 import configparser
 import os
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -193,7 +194,7 @@ class FileConfig:
     #: ``None`` loads the bundled adapters only; a frozenset also opts in the named
     #: third-party plugins (by entry-point name). Bundled adapters always load.
     adapters: frozenset[str] | None = None
-    executables: dict[str, str] = field(default_factory=dict)
+    executables: dict[str, str] = field(default_factory=dict[str, str])
     source: Path | None = None
     log_level: str | None = None
     log_file: str | None = None
@@ -445,15 +446,16 @@ def _validate_defaults_section(sec: configparser.SectionProxy) -> list[ConfigIss
 
     _check_enum_keys(sec, issues)
 
-    for key, parser_fn in (
+    numeric_parsers: tuple[tuple[str, Callable[[str, str], object]], ...] = (
         ("timeout", _parse_timeout),
         ("max_size", _parse_size),
         ("max_age", _parse_age),
-    ):
+    )
+    for key, parse_value in numeric_parsers:
         raw = sec.get(key)
         if raw is not None:
             try:
-                parser_fn(raw, "")  # type: ignore[operator]
+                parse_value(raw, "")
             except ConfigError as exc:
                 issues.append(ConfigIssue("error", key, str(exc)))
 
@@ -507,7 +509,7 @@ def validate(path: Path | None = None) -> list[ConfigIssue]:
     return issues
 
 
-def _pick(flag, env, file_value, default) -> tuple[object, str]:
+def _pick(flag: object, env: object, file_value: object, default: object) -> tuple[object, str]:
     """First non-empty of flag > env > file > default, with its provenance."""
     if flag is not None:
         return flag, "flag"
@@ -601,6 +603,32 @@ def resolve_settings(
         # log_file: flag > env > config > <store>/gmlcache.log.
         "log_file": _pick(log_file_flag, log_file_env, file_cfg.log_file, default_log_file),
     }
+
+
+def _number_or_none(setting_value: object, key: str) -> float | None:
+    """Narrow a resolved numeric setting (guaranteed numeric by the parsers above)
+    to ``float | None``, failing loud on a value the resolution rules cannot produce."""
+    if setting_value is None:
+        return None
+    if isinstance(setting_value, bool) or not isinstance(setting_value, (int, float)):
+        raise ConfigError(f"invalid {key} {setting_value!r}; expected a number")
+    return float(setting_value)
+
+
+def resolved_timeout(settings: Mapping[str, tuple[object, str]]) -> float | None:
+    """The resolved ``timeout`` in seconds, or ``None`` for no timeout."""
+    return _number_or_none(settings["timeout"][0], "timeout")
+
+
+def resolved_max_age(settings: Mapping[str, tuple[object, str]]) -> float | None:
+    """The resolved ``max_age`` in seconds, or ``None`` when age eviction is off."""
+    return _number_or_none(settings["max_age"][0], "max_age")
+
+
+def resolved_max_size(settings: Mapping[str, tuple[object, str]]) -> int | None:
+    """The resolved ``max_size`` in bytes, or ``None`` when the size cap is off."""
+    max_size_bytes = _number_or_none(settings["max_size"][0], "max_size")
+    return None if max_size_bytes is None else int(max_size_bytes)
 
 
 def executable_for(file_cfg: FileConfig, client: str, *, flag: str | None = None) -> str | None:

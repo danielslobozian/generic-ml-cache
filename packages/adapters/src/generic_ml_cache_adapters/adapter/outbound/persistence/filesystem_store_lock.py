@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -51,7 +51,7 @@ class FilesystemStoreLock(StoreLockPort):
         self._path = Path(store_root) / _FILENAME
 
     @contextmanager
-    def acquire(self) -> Iterator[None]:
+    def acquire(self) -> Generator[None]:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
             fd = os.open(str(self._path), os.O_CREAT | os.O_WRONLY)

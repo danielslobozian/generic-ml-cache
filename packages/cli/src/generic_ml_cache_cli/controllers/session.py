@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from generic_ml_cache_core.application.domain.model.session.session_spec import SessionSpec
 from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_spec_command import (
@@ -34,13 +35,13 @@ from generic_ml_cache_core.application.port.inbound.session_tags.untag_session_c
 from generic_ml_cache_cli import config
 from generic_ml_cache_cli._compose import build_use_cases
 from generic_ml_cache_cli.composition import (
-    _db_conn_factory,
-    _make_diag,
-    _store_root,
+    db_conn_factory,
+    make_diag,
+    store_root,
 )
 from generic_ml_cache_cli.presenters.session import (
-    _render_session_report,
-    _session_report_json,
+    render_session_report,
+    session_report_json,
 )
 
 
@@ -59,13 +60,13 @@ def _parse_spec_args(args: argparse.Namespace) -> SessionSpec | None:
     return SessionSpec(client=str(client), model=str(model), effort=str(effort))
 
 
-def _cmd_session_start(args: argparse.Namespace) -> int:
+def cmd_session_start(args: argparse.Namespace) -> int:
     import uuid
 
     session_id = str(uuid.uuid4())
     # Print only the id, so it is scriptable: SESSION=$(gmlcache session start)
     print(session_id)
-    tags = getattr(args, "tag", None) or []
+    tags: list[str] = getattr(args, "tag", None) or []
     try:
         spec = _parse_spec_args(args)
     except ValueError as exc:
@@ -73,8 +74,10 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
         return 2
     if tags or spec:
         settings = config.resolve_settings(config.load())
-        store_root = Path(str(settings["store"][0]))
-        wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
+        store_root_path = Path(str(settings["store"][0]))
+        wired = build_use_cases(
+            db_conn_factory(store_root_path), store_root_path, diag=make_diag(args)
+        )
         for tag in tags:
             wired.session_tags.tag(TagSessionCommand(session_id, tag))
         if spec is not None:
@@ -82,7 +85,7 @@ def _cmd_session_start(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_session_update(args: argparse.Namespace) -> int:
+def cmd_session_update(args: argparse.Namespace) -> int:
     try:
         spec = _parse_spec_args(args)
     except ValueError as exc:
@@ -94,10 +97,10 @@ def _cmd_session_update(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    store_root = _store_root()
-    if store_root is None:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
+    wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
     wired.session_admin.set_spec(SetSessionSpecCommand(args.session_id, spec))
     if not args.json:
         print(f"spec  : {spec.client}/{spec.model}/{spec.effort!r}")
@@ -120,11 +123,11 @@ def _cmd_session_update(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_session_clear_spec(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
+    wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
     wired.session_admin.clear_spec(ClearSessionSpecCommand(args.session_id))
     if not args.json:
         print(f"spec cleared for session {args.session_id}")
@@ -135,16 +138,16 @@ def _cmd_session_clear_spec(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_session_report(args: argparse.Namespace) -> int:
-    store_root = _store_root()
-    if store_root is None:
+def cmd_session_report(args: argparse.Namespace) -> int:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
     session_id = getattr(args, "session_id", None)
     tag = getattr(args, "tag", None)
     if not session_id and not tag:
         print("gmlc: provide a session id or --tag <tag>", file=sys.stderr)
         return 1
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
+    wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
 
     if tag:
         return _cmd_session_report_by_tag(wired, tag, args.json)
@@ -156,17 +159,19 @@ def _cmd_session_report(args: argparse.Namespace) -> int:
     if args.json:
         import json
 
-        print(json.dumps(_session_report_json(report, tags), indent=2))
+        print(json.dumps(session_report_json(report, tags), indent=2))
         return 0
     if report.invocations == 0 and not tags:
         print(f"no events recorded for session {session_id!r}")
         return 0
-    print(_render_session_report(report, tags))
+    print(render_session_report(report, tags))
     return 0
 
 
 def _cmd_session_report_by_tag(  # NOSONAR — always 0 by design
-    wired, tag: str, as_json: bool
+    wired: Any,  # the ApplicationApi bundle; typed after decision B-1
+    tag: str,
+    as_json: bool,
 ) -> int:
     result = wired.session_report.report_for_tag(ReportForTagCommand(tag))
     if result.session_count == 0:
@@ -177,7 +182,7 @@ def _cmd_session_report_by_tag(  # NOSONAR — always 0 by design
     if as_json:
         import json
 
-        payload = _session_report_json(report, [tag])
+        payload = session_report_json(report, [tag])
         payload["tag"] = tag
         payload["session_count"] = result.session_count
         del payload["session"]
@@ -185,18 +190,18 @@ def _cmd_session_report_by_tag(  # NOSONAR — always 0 by design
         return 0
     lines = [f"tag         : {tag}", f"sessions    : {result.session_count}"]
     print("\n".join(lines))
-    print(_render_session_report(report))
+    print(render_session_report(report))
     return 0  # NOSONAR — always 0: all paths are success (found or not-found)
 
 
-def _cmd_session_tag(args: argparse.Namespace) -> int:
+def cmd_session_tag(args: argparse.Namespace) -> int:
     if not args.add and not args.remove:
         print("error: supply at least one --add or --remove flag", file=sys.stderr)
         return 2
-    store_root = _store_root()
-    if store_root is None:
+    store_root_path = store_root()
+    if store_root_path is None:
         return 4
-    wired = build_use_cases(_db_conn_factory(store_root), store_root, diag=_make_diag(args))
+    wired = build_use_cases(db_conn_factory(store_root_path), store_root_path, diag=make_diag(args))
     for tag in args.add:
         wired.session_tags.tag(TagSessionCommand(args.session_id, tag))
     for tag in args.remove:
@@ -211,7 +216,7 @@ def _cmd_session_tag(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_session(_args: argparse.Namespace) -> int:
+def cmd_session(_args: argparse.Namespace) -> int:
     print(
         "usage: gmlcache session start | tag | update | clear-spec | report",
         file=sys.stderr,

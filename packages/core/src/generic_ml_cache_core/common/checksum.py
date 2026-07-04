@@ -56,7 +56,7 @@ def fingerprint_arguments(arguments: Sequence[str]) -> str:
     return text_checksum(_ARGUMENT_SEP.join(arguments))
 
 
-def checksum_input_data(input_data: Mapping[str, str]) -> str:
+def checksum_input_data(input_data: Mapping[str, object]) -> str:
     """Return the container-independent SHA-256 checksum of ``input_data``.
 
     ``input_data`` is the cache input mapping, e.g. ``{"context": ..., "prompt":

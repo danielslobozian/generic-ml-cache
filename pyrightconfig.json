@@ -7,5 +7,5 @@
     "packages/bootstrap/src"
   ],
   "pythonVersion": "3.10",
-  "typeCheckingMode": "standard"
+  "typeCheckingMode": "strict"
 }

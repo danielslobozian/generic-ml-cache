@@ -202,7 +202,7 @@ class PurgeService(
         return report
 
     def _keys_for_session_tag(self, tag: str) -> list[str]:
-        seen: set = set()
+        seen: set[str] = set()
         keys: list[str] = []
         for session_id in self._metrics.session_ids_for_tag(tag):
             for key in self._metrics.execution_keys_for_session(session_id):

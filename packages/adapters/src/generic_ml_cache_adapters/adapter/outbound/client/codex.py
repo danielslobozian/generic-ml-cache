@@ -10,6 +10,7 @@ lets you point at any binary.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,10 @@ from generic_ml_cache_adapters.adapter.outbound.client.cli_runtime import wire_c
 from generic_ml_cache_adapters.adapter.outbound.client.composed_local_client import (
     ComposedLocalClient,
 )
-from generic_ml_cache_adapters.adapter.outbound.client.output_parsing import ensure_trailing_newline
+from generic_ml_cache_adapters.adapter.outbound.client.output_parsing import (
+    ensure_trailing_newline,
+    is_json_object,
+)
 
 
 class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
@@ -43,24 +47,29 @@ class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
     default_executable = "codex"
     execution_kind = ExecutionKind.LOCAL_MANAGED
 
-    def __init__(self, executable_override=None, timeout=None, stream_path=None):
+    def __init__(
+        self,
+        executable_override: str | None = None,
+        timeout: float | None = None,
+        stream_path: str | None = None,
+    ) -> None:
         wire_cli_client(self, executable_override, timeout, stream_path)
 
     @classmethod
-    def descriptor(cls):
+    def descriptor(cls) -> AdapterDescriptor:
         return AdapterDescriptor.local_cli("codex", {ClientCapability.RUN}, "OpenAI Codex")
 
     def build_argv(
         self,
-        executable,
-        run_dir,
-        model,
-        effort,
-        context,
-        prompt,
-        system_prompt,
-        client_args=(),
-        grants=(),
+        executable: str,
+        run_dir: Path,
+        model: str,
+        effort: str,
+        context: str,
+        prompt: str,
+        system_prompt: str,
+        client_args: Sequence[str] = (),
+        grants: Sequence[str] = (),
     ) -> list[str]:
         # Capability doors (sandbox write, network, web-search) now live in
         # $CODEX_HOME/config.toml written by grant_setup -- not in argv. build_argv
@@ -95,7 +104,7 @@ class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
         argv.append("-")
         return argv
 
-    def stdin_payload(self, context, prompt, system_prompt) -> str | None:
+    def stdin_payload(self, context: str, prompt: str, system_prompt: str) -> str | None:
         return f"{context}\n\n{prompt}" if context else prompt
 
     def parse_output(self, stdout: str) -> ParsedOutput:  # noqa: C901
@@ -115,17 +124,17 @@ class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
                 event = json.loads(line)
             except json.JSONDecodeError:
                 continue  # tolerate a stray non-JSON line in the stream
-            if not isinstance(event, dict):
+            if not is_json_object(event):
                 continue
             if event.get("type") == "item.completed":
                 item = event.get("item")
-                if isinstance(item, dict) and item.get("type") == "agent_message":
+                if is_json_object(item) and item.get("type") == "agent_message":
                     text = item.get("text")
                     if isinstance(text, str):
                         answer = text  # keep the latest; the final one is the answer
             elif event.get("type") == "turn.completed":
                 block = event.get("usage")
-                if isinstance(block, dict):
+                if is_json_object(block):
                     usage_block = block
 
         if answer is None:
@@ -146,7 +155,7 @@ class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
             )
         return ParsedOutput(text=ensure_trailing_newline(answer), usage=usage)
 
-    def build_grants_config_file(self, grants):
+    def build_grants_config_file(self, grants: Sequence[str]) -> GrantConfigFile:
         # Uniform door: $CODEX_HOME/config.toml so the FILE enables capabilities.
         # The run folder is untrusted (a fresh temp dir), so a folder-local
         # .codex/config.toml would be skipped -- we redirect the home instead and
@@ -163,35 +172,35 @@ class CodexCliAdapter(ComposedLocalClient, ClientConfigPort):
         content = ("\n".join(lines) + "\n").encode("utf-8")
         return GrantConfigFile(file_name="config.toml", content=content)
 
-    def get_token_files(self):
+    def get_token_files(self) -> list[CredentialFile]:
         auth = Path.home() / ".codex" / "auth.json"
         return [CredentialFile(source=auth, target_name="auth.json")] if auth.is_file() else []
 
-    def config_home_env_var(self):
+    def config_home_env_var(self) -> str:
         return "CODEX_HOME"
 
-    def stream_event(self, raw_line):
+    def stream_event(self, raw_line: str) -> dict[str, str | None] | None:
         try:
-            ev = json.loads(raw_line)
+            line_event = json.loads(raw_line)
         except (json.JSONDecodeError, ValueError):
             return None
-        if not isinstance(ev, dict):
+        if not is_json_object(line_event):
             return None
-        t = ev.get("type")
-        if t == "thread.started":
+        event_type = line_event.get("type")
+        if event_type == "thread.started":
             return {"kind": "start"}
-        if t == "turn.completed":
+        if event_type == "turn.completed":
             return {"kind": "result"}
-        if t in ("error", "turn.failed"):
+        if event_type in ("error", "turn.failed"):
             return {"kind": "error"}
-        if t == "item.completed":
-            item = ev.get("item")
-            if isinstance(item, dict):
-                it = item.get("type")
-                if it == "agent_message":
+        if event_type == "item.completed":
+            item = line_event.get("item")
+            if is_json_object(item):
+                item_type = item.get("type")
+                if item_type == "agent_message":
                     return {"kind": "message"}
-                if it:
-                    return {"kind": "tool", "name": it}
+                if item_type:
+                    return {"kind": "tool", "name": item_type}
         return None
 
 

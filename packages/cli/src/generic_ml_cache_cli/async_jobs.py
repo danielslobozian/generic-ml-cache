@@ -28,10 +28,11 @@ import re
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from generic_ml_cache_adapters.stream import StreamWriter
 from generic_ml_cache_core.common.errors import StoreLocked
@@ -43,7 +44,7 @@ _JOB_ID = re.compile(r"\A[a-z0-9]{1,64}\Z")
 
 
 def _safe_job_id(job_id: str) -> str:
-    if not isinstance(job_id, str) or not _JOB_ID.match(job_id):
+    if not _JOB_ID.match(job_id):
         raise ValueError(f"invalid job id: {job_id!r}")
     return job_id
 
@@ -104,29 +105,37 @@ class JobStore:
             return []
         return sorted(p.name for p in self._jobs.iterdir() if p.is_dir() and p.name != "locks")
 
-    def write_spec(self, job_id: str, spec: dict) -> None:
+    def write_spec(self, job_id: str, spec: dict[str, object]) -> None:
         self.job_dir(job_id).mkdir(parents=True, exist_ok=True)
         self._write_json(self._spec_path(job_id), spec)
 
-    def read_spec(self, job_id: str) -> dict:
-        return json.loads(self._spec_path(job_id).read_text(encoding="utf-8"))
+    def read_spec(self, job_id: str) -> dict[str, object]:
+        spec: object = json.loads(self._spec_path(job_id).read_text(encoding="utf-8"))
+        if not isinstance(spec, dict):
+            raise ValueError(f"job {job_id} spec.json does not hold a JSON object")
+        # A JSON object always has string keys, so this narrowing cast is exact.
+        return cast("dict[str, object]", spec)
 
-    def read_status(self, job_id: str) -> dict | None:
+    def read_status(self, job_id: str) -> dict[str, object] | None:
         try:
-            return json.loads(self._status_path(job_id).read_text(encoding="utf-8"))
+            status: object = json.loads(self._status_path(job_id).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
+        if not isinstance(status, dict):
+            return None
+        # A JSON object always has string keys, so this narrowing cast is exact.
+        return cast("dict[str, object]", status)
 
-    def update_status(self, job_id: str, **fields: object) -> dict:
+    def update_status(self, job_id: str, **fields: object) -> dict[str, object]:
         """Merge ``fields`` into the job's status.json (creating it), and return it."""
-        status = self.read_status(job_id) or {"job": job_id}
+        status: dict[str, object] = self.read_status(job_id) or {"job": job_id}
         status.update(fields)
         self.job_dir(job_id).mkdir(parents=True, exist_ok=True)
         self._write_json(self._status_path(job_id), status)
         return status
 
     @staticmethod
-    def _write_json(path: Path, data: dict) -> None:
+    def _write_json(path: Path, data: dict[str, object]) -> None:
         # ``path`` is built only from a job id validated by _safe_job_id (allowlist
         # ``[a-z0-9]{1,64}``) and confined by _within_jobs, so it cannot escape the jobs
         # directory; ``data`` is gmlcache's own job record (it intentionally stores the run
@@ -141,7 +150,7 @@ class JobStore:
 
 
 @contextmanager
-def hold_job_lock(lock_path: Path) -> Iterator[None]:
+def hold_job_lock(lock_path: Path) -> Generator[None, None, None]:
     """Hold the job's exclusive lock for the duration of the block. Raises
     :class:`StoreLocked` if another worker already owns this job."""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +188,7 @@ def job_lock_held(lock_path: Path) -> bool:
         connection.close()
 
 
-def derived_state(status: dict | None, lock_held: bool) -> str:
+def derived_state(status: dict[str, object] | None, lock_held: bool) -> str:
     """The reported state: terminal as stored; a stored ``running`` with no live
     worker (lock free) is reported as :data:`INTERRUPTED`."""
     if status is None:

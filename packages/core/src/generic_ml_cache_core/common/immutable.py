@@ -13,9 +13,9 @@ body (``MappingProxyType`` is not ``json``-serializable, tuples already are).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 
 def deep_freeze(value: Any) -> Any:
@@ -23,11 +23,14 @@ def deep_freeze(value: Any) -> Any:
     ``Mapping`` → ``MappingProxyType``, ``list``/``tuple`` → ``tuple``,
     ``set``/``frozenset`` → ``frozenset``. Scalars pass through. Idempotent."""
     if isinstance(value, Mapping):
-        return MappingProxyType({key: deep_freeze(item) for key, item in value.items()})
+        mapping_value = cast("Mapping[object, object]", value)
+        return MappingProxyType({key: deep_freeze(item) for key, item in mapping_value.items()})
     if isinstance(value, (list, tuple)):
-        return tuple(deep_freeze(item) for item in value)
+        sequence_value = cast("Iterable[object]", value)
+        return tuple(deep_freeze(item) for item in sequence_value)
     if isinstance(value, (set, frozenset)):
-        return frozenset(deep_freeze(item) for item in value)
+        set_value = cast("Iterable[object]", value)
+        return frozenset(deep_freeze(item) for item in set_value)
     return value
 
 
@@ -36,7 +39,9 @@ def thaw(value: Any) -> Any:
     ``tuple`` → ``list``, ``frozenset`` → ``list``, recursively — a plain structure
     ``json.dumps`` accepts. Scalars pass through."""
     if isinstance(value, Mapping):
-        return {key: thaw(item) for key, item in value.items()}
+        mapping_value = cast("Mapping[object, object]", value)
+        return {key: thaw(item) for key, item in mapping_value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):
-        return [thaw(item) for item in value]
+        collection_value = cast("Iterable[object]", value)
+        return [thaw(item) for item in collection_value]
     return value

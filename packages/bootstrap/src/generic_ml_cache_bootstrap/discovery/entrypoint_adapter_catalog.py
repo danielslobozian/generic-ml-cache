@@ -11,6 +11,7 @@ dependency lives, out of core.
 
 from __future__ import annotations
 
+import importlib.metadata
 import warnings
 from collections.abc import Sequence
 from typing import cast
@@ -57,33 +58,33 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
         self._descriptors: list[AdapterDescriptor] | None = None
         self._sources: dict[str, str] = {}
 
-    def _is_allowed_to_load(self, ep: object) -> bool:
-        """Trust gate, evaluated BEFORE ep.load(): a trusted distribution always
-        loads; anything else only if its entry-point name is whitelisted."""
-        if distribution_name(ep) in self._trusted:
+    def _is_allowed_to_load(self, entry_point: importlib.metadata.EntryPoint) -> bool:
+        """Trust gate, evaluated BEFORE entry_point.load(): a trusted distribution
+        always loads; anything else only if its entry-point name is whitelisted."""
+        if distribution_name(entry_point) in self._trusted:
             return True
-        ep_name = getattr(ep, "name", "")
-        return self._whitelist is not None and ep_name in self._whitelist
+        return self._whitelist is not None and entry_point.name in self._whitelist
 
     def _scan(self) -> list[AdapterDescriptor]:
         descriptors: list[AdapterDescriptor] = []
-        for ep in iter_entry_points(self._group):
-            ep_key = getattr(ep, "name", str(ep))
-            if not self._is_allowed_to_load(ep):
+        for entry_point in iter_entry_points(self._group):
+            entry_point_name = entry_point.name
+            if not self._is_allowed_to_load(entry_point):
                 # Untrusted third-party, not whitelisted: never import it.
                 continue
             try:
-                cls = ep.load()
+                cls = entry_point.load()
             except Exception as exc:  # noqa: BLE001 — broken plugin must not crash discovery
                 warnings.warn(
-                    f"gmlcache: could not load entry-point adapter {ep_key!r}: {exc}", stacklevel=2
+                    f"gmlcache: could not load entry-point adapter {entry_point_name!r}: {exc}",
+                    stacklevel=2,
                 )
                 continue
 
             declared = getattr(cls, "adapter_contract_version", None)
             if declared is not None and declared != ADAPTER_CONTRACT_VERSION:
                 warnings.warn(
-                    f"gmlcache: entry-point adapter {ep_key!r} targets contract {declared!r} "
+                    f"gmlcache: entry-point adapter {entry_point_name!r} targets contract {declared!r} "
                     f"but this core requires {ADAPTER_CONTRACT_VERSION!r}; skipping",
                     stacklevel=2,
                 )
@@ -92,7 +93,7 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
             describe = getattr(cls, "descriptor", None)
             if not callable(describe):
                 warnings.warn(
-                    f"gmlcache: entry-point adapter {ep_key!r} has no descriptor(); skipping",
+                    f"gmlcache: entry-point adapter {entry_point_name!r} has no descriptor(); skipping",
                     stacklevel=2,
                 )
                 continue
@@ -100,13 +101,13 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
                 descriptor = cast(AdapterDescriptor, describe())
             except Exception as exc:  # noqa: BLE001
                 warnings.warn(
-                    f"gmlcache: descriptor() failed for entry-point adapter {ep_key!r}: {exc}",
+                    f"gmlcache: descriptor() failed for entry-point adapter {entry_point_name!r}: {exc}",
                     stacklevel=2,
                 )
                 continue
 
             descriptors.append(descriptor)
-            self._sources[descriptor.adapter_id] = describe_source(ep)
+            self._sources[descriptor.adapter_id] = describe_source(entry_point)
         return descriptors
 
     def _ensure_loaded(self) -> list[AdapterDescriptor]:
@@ -118,11 +119,16 @@ class EntryPointAdapterCatalog(AdapterCatalogPort):
         return list(self._ensure_loaded())
 
     def find_by_client_name(self, client_name: str) -> Sequence[AdapterDescriptor]:
-        return [d for d in self._ensure_loaded() if d.client_name == client_name]
+        return [
+            descriptor
+            for descriptor in self._ensure_loaded()
+            if descriptor.client_name == client_name
+        ]
 
     def supports(self, client_name: str, mode: ExecutionKind) -> bool:
         return any(
-            d.client_name == client_name and d.supports_mode(mode) for d in self._ensure_loaded()
+            descriptor.client_name == client_name and descriptor.supports_mode(mode)
+            for descriptor in self._ensure_loaded()
         )
 
     def sources(self) -> dict[str, str]:

@@ -19,12 +19,13 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from types import FrameType
 from typing import Any
 
 from generic_ml_cache_core.common.errors import CommandLineTooLong, RunInterrupted
 
 
-def _terminate_group(proc: subprocess.Popen) -> None:
+def _terminate_group(proc: subprocess.Popen[str]) -> None:
     if proc.poll() is not None:
         return
     try:
@@ -64,7 +65,7 @@ def _check_command_line_size(argv: list[str]) -> None:
 
 
 def _communicate_streaming(  # noqa: C901
-    proc: subprocess.Popen,
+    proc: subprocess.Popen[str],
     stdin_text: str | None,
     timeout: float | None,
     on_line: Callable[[str], None],
@@ -133,12 +134,15 @@ class CliProcessRunner:
         cwd: Path,
         stdin_payload: str | None = None,
         timeout: float | None = None,
-        env: dict | None = None,
+        env: dict[str, str] | None = None,
         on_line: Callable[[str], None] | None = None,
     ) -> tuple[str, str, int]:
         """Launch ``argv`` in ``cwd``, honour stop signals, return (stdout, stderr, exit)."""
         _check_command_line_size(argv)
-        group_kwargs: dict = (
+        # Heterogeneous per-OS Popen keywords (bool vs int); ``Any`` because a
+        # value type precise enough for both branches cannot be splatted into
+        # Popen's typed keyword parameters.
+        group_kwargs: dict[str, Any] = (
             {"start_new_session": True}
             if os.name == "posix"
             else {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -159,7 +163,7 @@ class CliProcessRunner:
         previous: dict[int, Any] = {}
         installed: list[int] = []
 
-        def _on_stop(signum, _frame):
+        def _on_stop(signum: int, _frame: FrameType | None) -> None:
             stopped["signum"] = signum
             _terminate_group(proc)
 

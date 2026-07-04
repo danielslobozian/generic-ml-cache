@@ -62,7 +62,7 @@ def test_cache_error_handler(
 
 
 def test_unknown_client_from_build_command(client: TestClient) -> None:
-    """UnknownClient raised in _build_command is caught by the global handler."""
+    """UnknownClient raised in build_command is caught by the global handler."""
     response = client.post(
         "/run",
         json={"client": "no_such_adapter_xyz", "model": "m", "prompt": "hi"},

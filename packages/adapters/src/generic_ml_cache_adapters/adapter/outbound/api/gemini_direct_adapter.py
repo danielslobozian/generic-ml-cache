@@ -72,7 +72,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
         return key
 
     def _build_body(self, request: MlRequest) -> dict[str, Any]:
-        system_parts = []
+        system_parts: list[dict[str, str]] = []
         if request.context:
             system_parts.append({"text": request.context})
         if request.user_system_prompt:
@@ -89,7 +89,7 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
     def list_models(self) -> list[ModelInfo]:
         """Return all Gemini models that support generateContent."""
         data = self._get(_BASE_URL)
-        result = []
+        models: list[ModelInfo] = []
         for m in data.get("models", []):
             if "generateContent" not in m.get("supportedGenerationMethods", []):
                 continue
@@ -97,8 +97,8 @@ class GeminiDirectAdapter(ApiClientPort, ModelListingPort):
             if not model_id:
                 continue
             display = m.get("displayName", model_id)
-            result.append(ModelInfo(id=model_id, name=display))
-        return result
+            models.append(ModelInfo(id=model_id, name=display))
+        return models
 
     def _get(self, url: str) -> dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310 (trusted provider endpoint, https)

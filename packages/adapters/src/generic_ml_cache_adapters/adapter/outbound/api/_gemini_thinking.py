@@ -45,7 +45,7 @@ _LEVEL_TO_BUDGET: dict[str, int] = {
 # Strip the "models/" prefix and any version suffix (e.g. "-001") before
 # matching. Extend this list when Google releases new 2.5-generation models.
 # Source: https://ai.google.dev/gemini-api/docs/thinking
-_BUDGET_MODEL_BASES: frozenset = frozenset(
+_BUDGET_MODEL_BASES: frozenset[str] = frozenset(
     {
         "gemini-2.5-pro",
         "gemini-2.5-flash",

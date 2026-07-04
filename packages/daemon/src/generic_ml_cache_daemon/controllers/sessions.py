@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import secrets
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from generic_ml_cache_core.application.domain.model.session.session_report import ModelUsage
@@ -50,7 +51,7 @@ def _spec_to_body(spec: SessionSpec | None) -> SpecBody | None:
     return SpecBody(client=spec.client, model=spec.model, effort=spec.effort)
 
 
-def _session_response(wired, session_id: str) -> SessionResponse:
+def _session_response(wired: Any, session_id: str) -> SessionResponse:
     return SessionResponse(
         session_id=session_id,
         tags=wired.session_tags.list_tags(ListSessionTagsCommand(session_id)),

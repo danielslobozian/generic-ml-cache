@@ -67,6 +67,8 @@ def test_entrypoint_catalog_sources_map_ids_to_packages():
 class _FakeDist:
     def __init__(self, name):
         self.metadata = {"Name": name, "Version": "1.0"}
+        self.name = name
+        self.version = "1.0"
 
 
 class _FakeEntryPoint:

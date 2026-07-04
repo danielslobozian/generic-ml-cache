@@ -40,7 +40,7 @@ class MlExecution:
     execution_kind: ExecutionKind
     output_persisted: bool
     input_persisted: bool = False
-    artifacts: list[Artifact] = field(default_factory=list)
+    artifacts: list[Artifact] = field(default_factory=list[Artifact])
     token_usage: TokenUsage | None = None
     failure: ExecutionFailure | None = None
     superseded_at: datetime | None = None

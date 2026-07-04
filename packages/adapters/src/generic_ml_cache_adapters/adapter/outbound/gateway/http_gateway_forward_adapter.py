@@ -52,7 +52,7 @@ class HttpGatewayForwardAdapter(GatewayForwardPort):
             error_body_bytes = http_error.read()
             return ForwardedResponse(body_bytes=error_body_bytes, status_code=http_error.code)
 
-    def _build_headers(self, api_token: str, forward_headers: Mapping[str, str]) -> dict:
+    def _build_headers(self, api_token: str, forward_headers: Mapping[str, str]) -> dict[str, str]:
         _skip = {"host", "connection", "content-length", "accept-encoding", "transfer-encoding"}
         upstream_headers = {k: v for k, v in forward_headers.items() if k not in _skip}
         upstream_headers["content-type"] = "application/json"
