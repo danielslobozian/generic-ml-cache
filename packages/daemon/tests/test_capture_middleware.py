@@ -158,6 +158,22 @@ def test_chatgpt_account_id_header_is_redacted(tmp_path: Path) -> None:
     assert record["request_headers"].get("chatgpt-account-id") == "[REDACTED]"
 
 
+def test_unknown_provider_auth_headers_are_redacted_by_default(tmp_path: Path) -> None:
+    # Grouped nit: default-DENY — an auth header from a provider not on any explicit
+    # list (e.g. Google's x-goog-api-key, a bearer token header) is still redacted, so
+    # it is never written verbatim to the capture file.
+    capture_path = tmp_path / "capture.ndjson"
+    with TestClient(_make_app(capture_path)) as test_client:
+        test_client.post(
+            "/gateway/claude/v1/messages",
+            json={"model": "m"},
+            headers={"x-goog-api-key": "goog-secret", "x-subscription-token": "tok-secret"},
+        )
+    headers = _read_records(capture_path)[0]["request_headers"]
+    assert headers.get("x-goog-api-key") == "[REDACTED]"
+    assert headers.get("x-subscription-token") == "[REDACTED]"
+
+
 def test_non_sensitive_headers_are_preserved(tmp_path: Path) -> None:
     capture_path = tmp_path / "capture.ndjson"
     with TestClient(_make_app(capture_path)) as test_client:

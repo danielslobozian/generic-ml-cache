@@ -12,7 +12,7 @@ Each line in the output file is a self-contained JSON object:
         "ts":               "<ISO-8601 UTC timestamp>",
         "method":           "POST",
         "path":             "/gateway/claude/v1/messages",
-        "request_headers":  { ... },   // x-api-key and Authorization redacted
+        "request_headers":  { ... },   // any auth-ish header redacted (default-deny)
         "request_body":     { ... },   // parsed JSON, or raw string on failure
         "response_status":  200,
         "response_body":    { ... },   // parsed JSON, or raw string on failure
@@ -37,16 +37,32 @@ from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp
 
 _GATEWAY_PREFIX = "/gateway/"
+#: Explicit sensitive header names that the auth-ish patterns below do not catch.
 _SENSITIVE_HEADER_NAMES: frozenset[str] = frozenset(
     {
-        "authorization",
         "chatgpt-account-id",
         "cookie",
+        "set-cookie",
         "session-id",
-        "x-api-key",
     }
 )
+#: Default-DENY redaction (grouped nit): a header is redacted if its lowercased name
+#: contains any of these, so an auth header from a provider we don't explicitly know
+#: (e.g. ``x-goog-api-key``) is never written verbatim to the capture file — an
+#: allowlist would silently leak it. Over-redacting a non-secret is safe; leaking one
+#: is not.
+_SENSITIVE_HEADER_SUBSTRINGS: tuple[str, ...] = ("authorization", "api-key", "apikey")
+_SENSITIVE_HEADER_SUFFIXES: tuple[str, ...] = ("-token", "-secret", "-key")
 _REDACTED = "[REDACTED]"
+
+
+def _is_sensitive_header(header_name: str) -> bool:
+    lowered = header_name.lower()
+    if lowered in _SENSITIVE_HEADER_NAMES:
+        return True
+    if any(fragment in lowered for fragment in _SENSITIVE_HEADER_SUBSTRINGS):
+        return True
+    return lowered.endswith(_SENSITIVE_HEADER_SUFFIXES)
 
 
 class GatewayCaptureMiddleware(BaseHTTPMiddleware):
@@ -130,7 +146,7 @@ def _utc_now() -> str:
 
 def _redact_headers(headers: dict[str, str]) -> dict[str, str]:
     return {
-        header_name: (_REDACTED if header_name.lower() in _SENSITIVE_HEADER_NAMES else header_value)
+        header_name: (_REDACTED if _is_sensitive_header(header_name) else header_value)
         for header_name, header_value in headers.items()
     }
 

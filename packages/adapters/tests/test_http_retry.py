@@ -87,6 +87,17 @@ def test_non_retryable_4xx_raises_immediately():
     assert sleeps == []
 
 
+def test_provider_api_error_body_is_bounded():
+    # Grouped nit: a large upstream error body is snippet-bounded on the
+    # ProviderApiError, not carried whole into a user-facing message.
+    from generic_ml_cache_adapters.adapter.outbound.api._http import _MAX_BODY_SNIPPET
+
+    _, exc, _, _ = _call([_http_error(400, body=b"x" * 5000)])
+    assert exc is not None
+    assert len(exc.body) <= _MAX_BODY_SNIPPET + 1  # snippet + the "…" marker
+    assert exc.body.endswith("…")
+
+
 def test_429_is_retried_then_succeeds():
     result, exc, sleeps, calls = _call([_http_error(429), _ok(b'{"ok": 1}')])
     assert result == {"ok": 1}

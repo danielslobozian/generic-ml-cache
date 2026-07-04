@@ -149,7 +149,12 @@ def request_json(
             if _is_retryable_status(exc.code) and attempt < retry.max_attempts:
                 sleep(_delay(retry, attempt, _retry_after_seconds(exc.headers)))
                 continue
-            raise ProviderApiError(provider=provider, status_code=exc.code, body=body) from exc
+            # Bound the upstream error body (grouped nit): a provider error envelope
+            # can be large and occasionally echoes request material, so snippet it like
+            # the ProviderProtocolError path rather than carrying the full payload.
+            raise ProviderApiError(
+                provider=provider, status_code=exc.code, body=_body_snippet(body)
+            ) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             # HTTPError is a URLError subclass but is handled above, so this is a real
             # network/timeout failure (connection refused, DNS, read timeout).
