@@ -156,7 +156,6 @@ modules =
     generic_ml_cache_adapters.adapter.outbound.clock
     generic_ml_cache_adapters.adapter.outbound.crypto
     generic_ml_cache_adapters.adapter.outbound.fingerprint
-    generic_ml_cache_adapters.adapter.outbound.gateway
     generic_ml_cache_adapters.adapter.outbound.metrics
     generic_ml_cache_adapters.adapter.outbound.persistence
     generic_ml_cache_adapters.adapter.outbound.storage

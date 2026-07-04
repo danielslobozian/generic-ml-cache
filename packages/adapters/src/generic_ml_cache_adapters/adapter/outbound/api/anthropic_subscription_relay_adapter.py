@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Mapping
 
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.run.api_passthrough_request import (
     ApiPassthroughRequest,
 )
@@ -62,6 +63,11 @@ class AnthropicSubscriptionRelayAdapter(ApiPassthroughRunnerPort):
 
     def __init__(self, timeout: float = 120.0) -> None:
         self._timeout = timeout
+
+    @property
+    def execution_kind(self) -> ExecutionKind:
+        """Its registry identity — the gateway dispatches API_PASSTHROUGH to it."""
+        return ExecutionKind.API_PASSTHROUGH
 
     def execute_api_passthrough(self, request: ApiPassthroughRequest) -> ClientAnswer:
         http_request = urllib.request.Request(  # noqa: S310 — operator-configured upstream, https

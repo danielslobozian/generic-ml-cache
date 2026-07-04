@@ -1,26 +1,39 @@
 # SPDX-FileCopyrightText: 2026 Daniel Slobozian
 # SPDX-License-Identifier: Apache-2.0
-"""Route: POST /gateway/claude/{session_id}/v1/messages — Anthropic Messages API caching proxy."""
+"""Route: POST /gateway/claude/{session_id}/v1/messages — Anthropic Messages caching proxy.
+
+The daemon *is* the gateway: it maps an Anthropic-Messages HTTP request onto the
+library's ``run_ml_execution`` inbound port with an ``API_PASSTHROUGH`` command, so the
+caching / recording / hit-check all come from the one shared cache protocol. The raw
+request body is forwarded and keyed verbatim (W11); the verbatim relay wired in the
+composition root does the actual upstream call and reports the real status (W15).
+"""
 
 from __future__ import annotations
 
 import asyncio
+import json
 
-from fastapi import APIRouter, Request
-from generic_ml_cache_core.application.domain.model.gateway.gateway_request import GatewayRequest
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_command import (
-    RunMlGatewayCommand,
+from fastapi import APIRouter, HTTPException, Request
+from generic_ml_cache_core.application.domain.model.execution.artifact import ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_command import (
+    RunMlExecutionCommand,
 )
 from starlette.responses import Response
 
-from generic_ml_cache_daemon.presenters.gateway import MessagesRequest
-
 router = APIRouter(prefix="/gateway/claude")
 
-_ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"  # NOSONAR
-_HOP_BY_HOP = frozenset(
-    ["host", "connection", "content-length", "accept-encoding", "transfer-encoding"]
-)
+#: The client name the gateway relays through; the composition root wires the verbatim
+#: ``AnthropicSubscriptionRelayAdapter`` under this name (the end-to-end gateway tests
+#: fail loudly if the two ever drift, since run_ml would raise UnknownClient).
+_RELAY_CLIENT = "anthropic-subscription"
+_HTTP_OK = 200
+_BAD_GATEWAY = 502
+_JSON_MEDIA_TYPE = "application/json"
+_VALIDATION_STATUS = 422
 
 
 @router.get("/{session_id}", include_in_schema=False)
@@ -31,33 +44,59 @@ async def gateway_probe(session_id: str) -> dict[str, str]:
 
 
 @router.post("/{session_id}/v1/messages")
-async def proxy_messages(session_id: str, body: MessagesRequest, request: Request) -> Response:
+async def proxy_messages(session_id: str, request: Request) -> Response:
     """Cache-aware pass-through proxy for the Anthropic Messages API.
 
-    The gmlcache session ID is embedded in the URL path so the daemon stays
-    stateless — no --session flag needed at startup, and multiple sessions can
-    share the same daemon simultaneously.
+    The gmlcache session ID rides in the URL path so the daemon stays stateless — no
+    ``--session`` flag at startup, and many sessions can share one daemon. The caller's
+    body is forwarded and keyed byte-for-byte; only a copy is validated (W11).
     """
-    forward_headers = {k: v for k, v in request.headers.items() if k not in _HOP_BY_HOP}
-    api_token = request.headers.get("x-api-key", "")
-    # Forward the caller's body verbatim — every field, validated or not, is kept
-    # (extra="allow") so nothing is dropped upstream or from the cache key. The
-    # gmlcache session id rides in the URL path, not the upstream body, so it is
-    # excluded; max_tokens carries its validated default when the caller omits it.
-    gateway_request = GatewayRequest(body=body.model_dump(exclude={"session_id"}))
-    command = RunMlGatewayCommand(
-        gateway_request=gateway_request,
-        api_token=api_token,
-        target_url=_ANTHROPIC_MESSAGES_URL,
+    raw_body = await request.body()
+    _reject_malformed(raw_body)
+    command = RunMlExecutionCommand(
+        execution_kind=ExecutionKind.API_PASSTHROUGH,
+        client=_RELAY_CLIENT,
+        model="",
+        raw_body=raw_body,
+        # Forwarded verbatim; the relay drops connection-scoped hops case-insensitively.
+        forward_headers=tuple(request.headers.items()),
         session_id=session_id,
-        forward_headers=forward_headers,
     )
     wired = request.app.state.wired
     loop = asyncio.get_event_loop()
-    gateway_response = await loop.run_in_executor(None, wired.run_gateway.execute, command)
-    return Response(
-        content=gateway_response.response_body_bytes,
-        status_code=gateway_response.status_code,
-        media_type="application/json",
-        headers={"x-cache-hit": "true" if gateway_response.cache_hit else "false"},
-    )
+    execution = await loop.run_in_executor(None, wired.run_ml.execute, command)
+    status_code, response_body = _to_http_response(execution)
+    return Response(content=response_body, status_code=status_code, media_type=_JSON_MEDIA_TYPE)
+
+
+def _reject_malformed(raw_body: bytes) -> None:
+    """Fast local reject of a body that cannot be a Messages request (W11 — validate a
+    *copy*; the raw bytes are still what gets forwarded and keyed, never this parse)."""
+    try:
+        parsed = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(
+            status_code=_VALIDATION_STATUS, detail="request body is not valid JSON"
+        ) from exc
+    if not isinstance(parsed, dict) or "model" not in parsed:
+        raise HTTPException(
+            status_code=_VALIDATION_STATUS, detail="request body must include 'model'"
+        )
+
+
+def _to_http_response(execution: MlExecution) -> tuple[int, bytes]:
+    """Map the recorded/served execution back to the wire response: the STDOUT artifact
+    is the verbatim upstream body; a SUCCESS is a 200 (only a 200 is cached), a failure
+    carries the real upstream status in its exit code, forwarded verbatim and uncached."""
+    response_body = _stdout_bytes(execution)
+    if execution.execution_state is ExecutionState.SUCCESS:
+        return _HTTP_OK, response_body
+    upstream_status = execution.failure.exit_code if execution.failure else None
+    return upstream_status or _BAD_GATEWAY, response_body
+
+
+def _stdout_bytes(execution: MlExecution) -> bytes:
+    for artifact in execution.artifacts:
+        if artifact.artifact_type is ArtifactType.STDOUT and artifact.content is not None:
+            return artifact.content
+    return b""

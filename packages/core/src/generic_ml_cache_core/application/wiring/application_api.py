@@ -45,9 +45,6 @@ from generic_ml_cache_core.application.port.inbound.purge.purge_by_tag_use_case 
 from generic_ml_cache_core.application.port.inbound.run_ml_execution.run_ml_execution_use_case import (
     RunMlExecutionUseCase,
 )
-from generic_ml_cache_core.application.port.inbound.run_ml_gateway.run_ml_gateway_use_case import (
-    RunMlGatewayUseCase,
-)
 from generic_ml_cache_core.application.port.inbound.session_admin.clear_session_spec_use_case import (
     ClearSessionSpecUseCase,
 )
@@ -121,10 +118,9 @@ class ApplicationApi:
     precisely so the port ring can stay free of use-case imports.
     """
 
-    # run / probe / gateway — single-operation capabilities (execute-shaped)
+    # run / probe — single-operation capabilities (execute-shaped)
     run_ml: RunMlExecutionUseCase
     probe: ProbeUseCase
-    run_gateway: RunMlGatewayUseCase
 
     # purge — one PurgeService implements all seven
     purge_by_key: PurgeByKeyUseCase

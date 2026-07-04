@@ -28,7 +28,6 @@ def test_build_application_api_wires_the_full_graph(tmp_path):
     # including a segregated purge operation and one that shares its service.
     assert api.run_ml is not None
     assert api.probe is not None
-    assert api.run_gateway is not None
     assert api.purge_by_key is not None
     assert api.evict_to_quota is not None
     assert api.tag_session is not None

@@ -11,9 +11,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import Ar
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
-from generic_ml_cache_core.application.domain.model.identity.gateway_call_identity import (
-    GatewayCallIdentity,
-)
+from generic_ml_cache_core.application.domain.model.identity.call_identity import CallIdentity
 from generic_ml_cache_core.application.domain.model.run.cache_mode import CacheMode
 from generic_ml_cache_core.application.domain.model.run.client_run_result import ClientRunResult
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
@@ -38,6 +36,24 @@ from generic_ml_cache_core.common.errors import (
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _StubIdentity(CallIdentity):
+    """A fixed identity for exercising the shared base — the key is verbatim."""
+
+    cache_key: str = "test-key"
+
+    def generate_key(self) -> str:
+        return self.cache_key
+
+    @property
+    def summary_client(self) -> str:
+        return "test-client"
+
+    @property
+    def summary_model(self) -> str:
+        return "test-model"
+
+
 class _MlRunStore(SaveMlRunPort, ReadMlRunPort, AnnotateMlRunPort): ...
 
 
@@ -47,7 +63,7 @@ class _RunSvc(CachedMlExecutionService):
         self._runner = runner or MagicMock()
 
     def _build_identity(self, cmd):
-        return GatewayCallIdentity(cache_key="test-key")
+        return _StubIdentity()
 
     def _run_client(self, cmd):
         return self._runner(cmd)
@@ -110,7 +126,7 @@ def _make_execution(blob_key: str = "blob-1") -> MlExecution:
         size_bytes=4,
     )
     return MlExecution(
-        call_identity=GatewayCallIdentity(cache_key="test-key"),
+        call_identity=_StubIdentity(),
         execution_state=ExecutionState.SUCCESS,
         execution_kind=ExecutionKind.LOCAL_MANAGED,
         output_persisted=True,

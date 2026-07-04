@@ -8,10 +8,9 @@ import re
 
 # A blob key addresses one entry in the (dumb) blob store, which resolves it as a
 # single path component (``root / key``). Real keys are content fingerprints
-# (sha-256 hex) or a fingerprint with a small suffix (e.g. the gateway's
-# ``<key>.req``), so this charset covers every key the system produces while
-# excluding anything that could escape the store root: no ``/`` or ``\``, no
-# whitespace or control chars, bounded length.
+# (sha-256 hex); the charset also permits a dotted suffix, so this covers every key
+# the system produces while excluding anything that could escape the store root: no
+# ``/`` or ``\``, no whitespace or control chars, bounded length.
 _BLOB_KEY = re.compile(r"[A-Za-z0-9._-]{1,255}")
 
 
@@ -28,7 +27,7 @@ class BlobKey(str):
     It is a ``str`` subclass, so it drops in wherever a key string is used (dict
     lookups, ``root / key``, SQL parameters) — a plain ``str`` is not itself a
     validated key, but every key the system *produces* is built through this type
-    (the fingerprint sites, the gateway, and the repository's DB-read edge).
+    (the fingerprint sites and the repository's DB-read edge).
     """
 
     __slots__ = ()

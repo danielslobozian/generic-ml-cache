@@ -11,7 +11,7 @@ Only one thing genuinely differs between the drivers: **which client adapters to
 wire**. The CLI runs one selected client per invocation; the daemon wires every
 whitelisted client. That single variation is injected as the ``build_runners``
 strategy; everything else (store recovery, blob store + encryption, migrations,
-repository, metrics, gateway, the use-case graph) is identical and lives here.
+repository, metrics, the use-case graph) is identical and lives here.
 """
 
 from __future__ import annotations
@@ -19,6 +19,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from generic_ml_cache_adapters.adapter.outbound.api.anthropic_subscription_relay_adapter import (
+    AnthropicSubscriptionRelayAdapter,
+)
 from generic_ml_cache_adapters.adapter.outbound.crypto.encrypting_blob_store import (
     EncryptingBlobStore,
     TokenRequiredBlobStore,
@@ -32,9 +35,6 @@ from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_ada
 )
 from generic_ml_cache_adapters.adapter.outbound.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
-)
-from generic_ml_cache_adapters.adapter.outbound.gateway.http_gateway_forward_adapter import (
-    HttpGatewayForwardAdapter,
 )
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
@@ -54,7 +54,6 @@ from generic_ml_cache_core.application.port.outbound.diagnostics_port import Dia
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
-from generic_ml_cache_core.application.port.outbound.gateway_forward_port import GatewayForwardPort
 from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
     RegisteredAdapterPort,
 )
@@ -72,7 +71,6 @@ from generic_ml_cache_core.application.usecase.repair_store_service import Repai
 from generic_ml_cache_core.application.usecase.run_ml_execution_service import (
     RunMlExecutionService,
 )
-from generic_ml_cache_core.application.usecase.run_ml_gateway_service import RunMlGatewayService
 from generic_ml_cache_core.application.usecase.session_admin_service import SessionAdminService
 from generic_ml_cache_core.application.usecase.session_report_service import SessionReportService
 from generic_ml_cache_core.application.usecase.session_tags_service import SessionTagsService
@@ -145,7 +143,6 @@ def build_application_api(
     persistence: PersistenceBackend | None = None,
     blob_store: BlobStorePort | None = None,
     file_fingerprint: FileFingerprintPort | None = None,
-    gateway_forward: GatewayForwardPort | None = None,
     encryption_token: str | None = None,
     max_size: int | None = None,
     whitelist: frozenset[str] | None = None,
@@ -157,9 +154,9 @@ def build_application_api(
     client adapters to wire. The infrastructure adapters are OVERRIDABLE with shipped
     defaults (V33, ``@ConditionalOnMissingBean``): the DB-backed adapters as one
     ``PersistenceBackend`` bundle (default = SQLite under ``store_root``), and the
-    blob store / file fingerprint / gateway individually. A standalone driver injects
-    nothing and gets the batteries-included SQLite + filesystem stack; an embedder
-    supplies a Postgres/S3 backend and the C-2 boot handshake validates it.
+    blob store / file fingerprint individually. A standalone driver injects nothing and
+    gets the batteries-included SQLite + filesystem stack; an embedder supplies a
+    Postgres/S3 backend and the C-2 boot handshake validates it.
     """
     store_root = Path(store_root)
     _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
@@ -171,11 +168,12 @@ def build_application_api(
     file_fingerprint = (
         file_fingerprint if file_fingerprint is not None else FilesystemFileFingerprint()
     )
-    gateway_forward = (
-        gateway_forward if gateway_forward is not None else HttpGatewayForwardAdapter()
-    )
     provision_store(persistence.migration)
     runners = build_runners(catalog_for(whitelist), default_resolver())
+    # The caching HTTP gateway (the daemon's /gateway/claude route) dispatches an
+    # API_PASSTHROUGH command to this verbatim relay through the shared run use case —
+    # it is not a user-selectable client, so it is wired here rather than discovered.
+    runners.setdefault(AnthropicSubscriptionRelayAdapter.name, AnthropicSubscriptionRelayAdapter())
     # One application service per capability (grouped by shared machinery); each is
     # exposed through the segregated per-operation inbound-port fields of ApplicationApi
     # (B-1). On the outbound side (V32/V33) each service depends only on the role ports
@@ -206,13 +204,6 @@ def build_application_api(
         save=persistence.save_ml_run,
         blob_store=blob_store,
     )
-    run_gateway = RunMlGatewayService(
-        blob_store=blob_store,
-        gateway_forward_port=gateway_forward,
-        repository=persistence.save_ml_run,
-        metrics=persistence.record_call_event,
-        diag=_diag,
-    )
     return ApplicationApi(
         run_ml=RunMlExecutionService(
             file_fingerprint,
@@ -228,7 +219,6 @@ def build_application_api(
             diag=_diag,
         ),
         probe=ProbeService(file_fingerprint, persistence.read_ml_run),
-        run_gateway=run_gateway,
         purge_by_key=purge,
         purge_by_tag=purge,
         purge_by_session=purge,

@@ -19,9 +19,9 @@ def test_accepts_a_content_fingerprint():
     assert isinstance(key, str)  # drop-in wherever a key string is used
 
 
-def test_accepts_a_suffixed_gateway_key():
-    # The gateway stores its request body under "<key>.req".
-    assert BlobKey(f"{_FINGERPRINT}.req") == f"{_FINGERPRINT}.req"
+def test_accepts_a_suffixed_key():
+    # The charset permits a dotted suffix on a content fingerprint.
+    assert BlobKey(f"{_FINGERPRINT}.bin") == f"{_FINGERPRINT}.bin"
 
 
 def test_accepts_plain_names_with_dots_hyphens_underscores():

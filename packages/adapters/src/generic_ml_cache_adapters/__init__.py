@@ -5,7 +5,7 @@
 This package provides the infrastructure layer for generic-ml-cache-core:
 SQLite persistence, filesystem blob storage, AES-GCM encryption, ML client
 runners (claude, codex, cursor-agent), REST API adapters (anthropic, openai,
-gemini), metrics, clock, and HTTP gateway forwarding.
+gemini) including the verbatim Anthropic subscription relay, metrics, and clock.
 
 ML client adapters are declared via the ``gmlcache.adapters`` entry-point group
 and are discovered automatically through that group when this package is
