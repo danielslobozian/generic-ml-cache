@@ -33,3 +33,11 @@ class PassthroughCallIdentity(CallIdentity):
                 "args": self.native_args_fingerprint,
             }
         )
+
+    @property
+    def summary_client(self) -> str:
+        return self.client
+
+    @property
+    def summary_model(self) -> str:
+        return ""

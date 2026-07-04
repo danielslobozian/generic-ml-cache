@@ -22,3 +22,14 @@ class GatewayCallIdentity(CallIdentity):
 
     def generate_key(self) -> str:
         return self.cache_key
+
+    @property
+    def summary_client(self) -> str:
+        # The gateway request carries the provider, but this digest-only identity
+        # does not; the shipped gateway is Anthropic-shaped, matching the store's
+        # denormalized column. (Kept in parity with the persistence serializer.)
+        return "anthropic"
+
+    @property
+    def summary_model(self) -> str:
+        return ""

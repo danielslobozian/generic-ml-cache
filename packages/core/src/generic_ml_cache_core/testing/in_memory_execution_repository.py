@@ -28,10 +28,6 @@ from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import 
     UnpersistedRun,
 )
 
-from generic_ml_cache_adapters.adapter.outbound.persistence.call_identity_serialization import (
-    serialize_identity,
-)
-
 
 class InMemoryExecutionRepository(
     SaveMlRunPort,
@@ -229,13 +225,12 @@ class InMemoryExecutionRepository(
             for execution in executions:
                 if not self._is_servable(execution):
                     continue
-                serialized = serialize_identity(execution.call_identity)
                 summaries.append(
                     ExecutionSummary(
                         execution_key=key,
                         kind=execution.execution_kind.value,
-                        client=serialized.client,
-                        model=serialized.model,
+                        client=execution.call_identity.summary_client,
+                        model=execution.call_identity.summary_model,
                     )
                 )
         return summaries

@@ -86,6 +86,19 @@ source_modules =
 forbidden_modules =
     generic_ml_cache_core.application.usecase
 
+# Rule 3c — core production code must not import the shipped test-support kit.
+# generic_ml_cache_core.testing (the reference fakes + conformance TCK, E-1) is
+# test-support: production modules must never depend on it, so the core runtime
+# stays dependency-free (its pytest dep lives behind the [test] extra).
+[importlinter:contract:core-prod-not-testing]
+name = Core production code must not import the test-support kit
+type = forbidden
+source_modules =
+    generic_ml_cache_core.application
+    generic_ml_cache_core.common
+forbidden_modules =
+    generic_ml_cache_core.testing
+
 # Rule 4 — core must not import any specific database driver.
 # Core is driver-agnostic: it accepts a DBAPI2 connection injected by the caller.
 [importlinter:contract:no-db-driver-in-core]

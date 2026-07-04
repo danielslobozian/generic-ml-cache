@@ -84,6 +84,14 @@ class ManagedCallIdentity(CallIdentity):
         object.__setattr__(self, "grants", frozenset(self.grants))
         object.__setattr__(self, "allow_paths", frozenset(self.allow_paths))
 
+    @property
+    def summary_client(self) -> str:
+        return self.client
+
+    @property
+    def summary_model(self) -> str:
+        return self.model
+
     @classmethod
     def from_keyed_inputs(
         cls, keyed_inputs: KeyedCallInputs, input_file_fingerprints: Mapping[str, str]

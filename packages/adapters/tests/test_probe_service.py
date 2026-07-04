@@ -23,8 +23,7 @@ from generic_ml_cache_core.application.port.outbound.file_fingerprint_port impor
 )
 from generic_ml_cache_core.application.usecase.call_identity_building import build_call_identity
 from generic_ml_cache_core.application.usecase.probe_service import ProbeService
-
-from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
+from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 

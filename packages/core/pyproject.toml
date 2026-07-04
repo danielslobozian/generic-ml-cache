@@ -33,6 +33,11 @@ Issues = "https://github.com/danielslobozian/generic-ml-cache/issues"
 Changelog = "https://github.com/danielslobozian/generic-ml-cache/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+# The shipped test-support kit (generic_ml_cache_core.testing) needs pytest for its
+# conformance TCK. It sits behind this extra so the core RUNTIME stays dependency-free
+# (`dependencies = []`): a consumer running the TCK against their own PersistenceBackend
+# installs `generic-ml-cache-core[test]`.
+test = ["pytest>=7"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [tool.hatch.version]

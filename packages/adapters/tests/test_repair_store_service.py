@@ -20,8 +20,7 @@ from generic_ml_cache_core.application.domain.model.identity.managed_call_identi
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
 from generic_ml_cache_core.application.usecase.repair_store_service import RepairStoreService
-
-from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
+from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 

@@ -40,3 +40,11 @@ class ApiCallIdentity(CallIdentity):
         if self.system_fingerprint:
             data["system"] = self.system_fingerprint
         return checksum_input_data(data)
+
+    @property
+    def summary_client(self) -> str:
+        return self.provider
+
+    @property
+    def summary_model(self) -> str:
+        return self.model

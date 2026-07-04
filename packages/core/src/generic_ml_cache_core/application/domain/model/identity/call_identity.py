@@ -23,3 +23,17 @@ class CallIdentity(ABC):
 
         Pure: hashes only the already-in-memory fingerprints. No I/O.
         """
+
+    @property
+    @abstractmethod
+    def summary_client(self) -> str:
+        """The client/provider this identity reports as, for the denormalized
+        reporting/query columns (an API identity reports its provider; a gateway
+        identity reports its upstream). The identity owns this — a store adapter
+        must not re-derive it (the persistence serializer reads it from here too)."""
+
+    @property
+    @abstractmethod
+    def summary_model(self) -> str:
+        """The model this identity reports as for reporting/query, or ``""`` when
+        the kind has none (passthrough, gateway)."""

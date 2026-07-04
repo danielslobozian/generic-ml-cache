@@ -50,8 +50,7 @@ from generic_ml_cache_core.application.port.outbound.call_journal_ports import (
 )
 from generic_ml_cache_core.application.port.outbound.clock_port import ClockPort
 from generic_ml_cache_core.application.usecase.purge_service import PurgeService
-
-from generic_ml_cache_adapters.adapter.outbound.persistence.in_memory_execution_repository import (
+from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
 

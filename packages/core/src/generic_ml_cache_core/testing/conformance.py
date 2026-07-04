@@ -1,0 +1,163 @@
+# SPDX-FileCopyrightText: 2026 Daniel Slobozian
+# SPDX-License-Identifier: Apache-2.0
+"""A conformance TCK for the ML-run persistence ports (E-1, V6).
+
+A reusable behavioral contract every persistence backend must satisfy — the shipped
+SQLite adapter and the in-memory reference fake both pass it, so the fake cannot
+drift from the real store (Fowler's Contract Test), and a third-party backend author
+proves their adapter by subclassing it. Subclass ``MlRunStoreConformance`` in a test
+module and implement ``make_store`` to return a fresh, empty store bound to the given
+``tmp_path``; pytest then collects the inherited ``test_*`` methods.
+
+Needs pytest (this module is behind the core ``[test]`` extra), but is itself pure
+domain — it never imports an adapter.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Protocol
+
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    Artifact,
+    ArtifactStatus,
+    ArtifactType,
+)
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
+from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
+from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
+from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
+from generic_ml_cache_core.application.domain.model.identity.managed_call_identity import (
+    ManagedCallIdentity,
+)
+from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import UnpersistedRun
+
+
+class MlRunStore(Protocol):
+    """The slice of the persistence ports the conformance TCK exercises — a
+    structural type, so any backend (the fake, the SQLite adapter) satisfies it
+    without inheriting a header interface."""
+
+    def find_current(self, execution_key: str) -> MlExecution | None: ...
+    def find_all(self, execution_key: str) -> list[MlExecution]: ...
+    def save(self, execution: MlExecution) -> None: ...
+    def mark_artifacts_stored(self, execution_key: str, blob_key: str) -> None: ...
+    def mark_artifacts_failed(self, execution_key: str, blob_key: str, detail: str) -> None: ...
+    def finalize_output_persisted(self, execution_key: str) -> None: ...
+    def blob_reference_count(self, blob_key: str) -> int: ...
+    def runs_awaiting_persistence(self) -> list[UnpersistedRun]: ...
+    def soft_purge_execution(self, execution_key: str) -> None: ...
+
+
+def _identity(prompt: str = "p") -> ManagedCallIdentity:
+    return ManagedCallIdentity(
+        client="claude",
+        model="sonnet",
+        effort="high",
+        context_fingerprint="c",
+        prompt_fingerprint=prompt,
+    )
+
+
+def _artifact(
+    content: bytes = b"answer", *, status: ArtifactStatus = ArtifactStatus.STORED
+) -> Artifact:
+    return Artifact(
+        artifact_type=ArtifactType.STDOUT,
+        blob_key=BlobKey("blob" + content.hex()),
+        size_bytes=len(content),
+        content=content,
+        status=status,
+    )
+
+
+def _servable(identity: ManagedCallIdentity, content: bytes = b"answer") -> MlExecution:
+    return MlExecution(
+        call_identity=identity,
+        execution_state=ExecutionState.SUCCESS,
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        output_persisted=True,
+        artifacts=[_artifact(content)],
+    )
+
+
+def _pending(identity: ManagedCallIdentity, content: bytes = b"answer") -> MlExecution:
+    """A run as the C-4 DB-first path saves it: not yet servable, artifact PENDING."""
+    return MlExecution(
+        call_identity=identity,
+        execution_state=ExecutionState.SUCCESS,
+        execution_kind=ExecutionKind.LOCAL_MANAGED,
+        output_persisted=False,
+        artifacts=[_artifact(content, status=ArtifactStatus.PENDING)],
+    )
+
+
+class MlRunStoreConformance:
+    """The behavioral contract for an ml-run persistence store. Subclass + implement
+    ``make_store``; the shipped SQLite adapter and the reference fake both pass this."""
+
+    def make_store(self, tmp_path: Path) -> MlRunStore:
+        raise NotImplementedError
+
+    def test_find_current_is_none_for_unknown_key(self, tmp_path: Path) -> None:
+        assert self.make_store(tmp_path).find_current("nope") is None
+
+    def test_save_servable_then_find_current(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        store.save(_servable(identity))
+        found = store.find_current(identity.generate_key())
+        assert found is not None
+        assert found.execution_state is ExecutionState.SUCCESS
+
+    def test_a_new_servable_success_supersedes_the_prior_one(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity, b"old"))
+        store.save(_servable(identity, b"new"))
+        assert len(store.find_all(key)) == 2  # append-only history
+        current = store.find_current(key)
+        assert current is not None
+        assert current.artifacts[0].blob_key == BlobKey("blob" + b"new".hex())
+
+    def test_db_first_lifecycle_pending_then_stored_then_finalized(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        blob_key = _artifact().blob_key
+        store.save(_pending(identity))
+        assert store.find_current(key) is None  # PENDING -> not servable
+        store.mark_artifacts_stored(key, blob_key)
+        assert store.find_current(key) is None  # stored but not finalized
+        store.finalize_output_persisted(key)
+        current = store.find_current(key)
+        assert current is not None and current.output_persisted is True
+
+    def test_failed_artifact_blocks_servability_and_does_not_reference_the_blob(
+        self, tmp_path: Path
+    ) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        blob_key = _artifact().blob_key
+        store.save(_pending(identity))
+        store.mark_artifacts_failed(key, blob_key, "disk full")
+        assert store.find_current(key) is None
+        assert store.blob_reference_count(blob_key) == 0  # FAILED rows hold no reference
+
+    def test_runs_awaiting_persistence_lists_the_unfinished_run(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_pending(identity))
+        awaiting = store.runs_awaiting_persistence()
+        assert [run.execution_key for run in awaiting] == [key]
+
+    def test_soft_purge_releases_artifacts_and_unservables(self, tmp_path: Path) -> None:
+        store = self.make_store(tmp_path)
+        identity = _identity()
+        key = identity.generate_key()
+        store.save(_servable(identity))
+        store.soft_purge_execution(key)
+        assert store.find_current(key) is None
