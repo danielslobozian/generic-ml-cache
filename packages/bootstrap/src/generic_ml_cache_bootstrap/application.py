@@ -163,7 +163,14 @@ def build_application_api(
     """
     store_root = Path(store_root)
     _diag: DiagnosticsPort = diag if diag is not None else NullDiagnosticsAdapter()
-    recover_store(store_root)
+    # Roll back a half-finished encryption migration ONLY on the default filesystem
+    # stack (X20). recover_store hardcodes FilesystemEncryptionManifestStore +
+    # FilesystemStoreLock, so if an embedder injects its own blob store (Postgres/S3)
+    # it owns its own recovery and bootstrap must not read/write/lock local FS
+    # encryption state under a nominal store_root. Checked before blob_store is
+    # resolved to its default below.
+    if blob_store is None:
+        recover_store(store_root)
     persistence = persistence or sqlite_persistence_backend(store_root / _DB_NAME, _diag)
     blob_store = (
         blob_store if blob_store is not None else resolve_blob_store(store_root, encryption_token)

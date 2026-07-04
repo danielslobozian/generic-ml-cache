@@ -6,6 +6,7 @@ from generic_ml_cache_core.application.port.outbound.adapter_catalog_port import
 from generic_ml_cache_core.application.port.outbound.adapter_resolver_port import (
     AdapterResolverPort,
 )
+from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.registered_adapter_port import (
     RegisteredAdapterPort,
 )
@@ -68,3 +69,38 @@ def test_injected_persistence_backend_overrides_the_default(tmp_path):
     assert isinstance(api, ApplicationApi)
     assert (tmp_path / "custom.sqlite3").exists()  # the injected backend was used + migrated
     assert not (tmp_path / "executions.sqlite3").exists()  # the default was NOT built
+
+
+class _FakeBlobStore(BlobStorePort):
+    def get(self, key):
+        return None
+
+    def put(self, key, output):
+        pass
+
+    def is_healthy(self):
+        return True
+
+    def remove(self, key):
+        pass
+
+
+def test_injected_blob_store_skips_filesystem_encryption_recovery(tmp_path, monkeypatch):
+    # X20: an embedder injecting its own blob store (Postgres/S3) owns its own recovery,
+    # so bootstrap must NOT run the hardcoded filesystem encryption recovery — it would
+    # read/write/lock local FS encryption state under a nominal store_root.
+    import generic_ml_cache_bootstrap.application as app_module
+
+    calls: list = []
+    monkeypatch.setattr(app_module, "recover_store", lambda root: calls.append(root))
+    build_application_api(tmp_path, _no_runners, blob_store=_FakeBlobStore())
+    assert calls == []
+
+
+def test_default_filesystem_stack_runs_encryption_recovery(tmp_path, monkeypatch):
+    import generic_ml_cache_bootstrap.application as app_module
+
+    calls: list = []
+    monkeypatch.setattr(app_module, "recover_store", lambda root: calls.append(root))
+    build_application_api(tmp_path, _no_runners)  # no blob store injected → default FS stack
+    assert calls == [tmp_path]
