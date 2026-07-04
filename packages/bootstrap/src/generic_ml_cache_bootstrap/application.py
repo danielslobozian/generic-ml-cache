@@ -36,6 +36,9 @@ from generic_ml_cache_adapters.adapter.outbound.diagnostics.null_diagnostics_ada
 from generic_ml_cache_adapters.adapter.outbound.fingerprint.filesystem_file_fingerprint import (
     FilesystemFileFingerprint,
 )
+from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_execution_key_lock import (
+    FilesystemExecutionKeyLock,
+)
 from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
     FilesystemStoreLock,
 )
@@ -213,6 +216,7 @@ def build_application_api(
             read=persistence.read_ml_run,
             annotate=persistence.annotate_ml_run,
             record=persistence.record_call_event,
+            execution_key_lock=FilesystemExecutionKeyLock(store_root, _diag),
             purge_service=purge,
             max_size=max_size,
             workspace=FilesystemWorkspace(),

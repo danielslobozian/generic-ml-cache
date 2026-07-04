@@ -71,6 +71,9 @@ from generic_ml_cache_core.common.errors import (
 from generic_ml_cache_core.testing.in_memory_execution_repository import (
     InMemoryExecutionRepository,
 )
+from generic_ml_cache_core.testing.in_process_execution_key_lock import (
+    InProcessExecutionKeyLock,
+)
 
 
 class FixedClock(ClockPort):
@@ -395,6 +398,7 @@ class _Harness:
             read=self.repo,
             annotate=self.repo,
             record=self.metrics,
+            execution_key_lock=InProcessExecutionKeyLock(),
             workspace=FakeWorkspace(),
         )
 
@@ -461,6 +465,7 @@ def test_blob_write_failure_is_intercepted_and_surfaced():
         read=harness.repo,
         annotate=harness.repo,
         record=harness.metrics,
+        execution_key_lock=InProcessExecutionKeyLock(),
         workspace=FakeWorkspace(),
     )
 
@@ -732,6 +737,7 @@ def _harness_with_quota(max_size: int | None) -> tuple:
         read=harness.repo,
         annotate=harness.repo,
         record=harness.metrics,
+        execution_key_lock=InProcessExecutionKeyLock(),
         purge_service=spy,
         max_size=max_size,
         workspace=FakeWorkspace(),
@@ -780,6 +786,7 @@ def test_eviction_not_triggered_on_failed_run():
         read=failing_harness.repo,
         annotate=failing_harness.repo,
         record=failing_harness.metrics,
+        execution_key_lock=InProcessExecutionKeyLock(),
         purge_service=spy,
         max_size=1_000_000,
         workspace=FakeWorkspace(),
@@ -801,6 +808,7 @@ def _service_with_runners(runners) -> RunMlExecutionService:
         read=repo,
         annotate=repo,
         record=FakeMetrics(),
+        execution_key_lock=InProcessExecutionKeyLock(),
         workspace=FakeWorkspace(),
     )
 

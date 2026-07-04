@@ -4,11 +4,8 @@
 
 from __future__ import annotations
 
-import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Generator
-from contextlib import contextmanager
 from dataclasses import replace
 from typing import Generic, Protocol, TypeVar
 
@@ -33,6 +30,9 @@ from generic_ml_cache_core.application.domain.model.run.persistence_depth import
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     AnnotateMlRunPort,
     ReadMlRunPort,
@@ -49,13 +49,6 @@ from generic_ml_cache_core.common.errors import (
 
 _TEXT_ENCODING = "utf-8"
 _EXECUTE_EXIT = "execute EXIT"
-
-#: Number of stripes in the per-key lock array. A fixed pool bounds memory forever
-#: (W29): a key hashes to one stripe, so two distinct keys occasionally share a lock
-#: and one waits briefly — harmless, and cheaper than a lock-per-key dict that grows
-#: without bound for a long-lived daemon. The in-process lock only stops same-process
-#: duplicate work; cross-process correctness is the database's job (W1).
-_KEY_LOCK_STRIPE_COUNT = 64
 
 
 class CacheableExecutionCommand(Protocol):
@@ -101,6 +94,7 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         read: ReadMlRunPort,
         annotate: AnnotateMlRunPort,
         record: RecordCallEventPort,
+        execution_key_lock: ExecutionKeyLockPort,
         diag: DiagnosticsPort | None = None,
     ) -> None:
         self._blob_store = blob_store
@@ -108,9 +102,11 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         self._read = read
         self._annotate = annotate
         self._record = record
+        # The per-key record-once lock (X7). Injected, so it spans processes (the
+        # filesystem impl composes an in-process stripe lock with a per-key OS file
+        # lock) rather than only the threads of one process as the old W29 stripe did.
+        self._execution_key_lock = execution_key_lock
         self._diag: DiagnosticsPort | None = diag
-        # A fixed pool of striped locks (W29): bounded memory, no per-key growth.
-        self._key_lock_stripes = tuple(threading.Lock() for _ in range(_KEY_LOCK_STRIPE_COUNT))
 
     def execute(self, command: TCommand) -> MlExecution:  # noqa: C901
         _t = time.perf_counter()
@@ -370,17 +366,6 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             raise CacheMiss("offline: this call is not cacheable, so it cannot be served offline")
         return self._run_fresh(command, call_identity, execution_key, allow_store=False)
 
-    def _lock_for_key(self, execution_key: str) -> threading.Lock:
-        """The striped lock guarding this key. ``hash`` is per-process (fine — the
-        lock is intra-process only), and Python's ``%`` keeps the index in range."""
-        return self._key_lock_stripes[hash(execution_key) % _KEY_LOCK_STRIPE_COUNT]
-
-    @contextmanager
-    def _acquire_key_lock(self, execution_key: str) -> Generator[None, None, None]:
-        """Yield with the key's striped lock held."""
-        with self._lock_for_key(execution_key):
-            yield
-
     def _run_fresh(
         self,
         command: TCommand,
@@ -420,8 +405,9 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
         _t = time.perf_counter()
         if self._diag:
             self._diag.debug("run-fresh-locked ENTER", key=execution_key)
-        with self._acquire_key_lock(execution_key):
-            # Another thread holding this lock may have just completed this key.
+        with self._execution_key_lock.acquire(execution_key):
+            # Another caller holding this lock may have just completed this key (now
+            # across processes too, X7 — daemon/CLI/embedded over one store dir).
             if command.cache_mode is CacheMode.CACHE:
                 served = self._serve_current_if_healthy(command, execution_key)
                 if served is not None:

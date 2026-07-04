@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from unittest.mock import MagicMock, create_autospec
 
@@ -17,6 +18,9 @@ from generic_ml_cache_core.application.domain.model.run.client_run_result import
 from generic_ml_cache_core.application.domain.model.run.persistence_depth import PersistenceDepth
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
 from generic_ml_cache_core.application.port.outbound.ml_run_ports import (
     AnnotateMlRunPort,
     ReadMlRunPort,
@@ -29,6 +33,9 @@ from generic_ml_cache_core.common.errors import (
     CacheMiss,
     EncryptionTokenRequired,
     StoreUnavailable,
+)
+from generic_ml_cache_core.testing.in_process_execution_key_lock import (
+    InProcessExecutionKeyLock,
 )
 
 # ---------------------------------------------------------------------------
@@ -59,6 +66,7 @@ class _MlRunStore(SaveMlRunPort, ReadMlRunPort, AnnotateMlRunPort): ...
 
 class _RunSvc(CachedMlExecutionService):
     def __init__(self, blob, repo, metrics, runner=None, **kw):
+        kw.setdefault("execution_key_lock", InProcessExecutionKeyLock())
         super().__init__(blob, save=repo, read=repo, annotate=repo, record=metrics, **kw)
         self._runner = runner or MagicMock()
 
@@ -450,21 +458,37 @@ class TestTags:
         repo.add_tags.assert_called_once_with("test-key", ["tag1"])
 
 
-class TestStripedKeyLocks:
-    def test_key_locks_are_striped_and_bounded(self):
-        from generic_ml_cache_core.application.usecase.cached_ml_execution_service import (
-            _KEY_LOCK_STRIPE_COUNT,
+class _SpyKeyLock(ExecutionKeyLockPort):
+    """Records which keys the record-once critical section is entered under (X7)."""
+
+    def __init__(self) -> None:
+        self.acquired: list[str] = []
+
+    @contextmanager
+    def acquire(self, execution_key: str):
+        self.acquired.append(execution_key)
+        yield
+
+
+class TestExecutionKeyLock:
+    def test_a_fresh_run_is_guarded_by_the_injected_per_key_lock(self):
+        # X7: a cache miss runs the client under the injected ExecutionKeyLock, keyed
+        # by the execution key — the seam that now spans processes, not just threads.
+        runner = MagicMock(return_value=_make_result())
+        repo = create_autospec(_MlRunStore)
+        repo.find_current.return_value = None
+        spy = _SpyKeyLock()
+        svc = _RunSvc(
+            blob=create_autospec(BlobStorePort),
+            repo=repo,
+            metrics=create_autospec(RecordCallEventPort),
+            runner=runner,
+            execution_key_lock=spy,
         )
 
-        svc = _make_svc()
-        distinct_locks = {id(svc._lock_for_key(f"key-{i}")) for i in range(1000)}
-        # A thousand distinct keys map onto a fixed pool — memory never grows per
-        # key (W29), yet the keys spread across more than one stripe.
-        assert 1 < len(distinct_locks) <= _KEY_LOCK_STRIPE_COUNT
+        svc.execute(_Cmd())
 
-    def test_same_key_maps_to_the_same_lock(self):
-        svc = _make_svc()
-        assert svc._lock_for_key("stable-key") is svc._lock_for_key("stable-key")
+        assert spy.acquired == ["test-key"]  # the miss ran under the per-key lock
 
 
 class TestStoreUnavailable:

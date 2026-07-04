@@ -47,6 +47,9 @@ from generic_ml_cache_core.application.port.outbound.blob_store_port import Blob
 from generic_ml_cache_core.application.port.outbound.call_journal_ports import RecordCallEventPort
 from generic_ml_cache_core.application.port.outbound.client_config_port import ClientConfigPort
 from generic_ml_cache_core.application.port.outbound.diagnostics_port import DiagnosticsPort
+from generic_ml_cache_core.application.port.outbound.execution_key_lock_port import (
+    ExecutionKeyLockPort,
+)
 from generic_ml_cache_core.application.port.outbound.file_fingerprint_port import (
     FileFingerprintPort,
 )
@@ -102,12 +105,13 @@ class RunMlExecutionService(CachedMlExecutionService[RunMlExecutionCommand], Run
         read: ReadMlRunPort,
         annotate: AnnotateMlRunPort,
         record: RecordCallEventPort,
+        execution_key_lock: ExecutionKeyLockPort,
         purge_service: PurgeService | None = None,
         max_size: int | None = None,
         workspace: WorkspacePort | None = None,
         diag: DiagnosticsPort | None = None,
     ) -> None:
-        super().__init__(blob_store, save, read, annotate, record, diag)
+        super().__init__(blob_store, save, read, annotate, record, execution_key_lock, diag)
         self._file_fingerprint = file_fingerprint
         self._runners = runners
         self._purge = purge_service
