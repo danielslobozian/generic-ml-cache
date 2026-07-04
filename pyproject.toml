@@ -1,0 +1,20 @@
+# Workspace root (virtual — no [project]): declares the uv workspace whose
+# committed `uv.lock` pins the full dev/test toolchain (V3). Runtime floors in
+# each package stay `>=`; the lock only fixes the *resolved* versions the gates
+# run against, so `filterwarnings = ["error"]` surfaces upstream deprecations on
+# a deliberate `uv lock --upgrade`, never at a random upstream release.
+[tool.uv.workspace]
+members = ["packages/*"]
+
+# Inter-package `==0.28.*` pins resolve to the local workspace members, not PyPI.
+# Workspace-level tooling (not a package's runtime or test dependency): the
+# IDE env (`nox -s dev`) needs these; the lock pins them like everything else.
+[dependency-groups]
+dev = ["nox>=2024.4", "pre-commit>=4"]
+
+[tool.uv.sources]
+generic-ml-cache-core = { workspace = true }
+generic-ml-cache-adapters = { workspace = true }
+generic-ml-cache-bootstrap = { workspace = true }
+generic-ml-cache-cli = { workspace = true }
+generic-ml-cache-daemon = { workspace = true }

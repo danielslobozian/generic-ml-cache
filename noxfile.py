@@ -8,9 +8,10 @@ is a *thin caller* of these sessions, so there is exactly one definition of
 "what green means". That kills the local/CI drift that caused the pyright-venv
 bug: the gate that runs locally is byte-for-byte the gate that runs in CI.
 
-Gate sessions build their own hermetic environments via the ``uv`` backend
-(fast, reproducible). The persistent root ``.venv`` is built only by
-``nox -s dev`` and is the IDE's interpreter — the gate sessions never touch it.
+Gate sessions build their own hermetic environments via the ``uv`` backend,
+synced from the committed ``uv.lock`` (V3) so every gate runs the exact same
+pinned resolution locally and in CI. The persistent root ``.venv`` is built only
+by ``nox -s dev`` and is the IDE's interpreter — the gate sessions never touch it.
 
 Usage::
 
@@ -39,10 +40,6 @@ PACKAGES: tuple[str, ...] = tuple(
     sorted(p.parent.name for p in Path("packages").glob("*/pyproject.toml"))
 )
 
-# Per-package install extras. Everything gets [dev]; adapters also needs its
-# optional [encryption] extra (cryptography) for the full test suite.
-_EXTRAS: dict[str, str] = {"adapters": "[dev,encryption]"}
-
 # Distribution name -> import package name, for ``--cov=``.
 _IMPORT_NAME: dict[str, str] = {pkg: f"generic_ml_cache_{pkg}" for pkg in PACKAGES}
 
@@ -53,20 +50,26 @@ _SCRUBBER_MODULE = "generic_ml_cache_adapters.adapter.outbound.diagnostics.struc
 _SCRUBBER_FLOOR = 90
 
 
-def _editable_specs() -> list[str]:
-    """``-e packages/<pkg><extra>`` for every package.
-
-    Installed together in one call so uv resolves the inter-package
-    ``==0.2X.*`` pins against the local editables instead of fetching PyPI.
-    """
-    specs: list[str] = []
-    for pkg in PACKAGES:
-        specs += ["-e", f"packages/{pkg}{_EXTRAS.get(pkg, '[dev]')}"]
-    return specs
-
-
 def _install_all(session: nox.Session) -> None:
-    session.install(*_editable_specs())
+    """Sync the session env from the committed ``uv.lock`` (V3).
+
+    ``--locked`` refuses a stale lockfile, so every gate — local or CI — runs
+    against the exact pinned resolution; a dependency can only move via a
+    deliberate ``uv lock --upgrade``, which is what makes the
+    ``filterwarnings = ["error"]`` policy deterministic. All five packages
+    install editable with every extra (dev toolchain, adapters' encryption).
+    """
+    session.run_install(
+        "uv",
+        "sync",
+        "--locked",
+        "--all-packages",
+        "--all-extras",
+        "--python",
+        _session_python(session),
+        external=True,
+        env={"UV_PROJECT_ENVIRONMENT": session.virtualenv.location},
+    )
 
 
 def _session_python(session: nox.Session) -> str:
@@ -76,8 +79,8 @@ def _session_python(session: nox.Session) -> str:
 
 @nox.session
 def lint(session: nox.Session) -> None:
-    """Gates 1-2 — ruff lint and format check. No package install needed."""
-    session.install("ruff>=0.15")
+    """Gates 1-2 — ruff lint and format check (ruff at the locked version)."""
+    _install_all(session)
     session.run("ruff", "check", "packages/")
     session.run("ruff", "format", "--check", "packages/")
 
@@ -97,7 +100,6 @@ def typecheck(session: nox.Session) -> None:
     imports from the hermetic env rather than the IDE-only root ``.venv``.
     """
     _install_all(session)
-    session.install("pyright>=1.1")
     session.run("pyright", "--pythonpath", _session_python(session))
 
 
@@ -159,7 +161,6 @@ def sonar(session: nox.Session) -> None:
 def green(session: nox.Session) -> None:
     """The AGENTS.md 7-gate "green" checklist, in a single environment."""
     _install_all(session)
-    session.install("ruff>=0.15", "pyright>=1.1")
     session.run("ruff", "check", "packages/")
     session.run("ruff", "format", "--check", "packages/")
     session.run("lint-imports")
@@ -178,14 +179,12 @@ def dev(session: nox.Session) -> None:
     editable plus the dev toolchain and pre-commit, so opening the project in
     an editor and running ``git commit`` both work with no further setup.
     """
-    session.run("uv", "venv", ".venv", external=True)
     session.run(
         "uv",
-        "pip",
-        "install",
-        *_editable_specs(),
-        "pre-commit",
-        "nox",
+        "sync",
+        "--locked",
+        "--all-packages",
+        "--all-extras",
         external=True,
-        env={"VIRTUAL_ENV": ".venv"},
+        env={"UV_PROJECT_ENVIRONMENT": ".venv"},
     )
