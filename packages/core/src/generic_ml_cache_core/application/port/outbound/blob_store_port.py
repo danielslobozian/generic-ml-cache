@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
+
 
 class BlobStorePort(ABC):
     """Outbound port for storing and retrieving opaque execution output bytes.
@@ -19,15 +21,15 @@ class BlobStorePort(ABC):
     """
 
     @abstractmethod
-    def get(self, key: str) -> bytes | None:
+    def get(self, key: BlobKey) -> bytes | None:
         """Return the stored bytes for ``key``, or None if not present."""
 
     @abstractmethod
-    def put(self, key: str, output: bytes) -> None:
+    def put(self, key: BlobKey, output: bytes) -> None:
         """Persist ``output`` under ``key``, overwriting any prior value."""
 
     @abstractmethod
-    def exists(self, key: str) -> bool:
+    def exists(self, key: BlobKey) -> bool:
         """Return whether a blob is stored under ``key``.
 
         A cheap, keyless presence test: it fetches no bytes and performs no
@@ -36,7 +38,7 @@ class BlobStorePort(ABC):
         putting identical bytes again."""
 
     @abstractmethod
-    def remove(self, key: str) -> None:
+    def remove(self, key: BlobKey) -> None:
         """Delete the bytes stored under ``key``; a no-op if nothing is stored.
 
         Removal is driven by a reference-counted prune (a blob is content-

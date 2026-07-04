@@ -23,6 +23,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
 
@@ -84,7 +85,7 @@ class SaveMlRunPort(ABC):
         its blob is stored). Raises ``StoreConsistencyError`` for an unknown id."""
 
     @abstractmethod
-    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None:
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: BlobKey) -> None:
         """Flip every artifact of the execution identified by ``execution_id`` that
         references ``blob_key`` to ``STORED`` and stamp ``persisted_at`` — the blob
         is confirmed in the store. Two artifacts sharing a blob (e.g. empty
@@ -92,7 +93,9 @@ class SaveMlRunPort(ABC):
         ``StoreConsistencyError`` if no such artifact row exists to update."""
 
     @abstractmethod
-    def mark_artifacts_failed(self, execution_id: ExecutionId, blob_key: str, detail: str) -> None:
+    def mark_artifacts_failed(
+        self, execution_id: ExecutionId, blob_key: BlobKey, detail: str
+    ) -> None:
         """Flip every artifact of the execution identified by ``execution_id`` that
         references ``blob_key`` to ``FAILED`` with ``detail`` — the blob write did
         not land, so the run cannot become servable and the failure is visible in
@@ -178,13 +181,13 @@ class PurgeMlRunsPort(ABC):
         calls made for this identity."""
 
     @abstractmethod
-    def blob_keys_for_execution(self, execution_key: str) -> list[str]:
+    def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]:
         """Return the distinct blob keys referenced by ALL stored executions for
         ``execution_key`` (current and historical). Called before a soft purge so
         the caller can check reference counts before removing blobs."""
 
     @abstractmethod
-    def blob_reference_count(self, blob_key: str) -> int:
+    def blob_reference_count(self, blob_key: BlobKey) -> int:
         """Return the number of artifact rows across the entire store still
         referencing ``blob_key``. After a soft purge drops an execution's artifact
         rows, a count of zero means no other execution references the blob and the

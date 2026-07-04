@@ -11,6 +11,7 @@ from generic_ml_cache_core.application.domain.model.execution.artifact import (
     Artifact,
     ArtifactStatus,
 )
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -31,7 +32,7 @@ from generic_ml_cache_core.application.port.outbound.repair_ml_runs_port import 
 from generic_ml_cache_core.common.errors import StoreConsistencyError
 
 
-def _require_artifact_update(matched: int, execution_id: ExecutionId, blob_key: str) -> None:
+def _require_artifact_update(matched: int, execution_id: ExecutionId, blob_key: BlobKey) -> None:
     """A mark_* that matched no artifact is a stale/mistargeted write — fail loud
     rather than no-op, matching the SQLite adapter's rowcount guard (W1)."""
     if matched == 0:
@@ -94,7 +95,7 @@ class InMemoryExecutionRepository(
         _key, stored = self._require_by_id(execution_id)
         stored.artifacts.append(replace(artifact, content=None))
 
-    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None:
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: BlobKey) -> None:
         _key, execution = self._require_by_id(execution_id)
         persisted_at = self._clock.now().isoformat()
         matched = self._resolve_artifacts(
@@ -102,7 +103,9 @@ class InMemoryExecutionRepository(
         )
         _require_artifact_update(matched, execution_id, blob_key)
 
-    def mark_artifacts_failed(self, execution_id: ExecutionId, blob_key: str, detail: str) -> None:
+    def mark_artifacts_failed(
+        self, execution_id: ExecutionId, blob_key: BlobKey, detail: str
+    ) -> None:
         _key, execution = self._require_by_id(execution_id)
         matched = self._resolve_artifacts(
             execution, blob_key, status=ArtifactStatus.FAILED, status_detail=detail
@@ -129,7 +132,7 @@ class InMemoryExecutionRepository(
     @staticmethod
     def _resolve_artifacts(
         execution: MlExecution,
-        blob_key: str,
+        blob_key: BlobKey,
         *,
         status: ArtifactStatus,
         persisted_at: str | None = None,
@@ -176,7 +179,7 @@ class InMemoryExecutionRepository(
             latest = history[-1] if history else None
             if latest is None or latest.output_persisted:
                 continue
-            blob_keys: list[str] = []
+            blob_keys: list[BlobKey] = []
             for a in latest.artifacts:
                 if a.status is not ArtifactStatus.STORED and a.blob_key not in blob_keys:
                     blob_keys.append(a.blob_key)
@@ -211,7 +214,7 @@ class InMemoryExecutionRepository(
 
     # -- retention and purge --------------------------------------------------
 
-    def blob_keys_for_execution(self, execution_key: str) -> list[str]:
+    def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]:
         return list(
             {
                 a.blob_key
@@ -220,7 +223,7 @@ class InMemoryExecutionRepository(
             }
         )
 
-    def blob_reference_count(self, blob_key: str) -> int:
+    def blob_reference_count(self, blob_key: BlobKey) -> int:
         # Only STORED artifacts truly reference a blob (a PENDING/FAILED row's blob
         # may not exist), so only they keep it alive for GC.
         return sum(

@@ -7,6 +7,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.execution.execution_id import ExecutionId
 
 
@@ -19,7 +20,7 @@ class UnpersistedRun:
 
     execution_key: str
     execution_id: ExecutionId
-    blob_keys: tuple[str, ...]
+    blob_keys: tuple[BlobKey, ...]
 
 
 class RepairMlRunsPort(ABC):

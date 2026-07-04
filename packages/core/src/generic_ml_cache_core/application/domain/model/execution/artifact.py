@@ -7,6 +7,8 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
+
 _UTF8 = "utf-8"
 _BINARY = "binary"
 
@@ -64,7 +66,7 @@ class Artifact:
     """
 
     artifact_type: ArtifactType
-    blob_key: str
+    blob_key: BlobKey
     size_bytes: int
     name: str | None = None
     encoding: str = _UTF8
@@ -77,7 +79,7 @@ class Artifact:
     def from_content(
         cls,
         artifact_type: ArtifactType,
-        blob_key: str,
+        blob_key: BlobKey,
         content: bytes,
         name: str | None = None,
         status: ArtifactStatus = ArtifactStatus.STORED,

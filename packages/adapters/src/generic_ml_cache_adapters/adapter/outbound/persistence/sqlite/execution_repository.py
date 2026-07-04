@@ -55,7 +55,7 @@ from generic_ml_cache_adapters.db import DbConnection
 _INPUT_TYPE_VALUES = tuple(t.value for t in INPUT_ARTIFACT_TYPES)
 
 
-def _require_artifact_update(rowcount: int, execution_id: str, blob_key: str) -> None:
+def _require_artifact_update(rowcount: int, execution_id: str, blob_key: BlobKey) -> None:
     """A mark_* that updated zero rows means the artifact it was meant to resolve
     is not there — a stale/mistargeted write. Fail loud rather than no-op (W1)."""
     if rowcount == 0:
@@ -214,7 +214,7 @@ class SqliteExecutionRepository(
             row_id = self._require_row_id(connection, execution_id)
             self._insert_artifacts(connection, row_id, [artifact])
 
-    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: str) -> None:
+    def mark_artifacts_stored(self, execution_id: ExecutionId, blob_key: BlobKey) -> None:
         with self._write_transaction() as connection:
             cursor = connection.execute(
                 "UPDATE artifacts SET status = ?, persisted_at = ?, status_detail = NULL "
@@ -229,7 +229,9 @@ class SqliteExecutionRepository(
             )
             _require_artifact_update(cursor.rowcount, execution_id, blob_key)
 
-    def mark_artifacts_failed(self, execution_id: ExecutionId, blob_key: str, detail: str) -> None:
+    def mark_artifacts_failed(
+        self, execution_id: ExecutionId, blob_key: BlobKey, detail: str
+    ) -> None:
         with self._write_transaction() as connection:
             cursor = connection.execute(
                 "UPDATE artifacts SET status = ?, status_detail = ? "
@@ -253,11 +255,11 @@ class SqliteExecutionRepository(
             ).fetchall()
         finally:
             connection.close()
-        grouped: dict[str, tuple[str, list[str]]] = {}
+        grouped: dict[str, tuple[str, list[BlobKey]]] = {}
         for execution_key, execution_id, blob_key in rows:
             _stored_id, blob_keys = grouped.setdefault(execution_key, (execution_id, []))
-            if blob_key not in blob_keys:
-                blob_keys.append(blob_key)
+            if BlobKey(blob_key) not in blob_keys:
+                blob_keys.append(BlobKey(blob_key))
         return [
             UnpersistedRun(key, ExecutionId(execution_id), tuple(blob_keys))
             for key, (execution_id, blob_keys) in grouped.items()
@@ -578,7 +580,7 @@ class SqliteExecutionRepository(
 
     # -- retention and purge --------------------------------------------------
 
-    def blob_keys_for_execution(self, execution_key: str) -> list[str]:
+    def blob_keys_for_execution(self, execution_key: str) -> list[BlobKey]:
         connection = self._connect()
         try:
             rows = connection.execute(
@@ -587,11 +589,11 @@ class SqliteExecutionRepository(
                 "WHERE e.execution_key = ?",
                 (execution_key,),
             ).fetchall()
-            return [key for (key,) in rows]
+            return [BlobKey(key) for (key,) in rows]
         finally:
             connection.close()
 
-    def blob_reference_count(self, blob_key: str) -> int:
+    def blob_reference_count(self, blob_key: BlobKey) -> int:
         connection = self._connect()
         try:
             # Only STORED artifacts truly reference a blob; a PENDING/FAILED row's

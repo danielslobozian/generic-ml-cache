@@ -98,7 +98,7 @@ class RunMlGatewayService(RunMlGatewayUseCase):
         cache_key = command.gateway_request.generate_cache_key()
         if self._diag:
             self._diag.debug("load-cached-response ENTER", key=cache_key)
-        cached_bytes = self._blob_store.get(cache_key)
+        cached_bytes = self._blob_store.get(BlobKey(cache_key))
         if cached_bytes is not None:
             if self._diag:
                 self._diag.debug("gateway HIT", key=cache_key)

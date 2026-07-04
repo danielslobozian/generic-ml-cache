@@ -7,6 +7,7 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.domain.model.purge.purge_report import PurgeReport
 from generic_ml_cache_core.application.port.inbound.purge.evict_stale_command import (
     EvictStaleCommand,
@@ -223,19 +224,19 @@ class PurgeService(
                     keys.append(key)
         return keys
 
-    def _blob_sizes_for(self, keys: list[str]) -> dict[str, int]:
+    def _blob_sizes_for(self, keys: list[str]) -> dict[BlobKey, int]:
         """Map each distinct blob key referenced by ``keys`` to its size, read
         BEFORE the executions are deleted. A content-addressed blob shared by
         several executions appears once (its size is invariant), so summing the
         removed ones counts each freed blob a single time."""
-        blob_sizes: dict[str, int] = {}
+        blob_sizes: dict[BlobKey, int] = {}
         for key in keys:
             for execution in self._repository.find_all(key):
                 for artifact in execution.artifacts:
                     blob_sizes[artifact.blob_key] = artifact.size_bytes
         return blob_sizes
 
-    def _remove_orphaned_blobs(self, blob_sizes: dict[str, int]) -> tuple[int, int]:
+    def _remove_orphaned_blobs(self, blob_sizes: dict[BlobKey, int]) -> tuple[int, int]:
         """Remove each blob no execution still references, returning
         (blobs_removed, bytes_freed) measured directly from what was deleted —
         not a global before/after total (skewed by a concurrent write, and it

@@ -15,6 +15,7 @@ to call), never on the crypto library directly.
 
 from __future__ import annotations
 
+from generic_ml_cache_core.application.domain.model.execution.blob_key import BlobKey
 from generic_ml_cache_core.application.port.outbound.blob_store_port import BlobStorePort
 from generic_ml_cache_core.application.port.outbound.cipher_port import CipherPort
 from generic_ml_cache_core.common.errors import EncryptionTokenRequired
@@ -29,20 +30,20 @@ class EncryptingBlobStore(BlobStorePort):
         self._data_key = data_key
 
     def get(self, key: str) -> bytes | None:
-        blob = self._inner.get(key)
+        blob = self._inner.get(BlobKey(key))
         if blob is None:
             return None
         return self._cipher.decrypt(self._data_key, blob)
 
     def put(self, key: str, output: bytes) -> None:
-        self._inner.put(key, self._cipher.encrypt(self._data_key, output))
+        self._inner.put(BlobKey(key), self._cipher.encrypt(self._data_key, output))
 
     def exists(self, key: str) -> bool:
         # Presence is about the ciphertext file, not its plaintext — no decryption.
-        return self._inner.exists(key)
+        return self._inner.exists(BlobKey(key))
 
     def remove(self, key: str) -> None:
-        self._inner.remove(key)
+        self._inner.remove(BlobKey(key))
 
 
 class TokenRequiredBlobStore(BlobStorePort):
@@ -65,7 +66,7 @@ class TokenRequiredBlobStore(BlobStorePort):
 
     def exists(self, key: str) -> bool:
         # A presence test reads no content, so it works without the token (like remove).
-        return self._inner.exists(key)
+        return self._inner.exists(BlobKey(key))
 
     def remove(self, key: str) -> None:
-        self._inner.remove(key)
+        self._inner.remove(BlobKey(key))
