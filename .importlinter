@@ -28,8 +28,7 @@ forbidden_modules =
 #
 # The few remaining ignore_imports are genuinely driver-specific direct edges the
 # split did not (and should not) relocate into the composition root:
-#   * cli._compose encryption helpers back the `gmlcache encrypt/decrypt/status`
-#     commands (CLI feature logic, not wiring) + the stub adapter for demos.
+#   * cli._compose wires the stub API adapter for demos (no-credential replay).
 #   * cli.controllers.daemon -> daemon.app is the optional lazy launcher.
 [importlinter:contract:hex-drivers-no-driven-adapters]
 name = Driver packages must not import driven adapter implementations directly
@@ -44,11 +43,7 @@ ignore_imports =
     # The bulk application wiring moved to generic_ml_cache_bootstrap (the
     # composition root), so the long list of _compose/app -> adapter.outbound edges is
     # gone. What remains are the few adapters the drivers still touch directly:
-    # CLI encryption helpers (store encrypt/decrypt + the stub adapter for demos)
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher
-    generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock
+    # The CLI's stub adapter for demos (no-credential record/replay).
     generic_ml_cache_cli._compose -> generic_ml_cache_adapters.adapter.outbound.api.stub_api_client_adapter
     # Optional daemon dependency — lazy import with ImportError guard in _cmd_daemon_start
     generic_ml_cache_cli.controllers.daemon -> generic_ml_cache_daemon.app

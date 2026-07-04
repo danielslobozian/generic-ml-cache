@@ -11,20 +11,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
-if TYPE_CHECKING:
-    from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import AesGcmCipher
-    from generic_ml_cache_core.application.port.outbound.cipher_port import CipherPort
-
-from generic_ml_cache_adapters.adapter.outbound.crypto.filesystem_encryption_manifest_store import (
-    FilesystemEncryptionManifestStore,
-)
-from generic_ml_cache_adapters.adapter.outbound.crypto.store_encryptor import StoreEncryptor
-from generic_ml_cache_adapters.adapter.outbound.persistence.filesystem_store_lock import (
-    FilesystemStoreLock,
-)
 from generic_ml_cache_bootstrap.application import build_application_api
+from generic_ml_cache_bootstrap.encryption import StoreEncryptionOps
 from generic_ml_cache_core.application.domain.model.catalog.adapter_boundary import AdapterBoundary
 from generic_ml_cache_core.application.domain.model.encryption.encryption_state import (
     EncryptionState,
@@ -124,26 +114,4 @@ def build_use_cases(
 
 def get_encryption_state(store_root: Path) -> EncryptionState:
     """Return the current encryption state of the store at ``store_root``."""
-    return FilesystemEncryptionManifestStore(store_root).state()
-
-
-def load_cipher() -> AesGcmCipher:
-    """Build the AES-GCM cipher, with a friendly error if the optional extra is missing."""
-    try:
-        from generic_ml_cache_adapters.adapter.outbound.crypto.aesgcm_cipher import AesGcmCipher
-    except ImportError as exc:  # pragma: no cover
-        raise SystemExit(
-            "error: encryption needs an optional dependency — install with "
-            '`pip install "generic-ml-cache-adapters[encryption]"`'
-        ) from exc
-    return AesGcmCipher()
-
-
-def build_store_encryptor(store_root: Path, cipher: CipherPort | None = None) -> StoreEncryptor:
-    """Construct a StoreEncryptor for the store at ``store_root``."""
-    return StoreEncryptor(
-        store_root,
-        FilesystemEncryptionManifestStore(store_root),
-        FilesystemStoreLock(store_root),
-        cipher,
-    )
+    return StoreEncryptionOps(store_root).status()
