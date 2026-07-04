@@ -42,6 +42,16 @@ def test_factory_each_call_returns_independent_connection(tmp_path):
         c2.close()
 
 
+def test_factory_enables_wal_and_busy_timeout(tmp_path):
+    factory = sqlite_connection_factory(tmp_path / "test.sqlite3")
+    conn = factory()
+    try:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+    finally:
+        conn.close()
+
+
 def test_check_same_thread_false_allows_cross_thread_use(tmp_path):
     import threading
 
