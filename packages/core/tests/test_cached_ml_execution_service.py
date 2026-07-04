@@ -8,7 +8,11 @@ from unittest.mock import MagicMock, create_autospec
 
 import pytest
 
-from generic_ml_cache_core.application.domain.model.execution.artifact import Artifact, ArtifactType
+from generic_ml_cache_core.application.domain.model.execution.artifact import (
+    Artifact,
+    ArtifactStatus,
+    ArtifactType,
+)
 from generic_ml_cache_core.application.domain.model.execution.execution_kind import ExecutionKind
 from generic_ml_cache_core.application.domain.model.execution.execution_state import ExecutionState
 from generic_ml_cache_core.application.domain.model.execution.ml_execution import MlExecution
@@ -150,6 +154,80 @@ def _make_svc(blob=None, repo=None, metrics=None, runner=None):
         metrics=metrics or create_autospec(RecordCallEventPort),
         runner=runner,
     )
+
+
+# ---------------------------------------------------------------------------
+# Stateful write-path fakes (Y17): unlike the autospec mocks above, these hold
+# real state so a test can assert the DURABLE outcome (artifact status, blob
+# presence, finalize) of a partial failure — which a call-count mock cannot.
+# ---------------------------------------------------------------------------
+
+
+class _StatefulBlobStore(BlobStorePort):
+    """An in-memory blob store that really stores bytes; can fail every write."""
+
+    def __init__(self, fail_all_puts: bool = False):
+        self.blobs: dict[str, bytes] = {}
+        self._fail_all_puts = fail_all_puts
+
+    def get(self, key):
+        return self.blobs.get(str(key))
+
+    def put(self, key, output):
+        if self._fail_all_puts:
+            raise StoreUnavailable(f"injected blob write failure for {key!r}")
+        self.blobs[str(key)] = output
+
+    def is_healthy(self):
+        return True
+
+    def remove(self, key):
+        self.blobs.pop(str(key), None)
+
+
+class _StatefulWriteStore(_MlRunStore):
+    """A stateful persistence fake for the write path: tracks artifact status per
+    (execution_id, blob_key) and can inject a mark-STORED DB failure (Y6)."""
+
+    def __init__(self, fail_mark_stored: bool = False):
+        self.executions: dict[str, MlExecution] = {}
+        self.artifact_status: dict[tuple[str, str], ArtifactStatus] = {}
+        self.finalized: set[str] = set()
+        self.mark_failed_calls: list[tuple[str, str]] = []
+        self._fail_mark_stored = fail_mark_stored
+
+    def save(self, execution):
+        self.executions[execution.execution_id] = execution
+
+    def record_outcome(self, execution):
+        self.executions[execution.execution_id] = execution
+
+    def persist_artifact(self, execution_id, artifact):
+        self.artifact_status[(execution_id, str(artifact.blob_key))] = ArtifactStatus.PENDING
+
+    def remove_execution(self, execution_id):
+        self.executions.pop(execution_id, None)
+
+    def mark_artifacts_stored(self, execution_id, blob_key):
+        if self._fail_mark_stored:
+            raise StoreUnavailable("injected DB mark failure")
+        self.artifact_status[(execution_id, str(blob_key))] = ArtifactStatus.STORED
+
+    def mark_artifacts_failed(self, execution_id, blob_key, detail):
+        self.mark_failed_calls.append((execution_id, str(blob_key)))
+        self.artifact_status[(execution_id, str(blob_key))] = ArtifactStatus.FAILED
+
+    def finalize_output_persisted(self, execution_id):
+        self.finalized.add(execution_id)
+
+    def find_current(self, execution_key):
+        return None
+
+    def add_tags(self, execution_key, tags):
+        pass
+
+    def add_input_artifacts(self, execution_key, artifacts):
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -608,3 +686,56 @@ class TestEncryptionTokenGate:
 
         runner.assert_called_once()
         blob.ensure_available_for_content.assert_not_called()
+
+
+class TestStoreBlobPhaseSplit:
+    """Y6: blob-write and DB-mark are SEPARATE phases, asserted on durable state."""
+
+    def test_db_mark_failure_leaves_pending_not_failed_and_returns_the_result(self):
+        # The blob lands (phase 1 ok) but the DB mark fails (phase 2): the artifact must
+        # stay PENDING (repairable), never FAILED; no second DB write is fired against
+        # the failing DB; the run is not finalized; and the caller still gets the answer.
+        runner = MagicMock(return_value=_make_result())
+        repo = _StatefulWriteStore(fail_mark_stored=True)
+        blob = _StatefulBlobStore()
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        result = svc.execute(_Cmd())
+
+        assert blob.blobs  # the blob really landed on the store
+        assert ArtifactStatus.FAILED not in repo.artifact_status.values()  # never a lie
+        assert ArtifactStatus.PENDING in repo.artifact_status.values()  # left for repair
+        assert repo.mark_failed_calls == []  # NO second DB write on the failing DB
+        assert repo.finalized == set()  # not servable
+        assert result.output_persisted is False
+        assert result.execution_state is ExecutionState.SUCCESS  # the good answer survives
+
+    def test_blob_write_failure_marks_the_artifact_failed(self):
+        # Phase 1 fails: the artifact IS marked FAILED (the DB is healthy, that mark
+        # lands) and the run is not persisted — the unchanged pre-Y6 behaviour.
+        runner = MagicMock(return_value=_make_result())
+        repo = _StatefulWriteStore()
+        blob = _StatefulBlobStore(fail_all_puts=True)
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        result = svc.execute(_Cmd())
+
+        assert ArtifactStatus.FAILED in repo.artifact_status.values()
+        assert repo.mark_failed_calls  # the failed mark WAS written (DB is fine)
+        assert repo.finalized == set()
+        assert result.output_persisted is False
+
+    def test_all_phases_succeed_finalizes_and_stores(self):
+        # The happy path through the stateful fakes: blob stored, artifact STORED, run
+        # finalized, output_persisted True — the state-based mirror of the mock tests.
+        runner = MagicMock(return_value=_make_result())
+        repo = _StatefulWriteStore()
+        blob = _StatefulBlobStore()
+        svc = _make_svc(repo=repo, blob=blob, runner=runner)
+
+        result = svc.execute(_Cmd())
+
+        assert blob.blobs
+        assert set(repo.artifact_status.values()) == {ArtifactStatus.STORED}
+        assert repo.finalized  # finalize_output_persisted ran
+        assert result.output_persisted is True

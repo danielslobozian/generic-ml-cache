@@ -711,19 +711,27 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
             self._save.persist_artifact(execution_id, artifact)
             stored_artifact = self._store_blob(execution_id, artifact)
             resolved.append(stored_artifact)
-            if stored_artifact.status is ArtifactStatus.FAILED:
+            # Anything not STORED (a blob-write FAILED, or a mark-failed PENDING left for
+            # repair — Y6) means the run is not fully persisted, so it is not finalized.
+            if stored_artifact.status is not ArtifactStatus.STORED:
                 all_stored = False
         return resolved, all_stored
 
     def _store_blob(self, execution_id: ExecutionId, artifact: Artifact) -> Artifact:
-        """Write the artifact's blob, then mark it STORED; a write failure marks it
-        FAILED with the detail — caught and surfaced, never thrown out of execute()
-        (§10). The blob is owned by this execution (its key is execution-scoped), so
-        the write is unconditional (X25)."""
+        """Persist one artifact in two SEPARATE phases (Y6), so a database error is
+        never blamed on the filesystem and a good client answer is never discarded on a
+        transient DB fault. The blob is owned by this execution (its key is
+        execution-scoped), so the write is unconditional (X25).
+
+        Phase 1 — write the blob. A write failure IS the artifact's failure: mark it
+        FAILED (the DB is fine, that mark lands) and surface FAILED. Never thrown out of
+        execute() (§10). Phase 2 — the blob has landed, mark it STORED. If THAT DB mark
+        fails, do not lie that the blob failed and do not fire a second DB write against
+        the same failing DB: leave the artifact PENDING (repairable — the row stays
+        non-current and unservable, reconciled later) and return the live result, so a
+        transient DB error costs a re-run at worst, never the answer."""
         try:
             self._blob_store.put(artifact.blob_key, artifact.content or b"")
-            self._save.mark_artifacts_stored(execution_id, artifact.blob_key)
-            return replace(artifact, status=ArtifactStatus.STORED)
         except Exception as exc:  # noqa: BLE001 — translate ANY blob-write failure to a visible FAILED status (§10)
             self._save.mark_artifacts_failed(execution_id, artifact.blob_key, str(exc))
             if self._diag:
@@ -734,6 +742,18 @@ class CachedMlExecutionService(ABC, Generic[TCommand]):
                     exc=exc,
                 )
             return replace(artifact, status=ArtifactStatus.FAILED, status_detail=str(exc))
+        try:
+            self._save.mark_artifacts_stored(execution_id, artifact.blob_key)
+        except Exception as exc:  # noqa: BLE001 — the blob LANDED; a DB-mark failure leaves it PENDING for repair, not FAILED
+            if self._diag:
+                self._diag.warn(
+                    "artifact blob stored but DB mark failed — left PENDING for repair",
+                    execution_id=execution_id,
+                    blob=artifact.blob_key,
+                    exc=exc,
+                )
+            return replace(artifact, status=ArtifactStatus.PENDING, status_detail=str(exc))
+        return replace(artifact, status=ArtifactStatus.STORED)
 
     def _build_input_artifacts(
         self,
