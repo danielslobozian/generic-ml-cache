@@ -25,8 +25,8 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "generic-ml-cache-core==0.28.*",
-    "generic-ml-cache-adapters==0.28.*",
+    "generic-ml-cache-core==0.29.*",
+    "generic-ml-cache-adapters==0.29.*",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +35,7 @@ dependencies = [
 # the encryption facade + the encrypting blob store. Lockstep-pinned. The drivers
 # expose their own [encryption] extra through THIS one (they no longer depend on
 # the adapters package directly, W28).
-encryption = ["generic-ml-cache-adapters[encryption]==0.28.*"]
+encryption = ["generic-ml-cache-adapters[encryption]==0.29.*"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [project.urls]

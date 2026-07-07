@@ -9,12 +9,63 @@ between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.
 
 Since `0.2.0` the project is a **monorepo of lockstep-versioned packages** — the
 hexagonal kernel [`generic-ml-cache-core`](packages/core), its concrete adapters
-[`generic-ml-cache-adapters`](packages/adapters) (split out in 0.28.0), the CLI
-[`generic-ml-cache-cli`](packages/cli), and (since 0.13.0) the optional daemon
+[`generic-ml-cache-adapters`](packages/adapters) (split out in 0.28.0), the
+composition-root [`generic-ml-cache-bootstrap`](packages/bootstrap) (split out in
+0.29.0), the CLI [`generic-ml-cache-cli`](packages/cli), and (since 0.13.0) the optional daemon
 [`generic-ml-cache-daemon`](packages/daemon). All share the version below, and this file
 is the single changelog for all of them; entries note which package(s) a change touches.
 
 ## [Unreleased]
+
+## [0.29.0] - 2026-07-07
+
+The first release with **all five packages** on PyPI. A fifth package,
+[`generic-ml-cache-bootstrap`](packages/bootstrap), is split out as the shared
+**composition root**: the CLI and daemon no longer wire the dependency graph
+themselves and no longer depend on `generic-ml-cache-adapters` directly — they
+build their application through `generic-ml-cache-bootstrap`, which owns adapter
+discovery, the encryption facade, the persistence backend, and store provisioning.
+
+This release also lands the **V4–V8 hardening** merged in
+[#96](https://github.com/danielslobozian/generic-ml-cache/pull/96): a broad
+correctness, concurrency, and storage-safety pass across core and adapters. No
+user-facing CLI, daemon, or record-schema changes — behaviour is unchanged; the
+edges are made safe under failure and concurrency.
+
+### Added
+
+- **`generic-ml-cache-bootstrap` package** (new): the composition root shared by
+  both drivers — adapter catalog/resolver discovery (built-in scan + entry points),
+  the application-build API, the encryption facade, the persistence backend, store
+  provisioning, and progress reporting. Lockstep-versioned; publishes to PyPI after
+  `adapters` and before `cli`/`daemon`.
+- **`--unsafe-allow-network-gateway`** (daemon): a gateway bind to a non-loopback
+  address is now refused unless this flag is passed explicitly.
+
+### Changed
+
+- **Composition root extracted** (cli, daemon): the drivers wire their graph through
+  `generic-ml-cache-bootstrap` instead of importing `generic-ml-cache-adapters`
+  directly; the `[encryption]` extra is routed through bootstrap.
+- **Migrations 0001–0005 compressed** into a single initial schema (adapters).
+
+### Fixed
+
+- **Concurrency-safe first-init** (adapters): singleton `schema_version` row plus a
+  blocking-exclusive migrate lock, so a first-time store initialised by two processes
+  at once can no longer race.
+- **Failure translation at the run boundary** (core, adapters): `subprocess.TimeoutExpired`
+  → `RunTimedOut`; blob-store I/O failures → `StoreUnavailable`.
+- **Blob write is phase-split** (adapters): a blob that landed on disk is never recorded
+  as `FAILED`; self-heal deletes blobs before rows, so a failed removal leaves no orphan.
+- **Hit-time input back-fill** (core, adapters): guarded by the per-key lock, which was
+  made re-entrant to cover the coalescing path; the lock wait is sized to the client
+  timeout plus a margin.
+- **Content-encryption nonce safety** (adapters): a per-write subkey removes the
+  2³² nonce bound.
+- **Store-encryptor blob filtering** (adapters): filters by the `.tmp` suffix rather
+  than "contains a dot".
+- **Windows CI**: several storage/datasource race and path tolerances corrected.
 
 ## [0.28.2] - 2026-06-29
 
