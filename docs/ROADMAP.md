@@ -690,9 +690,46 @@ generic-ml-cache-cli    generic-ml-cache-daemon
 (imports core + adapters)   (imports core + adapters)
 ```
 
+### 0.29.0 — Composition-root package: `generic-ml-cache-bootstrap` + V4–V8 hardening ✅ released 2026-07-07
+
+The first release with all five packages on PyPI, and the completion of the hexagonal
+split that 0.28.0 began. 0.28.0 extracted the concrete adapters; 0.29.0 extracts the
+**composition root** into a fifth package so the drivers no longer wire the dependency
+graph themselves.
+
+**New package: `generic-ml-cache-bootstrap`**
+- Publishes to PyPI as `generic-ml-cache-bootstrap` (same version lockstep), after
+  `adapters` and before `cli`/`daemon` in the release chain.
+- Owns adapter discovery (built-in scan + `gmlcache.adapters` entry points, via the
+  `AdapterCatalogPort` / `AdapterResolverPort` contracts core injects), the
+  application-build API, the encryption facade, the persistence backend, store
+  provisioning, and progress reporting.
+- The CLI and daemon build their application through bootstrap and **no longer depend
+  on `generic-ml-cache-adapters` directly**; each driver's `[encryption]` extra is
+  routed through bootstrap's.
+
+**V4–V8 hardening (PR #96)**
+- A broad correctness, concurrency, and storage-safety pass across core and adapters,
+  with no user-facing CLI, daemon, or record-schema change: concurrency-safe first-init
+  migrations, failure translation at the run boundary (`RunTimedOut`, `StoreUnavailable`),
+  phase-split blob writes and orphan-free self-heal, per-key-locked hit-time back-fill,
+  per-write content-encryption subkeys, and a non-loopback gateway-bind refusal.
+
+**Dependency graph after 0.29.0**
+```
+generic-ml-cache-core        (pure hexagonal kernel, zero deps)
+       ↑
+generic-ml-cache-adapters    (all concrete implementations; depends on core)
+       ↑
+generic-ml-cache-bootstrap   (composition root: discovery, encryption, persistence)
+       ↑           ↑
+generic-ml-cache-cli    generic-ml-cache-daemon
+(core + bootstrap)          (core + bootstrap)
+```
+
 ### 1.0.0 — Stable, feature-rich cache
 
-Everything from 0.28.0 is a prerequisite. Remaining semantic changes at the stable tag:
+Everything from 0.29.0 is a prerequisite. Remaining semantic changes at the stable tag:
 
 - Alpha tag removed; development status classifiers updated to `5 - Production/Stable`
   in all three `pyproject.toml` files and README badges.
