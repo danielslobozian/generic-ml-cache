@@ -23,13 +23,33 @@ _RAW_REQUEST = b'{"model":"claude-opus-4-8","messages":[{"role":"user","content"
 _UPSTREAM_URL = "https://api.anthropic.com/v1/messages"
 
 
-def _ok_response(body: bytes, status: int = 200) -> MagicMock:
+def _ok_response(
+    body: bytes, status: int = 200, content_type: str = "application/json"
+) -> MagicMock:
     response = MagicMock()
     response.__enter__ = lambda self: self
     response.__exit__ = MagicMock(return_value=False)
     response.status = status
     response.read.return_value = body
+    response.headers = {"content-type": content_type}
     return response
+
+
+# A minimal but realistic Anthropic SSE stream (the shape Claude Code receives): input /
+# cache tokens land in message_start.message.usage; the final output_tokens in message_delta.
+_SSE_BODY = (
+    b"event: message_start\n"
+    b'data: {"type":"message_start","message":{"id":"msg_1","role":"assistant",'
+    b'"usage":{"input_tokens":817,"cache_creation_input_tokens":0,'
+    b'"cache_read_input_tokens":10,"output_tokens":1}}}\n\n'
+    b"event: content_block_delta\n"
+    b'data: {"type":"content_block_delta","index":0,'
+    b'"delta":{"type":"text_delta","text":"hi"}}\n\n'
+    b"event: message_delta\n"
+    b'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},'
+    b'"usage":{"output_tokens":18}}\n\n'
+    b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+)
 
 
 def _request(**overrides) -> ApiPassthroughRequest:
@@ -110,6 +130,64 @@ class TestVerbatimResponse:
         with patch("urllib.request.urlopen", side_effect=TimeoutError("timed out")):
             with pytest.raises(ProviderApiError):
                 adapter.execute_api_passthrough(_request())
+
+
+class TestStreamingUsage:
+    """Claude Code streams (text/event-stream); usage is split across SSE events and
+    must still be accounted (the gateway records the session's token spend)."""
+
+    def _answer(self, body: bytes, content_type: str):
+        adapter = AnthropicSubscriptionRelayAdapter()
+        with patch(
+            "urllib.request.urlopen",
+            return_value=_ok_response(body, content_type=content_type),
+        ):
+            return adapter.execute_api_passthrough(_request())
+
+    def test_sse_stream_parses_usage_across_events(self):
+        answer = self._answer(_SSE_BODY, "text/event-stream")
+        assert answer.exit_code == 0
+        assert answer.token_usage is not None
+        assert answer.token_usage.input_tokens == 817  # from message_start
+        assert answer.token_usage.output_tokens == 18  # final message_delta, not the start's 1
+        assert answer.token_usage.cache_read_tokens == 10
+        assert answer.token_usage.cache_write_tokens == 0
+
+    def test_sse_stream_body_is_returned_verbatim(self):
+        # The stream is stored + replayed byte-for-byte, so a cache hit re-serves it whole.
+        answer = self._answer(_SSE_BODY, "text/event-stream")
+        assert answer.stdout.encode("utf-8") == _SSE_BODY
+
+    def test_sse_content_type_with_charset_suffix_is_still_detected(self):
+        answer = self._answer(_SSE_BODY, "text/event-stream; charset=utf-8")
+        assert answer.token_usage is not None
+        assert answer.token_usage.output_tokens == 18
+
+    def test_last_message_delta_output_wins(self):
+        body = (
+            b"event: message_start\n"
+            b'data: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1}}}\n\n'
+            b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":10}}\n\n'
+            b'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":42}}\n\n'
+        )
+        answer = self._answer(body, "text/event-stream")
+        assert answer.token_usage is not None
+        assert answer.token_usage.output_tokens == 42  # cumulative final, last delta wins
+
+    def test_malformed_sse_yields_no_usage_without_crashing(self):
+        # W14: usage accounting must never break the relay — a garbled stream is served
+        # verbatim with no usage, not an exception.
+        body = b"event: message_start\ndata: {not json at all\n\ngarbage line\n"
+        answer = self._answer(body, "text/event-stream")
+        assert answer.exit_code == 0
+        assert answer.token_usage is None
+
+    def test_json_content_type_still_uses_the_json_parser(self):
+        # An SSE body would not parse as JSON, but a JSON content-type routes to the JSON
+        # parser — content-type is the authoritative dispatch, not a body sniff.
+        answer = self._answer(_OK_BODY, "application/json")
+        assert answer.token_usage is not None
+        assert answer.token_usage.input_tokens == 5
 
 
 class TestForwarding:
