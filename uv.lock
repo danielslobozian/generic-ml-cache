@@ -13,8 +13,8 @@ members = [
 
 [manifest.dependency-groups]
 dev = [
-    { name = "nox", specifier = ">=2024.4" },
-    { name = "pre-commit", specifier = ">=4" },
+    { name = "nox", specifier = ">=2026.4.10" },
+    { name = "pre-commit", specifier = ">=4.6.0" },
 ]
 
 [[package]]
