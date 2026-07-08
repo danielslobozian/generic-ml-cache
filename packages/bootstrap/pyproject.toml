@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Daniel Slobozian" }]
 keywords = ["cache", "llm", "ai", "hexagonal", "composition-root", "plugins", "discovery"]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
@@ -25,8 +25,8 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
 ]
 dependencies = [
-    "generic-ml-cache-core==0.29.*",
-    "generic-ml-cache-adapters==0.29.*",
+    "generic-ml-cache-core>=1.0.0,<2",
+    "generic-ml-cache-adapters>=1.0.0,<2",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +35,7 @@ dependencies = [
 # the encryption facade + the encrypting blob store. Lockstep-pinned. The drivers
 # expose their own [encryption] extra through THIS one (they no longer depend on
 # the adapters package directly, W28).
-encryption = ["generic-ml-cache-adapters[encryption]==0.29.*"]
+encryption = ["generic-ml-cache-adapters[encryption]>=1.0.0,<2"]
 dev = ["pytest>=7", "pytest-cov", "pytest-timeout", "coverage>=7", "ruff>=0.15", "import-linter>=2", "pyright>=1.1"]
 
 [project.urls]

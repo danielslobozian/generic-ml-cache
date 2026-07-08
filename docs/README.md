@@ -40,7 +40,7 @@ This documentation describes gmlcache as a Detached ML Execution Platform: an ex
 | [Usage](usage.md) | Current CLI behavior at a conceptual level |
 | [Storage](storage.md) | The execution store (SQLite) and content-addressed blob store |
 | [Client mapping](client-mapping.md) | Common request fields and adapter differences |
-| [Roadmap](ROADMAP.md) | Current alpha capability and path to 1.x |
+| [Roadmap](ROADMAP.md) | Shipped capability and the 1.x compatibility policy |
 | [Compatibility policy](compatibility.md) | What is stable at 1.0.0, Python support, schema and adapter promises |
 
 <br>

@@ -14,7 +14,7 @@
 
 ## At a glance
 
-- [Current alpha capability](#current-alpha-capability)
+- [Current capability](#current-capability)
 - [Road to 1.0.0: a stable, feature-complete cache](#road-to-100-a-stable-feature-complete-cache)
 - [After 1.0.0](#after-100)
 - [Out of scope unless explicitly revisited](#out-of-scope-unless-explicitly-revisited)
@@ -23,27 +23,24 @@
 
 This roadmap describes intended direction. It is not a promise of dates.
 
-The current ruling for versioning is:
+The ruling for versioning is:
 
-- `0.x.y` remains **alpha**: the execution-record schema, CLI surface, and adapter
-  contract may still change while the feature set is being built.
-- The `0.x` line builds toward a **stable, feature-complete `1.0.0`** — not a thin
-  "current capability" release. Each `0.x` minor lands a feature milestone; `y` covers
-  fixes and small corrections.
-- `1.0.0` is the **stable, feature-rich** release — the point at which every planned
-  feature has landed (gateway, daemon, dynamic adapter loading, and developer tooling
-  included), the **alpha tag is removed**, and the CLI surface, execution-record schema,
-  and adapter contract are locked under a compatibility policy.
+- **`1.0.0` shipped (2026-07-08): the project is now stable.** The CLI surface, the
+  execution-record schema, the adapter contract, and the public API are locked under a
+  compatibility policy and follow Semantic Versioning across the `1.x` line.
+- The `0.x` line was **alpha**: each `0.x` minor landed a feature milestone (gateway,
+  daemon, dynamic adapter loading, developer tooling, the API and CLI adapters) while the
+  schema and contracts were still free to change; `y` covered fixes and small corrections.
 
-Schema-shaping features (persistence, sessions) deliberately land **before** `1.0.0`,
-while `0.x` still permits the record schema to change — so `1.0.0` can lock a schema that
-is already session-aware rather than promise stability it would soon have to break.
+Schema-shaping features (persistence, sessions) landed **before** `1.0.0`, so the stable
+release locks a schema that was already session-aware rather than one it would soon have
+had to break.
 
 The data-handling features (tagging, persistence, encryption) are **orthogonal, composable
 toggles**, not one feature; their model and the cryptographic cautions are recorded in the
 [data-handling design note](design/data-handling.md).
 
-## Current alpha capability
+## Current capability
 
 The current implementation already provides:
 
@@ -727,16 +724,17 @@ generic-ml-cache-cli    generic-ml-cache-daemon
 (core + bootstrap)          (core + bootstrap)
 ```
 
-### 1.0.0 — Stable, feature-rich cache
+### 1.0.0 — Stable, feature-rich cache ✅ released 2026-07-08
 
-Everything from 0.29.0 is a prerequisite. Remaining semantic changes at the stable tag:
+The stable tag. Everything planned shipped — including the Vibe CLI and Mistral API
+adapters — folded into this release, and the semantic changes at the tag landed:
 
-- Alpha tag removed; development status classifiers updated to `5 - Production/Stable`
-  in all three `pyproject.toml` files and README badges.
+- Alpha/beta tag removed; development-status classifiers set to `5 - Production/Stable`
+  in all **five** `pyproject.toml` files, and the README status badges flipped to stable.
 - Inter-package version floors finalized: `>=1.0.0,<2`.
-- `SECURITY.md` supported-versions table updated for a post-1.0 support policy.
-- `CHANGELOG.md` alpha-disclaimer header updated; 1.0.0 entry documents what is
-  stable, the migration path from any 0.x store, known limitations, and security notes.
+- `SECURITY.md` supported-versions updated for a post-1.0 support policy.
+- `CHANGELOG.md` alpha disclaimer replaced with the SemVer stability statement; the
+  `1.0.0` entry documents what is locked, store-upgrade behaviour, and known limitations.
 
 ## After 1.0.0
 

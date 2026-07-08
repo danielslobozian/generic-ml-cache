@@ -14,7 +14,7 @@
 <br>
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-185FA5?style=for-the-badge&labelColor=403E3A)](LICENSE)
-[![Status: Beta](https://img.shields.io/badge/status-beta-BA7517?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
+[![Status: Stable](https://img.shields.io/badge/status-stable-0F6E56?style=for-the-badge&labelColor=403E3A)](docs/ROADMAP.md)
 
 [![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/claude.py)
 [![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/codex.py)
