@@ -10,7 +10,7 @@
 #### The hexagonal engine behind gmlcache — embeddable and stateless
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-2563eb?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/LICENSE)
-[![Status: Beta](https://img.shields.io/badge/Status-Beta-d97706?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
+[![Status: Stable](https://img.shields.io/badge/Status-Stable-0F6E56?style=flat-square)](https://github.com/danielslobozian/generic-ml-cache/blob/main/docs/ROADMAP.md)
 
 The reusable **hexagonal kernel** behind
 [`gmlcache`](https://github.com/danielslobozian/generic-ml-cache/tree/main/packages/cli):

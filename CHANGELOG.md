@@ -4,8 +4,9 @@ All notable changes to this project are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-While the version is `0.x.y` the project is in **alpha** and anything may change
-between releases; see [`docs/ROADMAP.md`](docs/ROADMAP.md) for the path to `1.0.0`.
+As of `1.0.0` the project is **stable**: the CLI surface, the execution-record schema,
+the adapter contract, and the public API follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+across the `1.x` line. See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the compatibility policy.
 
 Since `0.2.0` the project is a **monorepo of lockstep-versioned packages** — the
 hexagonal kernel [`generic-ml-cache-core`](packages/core), its concrete adapters
@@ -16,6 +17,53 @@ composition-root [`generic-ml-cache-bootstrap`](packages/bootstrap) (split out i
 is the single changelog for all of them; entries note which package(s) a change touches.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-07-08
+
+The **stable release**. The alpha/beta tag is removed: development-status classifiers
+are `5 - Production/Stable`, inter-package floors are `>=1.0.0,<2`, and the CLI surface,
+execution-record schema, adapter contract, and public API (`__all__`) are now covered by
+Semantic Versioning across the `1.x` line. This release also bundles everything merged
+since 0.29.0.
+
+### Added
+
+- **`vibe` — Mistral Vibe CLI adapter** (adapters): a managed-CLI adapter for Mistral's
+  agentic Vibe CLI. Model rides in `VIBE_ACTIVE_MODEL` (no `--model` flag); prompt goes on
+  argv; `--yolo --trust --workdir` run it non-interactively in the isolated folder. Effort
+  maps to Vibe's `thinking` (config-only; the model default is used). No token usage is
+  exposed in Vibe's programmatic output, and Vibe has no OS sandbox (read/write grants are
+  advisory).
+- **`mistral` — Mistral API adapter** (adapters): a REST adapter for Mistral's Chat
+  Completions API (`POST /v1/chat/completions`, OpenAI-compatible) with `GET /v1/models`
+  listing. Token usage from `prompt_tokens`/`completion_tokens`, plus `cache_read` from
+  `prompt_tokens_details.cached_tokens`. Auth via `MISTRAL_API_KEY`.
+- **`extra_run_env` hook** on the CLI runtime (adapters): lets an adapter inject per-run
+  environment variables at exec time (used by Vibe for `VIBE_ACTIVE_MODEL`).
+
+### Changed
+
+- **`session update --effort` is now optional** (cli): `--client` and `--model` are the
+  required pair; effort defaults to empty — matching `run`.
+- **Inter-package version floors** loosened from lockstep `==0.x.*` to `>=1.0.0,<2`.
+
+### Fixed
+
+- **Gateway token usage from streamed responses** (adapters): the Anthropic subscription
+  relay now parses usage from a streamed (`text/event-stream`) body via a content-type
+  dispatch, instead of `json.loads`-ing an SSE stream and recording zero — so per-session
+  cost/usage on gateway traffic (including Claude Code's spawned agents) is captured again.
+
+### Stability
+
+- **Locked under SemVer for `1.x`:** the CLI surface, the execution-record schema, the
+  adapter contract, and the public API.
+- **Store upgrades:** a store created by `0.29.0` opens unchanged. Recommend a manual copy
+  of the store before upgrading. (See "Known limitations" for older `0.x` stores.)
+- **Known limitations:** the daemon gateway relays the Anthropic subscription only (no
+  cross-provider translation, no true streaming — responses are buffered); the daemon is
+  strictly local and single-user. Stores from `0.x` releases *before* the current schema
+  may report a schema error on open — start a fresh store if so (it is a cache).
 
 ## [0.29.0] - 2026-07-07
 

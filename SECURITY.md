@@ -8,10 +8,9 @@ covers all five. Thank you for helping keep it and its users safe.
 
 ## Supported versions
 
-While the project is pre-`1.0` (beta), only the **latest released version** of each
-package receives security fixes — there are no long-term-support branches or
-backports. If you hit a security issue, please first confirm it still reproduces on
-the most recent release or on `main`.
+Only the **latest released `1.x` version** of each package receives security fixes —
+there are no long-term-support branches or backports. If you hit a security issue,
+please first confirm it still reproduces on the most recent release or on `main`.
 
 ## Reporting a vulnerability
 
@@ -34,7 +33,7 @@ repository or content to GitHub directly via
 
 ### What to expect
 
-This is a volunteer-maintained alpha project, so there is no guaranteed response time, but
+This is a volunteer-maintained project, so there is no guaranteed response time, but
 reports are taken seriously and reviewed as promptly as possible. If a report is
 accepted, we will work on a fix, credit you in the release notes unless you prefer to
 stay anonymous, and coordinate disclosure with you. If it is declined, we will explain

@@ -13,7 +13,7 @@ license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Daniel Slobozian" }]
 keywords = ["cache", "llm", "ai", "daemon", "http", "fastapi", "gateway", "proxy"]
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
@@ -25,8 +25,8 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "generic-ml-cache-core==0.29.*",
-  "generic-ml-cache-bootstrap==0.29.*",
+  "generic-ml-cache-core>=1.0.0,<2",
+  "generic-ml-cache-bootstrap>=1.0.0,<2",
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "sse-starlette>=2.0",
@@ -45,7 +45,7 @@ metrics = ["prometheus-client>=0.20"]
 # (cryptography) at the SAME version — app.py uses encryption_token /
 # EncryptingBlobStore (wired in bootstrap). Routed through bootstrap (the daemon no
 # longer depends on the adapters package directly, W28). Lockstep-pinned.
-encryption = ["generic-ml-cache-bootstrap[encryption]==0.29.*"]
+encryption = ["generic-ml-cache-bootstrap[encryption]>=1.0.0,<2"]
 dev = [
   "pytest>=7",
   "pytest-cov",
