@@ -109,6 +109,7 @@ gmlcache ships built-in adapters for every port in the engine. Because the archi
 | `anthropic` | REST API | ✅ | ✅ | ✅ |
 | `openai` | REST API | ✅ | ✅ | ✅ |
 | `gemini` | REST API | ✅ | ✅ | ✅ |
+| `mistral` | REST API | ✅ | ✅ | ✅ |
 
 **Managed CLI** adapters drive the vendor's installed binary as a subprocess; the cache wraps the process boundary. **REST API** adapters call the provider endpoint directly using stdlib HTTP — no third-party SDK required.
 
