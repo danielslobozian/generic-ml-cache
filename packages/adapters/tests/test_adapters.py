@@ -17,7 +17,7 @@ from generic_ml_cache_adapters.adapter.outbound.client.prime_directive import (
 
 
 def test_builtins_are_registered():
-    for name in ("claude", "codex", "cursor"):
+    for name in ("claude", "codex", "cursor", "vibe"):
         assert name in registered_names()
 
 

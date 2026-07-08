@@ -26,9 +26,17 @@ separate `--provider` or `--kind` flag is needed.
 | `claude` | `claude` | stdin (large prompts) or argv | yes (output files) | input, output, cache read/write tokens; `cost_usd` |
 | `codex` | `codex` | argv | no | input, output tokens (no cache counts) |
 | `cursor` | `cursor-agent` | argv | no | unconfirmed — verify live |
+| `vibe` | `vibe` | argv (no stdin) | unconfirmed — verify live | none — not in Vibe's `-p` output |
 
 **All CLI adapters** respect `--executable` (or `[executables]` config) to pin a
 non-`PATH` binary. `allow_paths` and `scan_trust` make a run uncacheable.
+
+**Vibe** differs from the other CLI clients: the model is selected via the
+`VIBE_ACTIVE_MODEL` env var (Vibe has no `--model` flag); `effort` maps to Vibe's
+`thinking`, which is config-only, so v1 leaves it at the model default; Vibe exposes
+no token usage in programmatic (`-p`) output; and Vibe has **no OS sandbox**, so
+read/write grants are advisory — it can read paths outside the run folder. Auth is
+read from the user's `~/.vibe` (`.env` / config).
 
 Cursor has no inference API and is a CLI adapter only.
 

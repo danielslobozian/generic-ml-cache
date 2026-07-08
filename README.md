@@ -105,6 +105,7 @@ gmlcache ships built-in adapters for every port in the engine. Because the archi
 | `claude` | Managed CLI | ✅ | ✅ | — |
 | `codex` | Managed CLI | ✅ | ✅ | — |
 | `cursor-agent` | Managed CLI | ✅ | ✅ | — |
+| `vibe` | Managed CLI | ✅ | ✅ | — |
 | `anthropic` | REST API | ✅ | ✅ | ✅ |
 | `openai` | REST API | ✅ | ✅ | ✅ |
 | `gemini` | REST API | ✅ | ✅ | ✅ |
@@ -153,7 +154,7 @@ Sessions build on that same metadata: `session report` rolls up a workflow's run
 
 | Capability | Description |
 |---|---|
-| **Adapters** | Runs supported detached CLI adapters: `claude`, `codex`, `cursor-agent` |
+| **Adapters** | Runs supported detached CLI adapters: `claude`, `codex`, `cursor-agent`, `vibe` |
 | **Cache key** | Builds a cache key from the full execution request, not from prompt text alone |
 | **Recording** | Records stdout, stderr, exit code, generated files, and usage metadata as an inspectable execution |
 | **Replay** | Replays a matching execution without calling the underlying client again |
