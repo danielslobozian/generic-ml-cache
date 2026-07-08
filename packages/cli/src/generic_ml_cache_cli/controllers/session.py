@@ -45,18 +45,22 @@ from generic_ml_cache_cli.presenters.session import (
 
 
 def _parse_spec_args(args: argparse.Namespace) -> SessionSpec | None:
-    """Return a SessionSpec from --client/--model/--effort, or None if all are absent.
-    Raises ValueError on a partial spec (some but not all flags supplied).
+    """Return a SessionSpec from --client/--model, or None if neither is given.
+
+    A spec needs ``--client`` and ``--model`` together; ``--effort`` is optional and
+    defaults to empty (the client's own default, or a model-encoded effort like Cursor's).
+    Raises ValueError on a partial spec: only one of client/model, or effort with neither.
     """
     client = getattr(args, "client", None)
     model = getattr(args, "model", None)
     effort = getattr(args, "effort", None)
-    provided = [x is not None for x in (client, model, effort)]
-    if not any(provided):
+    if client is None and model is None:
+        if effort is not None:
+            raise ValueError("--effort requires --client and --model")
         return None
-    if not all(provided):
-        raise ValueError("--client, --model, and --effort must all be supplied together")
-    return SessionSpec(client=str(client), model=str(model), effort=str(effort))
+    if client is None or model is None:
+        raise ValueError("--client and --model must be supplied together")
+    return SessionSpec(client=str(client), model=str(model), effort=str(effort or ""))
 
 
 def cmd_session_start(args: argparse.Namespace) -> int:
@@ -90,7 +94,7 @@ def cmd_session_update(args: argparse.Namespace) -> int:
         return 2
     if spec is None:
         print(
-            "error: --client, --model, and --effort are all required for session update",
+            "error: --client and --model are required for session update",
             file=sys.stderr,
         )
         return 2

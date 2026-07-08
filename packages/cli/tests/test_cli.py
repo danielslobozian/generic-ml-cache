@@ -1031,9 +1031,20 @@ def test_session_start_with_spec_attaches_spec(tmp_path, monkeypatch, capsys):
 
 
 def test_session_start_partial_spec_returns_error(capsys):
+    # --client without --model is a partial spec (client and model go together).
     rc = main(["session", "start", "--client", "claude"])
     assert rc == 2
-    assert "effort" in capsys.readouterr().err or "model" in capsys.readouterr().err
+    assert "model" in capsys.readouterr().err
+
+
+def test_session_start_spec_without_effort_defaults_empty(tmp_path, monkeypatch, capsys):
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    # --effort is optional: client + model alone is a valid spec.
+    rc = main(["session", "start", "--client", "claude", "--model", "claude-opus-4-8"])
+    assert rc == 0
+    assert capsys.readouterr().out.strip()  # non-empty session id
 
 
 def test_session_update_sets_spec(tmp_path, monkeypatch, capsys):
@@ -1058,6 +1069,34 @@ def test_session_update_sets_spec(tmp_path, monkeypatch, capsys):
         ]
     )
     assert rc == 0
+
+
+def test_session_update_without_effort_defaults_empty(tmp_path, monkeypatch, capsys):
+    import json
+
+    workdir = tmp_path / "work"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+
+    main(["session", "start"])
+    session_id = capsys.readouterr().out.strip()
+
+    # --effort omitted entirely now (previously required); spec stores empty effort.
+    rc = main(
+        [
+            "session",
+            "update",
+            session_id,
+            "--client",
+            "gemini",
+            "--model",
+            "gemini-2.0-flash",
+            "--json",
+        ]
+    )
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["spec"]["effort"] == ""
 
 
 def test_session_update_json_output(tmp_path, monkeypatch, capsys):
