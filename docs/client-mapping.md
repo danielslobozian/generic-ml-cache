@@ -51,8 +51,9 @@ or passed via `api_key=` at construction time.
 | `anthropic` | `POST /v1/messages` | `ANTHROPIC_API_KEY` | ✓ (`cache_read_input_tokens`) | ✓ (`cache_creation_input_tokens`) | — (folds into output) | — |
 | `gemini` | `POST /v1beta/models/{model}:generateContent` | `GEMINI_API_KEY` | ✓ (`cachedContentTokenCount`) | — | ✓ (`thoughtsTokenCount`) | — |
 | `openai` | `POST /v1/responses` | `OPENAI_API_KEY` | ✓ (`input_tokens_details.cached_tokens`, automatic) | — (read-only cache) | ✓ (`output_tokens_details.reasoning_tokens`) | — |
+| `mistral` | `POST /v1/chat/completions` | `MISTRAL_API_KEY` | ✓ (`prompt_tokens_details.cached_tokens`) | — (read-only cache) | — | — |
 
-`cost_usd` is always `None` for API adapters — none of the three providers return a
+`cost_usd` is always `None` for API adapters — none of the four providers return a
 dollar figure per call. Usage a call did not report is `None` (unknown), never `0`.
 
 ### Context and system prompt mapping

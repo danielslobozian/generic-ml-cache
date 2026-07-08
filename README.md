@@ -19,10 +19,12 @@
 [![CLI adapter: claude](https://img.shields.io/badge/cli-claude-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/claude.py)
 [![CLI adapter: codex](https://img.shields.io/badge/cli-codex-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/codex.py)
 [![CLI adapter: cursor-agent](https://img.shields.io/badge/cli-cursor--agent-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/cursor.py)
+[![CLI adapter: vibe](https://img.shields.io/badge/cli-vibe-534AB7?style=for-the-badge&labelColor=3C3489)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/client/vibe.py)
 
 [![API adapter: anthropic](https://img.shields.io/badge/api-anthropic-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/anthropic_direct_adapter.py)
 [![API adapter: openai](https://img.shields.io/badge/api-openai-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/openai_direct_adapter.py)
 [![API adapter: gemini](https://img.shields.io/badge/api-gemini-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/gemini_direct_adapter.py)
+[![API adapter: mistral](https://img.shields.io/badge/api-mistral-0F6E56?style=for-the-badge&labelColor=085041)](packages/adapters/src/generic_ml_cache_adapters/adapter/outbound/api/mistral_direct_adapter.py)
 
 <br>
 
@@ -109,6 +111,7 @@ gmlcache ships built-in adapters for every port in the engine. Because the archi
 | `anthropic` | REST API | ✅ | ✅ | ✅ |
 | `openai` | REST API | ✅ | ✅ | ✅ |
 | `gemini` | REST API | ✅ | ✅ | ✅ |
+| `mistral` | REST API | ✅ | ✅ | ✅ |
 
 **Managed CLI** adapters drive the vendor's installed binary as a subprocess; the cache wraps the process boundary. **REST API** adapters call the provider endpoint directly using stdlib HTTP — no third-party SDK required.
 

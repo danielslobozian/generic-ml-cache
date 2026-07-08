@@ -70,7 +70,7 @@ Selection:
 
 | Option | Meaning |
 |---|---|
-| `--client` | Adapter to use. CLI adapters (`claude`, `codex`, `cursor`, `vibe`) launch a local binary. API adapters (`anthropic`, `openai`, `gemini`) call the provider's REST API directly — set the corresponding `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`. Required. |
+| `--client` | Adapter to use. CLI adapters (`claude`, `codex`, `cursor`, `vibe`) launch a local binary. API adapters (`anthropic`, `openai`, `gemini`, `mistral`) call the provider's REST API directly — set the corresponding `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `MISTRAL_API_KEY`. Required. |
 | `--model` | Model identifier, passed or translated by the adapter. |
 | `--effort` | Reasoning effort (optional); omit for the client's default. For Cursor, leave this off when the model id already encodes effort. |
 
