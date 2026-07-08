@@ -165,7 +165,17 @@ class CliRuntime:
             argv += read_access_arguments
             argv += grant_arguments
             env_var: str | None = self._hook("config_home_env_var", default=None)
-            run_env = {**os.environ, env_var: str(config_home)} if env_var else None
+            # Per-run env overrides an adapter needs at exec time (e.g. Vibe has no
+            # --model flag: the model rides as VIBE_ACTIVE_MODEL). Defaults to empty,
+            # so adapters that pass everything via argv are unaffected.
+            extra_env: dict[str, str] = self._hook(
+                "extra_run_env", request.model, request.effort, default={}
+            )
+            run_env: dict[str, str] | None = None
+            if env_var or extra_env:
+                run_env = {**os.environ, **extra_env}
+                if env_var:
+                    run_env[env_var] = str(config_home)
             stdin_payload: str | None = self._hook(
                 "stdin_payload", request.context, request.prompt, system_prompt, default=None
             )
