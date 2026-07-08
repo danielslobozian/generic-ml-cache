@@ -53,3 +53,15 @@ def build_system_prompt(
     if user_system_prompt:
         return f"{directive}\n\n---\n\n{user_system_prompt}"
     return directive
+
+
+def fold_prompt(system_prompt: str, context: str, prompt: str) -> str:
+    """Fold the system prompt + context + user prompt into one string, for CLI clients
+    that take the prompt as a single argv argument and expose no system-prompt flag
+    (cursor, vibe). The pieces still enter the cache key individually via the Request;
+    this is transport only, so keying is identical to clients that pass them separately."""
+    segments: list[str] = [system_prompt] if system_prompt else []
+    if context:
+        segments.append(context)
+    segments.append(prompt)
+    return "\n\n".join(segments)

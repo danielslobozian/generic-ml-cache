@@ -45,6 +45,7 @@ from generic_ml_cache_adapters.adapter.outbound.client.output_parsing import (
     ensure_trailing_newline,
     is_json_object,
 )
+from generic_ml_cache_adapters.adapter.outbound.client.prime_directive import fold_prompt
 
 
 class VibeCliAdapter(ComposedLocalClient):
@@ -87,11 +88,7 @@ class VibeCliAdapter(ComposedLocalClient):
         # cache key identically to claude/codex (none of this touches the Request). Model
         # is omitted here on purpose: it rides as VIBE_ACTIVE_MODEL (see extra_run_env).
         # Effort is omitted too -- thinking is config-only (v1 uses the model default).
-        segments: list[str] = [system_prompt] if system_prompt else []
-        if context:
-            segments.append(context)
-        segments.append(prompt)
-        full_prompt = "\n\n".join(segments)
+        full_prompt = fold_prompt(system_prompt, context, prompt)
         return [
             executable,
             "-p",

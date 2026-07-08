@@ -37,6 +37,7 @@ from generic_ml_cache_adapters.adapter.outbound.client.output_parsing import (
     final_result_object,
     is_json_object,
 )
+from generic_ml_cache_adapters.adapter.outbound.client.prime_directive import fold_prompt
 
 
 class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
@@ -88,11 +89,7 @@ class CursorCliAdapter(ComposedLocalClient, ClientConfigPort):
         # (system prompt) and context are folded into the prompt argument itself.
         # None of this enters the Request, so input_data and the cache key are
         # unchanged: cursor keys identically to claude/codex.
-        segments: list[str] = [system_prompt] if system_prompt else []
-        if context:
-            segments.append(context)
-        segments.append(prompt)
-        full_prompt = "\n\n".join(segments)
+        full_prompt = fold_prompt(system_prompt, context, prompt)
         # Cursor encodes effort in the model id. Pass a full id from --list-models
         # with no effort (preferred), or a base id plus an effort to append. Do not
         # pass both, or the effort is duplicated.
