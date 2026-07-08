@@ -548,9 +548,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     session_update.add_argument(
         "--effort",
-        required=True,
         metavar="EFFORT",
-        help="effort for the new spec (empty string for Cursor)",
+        help="reasoning effort for the new spec (optional); omit for the model default "
+        "(and for adapters that encode effort in the model id, e.g. Cursor)",
     )
     session_update.add_argument("--json", action="store_true", help=_JSON_HELP)
     session_update.set_defaults(func=cmd_session_update)
