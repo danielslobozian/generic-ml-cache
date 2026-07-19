@@ -10,7 +10,7 @@ members = ["packages/*"]
 # Workspace-level tooling (not a package's runtime or test dependency): the
 # IDE env (`nox -s dev`) needs these; the lock pins them like everything else.
 [dependency-groups]
-dev = ["nox>=2026.4.10", "pre-commit>=4.6.0"]
+dev = ["nox>=2026.7.11", "pre-commit>=4.6.0"]
 
 [tool.uv.sources]
 generic-ml-cache-core = { workspace = true }
